@@ -1,0 +1,13 @@
+ResourcedPipelines:
+- update gru.py
+  - start_minion
+  - stop_minion
+- add tests / check for regressions
+- add same __init_subclass__ check on pipelines? so that logic should be extracted to AsyncService?
+  yes it should because i want to make sure that any domain object can't set private attrs
+  but then i wouldn't be able to do that in my own subclasses
+  so i should just have methods and in that the method
+  so i can extract the logic to like AsyncService._ensure_no_new_priv_attrs
+  and then just call in the domain objects __init_subclass_ selectively
+
+# TODO: need to do crash testing of my system to ensure robustness

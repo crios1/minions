@@ -1,0 +1,583 @@
+# TODO:
+# The following is a draft implementation of the given design ...
+# I need to review and finalize it so i can integrate it into gru_shell.py
+
+# usage: demo_argparse [-h] [--verbose] [--mode {fast,safe,dry-run}] path {run,inspect} ...
+
+# CORE DESIGN:
+# each command enqueues work, prints IDs/infon and returns immediately
+# unless stated otherwise, maybe they should return work id to
+# be checked on my status command
+# Rationale:
+#   The shell remains responsive for submitting orchestrations,
+#   while still giving users an explicit way to wait on their
+#   submitted orchestration to resolve.
+
+# CORE API:
+# minion start <m_modpath> <m_configpath> <p_modpath>
+#   → returns wid
+# minion stop <mid>
+#   → returns wid
+# pipeline pause <pid>
+#   → allows you to pause ingesting while you redeploy consumers
+#   → returns wid, sets and enforces a desired state not directive like minion commands
+#     like “if it’s running, stop it,” and
+#     “if it hasn’t started yet,
+#     keep it in a paused/disabled state until resume is called.”
+# pipeline resume <pid>
+#   → returns wid, sets and enforces a desired state not directive like minion commands
+# status
+#   → instant snapshot of current state (work,minions,pipelines)
+# status <wid_or_pid_or_mid>
+#   → instant snapshot of current state for given id obj
+# status work
+#   → instant snapshot of current state (work)
+# status pipeline
+#   → instant snapshot of current state (pipelines)
+# status minion
+#   → instant snapshot of current state (minions)
+# status work <wid>
+#   → instant snapshot of current state for given wid obj
+# status pipeline <pid>
+#   → instant snapshot of current state for given pid obj
+# status minion <mid>
+#   → instant snapshot of current state for current mid obj
+# wait <ids_vector> [--timeout N]
+#   → keeps the command pending until each ID leaves its transitional state ("starting"/"stopping"/"draining").
+#   → timeout only ends the wait, never affects the underlying job.
+#   → Ctrl+C only ends the wait, never affects the underlying job.
+
+# todo: can i pipe result of minion start into status command?
+
+# DEVOPS DESIGN:
+# snapshot
+#   → instantly print canonical sorted json to stdout
+#   → contains code_hash / config_hash
+# fingerprint
+#   → runs 'snapshot' and returns its hash
+# deps <id>
+#   → <id> of minion, pipeline, or resource
+#   → usage:
+#     gru> deps minion 1234-abcd
+#     minion 1234-abcd:
+#       pipeline: pipe-foo
+#       resources:
+#         - redis-main
+#         - feature-flags
+#       transitive-resources:
+#         - redis-main
+#         - feature-flags
+#         - db-primary
+#     gru> deps pipeline 1234-abcd
+#     pipeline 1234-abcd:
+#       resources:
+#         - redis-main
+#         - feature-flags
+#       transitive-resources:
+#         - redis-main
+#         - feature-flags
+#         - db-primary
+#     gru> deps resource 1234-abcd
+#     resource 1234-abcd:
+#       resources:
+#         - redis-main
+#         - feature-flags
+#       transitive-resources:
+#         - redis-main
+#         - feature-flags
+#         - db-primary
+# redeploy --strategy {drain,cutover} [--timeout TIMEOUT] ID
+#   → arguments:
+#      - ID: the domain object id to redeploy
+#            gru already has all the file/path info for the domain object
+#            at runtime, so it's most convenient to redeploy by id
+#            ...
+#            if id minion,
+#            drain/cutover semantics just for X, pipeline keeps running.
+#            if id pipeline,
+#            drain/cutover semantics for P (and optionally its minions),
+#            which is what you use when you care about queue-backed
+#            “no missed events” for everyone behind that pipeline.
+#   → options:
+#      - strategy {drain,cutover}:
+#         - drain: wait for domain object work to finish before replacement
+#         - cutover: replace domain object immediately without waiting
+#      - timeout TIMEOUT:
+#         - max seconds to wait for redeploy to complete
+#           if omitted, redeploy waits indefinitely until completion
+#           or is cancelled by user with ctrl+c
+#           or i guess the user can cancel by wid instead of ctrl+c
+#           because redeploys can happen concurrently
+#   → implementation notes:
+#      - drain mode:
+#         - mark affected domain objects as draining
+#         - prevent new workflows / let existing finish
+#         - when inflight=0, apply code changes, restart, resume
+#      - cutover mode:
+#         - mark affected domain objects as stopping
+#         - prevent new workflows / abort existing (add cutover as abortion reason)
+#         - apply code changes, restart, resume
+#      - during drain/cutover, if upstream events arrive
+#        either they aren't seen by what's being redeployed or
+#        they are buffer outside the framework in like kafka/redis/etc
+#        in real 24/7 systems that truly can’t tolerate gaps:
+#        people will realistically put a real queue in
+#        front anyway (Kafka, Redis, SQS, etc.)
+#        the framework's job is just to integrate with those
+#        queues predictably
+#      - consider --on-timeout {cutover,abort}
+#        since maybe someone does a redeploy but it's taking too long
+#        and they decide that they want to just cutover or abort
+#        without allowing new workflows to spawn
+#      - redeploys of minions and pipelines is fine to do concurrently
+#        minions have no dependents and pipelines only have soft dependents
+#        if a pipeline is removed minions dependents just don't spawn
+#        new workflows
+#      - redeploys of resource can be partially concurrent
+#        but will need to be serialized in cases of conflict
+#      - if you redeploy a minion,
+#        just redeploy immediately (concurrent)
+#        (minions have no dependents)
+#        (redeploy each orchestration involving the minion)
+#      - if you redeploy a pipeline,
+#        just redeploy immediately (concurent)
+#        (pipelines only have soft dependents [minions])
+#      - if you redeploy a resource,
+#        redeploy serially or concurrently
+#        depending on dependency conflicts
+#        (resources have hard dependencies)
+
+# Rationale:
+# 'snapshot' and 'fingerprint' creates comparable orchestration state between SDLC enviornments (dev,qa,uat,prod)
+# users can export with 'snapshot' and do diffs or just use 'fingerprint' and compare hashes
+# in the docs, i can say just use 'fingerprint' or if you want to roll your own fingerprints just hash snapshot output
+# (show example command of piping std out of 'fingerprint' into a hashing command)
+
+# TODO: need to document this though somewhere formally w/ example
+# i will never add true statefulness to pipeline/resource
+# only adhoc supplemental statefulness
+# like an in memory cache but maybe i want to persist the cache
+# to disk w/ sqlite so that on restarts the cache
+# can be immediately useful again assuming data isn't stale
+# that will be app specific though
+# that state will never touch statestore
+# statestore is only for workflow states
+
+# TODO: implement 'print outs' for the following commands
+# gru> start minion.py cfg.py pipe.py
+# start queued: pending:12345
+
+# gru> status
+# pending:12345 starting
+
+# gru> status --await --timeout 30
+# pending:12345 running   # or failed, etc.
+
+# gru> stop minion-1
+# stop queued for 1
+
+# gru> status --await minion-1 --timeout 10
+# minion-1 stopped
+
+# does it make sense to have 'list' and 'snapshot' commands?
+# list would be more user friendly but not as robust as snapshot.
+# 'list' would give you a list of what 'start' commands you ran that are still present
+# but why would i let the user do that if they can get that info and more from 'snapshot'?
+# but idk, i sense that it would be best for the user to only have one robust way of reading state system state
+# like the user either sees the following json from 'snapshot' or the following text block from 'list'
+# idk what would be better for them or if it makes sense to just offer one
+# {
+#   "minions": [
+#     {
+#       "name": "PriceWatcher",
+#       "module": "app.minions.price_watcher",
+#       "class": "PriceWatcher",
+#       "config_module": "app.configs.price_watcher",
+#       "pipeline": "price_pipeline",
+#       "config_hash": "a3f1c0...",
+#       "code_hash": "7be92d..."
+#     },
+#     ...
+#   ]
+# }
+# start <m_modpath> <m_configpath> <p_modpath>
+# start <m_modpath> <m_configpath> <p_modpath>
+# ...
+
+# TODO: document how you manage deployments
+# so i think the best practice for managing code changes is just
+# replicating prod in lower enviornments and make sure you get it right
+# in the lower enviornments before you go to prod.
+# in other words, the "sending a rocket to the moon" dev to prod process,
+# you only have one shot so get it right.
+# include that as a 'selling point' to minions that everything being
+# in one process, all the redeploy logic is handles completely by
+# the framework, you just run a command and it happens automately
+# Your realistic safety story is:
+#    Ensure env parity with snapshot / fingerprint.
+#    Validate your redeploy procedure (drain vs cutover, timeouts) in lower envs.
+#    Use the same redeploy commands and strategy flags in prod.
+#    Rely on your own domain knowledge for:
+#       whether inflight workflows can be aborted,
+#       whether your state is backwards compatible,
+#       how your side effects behave.
+
+# cold start minions without missing events for all consumers
+# gru> pipeline pause OrdersPipeline
+# gru> start minion ...  # all minions that depend on OrdersPipeline
+# gru> pipeline resume OrdersPipeline
+
+# redeploying minions without missing events for all consumers
+# gru> pipeline pause OrdersPipeline
+# gru> redeploy minion X --strategy=drain|cutover  # all minions that depend on OrdersPipeline
+# gru> pipeline resume OrdersPipeline
+
+# TODO: Update my docs:
+# The best practice for managing code changes is just replicating prod in lower enviornments
+# and making sure you get it right there before going to prod.
+# Almost like a "sending a rocket to the moon" dev process 
+# where you only have one shot to get it right but you do simulations beforehand.
+
+# So my conclusion is reasonable:
+# - prod-like lower envs.
+# - prove changes there.
+# - treat prod deploys as “rocket launch”: one clear shot, with a rollback playbook if needed.
+
+# The whole deployment/rollback process could be like:
+# - ensure enviornment parity between prod and lower enviornments
+# - validate changes in lower enviornments
+# - in prod:
+#    - freeze and clone inflight workflows / accumulate pipeline events (if not changing pipelines)
+#    - make validated changes (update files / use redeploy command)
+#    - unfreeze cloned inflight workflows
+#    - check logs / go thru your validation plan
+#    - if all good, release accumulated pipeline events
+#    - if not good, (maybe cleanup/delete the bad workflows and logs)
+#      rollback changes, unfreeze inflight workflows and release accumulated pipeline events
+
+# TODO: put the following documentation / mental model in the proper place(s)
+# TopLevelModuleAPI: Minion, Pipeline, Resource, Gru, run_gru_shell
+# because wiring Gru and GruShell is non trivial so helper does it for us
+# manual usage of 'runtime domain objects' (Gru, GruShell)
+# is for advanced use cases (like embedding Gru into a larger asyncio app)
+# and thus generally not need by most users
+# DefaultDeploymentScriptDraft:
+# from minions import Minion, Pipeline, Resource, run_gru_shell, Gru
+# import asyncio
+
+# MINION_SPECS = [
+#     ("mod_a", "cfg_a", "pipe_a"),
+#     ("mod_b", "cfg_b", "pipe_b"),
+#     ("mod_c", "cfg_c", "pipe_c"),
+# ]
+
+# async def init(gru: Gru):
+#     coros = [gru.start_minion(*spec) for spec in MINION_SPECS]
+#     results = await asyncio.gather(*coros, return_exceptions=True)
+#     failures = [r for r in results if isinstance(r, Exception)]
+#     if failures:
+#         raise RuntimeError(f"{len(failures)} minions failed to start")
+
+# if __name__ == "__main__":
+#     run_gru_shell(init=init)
+
+# and run_gru_shell is implemented launch_gru_and_shell or something
+# so powerusers can do whatever they want i guess?
+# gru, shell, loop, thread = launch_gru_and_shell(init=my_init)
+# shell.cmdloop()
+# custom shutdown, or embed shell into existing app
+
+# import asyncio
+# import threading
+# import concurrent.futures as cf
+# from collections.abc import Awaitable, Callable
+
+# from .gru import Gru, _UNSET, StateStore, Logger, Metrics
+
+# InitHook = Callable[[Gru], Awaitable[None]]
+
+# def launch_gru_and_shell(
+#     *,
+#     init: InitHook | None = None,
+#     state_store: StateStore | None | object = _UNSET,
+#     logger: Logger | None | object = _UNSET,
+#     metrics: Metrics | None | object = _UNSET,
+#     metrics_port: int = 8081,
+# ) -> tuple[Gru, "GruShell", asyncio.AbstractEventLoop, threading.Thread]:
+#     loop = asyncio.new_event_loop()
+#     ready: cf.Future[Gru] = cf.Future()
+
+#     def runner():
+#         asyncio.set_event_loop(loop)
+
+#         async def bootstrap():
+#             gru = await Gru.create(
+#                 state_store=state_store,
+#                 logger=logger,
+#                 metrics=metrics,
+#                 metrics_port=metrics_port,
+#             )
+#             if init:
+#                 await init(gru)
+#             if not ready.done(): ready.set_result(gru)
+
+#         loop.create_task(bootstrap())
+#         loop.run_forever()
+
+#     thread = threading.Thread(target=runner, daemon=True)
+#     thread.start()
+
+#     gru = ready.result()
+#     shell = GruShell(gru)
+#     return gru, shell, loop, thread
+
+# def run_gru_shell(
+#     *,
+#     init: InitHook | None = None,
+#     state_store: StateStore | None | object = _UNSET,
+#     logger: Logger | None | object = _UNSET,
+#     metrics: Metrics | None | object = _UNSET,
+#     metrics_port: int = 8081,
+# ) -> None:
+#     gru, shell, loop, thread = launch_gru_and_shell(
+#         init=init,
+#         state_store=state_store,
+#         logger=logger,
+#         metrics=metrics,
+#         metrics_port=metrics_port,
+#     )
+
+#     try:
+#         shell.cmdloop()
+#     finally:
+#         try:
+#             asyncio.run_coroutine_threadsafe(gru.shutdown(), loop).result()
+#         except Exception:
+#             pass
+#         loop.call_soon_threadsafe(loop.stop)
+#         thread.join()
+
+import asyncio
+import cmd
+import os
+import shlex
+import time
+import concurrent.futures as cf
+
+from pprint import pprint
+from typing import Literal, Optional
+
+from .gru import Gru
+
+State = Literal[
+    "starting","running","stopping","draining"
+    "stopped","failed","aborted","unknown"
+]
+
+class GruShell(cmd.Cmd):
+    """Interactive shell bound to a running Gru instance.
+
+    This is a runtime integration object. Prefer `minions.run_shell()`
+    unless you need custom wiring.
+    """
+    intro = "Welcome to GruShell. Type 'help' or '?' to list commands."
+    prompt = "gru> "
+
+    def __init__(self, gru: Gru):
+        super().__init__()
+        self._gru = gru
+        self._loop = gru._loop
+        self._shutdown_done = self._loop.create_future()
+        self._start_ops: dict[str, cf.Future] = {}    # id_or_pending -> future
+        self._stop_ops: dict[str, cf.Future] = {}     # id -> future
+        self._last_targets: list[str] = []
+
+    # -------- helpers --------
+
+    def _to_argv(self, line: str) -> list[str]:
+        return shlex.split(line)
+
+    def _get_minion_ids_and_names(self) -> list[str]:
+        return [i for i in self._gru._minions_by_id] \
+        + [n for n in self._gru._minions_by_name]
+
+    def _submit(self, coro) -> cf.Future:
+        if not self._loop.is_running():
+            raise RuntimeError("Gru loop must be running before submitting coroutines")
+        return asyncio.run_coroutine_threadsafe(coro, self._loop)
+        # if self._loop.is_running():
+        #     return asyncio.run_coroutine_threadsafe(coro, self._loop)
+        # return self._loop.create_task(coro)
+
+    def _compute_state(self, key: str) -> State:
+        if key.startswith("pending:"):
+            f = self._start_ops.get(key)
+            return "failed" if (f and f.done() and f.exception()) \
+            else ("starting" if f and not f.done() else "unknown")
+        if key in self._stop_ops:
+            f = self._stop_ops[key]
+            if not f.done(): return "stopping"
+            try:
+                f.result(); return "stopped"
+            except asyncio.CancelledError: return "aborted"
+            except Exception: return "failed"
+        if key in self._gru._minions_by_id:
+            return "running"
+        return "unknown"
+
+    def _print_summary(self):
+        counts: dict[State, int] = {}
+        keys = set(self._start_ops) | set(self._stop_ops) | set(self._gru._minions_by_id)
+        for k in keys:
+            s = self._compute_state(k); counts[s] = counts.get(s, 0) + 1
+        print(" ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "(none)")
+
+    def _parse_timeout_and_targets(self, argv: list[str]) -> tuple[Optional[float], list[str]]:
+        timeout = None
+        if "--timeout" in argv:
+            i = argv.index("--timeout")
+            if i + 1 < len(argv):
+                timeout = float(argv[i+1])
+            argv = [a for j, a in enumerate(argv) if j not in (i, i + 1)]
+        targets = [a for a in argv if not a.startswith("--")]
+        return timeout, targets
+
+    def _is_transitional(self, state: State) -> bool:
+        return state in ("starting", "stopping")
+
+    # -------- start --------
+
+    def do_start(self, line: str):
+        argv = self._to_argv(line)
+        if len(argv) != 3:
+            print("Usage: start MINION_MODULEPATH MINION_CONFIG_MODULEPATH PIPELINE_MODULEPATH")
+            return
+
+        fut = self._submit(self._gru.start_minion(*argv))
+        pending_id = f"pending:{id(fut)}"
+        self._start_ops[pending_id] = fut
+        self._last_targets = [pending_id]
+        print("start queued")
+
+        def _cb(f: cf.Future):
+            try:
+                inst_id = f.result()
+            except Exception:
+                self._start_ops[pending_id] = f
+                return
+            self._start_ops.pop(pending_id, None)
+            self._start_ops[inst_id] = f
+            self._last_targets = [inst_id]
+
+        fut.add_done_callback(_cb)
+
+    def complete_start(self, text: str, line: str, begidx: int, endidx: int):
+        return [f for f in os.listdir(".") if f.endswith(".py") and f.startswith(text)]
+
+    # -------- stop --------
+
+    def do_stop(self, line: str):
+        ids = self._to_argv(line)
+        if not ids:
+            print("Usage: stop NAME_OR_INSTANCE_ID ...")
+            return
+        for mid in ids:
+            fut = self._submit(self._gru.stop_minion(mid))
+            self._stop_ops[mid] = fut
+        self._last_targets = ids
+        print(f"stop queued for {len(ids)}")
+
+    def complete_stop(self, text: str, line: str, begidx: int, endidx: int):
+        return self._get_minion_ids_and_names()
+
+    # -------- status (snapshot only) --------
+
+    def do_status(self, line: str):
+        "used to check the state of pending orchestrations"
+        argv = self._to_argv(line)
+        targets = [a for a in argv if not a.startswith("--")] or self._last_targets
+        if not targets:
+            self._print_summary(); return
+        for t in targets:
+            print(f"{t} {self._compute_state(t)}")
+
+    def complete_status(self, text: str, line: str, begidx: int, endidx: int):
+        return self._get_minion_ids_and_names() \
+        + [k for k in self._start_ops if k.startswith("pending:")]
+
+    # -------- wait (blocking command, loop keeps running) --------
+
+    def do_wait(self, line: str):
+        argv = self._to_argv(line)
+        timeout, targets = self._parse_timeout_and_targets(argv)
+        targets = targets or self._last_targets
+        if not targets:
+            print("No targets to wait on"); return
+
+        pending = set(targets)
+        deadline = time.monotonic() + timeout if timeout is not None else None
+
+        try:
+            while pending:
+                done = []
+                for t in pending:
+                    st = self._compute_state(t)
+                    if not self._is_transitional(st):
+                        done.append(t)
+                for t in done:
+                    pending.discard(t)
+                if not pending:
+                    break
+                if deadline is not None and time.monotonic() >= deadline:
+                    break
+                time.sleep(0.1)
+        except KeyboardInterrupt:
+            print("wait interrupted by user")
+
+        for t in targets:
+            print(f"{t} {self._compute_state(t)}")
+
+    def complete_wait(self, text: str, line: str, begidx: int, endidx: int):
+        return self._get_minion_ids_and_names() \
+        + [k for k in self._start_ops if k.startswith("pending:")] \
+        + [k for k in self._stop_ops]
+
+    # -------- metrics --------
+
+    def do_metrics(self, line: str):
+        coro = self._gru._metrics._snapshot()
+        try:
+            if self._loop.is_running():
+                fut = asyncio.run_coroutine_threadsafe(coro, self._loop)
+                snap = fut.result(timeout=5)
+            else:
+                snap = self._loop.run_until_complete(coro)
+        except Exception as e:
+            print(f"metrics error: {e}")
+            return
+        pprint(snap)
+
+    # -------- shutdown --------
+
+    def do_shutdown(self, line: str):
+        if self._shutdown_done.done():
+            print("Shutdown already in progress...")
+            return
+        print("Shutting down gru and minions...")
+
+        async def _shutdown():
+            await self._gru.shutdown()
+            if not self._shutdown_done.done():
+                self._shutdown_done.set_result(True)
+
+        self._submit(_shutdown())
+        return True
+
+    # -------- clear --------
+
+    def do_clear(self, line: str):
+        os.system('cls' if os.name == 'nt' else 'clear')
+
+    # async def run_until_complete(self) -> bool:
+    #     self.cmdloop()
+    #     return await self._shutdown_done

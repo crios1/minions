@@ -1,0 +1,15 @@
+import asyncio
+import time
+
+from minions import Pipeline
+
+class EveryMinutePipeline(Pipeline):
+    "create an event every minute"
+
+    async def startup(self):
+        ...
+        self.interval = 60
+
+    async def produce_event(self):
+        await asyncio.sleep(self.interval)
+        return {"timestamp": time.time()}
