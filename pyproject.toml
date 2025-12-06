@@ -1,20 +1,29 @@
 [project]
 name = "minions"
-version = "0.0.1"
-description = "Namespace reservation. Full package coming soon."
+version = "0.0.2"
+description = "Async-native orchestration framework — pre-0.1.0 and under active development."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
-authors = [{ name = "Chris", email = "you@example.com" }]
+authors = [
+  { name = "Chris" }
+]
+
 classifiers = [
-  "Development Status :: 1 - Planning",
+  "Development Status :: 2 - Pre-Alpha",
   "Programming Language :: Python :: 3",
   "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent"
 ]
+
 dependencies = [
   "aiosqlite>=0.19.0"
 ]
+
+[project.urls]
+Homepage = "https://github.com/crios1/minions"
+Source = "https://github.com/crios1/minions"
+Issues = "https://github.com/crios1/minions/issues"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
