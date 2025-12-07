@@ -50,8 +50,12 @@ SnapshotResult = dict[
 class Metrics(AsyncComponent):
     """
     To implement your own metrics backend, subclass this and override:
-      - create_metric(metric_name, label_names, kind)
-      - and the snapshot methods too
+
+    - create_metric(metric_name, label_names, kind)
+    - snapshot_counters()
+    - snapshot_gauges()
+    - snapshot_histograms()
+
     Label names are managed by the framework; you only handle metric creation.
     """
     def __init_subclass__(cls, **kwargs):
@@ -158,47 +162,56 @@ class Metrics(AsyncComponent):
     @abstractmethod
     def snapshot_counters(self) -> SnapshotCounters:
         """
-        SampleResult:
-        {
-            "MINION_WORKFLOW_SUCCEEDED_TOTAL": [
-                {"labels": {"minion": "PriceSync", "reason": "start"}, "value": 4.0},
-                {"labels": {"minion": "PriceSync", "reason": "resume"}, "value": 2.0},
-                {"labels": {"minion": "OrderWatcher", "reason": "start"}, "value": 1.0}
-            ],
-            "MINION_WORKFLOW_FAILED_TOTAL": [
-                {"labels": {"minion": "OrderWatcher", "error_type": "TimeoutError"}, "value": 1.0}
-            ],
-            "MINION_WORKFLOW_ABORTED_TOTAL": []
-        }
+        Return a snapshot of all counters.
+
+        Example structure::
+
+            {
+                "MINION_WORKFLOW_SUCCEEDED_TOTAL": [
+                    {"labels": {"minion": "PriceSync", "reason": "start"}, "value": 4.0},
+                    {"labels": {"minion": "PriceSync", "reason": "resume"}, "value": 2.0},
+                    {"labels": {"minion": "OrderWatcher", "reason": "start"}, "value": 1.0}
+                ],
+                "MINION_WORKFLOW_FAILED_TOTAL": [
+                    {"labels": {"minion": "OrderWatcher", "error_type": "TimeoutError"}, "value": 1.0}
+                ],
+                "MINION_WORKFLOW_ABORTED_TOTAL": []
+            }
         """
 
     @abstractmethod
     def snapshot_gauges(self) -> SnapshotGauges:
         """
-        SampleResult:
-        {
-            "MINION_WORKFLOW_INFLIGHT_GAUGE": [
-                {"labels": {"minion": "PriceSync"}, "value": 1.0},
-                {"labels": {"minion": "OrderWatcher"}, "value": 0.0}
-            ],
-            "SYSTEM_MEMORY_USAGE_BYTES": [
-                {"labels": {}, "value": 2.14e8}
-            ]
-        }
+        Return a snapshot of all gauges.
+
+        Example structure::
+
+            {
+                "MINION_WORKFLOW_INFLIGHT_GAUGE": [
+                    {"labels": {"minion": "PriceSync"}, "value": 1.0},
+                    {"labels": {"minion": "OrderWatcher"}, "value": 0.0}
+                ],
+                "SYSTEM_MEMORY_USAGE_BYTES": [
+                    {"labels": {}, "value": 2.14e8}
+                ]
+            }
         """
 
     @abstractmethod
     def snapshot_histograms(self) -> SnapshotHistograms:
         """
-        SampleResult:
-        {
-            "STEP_DURATION_SECONDS": [
-                {"labels": {"minion": "PriceSync", "step": "fetch_orders"}, "count": 3.0, "sum": 1.24},
-                {"labels": {"minion": "PriceSync", "step": "sync_prices"}, "count": 2.0, "sum": 0.77},
-                {"labels": {"minion": "OrderWatcher", "step": "poll_market"}, "count": 5.0, "sum": 2.95}
-            ],
-            "WORKFLOW_LATENCY_SECONDS": [
-                {"labels": {"minion": "PriceSync"}, "count": 10.0, "sum": 4.38}
-            ]
-        }
+        Return a snapshot of all histograms.
+
+        Example structure::
+
+            {
+                "STEP_DURATION_SECONDS": [
+                    {"labels": {"minion": "PriceSync", "step": "fetch_orders"}, "count": 3.0, "sum": 1.24},
+                    {"labels": {"minion": "PriceSync", "step": "sync_prices"}, "count": 2.0, "sum": 0.77},
+                    {"labels": {"minion": "OrderWatcher", "step": "poll_market"}, "count": 5.0, "sum": 2.95}
+                ],
+                "WORKFLOW_LATENCY_SECONDS": [
+                    {"labels": {"minion": "PriceSync"}, "count": 10.0, "sum": 4.38}
+                ]
+            }
         """

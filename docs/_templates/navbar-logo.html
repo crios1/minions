@@ -1,0 +1,16 @@
+{# Override for sphinx_book_theme / pydata navbar logo to ensure title renders and light/dark assets are respected. #}
+{% set light_logo = theme_logo.get("image_light") or logo_url %}
+{% set dark_logo = theme_logo.get("image_dark") or theme_logo.get("image_light") or logo_url %}
+{% set alt_text = theme_logo.get("alt_text") or alt_logo or (project ~ " - Home") %}
+{% set light_logo_url = light_logo if light_logo and light_logo.startswith("http") else pathto(light_logo, 1) if light_logo else None %}
+{% set dark_logo_url = dark_logo if dark_logo and dark_logo.startswith("http") else pathto(dark_logo, 1) if dark_logo else None %}
+
+<a class="navbar-brand logo" href="{{ pathto(root_doc) }}">
+  {% if light_logo_url %}
+    <img src="{{ light_logo_url }}" class="logo__image only-light" alt="{{ alt_text }}">
+    <img src="{{ dark_logo_url or light_logo_url }}" class="logo__image only-dark" alt="{{ alt_text }}">
+  {% endif %}
+  {% if not theme_logo.get('logo_only', False) %}
+    <p class="title logo__title">{{ (html_title or project)|e }}</p>
+  {% endif %}
+</a>

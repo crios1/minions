@@ -1,0 +1,26 @@
+.navbar-brand.logo {
+  display: flex;
+  flex-direction: column; /* row */
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.navbar-brand.logo img {
+  /* Larger responsive logo: min ~56px, responsive, max ~80px */
+  height: clamp(3.5rem, 9vw, 5rem);
+  width: auto;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.navbar-brand.logo .logo__title {
+  margin: 0;
+  text-align: left;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+/* Ensure the logo scales down on small viewports */
+@media (max-width: 480px) {
+  .navbar-brand.logo img { height: 3rem; }
+}

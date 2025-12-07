@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/_static/mascot-856.png" width="256" alt="Minions mascot">
+</p>
+
 # minions
 
 Async-native orchestration framework for running many long-lived “minions” (workers) on a single machine, with persistence and structured workflows.

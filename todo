@@ -1,3 +1,7 @@
+# TODO: should import examples dir and test them all in tests dir w/ pytest
+# probably for benchmarks dir too to ensure it's correct i guess?
+# but actually benchmarking won't be done thru pytest
+
 # TODO: write my docs for this project based off of 
 # the amazing docs of prompt-toolkit
 # https://python-prompt-toolkit.readthedocs.io/en/master/index.html
