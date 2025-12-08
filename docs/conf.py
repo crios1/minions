@@ -36,6 +36,7 @@ myst_heading_anchors = 3
 html_theme = "sphinx_book_theme"
 html_theme_options = {
     "repository_url": "https://github.com/crios1/minions",
+    "announcement": "Status: Pre-alpha (`0.0.x`). APIs and docs are still evolving and may change without notice.",
     "use_repository_button": False,
     "use_issues_button": False,
     "use_edit_page_button": False,
@@ -50,7 +51,7 @@ html_theme_options = {
             "name": "PyPI",
             "url": "https://pypi.org/project/minions/",
             "icon": "_static/pypi-logo-small.8998e9d1.svg",
-            "type": "url",
+            "type": "local",
         },
     ],
     "show_navbar_depth": 1,
