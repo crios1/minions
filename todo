@@ -1,3 +1,10 @@
+# TODO: document deployment / code changes strategy in docs
+# and any other big large design choice within minions that i can't afford to keep solely in my head
+# once that's done i can continue building minions
+# without worry of needing to revist / second guess design decisions
+# design decisions should be documented in the public docs like
+# "deployment / code changes strategy is xyz because abc choice / trade off / decision"
+
 # TODO: should import examples dir and test them all in tests dir w/ pytest
 # probably for benchmarks dir too to ensure it's correct i guess?
 # but actually benchmarking won't be done thru pytest

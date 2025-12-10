@@ -3,12 +3,6 @@
 :hidden:
 
 getting-started
-concepts/overview
-concepts/minions
-concepts/pipelines
-concepts/resources
-concepts/state-and-persistence
-concepts/concurrency-and-backpressure
 how-to/run-your-first-minion
 how-to/writing-a-custom-resource
 how-to/integrating-with-cli
@@ -21,12 +15,29 @@ guides/deployment-strategies
 ```
 
 ```{toctree}
+:maxdepth: 2
+:hidden:
+:caption: Concepts
+
+concepts/overview
+concepts/minions
+concepts/pipelines
+concepts/resources
+concepts/state-and-persistence
+concepts/concurrency-and-backpressure
+concepts/runtime-modes
+concepts/project-structure
+concepts/portability
+```
+
+```{toctree}
 :maxdepth: 1
 :hidden:
 :caption: kitchen skin
 
 kitchen-skin/need-a-nonnative-library
 kitchen-skin/contributing
+kitchen-skin/writing-minions
 ```
 
 # Minions
@@ -43,6 +54,8 @@ Define your components as Python classes, declare your orchestrations, and the r
 - Pure Python development with no distributed debugging or infra burden
 - Built-in orchestration, lifecycle, dependency management, metrics, and state
 - Safe, dependency-aware restarts and redeployment of individual components
+- Fully portable: a Minions system is just a project folder.  
+  Copy it anywhere and the entire orchestration — code, configs, and state — runs exactly the same.
 
 If you don’t need container-grade isolation or horizontal scaling, Minions is almost always simpler, faster, and more efficient.  
 Minions also lets you isolate risky or unstable code so that failures in those parts never bring down the runtime.
@@ -56,7 +69,7 @@ Minions also lets you isolate risky or unstable code so that failures in those p
     it is to operate, etc. start first with reference examples
     and in the future i can be testimonials of users almost
 -->
-## Microservices vs Minions (on-chain crypto trading bot)
+## Microservices vs Minions Example
 
 Imagine an on-chain trading bot that:
 
@@ -89,6 +102,8 @@ This works, but it comes with the usual overhead:
 With Minions, the same shape of system lives inside a single process:
 <!-- TODO: update the snippet to latest Minions api -->
 ```python
+from minions import Minion, Pipeline, Resource
+
 class ChainEvents(Resource):
     async def subscribe(self) -> AsyncIterator[ChainEvent]: ...
     

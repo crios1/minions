@@ -1,7 +1,7 @@
 (concurrency-backpressure)=
 # Concurrency and Backpressure
 
-The runtime prefers to be **greedy**: pipelines keep producing, minions fan out, and workflows run concurrently. Rate limiting and backpressure live at the resource edge, not in the core scheduler.
+The runtime prefers to be **greedy**: pipelines keep producing, minions fan out, and workflows run concurrently. Rate limiting and backpressure live at the resource edge, not in the core scheduler. This keeps the core simple and pushes policy to where it belongs—the dependency that needs protection.
 
 ## Philosophy
 
@@ -11,9 +11,10 @@ The runtime prefers to be **greedy**: pipelines keep producing, minions fan out,
 
 ## Practical patterns
 
-- Wrap outbound calls in resource-level semaphores or connection pools.
+- Wrap outbound calls in resource-level semaphores or connection pools sized for the dependency.
 - Add per-resource retries/backoff rather than pausing the whole pipeline.
 - Emit warnings when resuming a large number of workflows after a crash; then rely on resources to smooth the recovery.
+- When you truly need a hard cap, put it inside a Resource so fanout continues but individual calls queue at the edge.
 
 ## Monitoring hooks
 

@@ -6,7 +6,7 @@ Resources are shared async services used by pipelines and minions. They encapsul
 
 - Implement `startup`, `run`, and `shutdown` as needed.
 - Public async methods are automatically wrapped to record latency and errors via Prometheus metrics and structured logs.
-- Use `{py:func}``Resource.untracked`` when you need a method to skip tracking.
+- Use `{py:func}``Resource.untracked`` when you need a method to skip tracking (e.g., health checks).
 
 ```python
 from minions import Resource
@@ -25,11 +25,11 @@ class PriceAPI(Resource):
 
 ## Dependency graph
 
-Resources can depend on other resources by type hinting attributes. Gru traverses the graph, starts everything once, reference-counts usage, and shuts down unused resources when minions or pipelines stop.
+Resources can depend on other resources via type hints. Gru traverses the graph, starts everything once, reference-counts usage, and shuts down unused nodes when minions or pipelines stop.
 
 ```python
 class CachedPriceAPI(Resource):
     backend: PriceAPI  # started first, injected automatically
 ```
 
-When Gru shuts down a minion, it decrements resource reference counts and stops resources that are no longer in use.
+The same resource instance is shared wherever the type appears, so rate limiting, connection pools, and caches live in one place.

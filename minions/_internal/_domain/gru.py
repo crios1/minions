@@ -8,12 +8,13 @@ import uuid
 
 from collections import defaultdict, deque
 from pathlib import Path
-from typing import get_type_hints, Iterable
+from typing import Iterable, Mapping, Any, get_type_hints, overload
 
-from .gru_result_types import StartMinionResult, StopMinionResult, ConflictingMinion
 from .minion import Minion
 from .pipeline import Pipeline
 from .resource import Resource
+from .types import T_Event, T_Ctx
+from .gru_result_types import StartMinionResult, StopMinionResult, ConflictingMinion
 
 from .._framework.logger import Logger, DEBUG, INFO, WARNING, ERROR, CRITICAL
 from .._framework.logger_noop import NoOpLogger
@@ -214,8 +215,20 @@ class Gru:
     def _make_minion_instance_id(self) -> str:
         return uuid.uuid4().hex
 
-    def _make_minion_composite_key(self, minion_modpath: str, minion_config_path: str, pipeline_modpath: str) -> str:
-        return f"{Path(minion_modpath).resolve()}|{Path(minion_config_path).resolve()}|{Path(pipeline_modpath).resolve()}"
+    def _make_minion_composite_key(self, minion_modpath: str, minion_config_path: str | None, pipeline_modpath: str) -> str:
+        "conceptually composite_key is project-root-relative identity (with absolute fallbacks)"
+        if minion_config_path == "<inline>":
+            cfg = "<inline>"
+        elif minion_config_path:
+            p = Path(minion_config_path)
+            try:
+                cfg = p.resolve().relative_to(Path.cwd().resolve()).as_posix()
+            except ValueError:
+                cfg = p.resolve().as_posix()
+        else:
+            cfg = ""
+        return f"{minion_modpath}|{cfg}|{pipeline_modpath}"
+
 
     def _get_minion_class(self, minion_modpath: str) -> type[Minion]:
         mod = importlib.import_module(minion_modpath)
@@ -401,6 +414,8 @@ class Gru:
     # i can write the logic to have not depth and
     # then realistically, users won't have depth deeper
     # than 2 or 3.
+    # Might have solved this already
+    # in the sense that cycles are handled gracefully and there is not resource dep depth limit ...
     
     def _get_resource(self):
         ...
@@ -528,20 +543,89 @@ class Gru:
 
     # TODO: might need a per minion lock or some thing for the public endpoints
 
-    async def start_minion(self, minion_modpath: str, minion_config_path: str, pipeline_modpath: str) -> StartMinionResult:
-        # TODO: if ram_usage >= self._max_ram_usage: log and return MinionStartResult
+    @overload
+    async def start_minion(
+        self,
+        minion: type[Minion[T_Event, T_Ctx]],
+        pipeline: type[Pipeline[T_Event]],
+        *,
+        minion_config: Mapping[str, Any] | None = None,
+    ) -> StartMinionResult: ...
+    
+    @overload
+    async def start_minion(
+        self,
+        minion: str,
+        pipeline: str,
+        *,
+        minion_config_path: str | None = None,
+    ) -> StartMinionResult: ...
 
-        minion_modpath = minion_modpath.strip()
-        minion_config_path = str(Path(minion_config_path.strip()).resolve())
-        pipeline_modpath = pipeline_modpath.strip()
-
+    async def start_minion(
+        self,
+        minion: type[Minion[Any, Any]] | str,
+        pipeline: type[Pipeline[Any]] | str,
+        *,
+        minion_config: Mapping[str, Any] | None = None,
+        minion_config_path: str | None = None,
+    ) -> StartMinionResult:
         self._ensure_started()
+
+        # string based start
+        if isinstance(minion, str):
+            if not isinstance(pipeline, str):
+                return StartMinionResult(
+                    success=False,
+                    reason="pipeline must be str when minion is str"
+                )
+            if minion_config is not None:
+                return StartMinionResult(
+                    success=False,
+                    reason="minion_config is only allowed when using Minion and Pipeline subclasses",
+                    suggestion="use minion_config_path instead"
+                )
+            minion_modpath = minion.strip()
+            pipeline_modpath = pipeline.strip()
+            minion_config_path = \
+                None if not minion_config_path \
+                else str(Path(minion_config_path.strip()).resolve())
+
+        # class based start
+        elif isinstance(minion, type) and issubclass(minion, Minion):
+            if not (isinstance(pipeline, type) and issubclass(pipeline, Pipeline)):
+                return StartMinionResult(
+                    success=False,
+                    reason="pipeline must be a Pipeline subclass when minion is a Minion subclass"
+                )
+            if minion_config_path is not None:
+                return StartMinionResult(
+                    success=False,
+                    reason="minion_config_path is only allowed when using module path strings for minion and pipeline",
+                    suggestion="use minion_config instead"
+                )
+            minion_modpath = minion.__module__
+            pipeline_modpath = pipeline.__module__
+            minion_config_path = "<inline>" if minion_config else None
+
+        else:
+            return StartMinionResult(
+                success=False,
+                reason="minion must be either a Minion subclass or a module path string",
+            )
+
+        # TODO: if ram_usage >= self._max_ram_usage: log and return MinionStartResult;
 
         minion_instance_id = self._make_minion_instance_id()
         minion_composite_key = self._make_minion_composite_key(minion_modpath, minion_config_path, pipeline_modpath)
+
+        # ...
+
+        # prev sig: 
+        # async def start_minion(self, minion_modpath: str, minion_config_path: str, pipeline_modpath: str) -> StartMinionResult:
         try:
             # ensure minion is not running
 
+            # todo: will prob rename this and refs to _minion
             minion = self._minions_by_composite_key.get(minion_composite_key)
             if minion:
                 reason = "Minion already running — start request was skipped."
@@ -714,9 +798,9 @@ class Gru:
             )
 
     async def stop_minion(self, name_or_instance_id: str) -> StopMinionResult:
-        name_or_instance_id = name_or_instance_id.strip()
-
         self._ensure_started()
+
+        name_or_instance_id = name_or_instance_id.strip()
 
         try:
             # ensure minion is running

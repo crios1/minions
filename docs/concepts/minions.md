@@ -1,8 +1,8 @@
 # Minions
 
-Minions are async workers that react to events produced by a pipeline. Each event spawns a **workflow**: an ordered series of `@minion_step` methods. Workflows carry a **context** object that survives across steps and can be persisted.
+Minions are async workers that react to pipeline events. Each event spawns a **workflow**: an ordered series of `@minion_step` methods that share a **context** object. Gru persists context + step index before each step so workflows can resume after restarts; you still need to make steps idempotent.
 
-## Anatomy of a Minion
+## Anatomy of a minion
 
 ```python
 from dataclasses import dataclass
@@ -25,16 +25,16 @@ class OrderMinion(Minion[dict, WorkflowCtx]):
         ...
 ```
 
-Key rules:
+Rules from the runtime:
 
-- Declare **event** and **workflow context** types via generics. Both must be JSON-serializable (dataclasses and TypedDicts are fine; bare primitives are rejected).
+- Declare **event** and **workflow context** types via generics. Both must be JSON-serializable structured types (dataclasses/TypedDicts are fine; bare primitives are rejected).
 - Steps must be instance methods decorated with `{py:func}``@minion_step``. They run in source order.
-- Use `self.event` inside steps to access the pipeline event that triggered the workflow.
-- Raise `{py:class}``minions.exceptions.AbortWorkflow`` to stop a workflow gracefully without treating it as a failure.
+- Use `self.event` to access the current pipeline event; the event is contextvar-bound per workflow.
+- Raise `{py:class}``minions._internal._domain.exceptions.AbortWorkflow`` to stop a workflow gracefully without treating it as a failure.
 
 ## Resources inside minions
 
-Dependencies are declared via type hints. Gru inspects those hints, starts the resources, and injects instances on the minion before it runs.
+Dependencies are declared via type hints. Gru inspects hints, starts resources, and injects them on the minion before it runs.
 
 ```python
 from .resources import PriceAPI
@@ -47,14 +47,13 @@ class PriceMinion(Minion[PriceEvent, WorkflowCtx]):
         ctx.price = await self.price_api.get_price(ctx.symbol)
 ```
 
-Resources can also depend on other resources; the graph is started once and reference-counted.
+Resources can depend on other resources; Gru reference-counts the graph and shuts down unused nodes when a minion stops.
 
-## Lifecycles
+## Lifecycles and observability
 
-Minions inherit lifecycle hooks from `AsyncService`:
+Minions inherit `startup`, `run`, and `shutdown` hooks from `AsyncService`. Gru:
 
-- `startup` – initialize derived state or validate config.
-- `run` – optional background loop for long-lived tasks.
-- `shutdown` – cleanup; called even when startup fails.
-
-Gru starts minions as tasks, waits for startup to finish, and handles shutdown when you stop a minion or the process exits.
+- starts each minion as a task and waits for `startup`
+- logs workflow/step start, success, abort, and failure (with user file/line when available)
+- emits Prometheus counters/gauges/histograms for workflows and steps
+- cancels outstanding workflows during shutdown and drains the state store

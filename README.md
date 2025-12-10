@@ -18,6 +18,8 @@ Define your components as Python classes, declare your orchestrations, and the r
 - Pure Python development with no distributed debugging or infra burden
 - Built-in orchestration, lifecycle, dependency management, metrics, and state
 - Safe, dependency-aware restarts and redeployment of individual components
+- Fully portable: a Minions system is just a project folder.  
+  Copy it anywhere and the entire orchestration — code, configs, and state — runs exactly the same.
 
 If you don’t need container-grade isolation or horizontal scaling, Minions is almost always simpler, faster, and more efficient.  
 Minions also lets you isolate risky or unstable code so that failures in those parts never bring down the runtime.

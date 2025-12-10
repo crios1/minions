@@ -9,7 +9,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import (
     Any, Awaitable, Callable, ClassVar,
-    Generic, Literal, Type, TypeVar,
+    Generic, Literal, Type,
     get_args, get_origin, get_type_hints
 )
 
