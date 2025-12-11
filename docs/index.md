@@ -31,6 +31,15 @@ concepts/portability
 ```
 
 ```{toctree}
+:maxdepth: 2
+:hidden:
+:caption: Advanced
+
+advanced/sidecar-resources
+advanced/minimal-installs
+```
+
+```{toctree}
 :maxdepth: 1
 :hidden:
 :caption: kitchen skin
