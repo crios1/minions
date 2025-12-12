@@ -32,6 +32,10 @@ Rules from the runtime:
 - Use `self.event` to access the current pipeline event; the event is contextvar-bound per workflow.
 - Raise `{py:class}``minions._internal._domain.exceptions.AbortWorkflow`` to stop a workflow gracefully without treating it as a failure.
 
+### Reserved attribute space
+
+Names starting with `_mn_` are reserved for the runtime across minions, pipelines, and resources. Do not define attributes or annotations with that prefix; Gru rejects classes that collide with the reserved “minions attr-space.”
+
 ## Resources inside minions
 
 Dependencies are declared via type hints. Gru inspects hints, starts resources, and injects them on the minion before it runs.

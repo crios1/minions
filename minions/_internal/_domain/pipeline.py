@@ -19,7 +19,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
     def __init_subclass__(cls, *, defer_pipeline_setup=False, **kwargs):
         super().__init_subclass__(**kwargs)
 
-        cls._mn_validate_user_annotations()
+        cls._mn_ensure_attrspace()
 
         if defer_pipeline_setup:
             return

@@ -52,7 +52,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     def __init_subclass__(cls, *, defer_minion_setup=False, **kwargs):
         super().__init_subclass__(**kwargs)
 
-        cls._mn_validate_user_annotations()
+        cls._mn_ensure_attrspace()
 
         cls._mn_defer_minion_setup = bool(defer_minion_setup)
         cls._mn_workflow_spec = None

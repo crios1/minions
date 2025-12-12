@@ -26,7 +26,7 @@ class Resource(AsyncService):
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        cls._mn_validate_user_annotations()
+        cls._mn_ensure_attrspace()
 
     def __init__(self, logger: Logger, metrics: Metrics, resource_modpath: str):
         super().__init__(logger)

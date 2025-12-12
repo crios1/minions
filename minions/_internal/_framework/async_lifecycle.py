@@ -9,16 +9,10 @@ from .._utils.get_relative_module_path import get_relative_module_path
 
 T = TypeVar("T")
 
-# TODO: I'm guarding against collisions at runtime
-# I'm validating user code when class is instantiated or at component startup
-# I need to make sure i'm doing those things
-
-# might do a temp:
-# if not name.startswith('_mn_') and name[0]=='_': raise error;
-# so i can find where i missed prefixing the private attr
 class AsyncLifecycle(ABC):
     @classmethod
-    def _mn_validate_user_annotations(cls):
+    def _mn_ensure_attrspace(cls):
+        "Ensure no user-defined class attributes or annotations violate the reserved _mn_ attrspace."
         names = {**cls.__dict__, **getattr(cls, "__annotations__", {})}
         bad = {n for n in names if isinstance(n, str) and n.startswith("_mn_")}
         if bad:
@@ -26,7 +20,7 @@ class AsyncLifecycle(ABC):
             names = ", ".join(f"`{cls.__name__}.{n}`" for n in sorted(bad))
             raise UnsupportedUserCode(
                 f"Invalid attribute assignment: {names} in `{modpath}`. "
-                f"Attributes starting with `_mn_` are reserved for framework use."
+                f"Attributes starting with `_mn_` are reserved for internal Minions runtime use."
             )
 
     @classmethod
