@@ -68,7 +68,7 @@
 
 - todo: add gru config so users can optin to use uvloop for better performance on *nix systems (maybe 2-4x more)
   - design: 
-    - user does "pip install minions[perf]" and get uvloop if not on windows
+    - user does "pip install minions[perf]" and gets uvloop if not on windows
         - in pyproject.toml add to objs
           ```python
           [project.optional-dependencies]
@@ -80,12 +80,73 @@
             "uvloop>=0.22,<0.23",
           ]
           ```
-    - gru uses uvloop if available and on a *nix system;
-      gru exposed loop option with a kwarg config like <loop_config> = "auto" | "uvloop" | "asyncio"
+    - gru supports uvloop; user sets the asyncio event loop policy before running gru with `asyncio.run(...)`
   - implications:
     - my test suite needs to run each test twice (once w/ uvloop and again w/ asyncio loop)
+      - i can configure pytest to behave as follows:
+        - test both backends: "pytest tests/minions/_internal/_domain"
+        - test only asyncio:  "pytest tests/minions/_internal/_domain --loop-policy asyncio"
+        - test only uvloop:   "pytest tests/minions/_internal/_domain --loop-policy uvloop"
+      - steps:
+        - update tests/conftest.py
+          ```python
+          import pytest
+
+          def pytest_addoption(parser):
+              parser.addoption(
+                  "--loop-backend",
+                  action="append",
+                  choices=["asyncio", "uvloop"],
+                  help="Limit loop backends; default runs both",
+              )
+
+          def pytest_generate_tests(metafunc):
+              if "loop_backend" in metafunc.fixturenames:
+                  backends = metafunc.config.getoption("--loop-backend") or ["asyncio", "uvloop"]
+                  metafunc.parametrize(
+                      "loop_backend",
+                      [pytest.param(b, id=b, marks=pytest.mark.loop_uvloop if b == "uvloop" else ()) for b in backends],
+                      scope="session",
+                  )
+          ```
+        - update tests/minions/_internal/_domain/conftest.py
+          ```python
+          import asyncio
+          import pytest
+          import pytest_asyncio
+          import minions._internal._domain.gru as grumod
+          from minions._internal._domain.gru import Gru
+
+          @pytest.fixture(scope="session")
+          def loop_policy(loop_backend):
+              if loop_backend == "uvloop":
+                  uvloop = pytest.importorskip("uvloop")
+                  return uvloop.EventLoopPolicy()
+              return asyncio.DefaultEventLoopPolicy()
+
+          @pytest.fixture
+          def event_loop(loop_policy):
+              asyncio.set_event_loop_policy(loop_policy)
+              loop = asyncio.new_event_loop()
+              try:
+                  yield loop
+              finally:
+                  loop.run_until_complete(loop.shutdown_asyncgens())
+                  loop.close()
+                  asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+
+          @pytest_asyncio.fixture
+          async def gru(loop_backend, logger, metrics, state_store):
+              grumod._GRU_SINGLETON = None
+              g = await Gru.create(logger=logger, metrics=metrics, state_store=state_store)
+              try:
+                  yield g
+              finally:
+                  await g.shutdown()
+                  grumod._GRU_SINGLETON = None
+          ```
     - it's the same deal with future benchmarks in a benchmarks dir, run each twice (once per loop)
-    - in test suite, if uvloop not available, abort the suite and inform the user
+    - in test suite, if uvloop not available, abort the suite and inform the dev
     - in my contributing.md
       - says requires Linux/macOS or WSL2
   - convo: https://chatgpt.com/c/693a8a64-55a0-8326-b383-881b36874aec
