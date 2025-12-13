@@ -50,6 +50,9 @@
     - doing so provides fast feedback to users new to the runtime as they go thru the dev/playground mode of onboarding
     - they won't need to inspect StartMinionResult to know they violated a compositional rule or constraint, an exception will be raise at class definition time instead
     - this behavior is safe because in production minions systems, the user will be using str style minion starts so there is no risk of messing up thier prod launch cuz they won't by passing classes to gru
+  - implementation:
+    - basically just call ... in each the `__init_subclass__` of Minion, Pipeline, Resource
+    - and then in the test suite i'll defer the `__init_subclass__` like i do to make SpiedMinion (might already be done for all domain objects in test suite)
 
 - todo(needs spec-ing): manage OOM risk... how should the runtime react to / manage maximal memory demands? (is probably partially implemented)
   - design:
@@ -60,6 +63,8 @@
     - ...
 
 - todo: add support for resourced pipelines and resourced resources (currenlty partially implemented)
+
+- todo: add "crash testing" to test suite to ensure that minions runtime does the runtime crash guarentees
 
 - todo: add gru config so users can optin to use uvloop for better performance on *nix systems (maybe 2-4x more)
   - design: 

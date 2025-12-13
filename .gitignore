@@ -1,6 +1,8 @@
 logs/
 docs/private
 */_build/
+.github/
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

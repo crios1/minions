@@ -77,7 +77,7 @@ def state_store(logger):
 
 @pytest_asyncio.fixture
 async def gru(logger, metrics, state_store):
-    grumod._GRU_SINGLETON = None
+    grumod._GRU_INSTANCE = None
     g = await Gru.create(
         logger=logger,
         metrics=metrics,
@@ -87,7 +87,7 @@ async def gru(logger, metrics, state_store):
         yield g
     finally:
         await g.shutdown()
-        grumod._GRU_SINGLETON = None
+        grumod._GRU_INSTANCE = None
 
 # from prometheus_client import REGISTRY
 # def reset_prometheus_registry():

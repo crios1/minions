@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import gc
@@ -41,7 +43,7 @@ class _UnsetType: ...
 
 _UNSET = _UnsetType()
 
-_GRU_SINGLETON = None
+_GRU_INSTANCE: Gru | None = None
 
 
 class Gru:
@@ -85,11 +87,12 @@ class Gru:
             raise RuntimeError("Use 'await Gru.create(...)' instead of direct instantiation.")
 
         self._started = False
+        self._shutdown = False
 
-        global _GRU_SINGLETON
-        if _GRU_SINGLETON is not None:
+        global _GRU_INSTANCE
+        if _GRU_INSTANCE is not None:
             raise RuntimeError("Only one Gru instance is allowed per process.")
-        _GRU_SINGLETON = self
+        _GRU_INSTANCE = self
 
         if logger is _UNSET:
             self._logger = FileLogger()
@@ -533,6 +536,10 @@ class Gru:
         )
 
     def _ensure_started(self):
+        if self._shutdown:
+            raise RuntimeError(
+                "Gru has been shut down. Create a new instance with `await Gru.create(...)`."
+            )
         if not self._started:
             raise RuntimeError(
                 "Gru is not started. Either use `await Gru.create(...)` to construct and start it in one step, "
@@ -933,6 +940,12 @@ class Gru:
 
         except Exception as e: # pragma: no cover
             await self._log_exception_with_context(e, "Gru.shutdown failed")
+        finally:
+            self._started = False
+            self._shutdown = True
+            global _GRU_INSTANCE
+            if _GRU_INSTANCE is self:
+                _GRU_INSTANCE = None
 
     # Background Tasks
 

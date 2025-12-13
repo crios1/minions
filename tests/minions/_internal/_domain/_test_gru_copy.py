@@ -35,16 +35,16 @@ from minions._internal._framework.metrics_constants import (
 TESTS_DIR = Path(__file__).resolve().parents[3]
 
 # @pytest.fixture(autouse=True)
-# def reset_gru_singleton():
-#     grumod._GRU_SINGLETON = None
+# def reset_GRU_INSTANCE():
+#     grumod._GRU_INSTANCE = None
 #     yield
-#     grumod._GRU_SINGLETON = None
+#     grumod._GRU_INSTANCE = None
 
 
 @pytest_asyncio.fixture(autouse=True)
 async def reset_test_env():
     # ensure singleton cleared at test start and spying enabled for helpers
-    grumod._GRU_SINGLETON = None
+    grumod._GRU_INSTANCE = None
     InMemoryLogger.enable_spy()
     InMemoryMetrics.enable_spy()
     InMemoryStateStore.enable_spy()
@@ -79,7 +79,7 @@ async def reset_test_env():
         except Exception:
             from tests.assets.support.mixin_spy import SpyMixin as spy
         return {
-            "GRU_SINGLETON": repr(grumod._GRU_SINGLETON),
+            "GRU_SINGLETON": repr(grumod._GRU_INSTANCE),
             "SpyMixin": _cls_snap(spy),
             "InMemoryLogger": _cls_snap(InMemoryLogger),
             "InMemoryMetrics": _cls_snap(InMemoryMetrics),
@@ -114,7 +114,7 @@ async def reset_test_env():
     pprint({"pre": pre})
     pprint({"post": post})
 
-    grumod._GRU_SINGLETON = None
+    grumod._GRU_INSTANCE = None
     InMemoryLogger.reset()
     InMemoryMetrics.reset()
     InMemoryStateStore.reset()
@@ -152,7 +152,7 @@ async def run_scenario(gru_cmds: Iterable[GruCmd]):
     metrics = InMemoryMetrics()
     state_store = InMemoryStateStore(logger=logger)
 
-    grumod._GRU_SINGLETON = None
+    grumod._GRU_INSTANCE = None
 
     gru = await Gru.create(logger=logger, metrics=metrics, state_store=state_store)
 
@@ -187,7 +187,7 @@ async def setup_gru() -> tuple[Gru, InMemoryLogger, InMemoryMetrics, InMemorySta
     metrics = InMemoryMetrics()
     state_store = InMemoryStateStore(logger=logger)
 
-    grumod._GRU_SINGLETON = None
+    grumod._GRU_INSTANCE = None
 
     gru = await Gru.create(logger=logger, metrics=metrics, state_store=state_store)
 
