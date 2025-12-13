@@ -101,6 +101,8 @@ But you only:
 - Debug one runtime
 - Operate one system
 
+Need more throughput? Start with `docs/guides/scale-out-strategies.md`. If you later outgrow the single-process model, see `docs/guides/migrating-to-microservices.md`.
+
 ## Installation
 
 The package name is reserved on PyPI, but the project is **not** ready for general use.

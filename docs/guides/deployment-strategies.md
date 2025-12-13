@@ -4,6 +4,7 @@ Minions is built for single-process orchestrations. Here are pragmatic ways to r
 
 - **Supervised process**: wrap your app with `systemd`, `supervisord`, or a container runtime that restarts on failure. Gru enforces a single instance per process.
 - **Separate risky code**: if you depend on native extensions that can segfault, keep them in subprocesses and talk over a narrow IPC API; let Gru restart cleanly.
+- **Scale-out topology**: when scale-up isn’t enough, replicate runtimes with sharded ownership or offload hotspots to sidecars (see {doc}`scale-out-strategies`).
 - **Metrics endpoint**: expose Prometheus metrics (default port 8081) and alert on workflow failures, resource errors, and high memory/CPU gauges.
 - **Logs**: default logger writes to files; inject your own logger to ship to structured log pipelines.
 - **Persistence**: keep `minions.db` (SQLite) on durable storage if you rely on workflow resumption; or set `state_store=None` if you prefer stateless runs.

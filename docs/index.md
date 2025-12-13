@@ -12,6 +12,8 @@ reference/api/minions_cli
 guides/patterns-and-anti-patterns
 guides/testing-minions
 guides/deployment-strategies
+guides/migrating-to-microservices
+guides/scale-out-strategies
 ```
 
 ```{toctree}
@@ -66,7 +68,8 @@ Define your components as Python classes, declare your orchestrations, and the r
 - Fully portable: a Minions system is just a project folder.  
   Copy it anywhere and the entire orchestration — code, configs, and state — runs exactly the same.
 
-If you don’t need container-grade isolation or horizontal scaling, Minions is almost always simpler, faster, and more efficient.  
+If you don’t need container-grade isolation or horizontal scaling, Minions is often simpler, faster, and more efficient.
+Need more throughput? See {doc}`guides/scale-out-strategies`.(you can move system components out incrementally) If your needs change, Minions components map 1:1 to microservices components—see {doc}`guides/migrating-to-microservices`.
 Minions also lets you isolate risky or unstable code so that failures in those parts never bring down the runtime.
 
 <!-- ## Minions vs Microservices (side-by-side) -->

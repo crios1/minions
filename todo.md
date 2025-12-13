@@ -7,6 +7,8 @@
     Finally, I'll complete the todos in this file end to end w/ running tests.
 -->
 
+- todo: update my docs and readme to the approach laid out in index_new.md 
+
 - todo(needs spec-ing?): complete test suite refactor
 
 - todo: move private domain object attrs to minions attrspace (`_mn_`)
