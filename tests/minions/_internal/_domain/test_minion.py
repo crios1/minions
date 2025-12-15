@@ -66,39 +66,51 @@ class TestMinionSubclassingValid:
 
 class TestMinionSubclassingInvalid:
     def test_missing_event_and_context_types(self):
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError) as excinfo:
             class MyMinion(Minion):
                 ...
+        assert str(excinfo.value) == (
+            "MyMinion must declare both event and workflow context types. "
+            "Example: class MyMinion(Minion[MyPipelineEvent, MyWorkflowCtx])"
+        )
 
     def test_invalid_event_type(self):
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError) as excinfo:
             class MyMinion(Minion[int, MyContext]):
                 ...
+        assert str(excinfo.value) == "MyMinion: event type must be a structured type, not a primitive"
 
     def test_invalid_context_type(self):
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError) as excinfo:
             class MyMinion(Minion[MyEvent, int]):
                 ...
+        assert str(excinfo.value) == "MyMinion: workflow context type must be a structured type, not a primitive"
 
     def test_invalid_event_and_context_types(self):
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError) as excinfo:
             class MyMinion(Minion[int, int]):
                 ...
+        assert str(excinfo.value) == "MyMinion: event type must be a structured type, not a primitive"
     
     def test_reject_multiple_minion_bases(self):
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError) as excinfo:
             class MyMinion(Minion[MyEvent, MyContext], Minion[dict, dict]): # type: ignore
                 ...
+        assert str(excinfo.value) == "duplicate base class Minion"
     
     def test_reject_subclassing_minion_subclasses(self):
         class MinionSub(Minion[MyEvent, MyContext]):
             ...
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError) as excinfo:
             class MinionSubSub(MinionSub):
                 ...
+        assert str(excinfo.value) == (
+            "MinionSubSub must subclass Minion directly. "
+            "Subclasses of Minion subclasses are not supported."
+        )
 
     def test_invalid_name(self):
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError) as excinfo:
             class MyMinion(Minion[dict, dict]):
                 name = set('invalid_name') # only kebab-case is valid
             MyMinion(
@@ -110,11 +122,18 @@ class TestMinionSubclassingInvalid:
                 metrics=NoOpMetrics(),
                 logger=NoOpLogger()
             )
+        assert str(excinfo.value) == "MyMinion.name must be a string, got set"
 
     def test_duplicate_resource_dependency(self):
         class MyResource(Resource):
             ...
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError) as excinfo:
             class MyMinion(Minion[dict, dict]):
                 r1: MyResource
                 r2: MyResource
+        resource_id = f"{MyResource.__module__}.{MyResource.__name__}"
+        assert str(excinfo.value) == (
+            "MyMinion declares multiple class attributes with the same Resource type: "
+            f"{resource_id} -> ['r1', 'r2']. "
+            "Define only one class-level Resource per Resource type."
+        )

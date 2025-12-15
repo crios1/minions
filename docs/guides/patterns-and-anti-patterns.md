@@ -5,7 +5,7 @@ A few guardrails while the framework is still evolving.
 ## Patterns
 
 - **Explicit resources**: move I/O and rate limits into `Resource` subclasses; keep minion steps mostly orchestration logic.
-- **Structured events/contexts**: use dataclasses/TypedDicts instead of bare primitives to keep serialization predictable.
+- **Structured events/contexts**: use dataclasses or TypedDicts instead of bare primitives to keep serialization predictable. If serialization throughput matters, prefer `msgspec.Struct` (or use `@dataclass(slots=True)` as a close second).
 - **Idempotent steps**: design steps so reruns after restarts are safe; persist intent, not transient state.
 - **Compose via type hints**: declare dependencies with annotations instead of manual wiring; let Gru manage the graph.
 - **Metrics-first**: use the built-in Prometheus counters/gauges to watch throughput and errors before tuning concurrency.

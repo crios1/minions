@@ -61,7 +61,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             return
 
         no_event_or_ctx_types_err = TypeError(
-            f"{cls.__name__} must declare both event and workflow context types.\n"
+            f"{cls.__name__} must declare both event and workflow context types. "
             f"Example: class MyMinion(Minion[MyPipelineEvent, MyWorkflowCtx])"
         )
 

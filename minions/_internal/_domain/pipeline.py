@@ -25,7 +25,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
             return
 
         err = TypeError(
-            f"{cls.__name__} must declare an event type.\n"
+            f"{cls.__name__} must declare an event type. "
             f"Example: class MyPipeline(Pipeline[MyEvent])"
         )
 

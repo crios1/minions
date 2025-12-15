@@ -17,7 +17,7 @@ Scale-up preserves Minions’ simplest deployment model:
 - Increase safe concurrency (more workflows/steps in flight).
 - Put backpressure at the edges (rate-limit inside resources), not by “sleeping” in steps.
 
-Related reading: {doc}`concepts/concurrency-and-backpressure`, {doc}`guides/deployment-strategies`, {doc}`guides/patterns-and-anti-patterns`.
+Related reading: {doc}`/concepts/concurrency-and-backpressure`, {doc}`/guides/deployment-strategies`, {doc}`/guides/patterns-and-anti-patterns`.
 
 ## 1) Offload hotspots to a sidecar process (recommended “scale-out”)
 
@@ -29,7 +29,7 @@ If you have CPU headroom on the host but one dependency is the bottleneck (or ri
 
 Your Minions process stays the orchestrator; the sidecar scales independently (more processes/threads; different resource limits).
 
-Related reading: {doc}`advanced/sidecar-resources`.
+Related reading: {doc}`/advanced/sidecar-resources`.
 
 ## 2) Run multiple Minions runtimes with sharded ownership
 
@@ -74,9 +74,9 @@ Use followers for shard-local work only, or keep them hot as failover.
 
 Minions’ in-process orchestration is simple; distributed orchestration is not. If you scale out, explicitly decide how you preserve correctness:
 
-- **Delivery semantics**: assume at-least-once and make side effects idempotent (see {doc}`kitchen-skin/writing-minions`).
+- **Delivery semantics**: assume at-least-once and make side effects idempotent (see {doc}`/kitchen-skin/writing-minions`).
 - **Ownership**: ensure a workflow/event is handled by exactly one shard at a time (partitioning or leases).
-- **Persistence**: decide where workflow state lives and how it’s updated safely (see {doc}`concepts/state-and-persistence`).
+- **Persistence**: decide where workflow state lives and how it’s updated safely (see {doc}`/concepts/state-and-persistence`).
 - **Replays**: define what happens on restart (re-consume events? resume from DB? dedupe?).
 
 If you’re currently using SQLite for the state store, multiple replicas generally means either:
@@ -88,5 +88,4 @@ If you’re currently using SQLite for the state store, multiple replicas genera
 
 If you need independent scaling for many components, strong isolation boundaries, or lots of cross-process coordination, it may be time to migrate to microservices.
 
-See {doc}`guides/migrating-to-microservices` for a pragmatic 1:1 mapping approach.
-
+See {doc}`/guides/migrating-to-microservices` for a pragmatic 1:1 mapping approach.

@@ -31,9 +31,9 @@ If you don’t need container-grade isolation or horizontal scaling, Minions is 
 
 Minions is not a dead end.
 
-When you need more throughput, you can incrementally scale out by externalizing selected components while continuing to use Minions for orchestration (see {doc}`guides/scale-out-strategies`).
+When you need more throughput, you can incrementally scale out by externalizing selected components while continuing to use Minions for orchestration (see {doc}`/guides/scale-out-strategies`).
 
-If your requirements eventually demand a fully distributed system, Minions components map cleanly to microservices boundaries, making migration straightforward (see {doc}`guides/migrating-to-microservices`).
+If your requirements eventually demand a fully distributed system, Minions components map cleanly to microservices boundaries, making migration straightforward (see {doc}`/guides/migrating-to-microservices`).
 
 The goal is not to avoid microservices forever—it’s to adopt them deliberately, if and when they are truly warranted.
 

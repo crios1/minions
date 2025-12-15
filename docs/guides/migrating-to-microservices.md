@@ -25,9 +25,9 @@ Minions is often the simplest choice if you don’t need container-grade isolati
 - **Multi-team ownership** with independent release trains and SLAs.
 - **Geographic distribution** or strong data-locality constraints.
 
-If you mostly want “separation of concerns” and “operational clarity”, a Minions deployment mode system can often get you there without going distributed (see {doc}`concepts/runtime-modes` and {doc}`guides/deployment-strategies`).
+If you mostly want “separation of concerns” and “operational clarity”, a Minions deployment mode system can often get you there without going distributed (see {doc}`/concepts/runtime-modes` and {doc}`/guides/deployment-strategies`).
 
-If you’re primarily thinking about throughput, also consider the intermediate options in {doc}`guides/scale-out-strategies`.
+If you’re primarily thinking about throughput, also consider the intermediate options in {doc}`/guides/scale-out-strategies`.
 
 ## Mapping Minions concepts to microservices
 
@@ -42,7 +42,7 @@ This isn’t the only mapping, but it’s the most common starting point:
 | State store / workflow context | A DB table, event store, or durable cache owned by the service |
 | Minion steps / retries | Queue retries + idempotency keys + compensations in the service |
 
-Minions makes step execution durable and resumable (see {doc}`concepts/state-and-persistence`). When you migrate, you’ll re-create those guarantees explicitly using your platform and data store choices.
+Minions makes step execution durable and resumable (see {doc}`/concepts/state-and-persistence`). When you migrate, you’ll re-create those guarantees explicitly using your platform and data store choices.
 
 ## What tends to be “copy/paste”
 
@@ -64,7 +64,7 @@ Plan for these explicitly:
 - **Retries and backpressure**: retry policy, rate limits, dead-letter handling
 - **Observability**: logs/metrics/traces across services
 
-Minions already pushes you toward idempotent logic because step execution is at-least-once. Keep that discipline; it maps directly to microservices reliability patterns (see {doc}`kitchen-skin/writing-minions`).
+Minions already pushes you toward idempotent logic because step execution is at-least-once. Keep that discipline; it maps directly to microservices reliability patterns (see {doc}`/kitchen-skin/writing-minions`).
 
 ## Migration strategies
 

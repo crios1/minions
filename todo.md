@@ -39,6 +39,16 @@
   - convo:
     - https://chatgpt.com/c/693f9bc9-c46c-8327-bd5a-c9b38f45859b
 
+- todo: write tests that prove that gru works with msgspec.Struct event and context types
+  - ```python
+    class MyEvent(msgspec.Struct):
+      greeting: str = "hello world"
+    ```
+  - ```python
+    class MyContext(msgspec.Struct):
+      my_attribute: str | None = None
+    ```
+
 - todo: setup github repo so feature requests are surfaced thru "discussions" instead of "issues"
   - https://chatgpt.com/c/693f6fff-6bac-8333-9844-b1aade31a4d5
 

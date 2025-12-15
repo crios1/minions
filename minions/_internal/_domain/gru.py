@@ -676,9 +676,9 @@ class Gru:
             if minion._mn_event_cls != pipeline._mn_event_cls:
 
                 reason = (
-                    f"Incompatible minion and pipeline event types:\n"
-                    f"  Pipeline emits: {pipeline._mn_event_cls.__name__}\n"
-                    f"  Minion expects: {minion._mn_event_cls.__name__}"
+                    "Incompatible minion and pipeline event types: "
+                    f"pipeline_emits={pipeline._mn_event_cls.__name__}; "
+                    f"minion_expects={minion._mn_event_cls.__name__}"
                 )
                 suggestion = "Update the minion or pipeline so they use the same event type."
                 minion_instance_id = minion._mn_minion_instance_id

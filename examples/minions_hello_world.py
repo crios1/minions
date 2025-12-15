@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 from typing import Any
+
 from minions import Minion, Pipeline, Gru, minion_step
 
 # Uncomment to use uvloop:

@@ -15,10 +15,6 @@ from minions._internal._utils.serialization import (
     is_type_serializable
 )
 
-# TODO: should document encoding (maybe decoding) is 9% faster when subclassing msgspec.Struct
-# i need to verify that it's true to begin with
-# if it is, then i should put it in advanced or perf-tuning of minions
-# no in the hello world cuz we want that to be a mvp example
 @dataclass
 class Event:
     id: str = field(default_factory=lambda: uuid.uuid4().hex)

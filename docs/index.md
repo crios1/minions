@@ -2,6 +2,7 @@
 :maxdepth: 2
 :hidden:
 
+index_new
 getting-started
 how-to/run-your-first-minion
 how-to/writing-a-custom-resource
@@ -69,7 +70,7 @@ Define your components as Python classes, declare your orchestrations, and the r
   Copy it anywhere and the entire orchestration — code, configs, and state — runs exactly the same.
 
 If you don’t need container-grade isolation or horizontal scaling, Minions is often simpler, faster, and more efficient.
-Need more throughput? See {doc}`guides/scale-out-strategies`.(you can move system components out incrementally) If your needs change, Minions components map 1:1 to microservices components—see {doc}`guides/migrating-to-microservices`.
+Need more throughput? See {doc}`/guides/scale-out-strategies`.(you can move system components out incrementally) If your needs change, Minions components map 1:1 to microservices components—see {doc}`/guides/migrating-to-microservices`.
 Minions also lets you isolate risky or unstable code so that failures in those parts never bring down the runtime.
 
 <!-- ## Minions vs Microservices (side-by-side) -->
@@ -154,6 +155,6 @@ But you only:
 ## Next steps
 
 - Start with {doc}`getting-started` for a concrete “hello minion” walkthrough  
-- Read {doc}`concepts/overview` to understand the Minions mental model  
+- Read {doc}`/concepts/overview` to understand the Minions mental model  
 - Jump to {doc}`how-to/run-your-first-minion` for a hands-on checklist  
 - Explore {doc}`reference/api/minions_core` as the API surface evolves
