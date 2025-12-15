@@ -7,9 +7,47 @@
     Finally, I'll complete the todos in this file end to end w/ running tests.
 -->
 
-- todo: update my docs and readme to the approach laid out in index_new.md 
-
 - todo(needs spec-ing?): complete test suite refactor
+
+- todo: refactor tests/assets naming + organization for long-term maintainability
+  - decision:
+    - directory-first taxonomy; no hand-maintained manifest
+  - goals:
+    - scale to ~100–200 assets without filename bloat or collisions
+    - encode intent in paths + semantic names; avoid “mystery variants”
+    - preserve ability for tests to stay “pure Python imports” of assets
+  - conventions:
+    - layout is the primary index:
+      - `tests/assets/<kind>/<scenario_family>/...`
+      - kinds: `pipelines/`, `minions/`, `resources/`, `workflow_files/`, `config/`, `support/`
+      - `scenario_family` = the human-meaningful scenario bucket (e.g. `emit1`, `emit_loop`, `on_simple_event`, `invalid_explicit`, etc.)
+    - filenames are short + semantic:
+      - `tests/assets/<...>/<case>.py` (snake_case)
+      - `case` describes purpose (e.g. `hang_after_first_event`, `invalid_missing_resource`, etc.)
+    - identity clones use letters, not numbers:
+      - when identical behavior but distinct runtime identity is required: `<case>_a.py`, `<case>_b.py`, `<case>_c.py`
+      - class names inside match suffix (e.g. `MyPipelineA`, `MyPipelineB`) to satisfy “unique identity per class path”
+    - skip vNN by default:
+      - don’t version fixtures; edit in place
+      - when you need “old behavior kept alongside new”, create a new semantic case asset instead of vNN
+  - docs:
+    - add `tests/assets/README.md` defining:
+      - taxonomy + naming rules
+      - examples for each kind
+      - when to use `_a/_b/_c` clones
+      - where invalid fixtures live and how to name them
+  - convo:
+    - https://chatgpt.com/c/693f9bc9-c46c-8327-bd5a-c9b38f45859b
+
+- todo: setup github repo so feature requests are surfaced thru "discussions" instead of "issues"
+  - https://chatgpt.com/c/693f6fff-6bac-8333-9844-b1aade31a4d5
+
+- todo: update my docs and readme with positioning surfaced in this thread (https://chatgpt.com/c/693b751c-bb18-8329-b2d5-b6ece864000b)
+  - ctrl+f to read from the following text to end of thread:
+    - "Short answer: the angle I suggested is stronger than this one as a primary positioning, but most of what you wrote here is still very good. The difference is where and how it’s used."
+  - note: thread also contains additional todos and plans
+
+- todo: my landing page doc and readme are almost the same, i should consider centralizing them to some extent or better to maintain them seperately?
 
 - todo: move private domain object attrs to minions attrspace (`_mn_`)
   - steps:
@@ -64,11 +102,31 @@
   - implementation / verify w/ tests:
     - ...
 
+- todo: complete GruShell (~90% implemented, needs documentation / user onboarding flow)
+  - users will embed GruShell into thier deployment scripts / use the cookbook to make the script
+  - but maybe it makes sense to let the user experiment with the shell by calling "python -m minions shell"? i need to consider the user onboarding flow further.
+
 - todo: add support for resourced pipelines and resourced resources (currenlty partially implemented)
+  - requires implementation, testing, and documentation for each
+  - before testing, i'll probably have to refactor the structure of test assets
+  - todo: test that resourced domain objects can have multiple resource dependencies
+    - current test assets only test 1 dependency per asset
+  - justification:
+    - consider a system like as follows
+      ```python
+      # WSClientResource
+      # PriceOracleResource (depends on WSClientResource)
+      # NewTokenCreatedPipeline (depends on WSClientResource)
+      # TradingMinion (
+      #   depends on NewTokenCreatedPipeline and PriceOracleResource
+      #   and it's possible that you want to expose the "raw" WSClientResource
+      #   to TradingMinion too
+      # )
+      ```
 
 - todo: add "crash testing" to test suite to ensure that minions runtime does the runtime crash guarentees
 
-- todo: add gru config so users can optin to use uvloop for better performance on *nix systems (maybe 2-4x more)
+- todo: provide uvloop support for better performance on *nix systems (maybe 2-4x more)
   - design: 
     - user does "pip install minions[perf]" and gets uvloop if not on windows
         - in pyproject.toml add to objs

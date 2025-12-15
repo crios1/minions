@@ -8,7 +8,7 @@ Minions emphasizes correctness, stability, and real-world validation over rapid 
 
 ## v0.1.x
 - Maintenance and hardening releases
-- Bug fixes and dependency or security updates
+- Bug fixes, dependency updates, and security patches
 - No semantic or architectural changes
 
 ## v0.x.0
