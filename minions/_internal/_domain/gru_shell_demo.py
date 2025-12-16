@@ -334,8 +334,12 @@ class GruShell(cmd.Cmd):
         print()
         return True
 
-# TODO: should add a ctrl+c global exception handler
-# or something so it doesn't blow up my cmdloop
-
 if __name__ == "__main__":
-    GruShell().cmdloop()
+    shell = GruShell()
+    while True:
+        try:
+            shell.cmdloop()
+            break
+        except KeyboardInterrupt:
+            print()
+            continue

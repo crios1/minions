@@ -10,5 +10,3 @@ class ConsoleLogger(Logger):
     async def log(self, level: int, msg: str, **kwargs: Any) -> None:
         now = datetime.now(timezone.utc).isoformat()
         print(f"[{now}] [level={level}] {msg} {kwargs}", file=sys.stdout)
-
-# TODO: improve

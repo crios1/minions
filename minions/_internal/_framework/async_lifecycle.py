@@ -24,6 +24,22 @@ class AsyncLifecycle(ABC):
             )
 
     @classmethod
+    def _mn_validate_class_user_code(cls, modpath: str | None = None):
+        modpath = modpath or cls.__module__
+        isfunction = inspect.isfunction
+        validate = cls._mn_validate_user_code
+
+        for name, attr in cls.__dict__.items():
+            if not name or not name[0].isalpha():
+                continue
+
+            func = getattr(attr, "__func__", attr)  # unwrap staticmethod/classmethod if present
+            if not isfunction(func):
+                continue  # avoids builtins / descriptors that don't have user code
+
+            validate(func, modpath)
+
+    @classmethod
     def _mn_validate_user_code(cls, func: Callable, modpath: str):
         try:
             src = textwrap.dedent(inspect.getsource(func))

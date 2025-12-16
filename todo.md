@@ -9,6 +9,54 @@
 -->
 
 ### Test Suite:
+- todo: centralize definition-time validation for user-facing classes
+  - steps:
+    - update `AsyncLifecycle.__init_subclass__`
+      ```python
+      class AsyncLifecycle(ABC):
+        """
+        Framework base class for async lifecycle components.
+
+        Notes:
+        - Definition-time validation of user code is gated behind `_mn_user_facing`.
+        - Internal framework classes and test/spy helpers leave this False.
+        - User-facing domain classes set `_mn_user_facing = True` so violations
+          are caught immediately when subclasses are defined.
+        - Helper/spy subclasses may temporarily disable validation and re-enable
+          it at the final leaf.
+        """
+        _mn_user_facing = False
+        def __init_subclass__(cls, **kwargs):
+          super().__init_subclass__(**kwargs)
+          if not cls._mn_user_facing:
+              return
+          cls._mn_ensure_attrspace()
+          cls._mn_validate_class_user_code(cls.__module__)
+        ...
+      ```
+    - mark user-facing domain objects (pipeline, minion, resource, metrics, statestore, logger) with "_mn_user_facing = True" and remove any redundant `__init_subclass__` logic
+    ```python
+    class Pipeline(AsyncService):
+      _mn_user_facing = True
+      ...
+    ```
+    - update intermediate helper / spy subclasses in test suite (SpiedPipeline, etc.) to disable validation while extending behavior, and re-enable it at the "tip" of the inheritance chain
+    ```python
+    class Pipeline(AsyncService):
+      _mn_user_facing = True
+      ...
+
+    class SpiedPipeline(Pipeline):
+      _mn_user_facing = False
+      ...
+
+    class MockUserDefinedPipeline(SpiedPipeline):
+      _mn_user_facing = True
+      ...
+    ```
+    - refactor SpyMixin to remove enable_spy so we don't have to call enable enable_spy anymore. and update tests that call the method.
+  - convo: https://chatgpt.com/c/6940a419-8a4c-8325-be84-75509c098769
+
 - todo: harden/repair test_gru.py:
   - test suite is partially broken after partially implementing a robust reuseable testing routine for each set of orchestrations in a test
   - steps:
@@ -130,6 +178,10 @@
   - users will embed GruShell into thier deployment scripts / use the cookbook to make the script
   - but maybe it makes sense to let the user experiment with the shell by calling "python -m minions shell"? i need to consider the user onboarding flow further.
 
+- todo: implement "minions gru serve" and "minions gru attach"
+  - basically a redesign of the controller of the runtime, GruShell will remain as perhaps a demo thing or something maybe but the official and best way to use gru and the shell is in a serve-attach model as seperate
+  - convo: https://chatgpt.com/c/69406c80-f478-8327-85b2-e3fb54d89796
+
 - todo: add support for resourced pipelines and resourced resources (currenlty partially implemented)
   - requires implementation, testing, and documentation for each
   - before testing, i'll probably have to refactor the structure of test assets
@@ -232,6 +284,8 @@
     - in my contributing.md
       - says requires Linux/macOS or WSL2
   - convo: https://chatgpt.com/c/693a8a64-55a0-8326-b383-881b36874aec
+
+<!-- after doing all the todos above, just go thru the codebase and address all the little todos that are scattered about -->
 
 ### Docs:
 - todo: update my docs and readme with positioning surfaced in this thread (https://chatgpt.com/c/693b751c-bb18-8329-b2d5-b6ece864000b)

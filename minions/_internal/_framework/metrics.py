@@ -12,7 +12,6 @@ The framework will automatically:
 """
 
 import asyncio
-import inspect
 import threading
 from abc import abstractmethod
 from typing import Any, Dict, Literal, TypedDict
@@ -60,21 +59,7 @@ class Metrics(AsyncComponent):
     """
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        # TODO: might make this a common method i can call from 
-        # __init_subclass__ so all my domain objects will statically validate user code
-        # even though i have guards for runtime too
-        # I should probably do that and write a unit test for it actually.
-        for name, attr in cls.__dict__.items():
-            if not name or not name[0].isalpha():
-                continue
-
-            attr = inspect.getattr_static(cls, name)
-            func = getattr(attr, "__func__", attr)  # unwrap staticmethod/classmethod if present
-
-            if not inspect.isfunction(func):
-                continue  # avoids builtins / descriptors that don't have user code
-
-            cls._mn_validate_user_code(func, cls.__module__)
+        cls._mn_validate_class_user_code(cls.__module__)
 
     def __init__(self, logger: Logger):
         super().__init__(logger)

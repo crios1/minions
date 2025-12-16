@@ -159,4 +159,4 @@ class Pipeline(AsyncService, Generic[T_Event]):
     @abstractmethod
     async def produce_event(self) -> T_Event:
         """override to create your own Pipeline"""
-        # TODO: will be long running like websocket event listener or polling?
+        ...

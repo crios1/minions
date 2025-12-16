@@ -89,7 +89,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         cls._mn_event_cls = args[0]
         cls._mn_workflow_ctx_cls = args[1]
 
-        # TODO: write test where subclasses of Minion subclasses are created/rejected
         for base in cls.__mro__[1:]:
             if base is Minion:
                 break
