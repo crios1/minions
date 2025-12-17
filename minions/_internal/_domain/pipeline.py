@@ -9,7 +9,7 @@ from .._framework.async_service import AsyncService
 from .._framework.logger import Logger, DEBUG, INFO, WARNING, ERROR, CRITICAL
 from .._framework.metrics import Metrics
 from .._framework.metrics_constants import (
-    LABEL_PIPELINE,
+    LABEL_MINION_INSTANCE_ID, LABEL_PIPELINE,
     PIPELINE_ERROR_TOTAL, PIPELINE_EVENT_PRODUCED_TOTAL,
     PIPELINE_EVENT_FANOUT_TOTAL
 )
@@ -119,21 +119,21 @@ class Pipeline(AsyncService, Generic[T_Event]):
             except Exception:
                 await self._mn_metrics._inc(
                     metric_name=PIPELINE_ERROR_TOTAL,
-                    pipeline=self._mn_pipeline_id,
+                    LABEL_PIPELINE=self._mn_pipeline_id
                 )
                 raise
             else:
                 await self._mn_metrics._inc(
                     metric_name=PIPELINE_EVENT_PRODUCED_TOTAL,
-                    pipeline=self._mn_pipeline_id,
+                    LABEL_PIPELINE=self._mn_pipeline_id
                 )
                 async with self._mn_subs_lock:
                     for minion in self._mn_subs:
                         self.safe_create_task(minion._mn_handle_event(event))
                         await self._mn_metrics._inc(
                             metric_name=PIPELINE_EVENT_FANOUT_TOTAL,
-                            pipeline=self._mn_pipeline_id,
-                            minion=minion._mn_minion_modpath,
+                            LABEL_PIPELINE=self._mn_pipeline_id,
+                            LABEL_MINION_INSTANCE_ID=minion._mn_minion_instance_id
                         )
                     await asyncio.gather(*[
                         self._mn_logger._log(

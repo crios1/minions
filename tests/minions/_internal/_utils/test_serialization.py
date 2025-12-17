@@ -40,12 +40,8 @@ def _make_event() -> Event:
         tags=["std", "unit"]
     )
 
-# NOTE: test_valid_roundtrip() is done for a general Event type, 
-# we need to test a valid roundtrip for all of the event types
-# we support serialization/deserialization for!
-# So basically test_valid_roundtrip as a template and pass in params/fixtures
-# so don't have to clone code and just use o1 and o2 for variable names.
-# It would be nice if there is a test/assert that gets the types that the framework
+# NOTE:
+# Maybe it would be nice if there is a test/assert that gets the types that the framework
 # says we support in the error message that happens on violation, 
 # and assert that a tests exists and passes for it, if the type is in the error message
 
