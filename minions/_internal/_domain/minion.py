@@ -134,9 +134,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         steps: list[tuple[int, str]] = []
         sources: dict[type, list[str]] = {}
 
-        # TODO: i need to decide if i'll let workflows be constructed with steps throughout the inheritance chain
-        # or if workflows should be constructed strictly from the "tip" of the inheritance chain (i can see benefits to both approaches)
-        # but currently i'm keeping it simple by requiring workflow steps only be declared on the inheritance chain "tip"
         for c in reversed(cls.__mro__):
             if not issubclass(c, Minion):
                 continue
@@ -195,8 +192,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             raise TypeError(f"{type(self).__name__}.name must be a string, got {type(name).__name__}")
         self._mn_name = name
 
-        # TODO: i'm thinking of droping minion from each of these props
-        # or add minion to _config_path prop
         self._mn_minion_instance_id = minion_instance_id
         self._mn_minion_composite_key = minion_composite_key
         self._mn_minion_modpath = minion_modpath
