@@ -62,6 +62,8 @@
   - steps:
     - complete the routine
     - rewrite each test to use the routine
+    - integrate gru tests from other files:
+      - test_minion_states.py is basically a gru test where checking for counters should be handled by the reuseable testing routine
 
 - todo: refactor tests/assets naming + organization for long-term maintainability
   - decision:
@@ -93,10 +95,16 @@
   - convo:
     - https://chatgpt.com/c/693f9bc9-c46c-8327-bd5a-c9b38f45859b
 
-- todo: consider restructuring test_gru.py into directories by test class
-  - idk if it would be better but it could be so should do research becauser otherwise the file will end up being like 2k or 3k lines and it's probably better to break it up
+- todo: restructure test_gru.py into directories by test class:
+  - structure:
+    - tests/gru/conftest.py (for test fixtures)
+    - tests/gru/test_unit.py
+    - tests/gru/test_invalid_composition.py
+    - tests/gru/test_invalid_usage.py
+    - tests/gru/test_valid_composition.py
+    - tests/gru/test_valid_usage.py
 
-- todo: write robust tests that i support persisting state for dict, dataclass, and msgspec.Struct as event and ccontext types (implement and say you support those types in the docs)
+- todo: write robust tests that i support persisting state for dict, dataclass, and msgspec.Struct as event and context types (implement and say you support those types in the docs)
   - ```python
     class MyEvent(msgspec.Struct):
       greeting: str = "hello world"
@@ -164,6 +172,15 @@
     - don't ship the check at in the final code, just do the check in the test suite because it gives us assurance
 
 - todo: add "crash testing" to test suite to ensure that minions runtime does the runtime crash guarentees
+
+- todo: add early (best-effort) serialization validation for user-provided event and workflow context types at Pipeline / Minion definition time
+  - statically check that user type annotations are supported by gru's serialization, and raise when an annotation is not
+  - this is an early feedback mechanism, full serializability can only be guaranteed at runtime
+
+- todo: robustify / clean up minions/_internal/_utils/serialization.py and it's respective test file
+
+- todo: now w/ the robust reuseable testing routine (from the harden/repair test_gru.py todo) fill out the test suite to cover all the ways the user will interact with gru... mainly the kinds of files they can pass to it.
+ - audit each of the test asset in the test suite and ensure they are useful and being used by gru with a reasonable test. otherwise, add the test(s) or delete the asset
 
 ### Features:
 - todo(needs spec-ing): manage OOM risk... how should the runtime react to / manage maximal memory demands? (is probably partially implemented)
@@ -296,6 +313,8 @@
 - todo: my landing page doc and readme are almost the same, i should consider centralizing them to some extent or better to maintain them seperately?
 
 ### Misc:
+- todo: comb the codebase for any remaining todo comments, they shold all be resolved by now, if not consolidate/complete them
+
 - todo: setup github repo so feature requests are surfaced thru "discussions" instead of "issues"
   - https://chatgpt.com/c/693f6fff-6bac-8333-9844-b1aade31a4d5
 

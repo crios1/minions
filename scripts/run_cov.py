@@ -1,6 +1,4 @@
 """
-# TODO: start a CONTRIBUTING.md
-
 ### Running tests locally
 For quick feedback or single files:
 - pytest tests/minions/test_gru.py -q

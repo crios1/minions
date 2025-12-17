@@ -1,9 +1,8 @@
 from dataclasses import dataclass, asdict
-from typing import Generic, Mapping, Any
+from typing import Generic
 
 from .types import T_Event, T_Ctx
 
-# TODO: i need to ensure (run a check) that user contexts are serializable
 @dataclass
 class MinionWorkflowContext(Generic[T_Event, T_Ctx]):
     "`context` must be a dict-like object or a dataclass so i can serialize it to statestore"

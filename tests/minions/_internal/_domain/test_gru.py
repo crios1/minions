@@ -1011,6 +1011,9 @@ class TestValidUsage:
     # TODO: I need tests for gru's default usages to ensure i stay version 1.x.x compliant
 
 class TestInvalidComposition:
+    # NOTE: should have test for each case where gru
+    # returns error given invalid minion, pipeline, resource
+
     class TestMinionFile:
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_empty_minion_file(self):

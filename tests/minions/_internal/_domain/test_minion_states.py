@@ -21,8 +21,6 @@ from minions._internal._domain.exceptions import AbortWorkflow
 
 from pprint import pprint
 
-# TODO: probably integrate this file into test_minion.py
-
 @pytest.mark.asyncio
 async def test_workflow_aborted_increments_aborted_counter():
     # define a minion whose first step aborts

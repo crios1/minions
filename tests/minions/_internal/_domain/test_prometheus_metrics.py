@@ -94,7 +94,7 @@ def test_unknown_metric_kind_raises_value_error():
     metrics = PrometheusMetrics(logger=NoOpLogger(), port=port, registry=registry)
 
     with pytest.raises(ValueError) as exc_info:
-        metrics.create_metric("invalid_metric", [], "bogus_kind")
+        metrics.create_metric("invalid_metric", [], "bogus_kind") # type: ignore
 
     assert "Unknown metric kind" in str(exc_info.value)
 

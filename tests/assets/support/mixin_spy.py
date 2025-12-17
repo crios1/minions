@@ -10,11 +10,6 @@ from weakref import WeakSet
 
 from tests.assets.support.mixin import Mixin
 
-# TODO: it would be nice to remove enable_spy from SpiedMinion
-# and just have spying be enabled by itself
-# i just need to make sure what methods are being wrapped
-# like only wrap the methods i care about?
-
 class SpyMixin(Mixin):
     """Test mixin for tracking method call counts on a subclass.
 

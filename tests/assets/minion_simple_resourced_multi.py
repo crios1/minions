@@ -5,9 +5,6 @@ from .event_simple import SimpleEvent
 from .resource_simple_1 import SimpleResource1
 from .resource_simple_2 import SimpleResource2
 
-# TODO: write a test for this file in test_gru.py
-# expected result: gru starts the two resources dependecies
-
 class SimpleMultiResourcedMinion(SpyMixin, Minion[SimpleEvent, dict]):
     name = "simple-multi-resourced-minion"
     r1: SimpleResource1

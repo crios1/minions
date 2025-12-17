@@ -17,4 +17,5 @@ class SimpleMinion(SpyMixin, Minion[SimpleEvent, dict]):
 
 # minion = SimpleMinion
 
-# TODO: need to test that i can access self.event in all steps even when starting workflows from state store
+# NOTE: need to test that i can access self.event and self.context in all steps even when starting workflows from state store
+# maybe it's best to make a specific test asset(s) for it that proves that access is working and especially after a crash

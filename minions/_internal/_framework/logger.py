@@ -45,5 +45,5 @@ class Logger(AsyncLifecycle):
             print(f"[Logger Fallback] {msg} | {kwargs}", file=sys.stderr)
 
     @abstractmethod
-    async def log(self, level: int, msg: str, **kwargs: Any): # TODO: should have passed log_kwargs explicity?
+    async def log(self, level: int, msg: str, **kwargs: Any):
         "override to implement your logger, kwargs are for inclusion in structured logs"

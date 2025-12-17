@@ -16,10 +16,6 @@ class InvalidResource(SpyMixin, Resource):
     async def run(self):
         return
 
-    # TODO: write the tests to ensure the following raise at class definition time
-    # might have to break each of the cases up
-    # and i can test it by making class instances not making files and running them with gru
-
     #should raise
     @Resource.untracked
     async def _private_helper_method_invalid(self):
