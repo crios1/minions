@@ -380,7 +380,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         ),
                         self._mn_metrics._inc(
                             metric_name=MINION_WORKFLOW_STARTED_TOTAL,
-                            LABEL_MINION_INSTANCE_ID=self._mn_minion_instance_id
+                            labels={LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id},
                         )
                     ])
                 else:
@@ -420,8 +420,10 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         ),
                         self._mn_metrics._inc(
                             metric_name=MINION_WORKFLOW_STEP_STARTED_TOTAL,
-                            LABEL_MINION_INSTANCE_ID=self._mn_minion_instance_id,
-                            LABEL_MINION_WORKFLOW_STEP=step_name
+                            labels={
+                                LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id,
+                                LABEL_MINION_WORKFLOW_STEP: step_name,
+                            },
                         )
                     ])
 
@@ -444,8 +446,10 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             ),
                             self._mn_metrics._inc(
                                 metric_name=MINION_WORKFLOW_STEP_ABORTED_TOTAL,
-                                LABEL_MINION_INSTANCE_ID=self._mn_minion_instance_id,
-                                LABEL_MINION_WORKFLOW_STEP=step_name
+                                labels={
+                                    LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id,
+                                    LABEL_MINION_WORKFLOW_STEP: step_name,
+                                },
                             )
                         ])
                         raise
@@ -482,9 +486,11 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             ),
                             self._mn_metrics._inc(
                                 metric_name=MINION_WORKFLOW_STEP_FAILED_TOTAL,
-                                LABEL_MINION_INSTANCE_ID=self._mn_minion_instance_id,
-                                LABEL_MINION_WORKFLOW_STEP=step_name,
-                                LABEL_ERROR_TYPE=type(e).__name__,
+                                labels={
+                                    LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id,
+                                    LABEL_MINION_WORKFLOW_STEP: step_name,
+                                    LABEL_ERROR_TYPE: type(e).__name__,
+                                },
                             )
                         )
                         raise
@@ -504,8 +510,10 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             ),
                             self._mn_metrics._inc(
                                 metric_name=MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
-                                LABEL_MINION_INSTANCE_ID=self._mn_minion_instance_id,
-                                LABEL_MINION_WORKFLOW_STEP=step_name
+                                labels={
+                                    LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id,
+                                    LABEL_MINION_WORKFLOW_STEP: step_name,
+                                },
                             )
                         ])
                     finally: # measure step duration & update inflight gauge (if aborted or failed)
@@ -520,9 +528,11 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         await self._mn_metrics._observe(
                             metric_name=MINION_WORKFLOW_STEP_DURATION_SECONDS,
                             value=duration,
-                            LABEL_MINION_INSTANCE_ID=self._mn_minion_instance_id,
-                            LABEL_MINION_WORKFLOW_STEP=step_name,
-                            status=step_status # TODO: is this what I want to do or put in a LABEL_MINION_WORKFLOW_STEP_STATUS ?
+                            labels={
+                                LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id,
+                                LABEL_MINION_WORKFLOW_STEP: step_name,
+                                "status": step_status,
+                            },
                         )
             except AbortWorkflow: # log / measure workflow aborted
                 workflow_status: Statuses = "aborted"
@@ -538,7 +548,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     ),
                     self._mn_metrics._inc(
                         metric_name=MINION_WORKFLOW_ABORTED_TOTAL,
-                        LABEL_MINION_INSTANCE_ID=self._mn_minion_instance_id
+                        labels={LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id},
                     )
                 ])
             except Exception as e: # log / measure workflow failure
@@ -558,8 +568,10 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     ),
                     self._mn_metrics._inc(
                         metric_name=MINION_WORKFLOW_FAILED_TOTAL,
-                        LABEL_MINION_INSTANCE_ID=self._mn_minion_instance_id,
-                        LABEL_ERROR_TYPE=type(e).__name__
+                        labels={
+                            LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id,
+                            LABEL_ERROR_TYPE: type(e).__name__,
+                        },
                     )
                 ])
             else: # log / measure workflow success
@@ -576,7 +588,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     ),
                     self._mn_metrics._inc(
                         metric_name=MINION_WORKFLOW_SUCCEEDED_TOTAL,
-                        LABEL_MINION_INSTANCE_ID=self._mn_minion_instance_id
+                        labels={LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id},
                     )
                 ])
             finally: # measure workflow duration, update inflight gauge, remove context from statestore
@@ -585,8 +597,10 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     self._mn_metrics._observe(
                         metric_name=MINION_WORKFLOW_DURATION_SECONDS,
                         value=duration,
-                        LABEL_MINION_INSTANCE_ID=self._mn_minion_instance_id,
-                        status=workflow_status # TODO: is this what I want to do or put in a LABEL_MINION_WORKFLOW_STEP_STATUS ?
+                        labels={
+                            LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id,
+                            "status": workflow_status,
+                        },
                     ),
                     await asyncio.shield(self._mn_state_store._delete_context(ctx.workflow_id))
                 ])
@@ -616,7 +630,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 self._mn_metrics._set(
                     metric_name=MINION_WORKFLOW_INFLIGHT_GAUGE,
                     value=len(self._mn_tasks),
-                    LABEL_MINION_INSTANCE_ID=self._mn_minion_instance_id
+                    labels={LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id},
                 )
             )
 
@@ -681,5 +695,5 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         await self._mn_metrics._set(
             metric_name=MINION_WORKFLOW_INFLIGHT_GAUGE,
             value=len(self._mn_tasks),
-            LABEL_MINION_INSTANCE_ID=self._mn_minion_instance_id
+            labels={LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id},
         )

@@ -141,19 +141,19 @@ class TestInMemoryMetrics:
         m = InMemoryMetrics()
 
         # Counters
-        await m._inc("jobs_total", amount=2, queue="alpha", status="ok")
-        await m._inc("jobs_total", amount=1, queue="alpha", status="ok")
-        await m._inc("jobs_total", amount=5, queue="beta", status="fail")
+        await m._inc("jobs_total", amount=2, labels={"queue": "alpha", "status": "ok"})
+        await m._inc("jobs_total", amount=1, labels={"queue": "alpha", "status": "ok"})
+        await m._inc("jobs_total", amount=5, labels={"queue": "beta", "status": "fail"})
 
         # Gauges (overwrite behavior)
-        await m._set("cpu_used_percent", 11.0)               # region defaults to ""
-        await m._set("cpu_used_percent", 7.5, region="us")   # set explicit
-        await m._set("cpu_used_percent", 9.0, region="us")   # overwrite
+        await m._set("cpu_used_percent", 11.0)  # region defaults to ""
+        await m._set("cpu_used_percent", 7.5, labels={"region": "us"})  # set explicit
+        await m._set("cpu_used_percent", 9.0, labels={"region": "us"})  # overwrite
 
         # Histograms (aggregate)
-        await m._observe("op_latency_seconds", 0.15, route="/v1/foo")
-        await m._observe("op_latency_seconds", 0.10, route="/v1/foo")
-        await m._observe("op_latency_seconds", 0.25, route="/v1/foo")
+        await m._observe("op_latency_seconds", 0.15, labels={"route": "/v1/foo"})
+        await m._observe("op_latency_seconds", 0.10, labels={"route": "/v1/foo"})
+        await m._observe("op_latency_seconds", 0.25, labels={"route": "/v1/foo"})
 
         # Assert counters
         csnap = m.snapshot_counters()
@@ -182,9 +182,9 @@ class TestInMemoryMetrics:
         m = InMemoryMetrics()
 
         # host present, region missing -> defaults to ""
-        await m._set("mem_used_bytes", 123.0, host="h1")
+        await m._set("mem_used_bytes", 123.0, labels={"host": "h1"})
         # both present, order in kwargs shouldn't matter
-        await m._set("mem_used_bytes", 456.0, region="us-east", host="h1")
+        await m._set("mem_used_bytes", 456.0, labels={"region": "us-east", "host": "h1"})
 
         gsnap = m.snapshot_gauges()["mem_used_bytes"]
         assert gsnap[(("host", "h1"), ("region", ""), )] == 123.0
@@ -200,7 +200,7 @@ class TestInMemoryMetrics:
 
         async def bump(n):
             for _ in range(n):
-                await m._inc("events_total", amount=1, minion="m1")
+                await m._inc("events_total", amount=1, labels={"minion": "m1"})
 
         # 5 tasks * 200 increments = 1000
         tasks = [asyncio.create_task(bump(200)) for _ in range(5)]

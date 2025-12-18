@@ -24,6 +24,7 @@ from .metrics_interface import LabelledMetric
 from minions._internal._utils.safe_create_task import safe_create_task
 
 Kind = Literal["counter", "gauge", "histogram"]
+Labels = dict[str, str]
 
 class CounterSample(TypedDict):
     labels: dict[str, str]
@@ -89,40 +90,37 @@ class Metrics(AsyncComponent):
             registry[metric_name] = self.create_metric(metric_name, labels, kind)
             return registry[metric_name]
 
-    def _inc_unsafe(self, metric_name: str, amount: float = 1, **labels):
+    def _inc_unsafe(self, metric_name: str, amount: float = 1, labels: Labels | None = None):
         metric = self._get_metric_unsafe("counter", metric_name)
-        metric.labels(**labels).inc(amount=amount)
+        metric.labels(**(labels or {})).inc(amount=amount)
 
-    def _set_unsafe(self, metric_name: str, value: float, **labels):
+    def _set_unsafe(self, metric_name: str, value: float, labels: Labels | None = None):
         metric = self._get_metric_unsafe("gauge", metric_name)
-        metric.labels(**labels).set(value)
+        metric.labels(**(labels or {})).set(value)
 
-    def _observe_unsafe(self, metric_name: str, value: float, **labels):
+    def _observe_unsafe(self, metric_name: str, value: float, labels: Labels | None = None):
         metric = self._get_metric_unsafe("histogram", metric_name)
-        metric.labels(**labels).observe(value)
+        metric.labels(**(labels or {})).observe(value)
 
-    async def _inc(self, metric_name: str, amount: float = 1, **labels):
+    async def _inc(self, metric_name: str, amount: float = 1, labels: Labels | None = None):
         """Increment a counter by the given amount (positive or negative)."""
         return await self._mn_safe_run_and_log(
             method=self._inc_unsafe,
-            method_args=[metric_name, amount],
-            method_kwargs=labels
+            method_args=[metric_name, amount, labels],
         )
 
-    async def _set(self, metric_name: str, value: float, **labels):
+    async def _set(self, metric_name: str, value: float, labels: Labels | None = None):
         """Set a gauge to a specific value."""
         return await self._mn_safe_run_and_log(
             method=self._set_unsafe,
-            method_args=[metric_name, value],
-            method_kwargs=labels
+            method_args=[metric_name, value, labels],
         )
 
-    async def _observe(self, metric_name: str, value: float, **labels):
+    async def _observe(self, metric_name: str, value: float, labels: Labels | None = None):
         """Observe a value (for histograms or summaries)."""
         return await self._mn_safe_run_and_log(
             method=self._observe_unsafe,
-            method_args=[metric_name, value],
-            method_kwargs=labels
+            method_args=[metric_name, value, labels],
         )
 
     async def _snapshot(self) -> SnapshotResult:

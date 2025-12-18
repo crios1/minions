@@ -110,9 +110,11 @@ class Resource(AsyncService):
         except Exception as e:
             await self._mn_metrics._inc(
                 metric_name=RESOURCE_ERROR_TOTAL,
-                LABEL_RESOURCE=resource,
-                LABEL_RESOURCE_METHOD=resource_method,
-                LABEL_ERROR_TYPE=type(e).__name__,
+                labels={
+                    LABEL_RESOURCE: resource,
+                    LABEL_RESOURCE_METHOD: resource_method,
+                    LABEL_ERROR_TYPE: type(e).__name__,
+                },
             )
             await self._mn_logger._log(
                 WARNING,
@@ -131,13 +133,17 @@ class Resource(AsyncService):
             await self._mn_metrics._observe(
                 metric_name=RESOURCE_LATENCY_SECONDS,
                 value=duration,
-                LABEL_RESOURCE=resource,
-                LABEL_RESOURCE_METHOD=resource_method
+                labels={
+                    LABEL_RESOURCE: resource,
+                    LABEL_RESOURCE_METHOD: resource_method,
+                },
             )
             await self._mn_metrics._inc(
                 metric_name=RESOURCE_SERVES_TOTAL,
-                LABEL_RESOURCE=resource,
-                LABEL_RESOURCE_METHOD=resource_method
+                labels={
+                    LABEL_RESOURCE: resource,
+                    LABEL_RESOURCE_METHOD: resource_method,
+                },
             )
             return result
     
