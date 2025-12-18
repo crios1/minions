@@ -191,6 +191,72 @@
   - implementation / verify w/ tests:
     - ...
 
+- todo: decouple orchestration addressing from stable runtime identity (component_id + instance_id)
+  - context:
+    - current identity spine is “project-root relative path/modpath”
+    - this breaks resumeability + prometheus continuity on directory refactors
+    - long-term guarantee requires stable ids not derived from paths
+  - goals:
+    - preserve current DX: `start_minion()` accepts classes or string refs
+    - make inflight workflow resume + reuse + metrics stable across refactors
+    - avoid forcing users to hand-maintain a full catalog unless they want nicer names
+  - decisions:
+    - introduce canonical stable ids:
+      - `component_id` = stable identity for each domain component class (minion/pipeline/resource)
+      - `instance_id` = stable identity for a running wiring of components + config (minion instance)
+    - refs remain for loading / addressing:
+      - string refs continue to work as “how to import the class”
+      - ids become “how the runtime persists and labels the thing”
+    - ids are immutable; “renames” are aliases, not id mutation
+  - steps:
+    - introduce registry storage under project root:
+      - `component_registry`: maps `component_id -> component_ref` (+ kind, timestamps, optional aliases)
+      - `alias_index`: maps `alias -> component_id` (human ids)
+      - persist in `.minions/` (toml/json/sqlite; pick one and standardize)
+    - define canonical “component ref” format:
+      - `module:qualname` (plus `kind` prefix internally if needed)
+      - store both `component_ref` and `component_id` everywhere you currently store “relpath”
+    - update Gru resolution pipeline:
+      - when `start_minion(minion=<class|ref|id>, pipeline=<class|ref|id>, ...)` is called:
+        - resolve each input to `(component_id, component_ref, cls)`
+        - if unknown component, register and assign `component_id` automatically
+        - if input is alias, resolve via alias_index
+        - if input is component_id, load via registry’s current ref
+      - make reuse keys based on `component_id` (not relpath)
+    - define config identity and instance identity:
+      - treat config as identity input, not a “component class”
+      - `config_id`:
+        - if `minion_config_path` provided: compute a stable hash of normalized config content (and store optional friendly alias)
+        - if `minion_config` mapping provided: compute hash from normalized serialization
+      - `instance_id = hash(minion_component_id + pipeline_component_id + config_id + resource_binding_ids)`
+      - reuse policy:
+        - pipelines reuse on `pipeline_component_id` (unless pipeline itself is config-parameterized; if so, fold pipeline config into its instance identity too)
+        - minion instances are distinct on `instance_id`
+    - update persistence + resume:
+      - change workflow state keys to use `instance_id` + `component_id` (never `component_ref`)
+      - ensure any “resume in-flight” logic loads classes via `component_id -> component_ref -> import`
+      - add migration shim:
+        - if old state keys exist (path-based), attempt best-effort mapping to new ids or mark orphaned with a clear error
+    - update prometheus labeling:
+      - stable labels:
+        - `component_id`, `instance_id`
+      - human/debug labels:
+        - `component_ref`
+        - optional `alias` if user assigned
+        - optional `config_alias` if provided
+      - ensure dashboards can be written against stable labels
+    - add CLI support (minimal but sufficient):
+      - `minions ls` (show component_id, kind, alias(es), current ref)
+      - `minions resolve <alias|id|ref>` (print canonical ids + refs)
+      - `minions alias set <alias> <component_id>` (alias only; never mutate id)
+      - `minions ref set <component_id> <new_ref>` (relink after refactor)
+      - `minions instance ls` (show instance_id composition: minion/pipeline/config)
+    - document the new contract:
+      - “refs can change; ids persist”
+      - “refactors require either a relink (ref set) or alias mapping; inflight workflows remain resumable”
+      - “durable observability requires stable labels; use alias for readable dashboards”
+  - convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/69446e9e-053c-832c-abfb-ba40b5123693
+
 - todo: complete GruShell (~90% implemented, needs documentation / user onboarding flow)
   - users will embed GruShell into thier deployment scripts / use the cookbook to make the script
   - but maybe it makes sense to let the user experiment with the shell by calling "python -m minions shell"? i need to consider the user onboarding flow further.
@@ -216,6 +282,7 @@
       #   to TradingMinion too
       # )
       ```
+      so in other words, you compose your system at a high level using "raw" resources, "higher level" resources, pipelines, and minions. (todo: i'll flesh this out in the docs as something like a "composing / designing your minion system")
 
 - todo: provide uvloop support for better performance on *nix systems (maybe 2-4x more)
   - design: 
@@ -323,4 +390,6 @@
   - https://microsoft.github.io/autogen/stable/
   - https://python-prompt-toolkit.readthedocs.io/en/master/index.html
 
-- todo: after building all features for v0.1.0 release, read thru the docs start to finish to see if anything needs adding
+- todo: after building all features for v0.1.0 release, read thru the docs start to finish to see if anything needs adding/updating
+
+- todo: dogfood the runtime and refine it based on findings
