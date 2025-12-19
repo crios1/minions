@@ -18,15 +18,16 @@ class MyPipeline(Pipeline[MyEvent]):
 
 @dataclass
 class MyContext:
-    my_attribute: Any = None
+    last_greeting: Any = None
 
 class MyMinion(Minion[MyEvent, MyContext]):
     @minion_step
     async def step_1(self):
-        self.context.my_attribute = self.event.greeting
+        self.context.last_greeting = self.event.greeting
+
     @minion_step
     async def step_2(self):
-        print(self.context.my_attribute)
+        print(self.context.last_greeting)
 
 async def main():
     gru = await Gru.create()

@@ -82,69 +82,97 @@ Minions also lets you isolate risky or unstable code so that failures in those p
     it is to operate, etc. start first with reference examples
     and in the future i can be testimonials of users almost
 -->
-## Microservices vs Minions Example
+## Microservices vs Minions
 
-Imagine an on-chain trading bot that:
+Imagine a system that:
 
-- Listens to events from a chain over WebSocket
-- Pulls on-chain/DEX prices for each new event
-- Applies a strategy and, when conditions match, submits a transaction
+- Listens to a stream of external events (WebSocket, queue, cron, etc.)
+- Pulls in additional data for each event
+- Applies business logic and takes action when conditions are met
+
+This could be an on-chain trading bot, an IoT controller, a real-time data processor, or any event-driven system with long-lived state and operational complexity.
 
 ### A typical microservices setup
 
-A common microservice-style design might look like:
+A common microservice-style design for a system like this might look like:
 
-- `event-listener-service` (WebSocket subscriber → pushes events to a queue)
-- `price-oracle-service` (HTTP/gRPC API for price data)
-- `strategy-executor-service` (consumes events, calls price service, decides trades)
-- Shared state in Redis/Postgres for positions / risk limits
-- Message broker (Kafka/RabbitMQ/etc.) for event fan-out
+- event-listener-service (subscribes to events and pushes them to a queue)
+- data-service (HTTP/gRPC API for fetching additional data)
+- worker-service (consumes events, calls data services, applies logic)
+- Shared state in Redis/Postgres for coordination and limits
+- Message broker (Kafka/RabbitMQ/etc.) for fan-out and buffering
 - Containers + orchestrator (Docker/Kubernetes/etc.) for each service
-- CI/CD + deployment scripts for each service
-- Centralized logging/metrics stack to stitch everything together
+- CI/CD pipelines and deployment scripts for every component
+- Centralized logging and metrics to reconstruct system behavior
 
-This works, but it comes with the usual overhead:
+This works, but it comes with familiar costs:
 
-- Multiple deployable services to build, ship, and observe
-- Cross-service versioning and compatibility issues
-- Network boundaries and failure modes between every hop
+- Multiple deployable units to build, version, and operate
+- Network boundaries and failure modes between every step
+- Cross-service coordination and compatibility concerns
 - Distributed debugging when something goes wrong
 
 ### The same system with Minions
 
-With Minions, the same shape of system lives inside a single process:
-<!-- TODO: update the snippet to latest Minions api -->
+Minions keeps the shape of a microservice system, but collapses it into a single, structured runtime.
+
+Instead of decomposing the system across processes and networks, you model the system directly:
+
+- Pipelines → event sources (WebSocket listeners, queue consumers, cron jobs)
+- Resources → shared services (DB clients, HTTP clients, price oracles)
+- Minions → long-lived workers that apply business logic
+- Minion steps → ordered stages in a workflow
+- Context → per-workflow state (what you’d otherwise persist or pass between services)
+- Gru → the orchestrator (lifecycle, wiring, metrics, shutdown)
+
+The result is a single process with explicit structure, lifecycle management, and observability — without queues, containers, or distributed coordination.
+
+### A minimal Minions example
+
+Below is a small example that shows the shape of a Minions system.
+A pipeline produces events, a minion processes them in ordered steps, and context is shared across the workflow.
+
 ```python
-from minions import Minion, Pipeline, Resource
+import asyncio
+from dataclasses import dataclass
+from typing import Any
 
-class ChainEvents(Resource):
-    async def subscribe(self) -> AsyncIterator[ChainEvent]: ...
-    
+from minions import Minion, Pipeline, Gru, minion_step
 
-class PriceFeed(Resource):
-    async def get_price(self, pair: Pair) -> Price: ...
-    
+@dataclass
+class MyEvent:
+    greeting: str = "hello world"
 
-class OnChainStrategy(Minion):
-    def __init__(self, events: ChainEvents, prices: PriceFeed):
-        self._events = events
-        self._prices = prices
+class MyPipeline(Pipeline[MyEvent]):
+    async def produce_event(self):
+        return MyEvent()
 
-    async def run(self) -> None:
-        async for event in self._events.subscribe():
-            price = await self._prices.get_price(event.pair)
-            if should_trade(event, price):
-                await submit_tx(event, price)
+@dataclass
+class MyContext:
+    last_greeting: Any = None
 
-run(OnChainStrategy) # The runtime wires resources and handles orchestration
+class MyMinion(Minion[MyEvent, MyContext]):
+    @minion_step
+    async def step_1(self):
+        self.context.last_greeting = self.event.greeting
+
+    @minion_step
+    async def step_2(self):
+        print(self.context.last_greeting)
+
+async def main():
+    gru = await Gru.create()
+    await gru.start_minion(MyMinion, MyPipeline)
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 You still get:
 
-- Clear separation of concerns (events, prices, strategy)
-- Long-lived workers and shared resources
-- Structured startup/shutdown and dependency management
-- Metrics, state, and lifecycle under a single orchestrator
+- Clear separation of concerns
+- Long-lived workers and shared dependencies
+- Explicit workflow structure and lifecycle management
 
 But you only:
 
