@@ -12,6 +12,10 @@ Minions is a single-process, Python-native runtime that coordinates your system�
 
 Define your components as Python classes, declare your orchestrations, and the runtime handles everything else—state, lifecycle, and resumability.
 
+## Platform support
+
+Production deployments: Linux (systemd or containers). Windows is supported for local development and testing only when using WSL2.
+
 ## Why Minions instead of microservices?
 
 - One process, one deploy — no containers, queues, gRPC, or distributed ops

@@ -10,6 +10,15 @@ Minions is built for single-process orchestrations. Here are pragmatic ways to r
 - **Persistence**: keep `minions.db` (SQLite) on durable storage if you rely on workflow resumption; or set `state_store=None` if you prefer stateless runs.
 - **Graceful shutdown**: use `Gru.shutdown()` on SIGTERM to cancel tasks and close resources before the supervisor kills the process.
 
+## Platform support
+
+Production deployments: Linux (systemd or containers).
+
+Windows:
+- Supported for local development and testing when using WSL2.
+- Not supported for production deployments.
+- Memory pressure management and service semantics are not guaranteed.
+
 ## Serialization performance: `msgspec.Struct`
 
 Minions uses `msgspec` to persist and restore your event/context models. If you have high event throughput (or large models), using `msgspec.Struct` for your events/contexts often gives measurable encode/decode speedups over `@dataclass`.

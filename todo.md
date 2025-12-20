@@ -183,13 +183,47 @@
  - audit each of the test asset in the test suite and ensure they are useful and being used by gru with a reasonable test. otherwise, add the test(s) or delete the asset
 
 ### Features:
-- todo(needs spec-ing): manage OOM risk... how should the runtime react to / manage maximal memory demands? (is probably partially implemented)
+- todo: add memory-pressure guard to manage OOM risk (high-utilization defaults)
+  - goal:
+    - avoid hard OOM kills while still letting a single-node minions system run “hot” (stable high RAM usage)
+    - prevent flapping/thrashing when crossing thresholds
   - design:
-    - when demand is high:
-      - gru rejects new start_minion requests
-      - gru suspends pipelines
-  - implementation / verify w/ tests:
-    - ...
+    - runtime maintains a small state machine driven by sampled memory usage:
+      - OK: normal
+      - SHED: memory pressure is sustained; runtime sheds load
+    - detection:
+      - poll memory usage at a fixed interval (e.g. 250ms) and smooth across a short window (N samples / EMA)
+      - enter SHED only after `enter_consecutive` samples at/above `shed_ratio`
+      - exit SHED only after:
+        - a minimum `cooldown_s` elapsed since entering SHED, and
+        - `exit_consecutive` samples at/below `resume_ratio`
+      - defaults are intentionally “peg high”:
+        - shed late (e.g. 0.94) and resume slightly below (e.g. 0.92) so system naturally stays near the top without bouncing down to 80%
+    - actions while in SHED:
+      - reject new `start_minion` requests (return a typed failure / reason = `memory_pressure`)
+      - suspend pipelines from admitting new work (soft suspend: don’t kill in-flight work; just stop new scheduling/emit)
+      - log pressure state with rate limiting (avoid spam)
+    - container vs host measurement:
+      - support `mode="auto"` that prefers cgroup limits when available, otherwise host memory
+      - if measurement fails, degrade safely (disable guard + log once), do not brick runtime
+    - config surface (minimal, user-overridable):
+      - `MemoryPressureCfg(shed_ratio, resume_ratio, enter_consecutive, exit_consecutive, cooldown_s, poll_interval_s, enabled=True, mode="auto")`
+      - keep defaults aggressive/high-util; users can set conservative ratios if they want more headroom
+  - implementation notes:
+    - wire guard state into `Gru.start_minion(...)` admission path
+    - wire guard state into pipeline scheduling / emit admission path (one choke point; no scattered checks)
+    - keep all internal fields in `_mn_` attrspace
+  - tests:
+    - test: sustained high memory enters SHED and rejects new `start_minion`
+    - test: pipelines stop admitting new work in SHED (no new tasks/events created), but in-flight work continues
+    - test: anti-flap works (bouncy samples around shed threshold do not repeatedly enter/exit)
+    - test: cooldown is respected (drops below resume_ratio immediately still stays SHED until cooldown elapsed)
+    - test: recovery resumes admission after sustained low memory (exit_consecutive satisfied)
+    - test: measurement failure degrades safely (guard disabled, runtime continues)
+  - docs:
+    - explain the philosophy: “single-node, maximize useful work; default runs hot; sheds only when sustained pressure risks OOM”
+    - document config knobs and recommended conservative profile for container/shared-host deployments
+  - convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/6945f1d2-cdcc-832e-9ce6-a12dfd906992
 
 - todo: decouple orchestration addressing from stable runtime identity (component_id + instance_id)
   - context:
@@ -257,13 +291,13 @@
       - “durable observability requires stable labels; use alias for readable dashboards”
   - convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/69446e9e-053c-832c-abfb-ba40b5123693
 
-- todo: complete GruShell (~90% implemented, needs documentation / user onboarding flow)
-  - users will embed GruShell into thier deployment scripts / use the cookbook to make the script
-  - but maybe it makes sense to let the user experiment with the shell by calling "python -m minions shell"? i need to consider the user onboarding flow further.
-
 - todo: implement "minions gru serve" and "minions gru attach"
   - basically a redesign of the controller of the runtime, GruShell will remain as perhaps a demo thing or something maybe but the official and best way to use gru and the shell is in a serve-attach model as seperate
   - convo: https://chatgpt.com/c/69406c80-f478-8327-85b2-e3fb54d89796
+
+- todo: complete GruShell (~90% implemented, needs documentation / user onboarding flow)
+  - users will embed GruShell into thier deployment scripts / use the cookbook to make the script
+  - but maybe it makes sense to let the user experiment with the shell by calling "python -m minions shell"? i need to consider the user onboarding flow further.
 
 - todo: add support for resourced pipelines and resourced resources (currenlty partially implemented)
   - requires implementation, testing, and documentation for each
@@ -282,7 +316,7 @@
       #   to TradingMinion too
       # )
       ```
-      so in other words, you compose your system at a high level using "raw" resources, "higher level" resources, pipelines, and minions. (todo: i'll flesh this out in the docs as something like a "composing / designing your minion system")
+      so in other words, you compose your system at a high level using "raw" resources, "higher level" resources, pipelines, and minions. (todo: i'll flesh this out in the docs as something like a "composing / designing your minion system") ... also maybe talk about commiting your observeability to a repo.
 
 - todo: provide uvloop support for better performance on *nix systems (maybe 2-4x more)
   - design: 
@@ -368,8 +402,6 @@
     - in my contributing.md
       - says requires Linux/macOS or WSL2
   - convo: https://chatgpt.com/c/693a8a64-55a0-8326-b383-881b36874aec
-
-<!-- after doing all the todos above, just go thru the codebase and address all the little todos that are scattered about -->
 
 ### Docs:
 - todo: update my docs and readme with positioning surfaced in this thread (https://chatgpt.com/c/693b751c-bb18-8329-b2d5-b6ece864000b)
