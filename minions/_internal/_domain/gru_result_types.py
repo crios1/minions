@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 class ConflictingMinion:
     instance_id: str
     modpath: str
-    config_modpath: str
+    config_modpath: str | None
     pipeline_modpath: str
 
 

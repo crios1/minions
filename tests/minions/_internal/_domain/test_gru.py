@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import importlib
 import inspect
 import types
@@ -9,8 +10,6 @@ import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-
-import minions._internal._domain.gru as grumod
 
 from minions._internal._domain.gru import Gru
 from minions._internal._domain.minion import Minion
@@ -40,6 +39,14 @@ TESTS_DIR = Path(__file__).resolve().parents[3]
 
 
 # --- Fixtures ---
+
+@contextlib.asynccontextmanager
+async def managed_gru(**kwargs):
+    gru = await Gru.create(**kwargs)
+    try:
+        yield gru
+    finally:
+        await gru.shutdown()
 
 @pytest.fixture(autouse=True)
 def scrub_asset_modules():
@@ -77,17 +84,12 @@ def state_store(logger):
 
 @pytest_asyncio.fixture
 async def gru(logger, metrics, state_store):
-    grumod._GRU_INSTANCE = None
-    g = await Gru.create(
+    async with managed_gru(
         logger=logger,
         metrics=metrics,
         state_store=state_store,
-    )
-    try:
+    ) as g:
         yield g
-    finally:
-        await g.shutdown()
-        grumod._GRU_INSTANCE = None
 
 # from prometheus_client import REGISTRY
 # def reset_prometheus_registry():
@@ -100,25 +102,25 @@ async def gru(logger, metrics, state_store):
 
 # --- Helpers (draft) ---
 
-@dataclass(frozen=True)
-class MinionStart:
-    expect_success: bool
-    minion_modpath: str
-    minion_config_path: str
-    pipeline_modpath: str
+# @dataclass(frozen=True)
+# class MinionStart:
+#     expect_success: bool
+#     minion_modpath: str
+#     minion_config_path: str
+#     pipeline_modpath: str
 
-    def as_kwargs(self):
-        allowed = set(inspect.signature(Gru.start_minion).parameters)
-        return {k: v for k, v in self.__dict__.items() if k in allowed}
+#     def as_kwargs(self):
+#         allowed = set(inspect.signature(Gru.start_minion).parameters)
+#         return {k: v for k, v in self.__dict__.items() if k in allowed}
 
-@dataclass(frozen=True)
-class MinionStop:
-    expect_success: bool
-    name_or_instance_id: str
+# @dataclass(frozen=True)
+# class MinionStop:
+#     expect_success: bool
+#     name_or_instance_id: str
 
-    def as_kwargs(self):
-        allowed = set(inspect.signature(Gru.stop_minion).parameters)
-        return {k: v for k, v in self.__dict__.items() if k in allowed}
+#     def as_kwargs(self):
+#         allowed = set(inspect.signature(Gru.stop_minion).parameters)
+#         return {k: v for k, v in self.__dict__.items() if k in allowed}
 
 @pytest.fixture
 def start_and_validate_minions(gru: Gru, logger: InMemoryLogger, metrics: InMemoryMetrics, state_store: InMemoryStateStore):
@@ -145,13 +147,13 @@ def start_and_validate_minions(gru: Gru, logger: InMemoryLogger, metrics: InMemo
                     m_cls.enable_spy()
                     unique_minion_classes[s.minion_modpath] = m_cls
 
-                    deps = gru._get_resource_dependencies(m_cls)
+                    deps = gru._get_all_resource_dependencies(m_cls)
                     if deps:
-                        true_deps = deps + [
+                        true_deps = set(deps) | {
                             x for d in deps
-                            for x in gru._get_resource_dependencies(d)
-                        ]
-                        for td in set(true_deps):
+                            for x in gru._get_all_resource_dependencies(d)
+                        }
+                        for td in true_deps:
                             assert issubclass(td, SpiedResource)
                             td.enable_spy()
                             unique_resource_classes.add(td)
@@ -162,13 +164,13 @@ def start_and_validate_minions(gru: Gru, logger: InMemoryLogger, metrics: InMemo
                     p_cls.enable_spy()
                     unique_pipeline_classes[s.pipeline_modpath] = p_cls
 
-                    deps = gru._get_resource_dependencies(p_cls)
+                    deps = gru._get_all_resource_dependencies(p_cls)
                     if deps:
-                        true_deps = deps + [
+                        true_deps = set(deps) | {
                             x for d in deps
-                            for x in gru._get_resource_dependencies(d)
-                        ]
-                        for td in set(true_deps):
+                            for x in gru._get_all_resource_dependencies(d)
+                        }
+                        for td in true_deps:
                             assert issubclass(td, SpiedResource)
                             td.enable_spy()
                             unique_resource_classes.add(td)
@@ -489,14 +491,16 @@ async def run_orchestration(gru: Gru, logger: InMemoryLogger, metrics: InMemoryM
             # Resources: lifecycle only (endpoint counts are scenario-dependent)
             for r in unique_resources:
                 base = {'__init__':1,'startup':1,'run':1}
-                if seen_shutdown: base['shutdown'] = 1
+                if seen_shutdown:
+                    base['shutdown'] = 1
                 call_counts[r] = base
                 call_orders[r] = tuple(base)
 
             # Pipelines (deterministic)
             for p in unique_pipelines.values():
                 base = {'__init__':1,'startup':1,'run':1,'produce_event':1}
-                if seen_shutdown: base['shutdown'] = 1
+                if seen_shutdown:
+                    base['shutdown'] = 1
                 call_counts[p] = base
                 call_orders[p] = tuple(base)
 
@@ -504,7 +508,8 @@ async def run_orchestration(gru: Gru, logger: InMemoryLogger, metrics: InMemoryM
             for m in unique_minions.values():
                 base = {'__init__':1,'startup':1,'run':1,
                         **{name: started_counts[m] for name in m._mn_workflow_spec}}  # type: ignore
-                if seen_shutdown: base['shutdown'] = 1
+                if seen_shutdown:
+                    base['shutdown'] = 1
                 call_counts[m] = base
                 call_orders[m] = tuple(base)
 
@@ -513,7 +518,8 @@ async def run_orchestration(gru: Gru, logger: InMemoryLogger, metrics: InMemoryM
                   'load_all_contexts': sum(started_counts.values()),
                   'save_context': sum(len(m._mn_workflow_spec)*started_counts[m] for m in unique_minions.values()),  # type: ignore
                   'delete_context': sum(started_counts.values())}
-            if seen_shutdown: ss['shutdown'] = 1
+            if seen_shutdown:
+                ss['shutdown'] = 1
             call_counts[type(state_store)] = ss
             call_orders[type(state_store)] = tuple(ss)
 
@@ -600,10 +606,10 @@ class TestUnit:
             await obj._monitor_process_resources(interval=0)
 
         gsnap = metrics.snapshot_gauges()
-        assert gsnap[SYSTEM_MEMORY_USED_PERCENT][()] == 55
-        assert gsnap[SYSTEM_CPU_USED_PERCENT][()] == 20
-        assert gsnap[PROCESS_MEMORY_USED_PERCENT][()] == 12   # 1234/10000*100
-        assert gsnap[PROCESS_CPU_USED_PERCENT][()] == 2       # 16/8
+        assert InMemoryMetrics.find_sample(gsnap[SYSTEM_MEMORY_USED_PERCENT], {})["value"] == 55
+        assert InMemoryMetrics.find_sample(gsnap[SYSTEM_CPU_USED_PERCENT], {})["value"] == 20
+        assert InMemoryMetrics.find_sample(gsnap[PROCESS_MEMORY_USED_PERCENT], {})["value"] == 12   # 1234/10000*100
+        assert InMemoryMetrics.find_sample(gsnap[PROCESS_CPU_USED_PERCENT], {})["value"] == 2       # 16/8
 
         assert metrics.snapshot_counters() == {}
         assert metrics.snapshot_histograms() == {}
@@ -649,10 +655,10 @@ class TestUnit:
 
         # Metrics reflect the last (normal) iteration too
         gsnap = metrics.snapshot_gauges()
-        assert gsnap[SYSTEM_MEMORY_USED_PERCENT][()] == 55
-        assert gsnap[SYSTEM_CPU_USED_PERCENT][()] == 20
-        assert gsnap[PROCESS_MEMORY_USED_PERCENT][()] == 10  # 1000/10000*100
-        assert gsnap[PROCESS_CPU_USED_PERCENT][()] == 2      # int(8/4)
+        assert InMemoryMetrics.find_sample(gsnap[SYSTEM_MEMORY_USED_PERCENT], {})["value"] == 55
+        assert InMemoryMetrics.find_sample(gsnap[SYSTEM_CPU_USED_PERCENT], {})["value"] == 20
+        assert InMemoryMetrics.find_sample(gsnap[PROCESS_MEMORY_USED_PERCENT], {})["value"] == 10  # 1000/10000*100
+        assert InMemoryMetrics.find_sample(gsnap[PROCESS_CPU_USED_PERCENT], {})["value"] == 2      # int(8/4)
 
     @pytest.mark.asyncio
     async def test_monitor_failure_suppressed_then_recovery(self, monkeypatch):
@@ -708,10 +714,10 @@ class TestUnit:
 
         # After recovery, gauges should be present (from the success iteration)
         gsnap = metrics.snapshot_gauges()
-        assert gsnap[SYSTEM_MEMORY_USED_PERCENT][()] == 50
-        assert gsnap[SYSTEM_CPU_USED_PERCENT][()] == 10
-        assert gsnap[PROCESS_MEMORY_USED_PERCENT][()] == 10
-        assert gsnap[PROCESS_CPU_USED_PERCENT][()] == 2
+        assert InMemoryMetrics.find_sample(gsnap[SYSTEM_MEMORY_USED_PERCENT], {})["value"] == 50
+        assert InMemoryMetrics.find_sample(gsnap[SYSTEM_CPU_USED_PERCENT], {})["value"] == 10
+        assert InMemoryMetrics.find_sample(gsnap[PROCESS_MEMORY_USED_PERCENT], {})["value"] == 10
+        assert InMemoryMetrics.find_sample(gsnap[PROCESS_CPU_USED_PERCENT], {})["value"] == 2
 
 class TestValidComposition:
     class TestMinionFile:
@@ -724,21 +730,18 @@ class TestValidComposition:
             tests_dir = Path(__file__).parent.parent.parent.parent
             config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
 
-            gru = await Gru.create(
+            async with managed_gru(
                 state_store=NoOpStateStore(),
                 logger=ConsoleLogger(),
                 metrics=NoOpMetrics()
-            )
+            ) as gru:
+                result = await gru.start_minion(
+                    minion=minion_modpath,
+                    minion_config_path=config_path,
+                    pipeline=pipeline_modpath
+                )
 
-            result = await gru.start_minion(
-                minion_modpath,
-                config_path,
-                pipeline_modpath
-            )
-
-            assert result.success
-
-            await gru.shutdown()
+                assert result.success
 
         @pytest.mark.asyncio
         async def test_gru_starts_minion_with_multiple_distinct_resource_dependencies(self):
@@ -749,21 +752,23 @@ class TestValidComposition:
             config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
 
             logger = InMemoryLogger()
-            gru = await Gru.create(
+            async with managed_gru(
                 state_store=InMemoryStateStore(logger=logger),
                 logger=logger,
                 metrics=InMemoryMetrics()
-            )
+            ) as gru:
+                result = await gru.start_minion(
+                    minion=minion_modpath,
+                    minion_config_path=config_path,
+                    pipeline=pipeline_modpath
+                )
 
-            result = await gru.start_minion(minion_modpath, config_path, pipeline_modpath)
+                assert result.success
 
-            assert result.success
+                assert len(gru._pipelines) >= 1
+                assert len(gru._resources) >= 2
 
-            assert len(gru._pipelines) >= 1
-            assert len(gru._resources) >= 2
-
-            assert result.instance_id is not None
-            await gru.shutdown()
+                assert result.instance_id is not None
 
     class TestPipelineFile: # TODO: implement test(s) (maybe like in TestMinionFile?)
         @pytest.mark.asyncio
@@ -774,39 +779,37 @@ class TestValidComposition:
             tests_dir = Path(__file__).parent.parent.parent.parent
             config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
 
-            gru = await Gru.create(
+            async with managed_gru(
                 state_store=NoOpStateStore(),
                 logger=ConsoleLogger(),
                 metrics=NoOpMetrics()
-            )
+            ) as gru:
+                result = await gru.start_minion(
+                    minion=minion_modpath,
+                    minion_config_path=config_path,
+                    pipeline=pipeline_modpath
+                )
 
-            result = await gru.start_minion(
-                minion_modpath,
-                config_path,
-                pipeline_modpath
-            )
-
-            assert result.success
-
-            await gru.shutdown()
+                assert result.success
 
 class TestValidUsage:
     @pytest.mark.asyncio
     async def test_gru_accepts_none_logger_metrics_state_store(self):
-        await Gru.create(
+        async with managed_gru(
             logger=None,
             state_store=None,
             metrics=None
-        )
+        ):
+            pass
 
     @pytest.mark.asyncio
     async def test_gru_allows_create_and_immediate_shutdown(self):
-        gru = await Gru.create(
+        async with managed_gru(
             state_store=NoOpStateStore(),
             logger=NoOpLogger(),
             metrics=NoOpMetrics()
-        )
-        await gru.shutdown()
+        ):
+            pass
 
     # TODO: test that pipeline event processed by minion for methods below
 
@@ -818,57 +821,48 @@ class TestValidUsage:
         tests_dir = Path(__file__).parent.parent.parent.parent
         config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
 
-        gru = await Gru.create(
+        async with managed_gru(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
-        )
+        ) as gru:
+            result = await gru.start_minion(
+                minion=minion_modpath,
+                minion_config_path=config_path,
+                pipeline=pipeline_modpath
+            )
 
-        result = await gru.start_minion(
-            minion_modpath,
-            config_path,
-            pipeline_modpath
-        )
+            assert result.success
+            assert result.name == "simple-minion"
+            assert result.instance_id in gru._minions_by_id
+            assert result.instance_id in gru._minion_tasks
 
-        assert result.success
-        assert result.name == "simple-minion"
-        assert result.instance_id in gru._minions_by_id
-        assert result.instance_id in gru._minion_tasks
-
-        await gru.stop_minion(result.instance_id)
-        await gru.shutdown()
+            await gru.stop_minion(result.instance_id)
 
     @pytest.mark.asyncio
     async def test_gru_start_minion_shutdown_without_stop(self):
-
         minion_modpath = "tests.assets.minion_simple"
         pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
 
         tests_dir = Path(__file__).parent.parent.parent.parent
         config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
 
-        gru = await Gru.create(
+        async with managed_gru(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
-        )
+        ) as gru:
+            result = await gru.start_minion(
+                minion=minion_modpath,
+                minion_config_path=config_path,
+                pipeline=pipeline_modpath
+            )
 
-        result = await gru.start_minion(
-            minion_modpath,
-            config_path,
-            pipeline_modpath
-        )
+            assert result.success
+            assert result.name == "simple-minion"
+            assert result.instance_id in gru._minions_by_id
+            assert result.instance_id in gru._minion_tasks
 
-        assert result.success
-        assert result.name == "simple-minion"
-        assert result.instance_id in gru._minions_by_id
-        assert result.instance_id in gru._minion_tasks
-
-        # skip .stop_minion method
-        # await gru.stop_minion(result.instance_id)
-
-        await gru.shutdown()
-    
     # TODO: check fanouts and such for methods below
 
     @pytest.mark.asyncio
@@ -891,33 +885,30 @@ class TestValidUsage:
         cfg3 = str(tests_dir / "assets" / "minion_config_simple_3.toml")
 
         logger = InMemoryLogger()
-        gru = await Gru.create(
+        async with managed_gru(
             state_store=InMemoryStateStore(logger=logger),
             logger=logger,
             metrics=InMemoryMetrics()
-        )
+        ) as gru:
+            r1 = await gru.start_minion(minion=minion1, minion_config_path=cfg1, pipeline=pipeline1)
+            r2 = await gru.start_minion(minion=minion2, minion_config_path=cfg2, pipeline=pipeline2)
+            r3 = await gru.start_minion(minion=minion3, minion_config_path=cfg3, pipeline=pipeline3)
 
-        r1 = await gru.start_minion(minion1, cfg1, pipeline1)
-        r2 = await gru.start_minion(minion2, cfg2, pipeline2)
-        r3 = await gru.start_minion(minion3, cfg3, pipeline3)
+            assert r1.success and r2.success and r3.success
 
-        assert r1.success and r2.success and r3.success
+            # Expect three distinct pipeline IDs
+            assert len(gru._pipelines) >= 3
 
-        # Expect three distinct pipeline IDs
-        assert len(gru._pipelines) >= 3
+            # Expect three distinct resource classes started
+            assert len(gru._resources) >= 3
 
-        # Expect three distinct resource classes started
-        assert len(gru._resources) >= 3
-
-        # stop them
-        assert r1.instance_id is not None
-        await gru.stop_minion(r1.instance_id)
-        assert r2.instance_id is not None
-        await gru.stop_minion(r2.instance_id)
-        assert r3.instance_id is not None
-        await gru.stop_minion(r3.instance_id)
-
-        await gru.shutdown()
+            # stop them
+            assert r1.instance_id is not None
+            await gru.stop_minion(r1.instance_id)
+            assert r2.instance_id is not None
+            await gru.stop_minion(r2.instance_id)
+            assert r3.instance_id is not None
+            await gru.stop_minion(r3.instance_id)
 
     @pytest.mark.asyncio
     async def test_gru_start_3_minions_1_pipeline_1_resource_sharing(self):
@@ -944,39 +935,36 @@ class TestValidUsage:
         # !! will have to do the update across this whole test file !!
 
         logger = InMemoryLogger()
-        gru = await Gru.create(
+        async with managed_gru(
             state_store=InMemoryStateStore(logger=logger),
             logger=logger,
             metrics=InMemoryMetrics()
-        )
+        ) as gru:
+            r1 = await gru.start_minion(minion=minion_modpath, minion_config_path=cfg1, pipeline=pipeline_modpath)
+            r2 = await gru.start_minion(minion=minion_modpath, minion_config_path=cfg2, pipeline=pipeline_modpath)
+            r3 = await gru.start_minion(minion=minion_modpath, minion_config_path=cfg3, pipeline=pipeline_modpath)
 
-        r1 = await gru.start_minion(minion_modpath, cfg1, pipeline_modpath)
-        r2 = await gru.start_minion(minion_modpath, cfg2, pipeline_modpath)
-        r3 = await gru.start_minion(minion_modpath, cfg3, pipeline_modpath)
+            assert r1.success and r2.success and r3.success
 
-        assert r1.success and r2.success and r3.success
+            # pipeline should be shared (single id)
+            assert len(gru._pipelines) == 1
 
-        # pipeline should be shared (single id)
-        assert len(gru._pipelines) == 1
+            # resource should be shared across minions
+            assert len(gru._resources) == 1
 
-        # resource should be shared across minions
-        assert len(gru._resources) == 1
+            # stop minions and assert cleanup
+            assert r1.instance_id is not None
+            await gru.stop_minion(r1.instance_id)
+            assert len(gru._pipelines) == 1
+            assert r2.instance_id is not None
+            await gru.stop_minion(r2.instance_id)
+            assert len(gru._pipelines) == 1
+            assert r3.instance_id is not None
+            await gru.stop_minion(r3.instance_id)
 
-        # stop minions and assert cleanup
-        assert r1.instance_id is not None
-        await gru.stop_minion(r1.instance_id)
-        assert len(gru._pipelines) == 1
-        assert r2.instance_id is not None
-        await gru.stop_minion(r2.instance_id)
-        assert len(gru._pipelines) == 1
-        assert r3.instance_id is not None
-        await gru.stop_minion(r3.instance_id)
-
-        # after all stopped, pipeline and resources cleaned
-        assert len(gru._pipelines) == 0
-        assert len(gru._resources) == 0
-
-        await gru.shutdown()
+            # after all stopped, pipeline and resources cleaned
+            assert len(gru._pipelines) == 0
+            assert len(gru._resources) == 0
 
     @pytest.mark.asyncio
     async def test_minion_and_pipeline_share_resource_dependency(self):
@@ -987,26 +975,23 @@ class TestValidUsage:
         cfg1 = str(tests_dir / "assets" / "minion_config_simple_1.toml")
 
         logger = InMemoryLogger()
-        gru = await Gru.create(
+        async with managed_gru(
             state_store=InMemoryStateStore(logger=logger),
             logger=logger,
             metrics=InMemoryMetrics()
-        )
+        ) as gru:
+            r1 = await gru.start_minion(minion=minion_modpath, minion_config_path=cfg1, pipeline=pipeline_modpath)
 
-        r1 = await gru.start_minion(minion_modpath, cfg1, pipeline_modpath)
+            assert r1.success
 
-        assert r1.success
+            assert len(gru._pipelines) == 1
+            assert len(gru._resources) == 1
 
-        assert len(gru._pipelines) == 1
-        assert len(gru._resources) == 1
+            assert isinstance(r1.instance_id, str)
+            await gru.stop_minion(r1.instance_id)
 
-        assert isinstance(r1.instance_id, str)
-        await gru.stop_minion(r1.instance_id)
-
-        assert len(gru._pipelines) == 0
-        assert len(gru._resources) == 0
-
-        await gru.shutdown()
+            assert len(gru._pipelines) == 0
+            assert len(gru._resources) == 0
 
     # TODO: I need tests for gru's default usages to ensure i stay version 1.x.x compliant
 
@@ -1024,23 +1009,20 @@ class TestInvalidComposition:
             tests_dir = Path(__file__).parent.parent.parent.parent
             config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
 
-            gru = await Gru.create(
+            async with managed_gru(
                 state_store=NoOpStateStore(),
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics()
-            )
+            ) as gru:
+                result = await gru.start_minion(
+                    minion=minion_modpath,
+                    minion_config_path=config_path,
+                    pipeline=pipeline_modpath
+                )
 
-            result = await gru.start_minion(
-                minion_modpath,
-                config_path,
-                pipeline_modpath
-            )
-
-            assert not result.success
-            assert result.reason
-            assert "must define a `minion` variable or contain at least one subclass of `Minion`" in result.reason
-
-            await gru.shutdown()
+                assert not result.success
+                assert result.reason
+                assert "must define a `minion` variable or contain at least one subclass of `Minion`" in result.reason
 
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_minion_file_with_multiple_minions_and_no_explicit_minion(self):
@@ -1051,23 +1033,20 @@ class TestInvalidComposition:
             tests_dir = Path(__file__).parent.parent.parent.parent
             config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
 
-            gru = await Gru.create(
+            async with managed_gru(
                 state_store=NoOpStateStore(),
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics()
-            )
+            ) as gru:
+                result = await gru.start_minion(
+                    minion=minion_modpath,
+                    minion_config_path=config_path,
+                    pipeline=pipeline_modpath
+                )
 
-            result = await gru.start_minion(
-                minion_modpath,
-                config_path,
-                pipeline_modpath
-            )
-
-            assert not result.success
-            assert result.reason
-            assert "multiple Minion subclasses but no explicit `minion` variable" in result.reason
-
-            await gru.shutdown()
+                assert not result.success
+                assert result.reason
+                assert "multiple Minion subclasses but no explicit `minion` variable" in result.reason
 
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_minion_file_with_invalid_explicit_minion(self):
@@ -1078,23 +1057,20 @@ class TestInvalidComposition:
             tests_dir = Path(__file__).parent.parent.parent.parent
             config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
 
-            gru = await Gru.create(
+            async with managed_gru(
                 state_store=NoOpStateStore(),
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics()
-            )
+            ) as gru:
+                result = await gru.start_minion(
+                    minion=minion_modpath,
+                    minion_config_path=config_path,
+                    pipeline=pipeline_modpath
+                )
 
-            result = await gru.start_minion(
-                minion_modpath,
-                config_path,
-                pipeline_modpath
-            )
-
-            assert not result.success
-            assert result.reason
-            assert "is not a subclass of Minion" in result.reason
-
-            await gru.shutdown()
+                assert not result.success
+                assert result.reason
+                assert "is not a subclass of Minion" in result.reason
 
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_minion_workflow_context_not_serializable(self):
@@ -1104,23 +1080,20 @@ class TestInvalidComposition:
             tests_dir = Path(__file__).parent.parent.parent.parent
             config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
 
-            gru = await Gru.create(
+            async with managed_gru(
                 state_store=NoOpStateStore(),
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics()
-            )
+            ) as gru:
+                result = await gru.start_minion(
+                    minion=minion_modpath,
+                    minion_config_path=config_path,
+                    pipeline=pipeline_modpath
+                )
 
-            result = await gru.start_minion(
-                minion_modpath,
-                config_path,
-                pipeline_modpath
-            )
-
-            assert not result.success
-            assert result.reason
-            assert "workflow context is not JSON-serializable" in result.reason
-
-            await gru.shutdown()
+                assert not result.success
+                assert result.reason
+                assert "workflow context is not JSON-serializable" in result.reason
 
         @pytest.mark.asyncio # TODO: implement
         async def test_gru_returns_error_on_minion_event_not_serializable(self):
@@ -1136,23 +1109,20 @@ class TestInvalidComposition:
             tests_dir = Path(__file__).parent.parent.parent.parent
             config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
 
-            gru = await Gru.create(
+            async with managed_gru(
                 state_store=NoOpStateStore(),
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics()
-            )
+            ) as gru:
+                result = await gru.start_minion(
+                    minion=minion_modpath,
+                    minion_config_path=config_path,
+                    pipeline=pipeline_modpath
+                )
 
-            result = await gru.start_minion(
-                minion_modpath,
-                config_path,
-                pipeline_modpath
-            )
-
-            assert not result.success
-            assert result.reason
-            assert "must define a `pipeline` variable or contain at least one subclass of `Pipeline`" in result.reason
-
-            await gru.shutdown()
+                assert not result.success
+                assert result.reason
+                assert "must define a `pipeline` variable or contain at least one subclass of `Pipeline`" in result.reason
 
         @pytest.mark.asyncio 
         async def test_gru_returns_error_on_pipeline_file_with_multiple_pipelines_and_no_explicit_pipeline(self):
@@ -1163,23 +1133,20 @@ class TestInvalidComposition:
             tests_dir = Path(__file__).parent.parent.parent.parent
             config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
 
-            gru = await Gru.create(
+            async with managed_gru(
                 state_store=NoOpStateStore(),
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics()
-            )
+            ) as gru:
+                result = await gru.start_minion(
+                    minion=minion_modpath,
+                    minion_config_path=config_path,
+                    pipeline=pipeline_modpath
+                )
 
-            result = await gru.start_minion(
-                minion_modpath,
-                config_path,
-                pipeline_modpath
-            )
-
-            assert not result.success
-            assert result.reason
-            assert "multiple Pipeline subclasses but no explicit `pipeline` variable" in result.reason
-
-            await gru.shutdown()
+                assert not result.success
+                assert result.reason
+                assert "multiple Pipeline subclasses but no explicit `pipeline` variable" in result.reason
 
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_pipeline_file_with_invalid_explicit_pipeline(self):
@@ -1190,23 +1157,20 @@ class TestInvalidComposition:
             tests_dir = Path(__file__).parent.parent.parent.parent
             config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
 
-            gru = await Gru.create(
+            async with managed_gru(
                 state_store=NoOpStateStore(),
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics()
-            )
+            ) as gru:
+                result = await gru.start_minion(
+                    minion=minion_modpath,
+                    minion_config_path=config_path,
+                    pipeline=pipeline_modpath
+                )
 
-            result = await gru.start_minion(
-                minion_modpath,
-                config_path,
-                pipeline_modpath
-            )
-
-            assert not result.success
-            assert result.reason
-            assert "is not a subclass of Pipeline" in result.reason
-
-            await gru.shutdown()
+                assert not result.success
+                assert result.reason
+                assert "is not a subclass of Pipeline" in result.reason
 
         @pytest.mark.asyncio # TODO: implement
         async def test_gru_returns_error_on_pipeline_event_not_serializable(self):...
@@ -1230,18 +1194,17 @@ class TestInvalidUsage:
 
     @pytest.mark.asyncio
     async def test_gru_raises_on_multiple_instances(self):
-        gru = await Gru.create(
+        async with managed_gru(
             logger=NoOpLogger(),
             metrics=NoOpMetrics(),
             state_store=NoOpStateStore()
-        )
-        with pytest.raises(RuntimeError, match="Only one Gru instance is allowed per process."):
-            await Gru.create(
-                logger=NoOpLogger(),
-                metrics=NoOpMetrics(),
-                state_store=NoOpStateStore()
-            )
-        await gru.shutdown()
+        ):
+            with pytest.raises(RuntimeError, match="Only one Gru instance is allowed per process."):
+                await Gru.create(
+                    logger=NoOpLogger(),
+                    metrics=NoOpMetrics(),
+                    state_store=NoOpStateStore()
+                )
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("bad_logger", [123, "invalid"])
@@ -1288,86 +1251,75 @@ class TestInvalidUsage:
         tests_dir = Path(__file__).parent.parent.parent.parent
         config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
 
-        gru = await Gru.create(
+        async with managed_gru(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
-        )
+        ) as gru:
+            result1 = await gru.start_minion(
+                minion=minion_modpath,
+                minion_config_path=config_path,
+                pipeline=pipeline_modpath
+            )
 
-        result1 = await gru.start_minion(
-            minion_modpath,
-            config_path,
-            pipeline_modpath
-        )
+            print(result1)
 
-        print(result1)
+            assert result1.success
+            assert result1.name == "simple-minion"
+            assert result1.instance_id in gru._minions_by_id
+            assert result1.instance_id in gru._minion_tasks
 
-        assert result1.success
-        assert result1.name == "simple-minion"
-        assert result1.instance_id in gru._minions_by_id
-        assert result1.instance_id in gru._minion_tasks
+            result2 = await gru.start_minion(
+                minion=minion_modpath,
+                minion_config_path=config_path,
+                pipeline=pipeline_modpath
+            )
 
-        result2 = await gru.start_minion(
-            minion_modpath,
-            config_path,
-            pipeline_modpath
-        )
+            print(result2)
 
-        print(result2)
-
-        assert not result2.success
-        assert result2.reason
-        assert "Minion already running" in result2.reason
-
-        await gru.shutdown()
+            assert not result2.success
+            assert result2.reason
+            assert "Minion already running" in result2.reason
 
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_stopping_nonexistant_minion(self):
-
-        gru = await Gru.create(
+        async with managed_gru(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
-        )
+        ) as gru:
+            result = await gru.stop_minion('mock') 
 
-        result = await gru.stop_minion('mock') 
+            print(result)
 
-        print(result)
-
-        assert not result.success
-        assert result.reason
-        assert "No minion found with the given name or instance ID" in result.reason
-
-        await gru.shutdown()
+            assert not result.success
+            assert result.reason
+            assert "No minion found with the given name or instance ID" in result.reason
 
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_mismatched_minion_and_pipeline_event_types(self):
-
         minion_modpath = "tests.assets.minion_simple"
         pipeline_modpath = "tests.assets.pipeline_dict"
 
         tests_dir = Path(__file__).parent.parent.parent.parent
         config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
 
-        gru = await Gru.create(
+        async with managed_gru(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
-        )
+        ) as gru:
+            result = await gru.start_minion(
+                minion=minion_modpath,
+                minion_config_path=config_path,
+                pipeline=pipeline_modpath
+            )
 
-        result = await gru.start_minion(
-            minion_modpath,
-            config_path,
-            pipeline_modpath
-        )
+            print(result)
 
-        print(result)
-
-        assert not result.success
-        assert result.reason
-        assert "Incompatible minion and pipeline event types" in result.reason
-
-        await gru.shutdown()
+            assert not result.success
+            assert result.reason
+            assert "Incompatible minion and pipeline event types" in result.reason
 
 
     # would need to be run in gru ...

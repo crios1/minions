@@ -89,11 +89,6 @@ class Gru:
         self._started = False
         self._shutdown = False
 
-        global _GRU_INSTANCE
-        if _GRU_INSTANCE is not None:
-            raise RuntimeError("Only one Gru instance is allowed per process.")
-        _GRU_INSTANCE = self
-
         if logger is _UNSET:
             self._logger = FileLogger()
         elif logger is None:
@@ -121,6 +116,11 @@ class Gru:
         else:
             raise TypeError(f"Invalid metrics: {type(metrics).__name__}")
         
+        global _GRU_INSTANCE
+        if _GRU_INSTANCE is not None:
+            raise RuntimeError("Only one Gru instance is allowed per process.")
+        _GRU_INSTANCE = self
+
         self._loop = loop
 
         # TODO: use the locks with my datastructures to make helpers and use them in my public method implementations
@@ -172,7 +172,13 @@ class Gru:
             )
         finally:
             cls._allow_direct_init = False
-        await inst._startup()
+        try:
+            await inst._startup()
+        except Exception:
+            global _GRU_INSTANCE
+            if _GRU_INSTANCE is inst:
+                _GRU_INSTANCE = None
+            raise
         if hasattr(gc, "freeze"):
             gc.freeze()
         return inst
@@ -266,7 +272,7 @@ class Gru:
         minion_instance_id: str,
         minion_composite_key: str,
         minion_modpath: str,
-        minion_config_path: str
+        minion_config_path: str | None
     ) -> Minion:
         minion_cls = self._get_minion_class(minion_modpath)
 
@@ -580,6 +586,9 @@ class Gru:
     ) -> StartMinionResult:
         self._ensure_started()
 
+        # TODO: consider that i need to log and return StartMinionErrors
+        # so raise in try-except or log and return line by line?
+
         # string based start
         if isinstance(minion, str):
             if not isinstance(pipeline, str):
@@ -627,20 +636,18 @@ class Gru:
         minion_instance_id = self._make_minion_instance_id()
         minion_composite_key = self._make_minion_composite_key(minion_modpath, minion_config_path, pipeline_modpath)
 
-        # ...
-
-        # prev sig: 
-        # async def start_minion(self, minion_modpath: str, minion_config_path: str, pipeline_modpath: str) -> StartMinionResult:
         try:
+            # prev sig: 
+            # async def start_minion(self, minion_modpath: str, minion_config_path: str, pipeline_modpath: str) -> StartMinionResult:
+
             # ensure minion is not running
 
-            # todo: will prob rename this and refs to _minion
-            minion = self._minions_by_composite_key.get(minion_composite_key)
-            if minion:
+            minion_inst = self._minions_by_composite_key.get(minion_composite_key)
+            if minion_inst:
                 reason = "Minion already running — start request was skipped."
                 suggestion = "Use a different config file if you want to launch another instance."
-                minion_instance_id = minion._mn_minion_instance_id
-                minion_name = minion._mn_name
+                minion_instance_id = minion_inst._mn_minion_instance_id
+                minion_name = minion_inst._mn_name
                 await self._logger._log(
                     INFO,
                     "Failed to start minion",
@@ -663,7 +670,7 @@ class Gru:
 
             # ensure minion and pipeline event compatibility
 
-            minion = self._get_minion(
+            minion_inst = self._get_minion(
                 minion_instance_id=minion_instance_id,
                 minion_composite_key=minion_composite_key,
                 minion_modpath=minion_modpath,
@@ -671,18 +678,18 @@ class Gru:
             )
             
             pipeline_id = self._make_pipeline_id(pipeline_modpath)
-            pipeline = self._get_pipeline(pipeline_id, pipeline_modpath)
+            pipeline_inst = self._get_pipeline(pipeline_id, pipeline_modpath)
             
-            if minion._mn_event_cls != pipeline._mn_event_cls:
+            if minion_inst._mn_event_cls != pipeline_inst._mn_event_cls:
 
                 reason = (
                     "Incompatible minion and pipeline event types: "
-                    f"pipeline_emits={pipeline._mn_event_cls.__name__}; "
-                    f"minion_expects={minion._mn_event_cls.__name__}"
+                    f"pipeline_emits={pipeline_inst._mn_event_cls.__name__}; "
+                    f"minion_expects={minion_inst._mn_event_cls.__name__}"
                 )
                 suggestion = "Update the minion or pipeline so they use the same event type."
-                minion_instance_id = minion._mn_minion_instance_id
-                minion_name = minion._mn_name
+                minion_instance_id = minion_inst._mn_minion_instance_id
+                minion_name = minion_inst._mn_name
                 await self._logger._log(
                     INFO,
                     "Failed to start minion",
@@ -712,12 +719,12 @@ class Gru:
                 pipeline_modpath=pipeline_modpath
             )
 
-            self._minions_by_composite_key[minion_composite_key] = minion
+            self._minions_by_composite_key[minion_composite_key] = minion_inst
 
             # ensure required resources are started and minion resource relationships are tracked
             resources_running: list[tuple[str, str, type[Resource]]] = []     # (id, name, class)
             resources_not_running: list[tuple[str, str, type[Resource]]] = [] # (id, name, class)
-            for attr, hint in get_type_hints(type(minion)).items():
+            for attr, hint in get_type_hints(type(minion_inst)).items():
                 cls = get_class(hint)
                 if isinstance(cls, type) and issubclass(cls, Resource):
                     id = self._make_resource_id(cls)
@@ -734,14 +741,14 @@ class Gru:
             ])
 
             for id, name, cls in resources_running + resources_not_running:
-                setattr(minion, name, self._resources[id])
+                setattr(minion_inst, name, self._resources[id])
                 self._minion_resource_map.setdefault(minion_instance_id, set()).add(id)
                 self._resource_refcounts[id] += 1  # owner ref from minion
 
             # ensure pipeline resources are started and pipeline-resource relationships are tracked
             pipeline_resources_running: list[tuple[str, str, type[Resource]]] = []     # (id, name, class)
             pipeline_resources_not_running: list[tuple[str, str, type[Resource]]] = [] # (id, name, class)
-            for attr, hint in get_type_hints(pipeline.__class__).items():
+            for attr, hint in get_type_hints(pipeline_inst.__class__).items():
                 cls = get_class(hint)
                 if isinstance(cls, type) and issubclass(cls, Resource):
                     id = self._make_resource_id(cls)
@@ -757,29 +764,29 @@ class Gru:
             ])
 
             for id, name, cls in pipeline_resources_running + pipeline_resources_not_running:
-                setattr(pipeline, name, self._resources[id])
+                setattr(pipeline_inst, name, self._resources[id])
                 self._pipeline_resource_map.setdefault(pipeline_id, set()).add(id)
                 self._resource_refcounts[id] += 1  # owner ref from pipeline
 
             # ensure pipeline is started, minion is subscribed, and minion pipeline relationship is tracked
             if pipeline_id not in self._pipelines:
-                await self._start_pipeline(pipeline_id, pipeline)
+                await self._start_pipeline(pipeline_id, pipeline_inst)
             else:
-                pipeline = self._pipelines[pipeline_id]
+                pipeline_inst = self._pipelines[pipeline_id]
 
-            await pipeline._mn_subscribe(minion)
+            await pipeline_inst._mn_subscribe(minion_inst)
 
             self._minion_pipeline_map[minion_instance_id] = pipeline_id
 
             # start minion
-            await self._start_minion(minion)
+            await self._start_minion(minion_inst)
 
             await self._logger._log(
                 INFO,
                 "Minion started",
-                minion_name=minion._mn_name,
-                minion_instance_id=minion._mn_minion_instance_id,
-                minion_composite_key=minion._mn_minion_composite_key,
+                minion_name=minion_inst._mn_name,
+                minion_instance_id=minion_inst._mn_minion_instance_id,
+                minion_composite_key=minion_inst._mn_minion_composite_key,
                 minion_modpath=minion_modpath,
                 minion_config_path=minion_config_path,
                 pipeline_modpath=pipeline_modpath
@@ -787,8 +794,8 @@ class Gru:
 
             return StartMinionResult(
                 success=True,
-                name=minion._mn_name,
-                instance_id=minion._mn_minion_instance_id,
+                name=minion_inst._mn_name,
+                instance_id=minion_inst._mn_minion_instance_id,
             )
         
         except Exception as e:
@@ -809,9 +816,9 @@ class Gru:
     async def stop_minion(self, name_or_instance_id: str) -> StopMinionResult:
         self._ensure_started()
 
-        name_or_instance_id = name_or_instance_id.strip()
-
         try:
+            name_or_instance_id = name_or_instance_id.strip()
+
             # ensure minion is running
 
             def _resolve_minion(name_or_id: str) -> Minion | StopMinionResult:
@@ -900,7 +907,14 @@ class Gru:
             )
 
     async def shutdown(self):
-        self._ensure_started()
+        global _GRU_INSTANCE
+        if self._shutdown:
+            return
+        if not self._started:
+            self._shutdown = True
+            if _GRU_INSTANCE is self:
+                _GRU_INSTANCE = None
+            return
 
         try:
             await self._logger._log(INFO, "Gru shutting down...")
@@ -943,7 +957,6 @@ class Gru:
         finally:
             self._started = False
             self._shutdown = True
-            global _GRU_INSTANCE
             if _GRU_INSTANCE is self:
                 _GRU_INSTANCE = None
 

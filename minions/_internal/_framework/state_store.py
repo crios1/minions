@@ -18,21 +18,21 @@ class StateStore(AsyncComponent):
         "override to implement your own StateStore"
 
     async def _save_context(self, ctx: MinionWorkflowContext):
-        await self._safe_run_and_log(
+        await self._mn_safe_run_and_log(
             method=self.save_context,
             method_args=[ctx],
             log_kwargs={'workflow_id': ctx.workflow_id}
         )
 
     async def _delete_context(self, workflow_id: str):
-        await self._safe_run_and_log(
+        await self._mn_safe_run_and_log(
             method=self.delete_context,
             method_args=[workflow_id],
             log_kwargs={'workflow_id': workflow_id}
         )
 
     async def _load_all_contexts(self) -> list[MinionWorkflowContext]:
-        result = await self._safe_run_and_log(
+        result = await self._mn_safe_run_and_log(
             self.load_all_contexts
         )
         return result or []

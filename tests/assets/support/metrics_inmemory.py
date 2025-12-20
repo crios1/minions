@@ -1,7 +1,16 @@
 import threading
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, cast, overload
 
-from minions._internal._framework.metrics import Metrics
+from minions._internal._framework.metrics import (
+    CounterSample,
+    GaugeSample,
+    HistogramSample,
+    Metrics,
+    SnapshotCounters,
+    SnapshotGauges,
+    SnapshotHistograms,
+    SnapshotResult,
+)
 from minions._internal._framework.metrics_interface import LabelledMetric
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_constants import METRIC_LABEL_NAMES
@@ -91,6 +100,12 @@ class _InMemoryMetric(LabelledMetric):
                 self._values.setdefault(label_key, 0.0)
         return _InMemoryMetricChild(self, label_key)
 
+    def snapshot_values(self) -> Dict[LabelKey, Any]:
+        with self._lock:
+            if self.kind == "histogram":
+                return {k: dict(v) for k, v in self._values.items()}
+            return dict(self._values)
+
     # These three satisfy the protocol if someone calls methods directly
     # on the unbound metric (not recommended, but safe):
     def inc(self, amount: float = 1) -> None:
@@ -118,46 +133,75 @@ class InMemoryMetrics(SpyMixin, Metrics):
 
     # ----------------- Test helpers (read-only) -----------------
 
-    def snapshot_counters(self) -> Dict[str, Dict[LabelKey, float]]:
-        """
-        { metric_name: { label_key: value } }
-        """
-        out: Dict[str, Dict[LabelKey, float]] = {}
+    @staticmethod
+    @overload
+    def find_sample(samples: list[CounterSample], labels: dict[str, str]) -> CounterSample: ...
+
+    @staticmethod
+    @overload
+    def find_sample(samples: list[GaugeSample], labels: dict[str, str]) -> GaugeSample: ...
+
+    @staticmethod
+    @overload
+    def find_sample(samples: list[HistogramSample], labels: dict[str, str]) -> HistogramSample: ...
+
+    @staticmethod
+    def find_sample(
+        samples: list[CounterSample] | list[GaugeSample] | list[HistogramSample],
+        labels: dict[str, str],
+    ) -> CounterSample | GaugeSample | HistogramSample:
+        for sample in samples:
+            if sample["labels"] == labels:
+                return sample
+        raise AssertionError(f"labels not found in snapshot: {labels}")
+
+    def snapshot_counters(self) -> SnapshotCounters:
+        out: SnapshotCounters = {}
         with self._snapshot_lock:
-            reg = self._registries["counter"]
+            reg = self._mn_registries["counter"]
             for name, metric in reg.items():
-                with metric._lock:
-                    out[name] = dict(metric._values)
+                metric_impl = cast(_InMemoryMetric, metric)
+                out[name] = [
+                    {"labels": dict(label_key), "value": float(value)}
+                    for label_key, value in metric_impl.snapshot_values().items()
+                ]
         return out
 
-    def snapshot_gauges(self) -> Dict[str, Dict[LabelKey, float]]:
-        out: Dict[str, Dict[LabelKey, float]] = {}
+    def snapshot_gauges(self) -> SnapshotGauges:
+        out: SnapshotGauges = {}
         with self._snapshot_lock:
-            reg = self._registries["gauge"]
+            reg = self._mn_registries["gauge"]
             for name, metric in reg.items():
-                with metric._lock:
-                    out[name] = dict(metric._values)
+                metric_impl = cast(_InMemoryMetric, metric)
+                out[name] = [
+                    {"labels": dict(label_key), "value": float(value)}
+                    for label_key, value in metric_impl.snapshot_values().items()
+                ]
         return out
 
-    def snapshot_histograms(self) -> Dict[str, Dict[LabelKey, Dict[str, float]]]:
-        """
-        { metric_name: { label_key: {"count": int, "sum": float, "min": float, "max": float} } }
-        """
-        out: Dict[str, Dict[LabelKey, Dict[str, float]]] = {}
+    def snapshot_histograms(self) -> SnapshotHistograms:
+        out: SnapshotHistograms = {}
         with self._snapshot_lock:
-            reg = self._registries["histogram"]
+            reg = self._mn_registries["histogram"]
             for name, metric in reg.items():
-                with metric._lock:
-                    out[name] = {k: dict(v) for k, v in metric._values.items()}
+                metric_impl = cast(_InMemoryMetric, metric)
+                out[name] = [
+                    {
+                        "labels": dict(label_key),
+                        "count": float(agg["count"]),
+                        "sum": float(agg["sum"]),
+                    }
+                    for label_key, agg in metric_impl.snapshot_values().items()
+                ]
         return out
 
-    def snapshot(self) -> Dict[str, Any]:
+    def snapshot(self) -> SnapshotResult:
         """Unified snapshot for tools/tests/shells.
 
-        Returns a dict with keys: counters, gauges, histograms.
+        Returns a dict with keys: counter, gauge, histogram.
         """
         return {
-            "counters": self.snapshot_counters(),
-            "gauges": self.snapshot_gauges(),
-            "histograms": self.snapshot_histograms(),
+            "counter": self.snapshot_counters(),
+            "gauge": self.snapshot_gauges(),
+            "histogram": self.snapshot_histograms(),
         }

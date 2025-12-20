@@ -14,7 +14,7 @@ The framework will automatically:
 import asyncio
 import threading
 from abc import abstractmethod
-from typing import Any, Dict, Literal, TypedDict
+from typing import Literal, TypedDict
 
 from .async_component import AsyncComponent
 from .logger import Logger, WARNING

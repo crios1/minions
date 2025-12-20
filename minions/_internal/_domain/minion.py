@@ -180,7 +180,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         minion_instance_id: str,
         minion_composite_key: str,
         minion_modpath: str,
-        config_path: str,
+        config_path: str | None,
         state_store: StateStore,
         metrics: Metrics,
         logger: Logger
@@ -281,7 +281,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     ):
         async def _pre():
             self._mn_validate_user_code(self._mn_load_config, type(self).__module__)
-            self._mn_config = await self._mn_load_config(self._mn_config_path)
+            if self._mn_config_path:
+                self._mn_config = await self._mn_load_config(self._mn_config_path)
         
         async def _post():
             contexts = await self._mn_state_store._load_all_contexts()

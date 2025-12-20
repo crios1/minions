@@ -5,11 +5,6 @@ from minions._internal._framework.metrics_constants import METRIC_LABEL_NAMES
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 
 
-def _labels_dict_from_key(label_key):
-    """Helper: convert the internal LabelKey (tuple of pairs) to a dict for easy asserts."""
-    return dict(label_key)
-
-
 class TestInMemoryMetrics:
     def test_counter_healthy_with_label_ordering(self, monkeypatch):
         """
@@ -19,16 +14,16 @@ class TestInMemoryMetrics:
 
         m = InMemoryMetrics()
         # Get backend metric and exercise via LabelledMetric API
-        counter = m._get_metric("counter", "my_counter")
+        counter = m._get_metric_unsafe("counter", "my_counter")
         counter.labels(minion="m1", pipeline="p1").inc(2)
         counter.labels(minion="m1", pipeline="p1").inc()  # +1
 
-        snap = m.snapshot_counters()
-        assert "my_counter" in snap
-        # There should be exactly one label set with minion/pipeline in that order
-        [(label_key, value)] = list(snap["my_counter"].items())
-        assert _labels_dict_from_key(label_key) == {"minion": "m1", "pipeline": "p1"}
-        assert value == 3.0
+        samples = m.snapshot_counters()["my_counter"]
+        assert len(samples) == 1
+        sample = samples[0]
+        assert sample["labels"] == {"minion": "m1", "pipeline": "p1"}
+        assert list(sample["labels"].keys()) == ["minion", "pipeline"]
+        assert sample["value"] == 3.0
 
     def test_gauge_set_with_missing_label_defaults(self, monkeypatch):
         """
@@ -37,17 +32,14 @@ class TestInMemoryMetrics:
         monkeypatch.setitem(METRIC_LABEL_NAMES, "cpu_gauge", ["region"])
 
         m = InMemoryMetrics()
-        gauge = m._get_metric("gauge", "cpu_gauge")
+        gauge = m._get_metric_unsafe("gauge", "cpu_gauge")
         gauge.labels().set(10.5)          # region defaults to ""
         gauge.labels(region="us-east").set(7.0)
         gauge.labels(region="us-east").set(8.0)  # overwrite
 
-        snap = m.snapshot_gauges()
-        assert "cpu_gauge" in snap
-        # Expect two entries: region="" and region="us-east"
-        items = {tuple(k): v for k, v in snap["cpu_gauge"].items()}
-        assert (("region", ""),) in items and items[(("region", ""),)] == 10.5
-        assert (("region", "us-east"),) in items and items[(("region", "us-east"),)] == 8.0
+        samples = m.snapshot_gauges()["cpu_gauge"]
+        assert InMemoryMetrics.find_sample(samples, {"region": ""})["value"] == 10.5
+        assert InMemoryMetrics.find_sample(samples, {"region": "us-east"})["value"] == 8.0
 
     def test_histogram_observe_aggregates(self, monkeypatch):
         """
@@ -56,38 +48,39 @@ class TestInMemoryMetrics:
         monkeypatch.setitem(METRIC_LABEL_NAMES, "latency_seconds", ["route"])
 
         m = InMemoryMetrics()
-        h = m._get_metric("histogram", "latency_seconds")
+        h = m._get_metric_unsafe("histogram", "latency_seconds")
         h.labels(route="/v1/foo").observe(0.120)
         h.labels(route="/v1/foo").observe(0.080)
         h.labels(route="/v1/foo").observe(0.200)
 
-        snap = m.snapshot_histograms()
-        stats = snap["latency_seconds"][ (("route", "/v1/foo"),) ]
-        assert stats["count"] == 3
-        # floating point: sum close to 0.400
+        samples = m.snapshot_histograms()["latency_seconds"]
+        stats = InMemoryMetrics.find_sample(samples, {"route": "/v1/foo"})
+        assert stats["count"] == 3.0
         assert abs(stats["sum"] - 0.400) < 1e-9
-        assert stats["min"] == 0.080
-        assert stats["max"] == 0.200
 
     def test_unbound_metric_methods_raise(self, monkeypatch):
         """
         Calling .inc/.set/.observe on the unbound metric (without .labels()) should raise TypeError.
         """
+        monkeypatch.setitem(METRIC_LABEL_NAMES, "events_total", ["minion"])
+        monkeypatch.setitem(METRIC_LABEL_NAMES, "temperature_celsius", ["sensor"])
+        monkeypatch.setitem(METRIC_LABEL_NAMES, "payload_bytes", ["endpoint"])
         m = InMemoryMetrics()
 
-        ctr = m._get_metric("counter", "events_total")
+        ctr = m._get_metric_unsafe("counter", "events_total")
         with pytest.raises(TypeError):
             ctr.inc(1)
 
-        g = m._get_metric("gauge", "temperature_celsius")
+        g = m._get_metric_unsafe("gauge", "temperature_celsius")
         with pytest.raises(TypeError):
             g.set(42)
 
-        h = m._get_metric("histogram", "payload_bytes")
+        h = m._get_metric_unsafe("histogram", "payload_bytes")
         with pytest.raises(TypeError):
             h.observe(10)
 
-    def test_unknown_metric_label_sorting(self):
+    @pytest.mark.asyncio
+    async def test_unknown_metric_label_sorting(self):
         """
         For metrics not listed in METRIC_LABEL_NAMES, labels are accepted and sorted by key.
         """
@@ -97,15 +90,15 @@ class TestInMemoryMetrics:
             del METRIC_LABEL_NAMES[METRIC_NAME]
 
         m = InMemoryMetrics()
-        ctr = m._get_metric("counter", METRIC_NAME)
-
         # Provide labels in reverse order; snapshot keys should be sorted ('a','b')
-        ctr.labels(b="2", a="1").inc()
+        await m._inc(METRIC_NAME, labels={"b": "2", "a": "1"})
 
-        snap = m.snapshot_counters()
-        [(label_key, value)] = list(snap[METRIC_NAME].items())
-        assert _labels_dict_from_key(label_key) == {"a": "1", "b": "2"}
-        assert value == 1.0
+        samples = m.snapshot_counters()[METRIC_NAME]
+        assert len(samples) == 1
+        sample = samples[0]
+        assert sample["labels"] == {"a": "1", "b": "2"}
+        assert list(sample["labels"].keys()) == ["a", "b"]
+        assert sample["value"] == 1.0
 
     def test_counter_multiple_label_sets(self, monkeypatch):
         """
@@ -114,19 +107,15 @@ class TestInMemoryMetrics:
         monkeypatch.setitem(METRIC_LABEL_NAMES, "jobs_total", ["queue", "status"])
 
         m = InMemoryMetrics()
-        ctr = m._get_metric("counter", "jobs_total")
+        ctr = m._get_metric_unsafe("counter", "jobs_total")
         ctr.labels(queue="alpha", status="ok").inc(5)
         ctr.labels(queue="alpha", status="fail").inc(2)
         ctr.labels(queue="beta", status="ok").inc()
 
-        snap = m.snapshot_counters()["jobs_total"]
-        # Normalize to dicts for easier assertions
-        normalized = {tuple(sorted(dct.items())): val for dct, val in
-                      [(_labels_dict_from_key(k), v) for k, v in snap.items()]}
-
-        assert normalized[ (("queue", "alpha"), ("status", "ok")) ] == 5.0
-        assert normalized[ (("queue", "alpha"), ("status", "fail")) ] == 2.0
-        assert normalized[ (("queue", "beta"), ("status", "ok")) ] == 1.0
+        samples = m.snapshot_counters()["jobs_total"]
+        assert InMemoryMetrics.find_sample(samples, {"queue": "alpha", "status": "ok"})["value"] == 5.0
+        assert InMemoryMetrics.find_sample(samples, {"queue": "alpha", "status": "fail"})["value"] == 2.0
+        assert InMemoryMetrics.find_sample(samples, {"queue": "beta", "status": "ok"})["value"] == 1.0
 
     @pytest.mark.asyncio
     async def test_metrics_async_healthy(self, monkeypatch):
@@ -156,22 +145,20 @@ class TestInMemoryMetrics:
         await m._observe("op_latency_seconds", 0.25, labels={"route": "/v1/foo"})
 
         # Assert counters
-        csnap = m.snapshot_counters()
-        assert csnap["jobs_total"][ (("queue", "alpha"), ("status", "ok")) ] == 3.0
-        assert csnap["jobs_total"][ (("queue", "beta"), ("status", "fail")) ] == 5.0
+        csnap = m.snapshot_counters()["jobs_total"]
+        assert InMemoryMetrics.find_sample(csnap, {"queue": "alpha", "status": "ok"})["value"] == 3.0
+        assert InMemoryMetrics.find_sample(csnap, {"queue": "beta", "status": "fail"})["value"] == 5.0
 
         # Assert gauges
-        gsnap = m.snapshot_gauges()
-        assert gsnap["cpu_used_percent"][ (("region", ""),) ] == 11.0
-        assert gsnap["cpu_used_percent"][ (("region", "us"),) ] == 9.0  # last write wins
+        gsnap = m.snapshot_gauges()["cpu_used_percent"]
+        assert InMemoryMetrics.find_sample(gsnap, {"region": ""})["value"] == 11.0
+        assert InMemoryMetrics.find_sample(gsnap, {"region": "us"})["value"] == 9.0  # last write wins
 
         # Assert histograms
-        hsnap = m.snapshot_histograms()
-        stats = hsnap["op_latency_seconds"][ (("route", "/v1/foo"),) ]
-        assert stats["count"] == 3
+        hsnap = m.snapshot_histograms()["op_latency_seconds"]
+        stats = InMemoryMetrics.find_sample(hsnap, {"route": "/v1/foo"})
+        assert stats["count"] == 3.0
         assert abs(stats["sum"] - 0.50) < 1e-9
-        assert stats["min"] == 0.10
-        assert stats["max"] == 0.25
 
     @pytest.mark.asyncio
     async def test_metrics_async_label_defaults_and_ordering(self, monkeypatch):
@@ -187,8 +174,8 @@ class TestInMemoryMetrics:
         await m._set("mem_used_bytes", 456.0, labels={"region": "us-east", "host": "h1"})
 
         gsnap = m.snapshot_gauges()["mem_used_bytes"]
-        assert gsnap[(("host", "h1"), ("region", ""), )] == 123.0
-        assert gsnap[(("host", "h1"), ("region", "us-east"), )] == 456.0
+        assert InMemoryMetrics.find_sample(gsnap, {"host": "h1", "region": ""})["value"] == 123.0
+        assert InMemoryMetrics.find_sample(gsnap, {"host": "h1", "region": "us-east"})["value"] == 456.0
 
     @pytest.mark.asyncio
     async def test_metrics_async_concurrent_updates(self, monkeypatch):
@@ -206,5 +193,5 @@ class TestInMemoryMetrics:
         tasks = [asyncio.create_task(bump(200)) for _ in range(5)]
         await asyncio.gather(*tasks)
 
-        csnap = m.snapshot_counters()
-        assert csnap["events_total"][ (("minion", "m1"),) ] == 1000.0
+        csnap = m.snapshot_counters()["events_total"]
+        assert InMemoryMetrics.find_sample(csnap, {"minion": "m1"})["value"] == 1000.0
