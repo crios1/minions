@@ -57,11 +57,10 @@
     - refactor SpyMixin to remove enable_spy so we don't have to call enable enable_spy anymore. and update tests that call the method.
   - convo: https://chatgpt.com/c/6940a419-8a4c-8325-be84-75509c098769
 
-- todo: harden/repair test_gru.py:
-  - test suite is partially broken after partially implementing a robust reuseable testing routine for each set of orchestrations in a test
+- todo: harden test_gru.py:
   - steps:
-    - complete the routine
-    - rewrite each test to use the routine
+    - complete the robust reuseable gru testing routine
+    - rewrite gru tests to use the routine
     - integrate gru tests from other files:
       - test_minion_states.py is basically a gru test where checking for counters should be handled by the reuseable testing routine
 
