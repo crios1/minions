@@ -25,7 +25,7 @@ class InMemoryLogger(SpyMixin, Logger):
                     return i
         idx_1 = _find_idx(substr_1)
         idx_2 = _find_idx(substr_2)
-        return idx_1 != None and idx_2 != None and idx_1 < idx_2
+        return idx_1 is not None and idx_2 is not None and idx_1 < idx_2
 
     def has_log(self, substr: str, min_level: int = DEBUG) -> bool:
         for log in self.logs:

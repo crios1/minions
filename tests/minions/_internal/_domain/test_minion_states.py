@@ -32,11 +32,11 @@ async def test_workflow_aborted_increments_aborted_counter():
             raise AbortWorkflow()
 
     InMemoryLogger.enable_spy()
-    InMemoryLogger.reset()
+    InMemoryLogger.reset_spy()
     InMemoryMetrics.enable_spy()
-    InMemoryMetrics.reset()
+    InMemoryMetrics.reset_spy()
     InMemoryStateStore.enable_spy()
-    InMemoryStateStore.reset()
+    InMemoryStateStore.reset_spy()
 
     logger = InMemoryLogger()
     metrics = InMemoryMetrics()
@@ -71,11 +71,11 @@ async def test_workflow_failed_increments_failed_counter():
             raise RuntimeError('boom')
 
     InMemoryLogger.enable_spy()
-    InMemoryLogger.reset()
+    InMemoryLogger.reset_spy()
     InMemoryMetrics.enable_spy()
-    InMemoryMetrics.reset()
+    InMemoryMetrics.reset_spy()
     InMemoryStateStore.enable_spy()
-    InMemoryStateStore.reset()
+    InMemoryStateStore.reset_spy()
 
     logger = InMemoryLogger()
     metrics = InMemoryMetrics()

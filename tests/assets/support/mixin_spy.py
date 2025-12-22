@@ -16,7 +16,7 @@ class SpyMixin(Mixin):
     When enabled via `enable_spy()`, all instance and class methods of the
     subclass are wrapped so each call increments a counter. These counters
     are stored per subclass (not per instance) and can be queried using
-    `get_call_counts()` or reset with `reset()`.
+    `get_call_counts()` or reset with `reset_spy()`.
 
     Async tests can also `await wait_for_call()` or `wait_for_calls()` to
     pause until the expected number of invocations has occurred. These methods
@@ -198,7 +198,7 @@ class SpyMixin(Mixin):
             cls._mspy_enabled = True
 
     @classmethod
-    def reset(cls) -> None:
+    def reset_spy(cls) -> None:
         """clears class call counts"""
         with cls._mspy_lock:
             cls._mspy_counts = {}

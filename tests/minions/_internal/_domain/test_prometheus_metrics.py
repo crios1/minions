@@ -111,7 +111,7 @@ async def test_http_server_start_failure_logs_error():
     registry = CollectorRegistry()
 
     InMemoryLogger.enable_spy()
-    InMemoryLogger.reset()
+    InMemoryLogger.reset_spy()
     logger = InMemoryLogger()
 
     first = PrometheusMetrics(logger=logger, port=port, registry=registry)

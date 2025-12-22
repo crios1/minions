@@ -67,19 +67,19 @@ def scrub_asset_modules():
 @pytest.fixture
 def logger():
     InMemoryLogger.enable_spy()
-    InMemoryLogger.reset()
+    InMemoryLogger.reset_spy()
     return InMemoryLogger()
 
 @pytest.fixture
 def metrics():
     InMemoryMetrics.enable_spy()
-    InMemoryMetrics.reset()
+    InMemoryMetrics.reset_spy()
     return InMemoryMetrics()
 
 @pytest.fixture
 def state_store(logger):
     InMemoryStateStore.enable_spy()
-    InMemoryStateStore.reset()
+    InMemoryStateStore.reset_spy()
     return InMemoryStateStore(logger=logger)
 
 @pytest_asyncio.fixture
@@ -294,11 +294,11 @@ def start_and_validate_minions(gru: Gru, logger: InMemoryLogger, metrics: InMemo
 
         finally:
             for cls in unique_minion_classes.values():
-                cls.reset()
+                cls.reset_spy()
             for cls in unique_pipeline_classes.values():
-                cls.reset()
+                cls.reset_spy()
             for cls in unique_resource_classes:
-                cls.reset()
+                cls.reset_spy()
             for t in pipeline_sentries:
                 t.cancel()
             await asyncio.gather(*pipeline_sentries, return_exceptions=True)

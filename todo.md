@@ -9,8 +9,6 @@
 -->
 
 ### Test Suite:
-- todo: refactor SpyMixin to remove enable_spy so we don't have to call enable enable_spy anymore. and update tests that call the method.
-
 - todo: harden test_gru.py:
   - steps:
     - complete the robust reuseable gru testing routine

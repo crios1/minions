@@ -131,7 +131,7 @@ async def test_spymixin_records_call_counts_and_resets():
         'bar': 1,
     }
 
-    Service.reset()
+    Service.reset_spy()
 
     assert not Service.get_call_counts()
 
@@ -152,8 +152,8 @@ async def test_idempotent_enable_spy_and_reset():
 
     assert X.get_call_counts() == {'__init__': 1, 'foo': 2}
 
-    X.reset()
-    X.reset()
+    X.reset_spy()
+    X.reset_spy()
 
     assert not X.get_call_counts()
 
@@ -252,7 +252,7 @@ async def test__spy_bump_race_guard_skips_cancelled_waiter():
             return
     
     _S.enable_spy()
-    _S.reset()
+    _S.reset_spy()
 
     loop = asyncio.get_running_loop()
     fut = loop.create_future()
@@ -298,7 +298,7 @@ async def test_spymixin_records_and_resets_call_history():
     # timestamps should be non-decreasing
     assert all(t1 <= t2 for (_, t1, _), (_, t2, _) in zip(hist, hist[1:]))
 
-    Sub.reset()
+    Sub.reset_spy()
     assert Sub.get_call_history() == []
 
 @pytest.mark.asyncio
@@ -327,7 +327,7 @@ async def test_spymixin_records_and_resets_call_history_multiple_instances():
     # timestamps should be non-decreasing
     assert all(t1 <= t2 for (_, t1, _), (_, t2, _) in zip(hist, hist[1:]))
 
-    Sub.reset()
+    Sub.reset_spy()
     assert Sub.get_call_history() == []
 
 @pytest.mark.asyncio
@@ -429,7 +429,7 @@ def S():
         async def aa(self): return "aa"
     S.enable_spy()
     yield S
-    S.reset()
+    S.reset_spy()
 
 @pytest.fixture
 def T():
@@ -440,7 +440,7 @@ def T():
         def y(self): return "y"
     T.enable_spy()
     yield T
-    T.reset()
+    T.reset_spy()
 
 # ---- Tests ----
 
