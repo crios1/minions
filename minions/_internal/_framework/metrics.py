@@ -58,9 +58,7 @@ class Metrics(AsyncComponent):
 
     Label names are managed by the framework; you only handle metric creation.
     """
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        cls._mn_validate_class_user_code(cls.__module__)
+    _mn_user_facing = True
 
     def __init__(self, logger: Logger):
         super().__init__(logger)

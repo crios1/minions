@@ -10,11 +10,36 @@ from .._utils.get_relative_module_path import get_relative_module_path
 T = TypeVar("T")
 
 class AsyncLifecycle(ABC):
+    """
+    Framework base class for async lifecycle components.
+
+    Definition-time validation applies only to user-facing domain classes
+    and is restricted to established user-facing inheritance chains.
+    """
+    _mn_user_facing = False
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if cls.__module__.startswith("minions._internal."):
+            return
+        if not cls._mn_user_facing:
+            return
+        if not any(getattr(base, "_mn_user_facing", False) for base in cls.__mro__[1:]):
+            return
+        cls._mn_ensure_attrspace()
+        cls._mn_validate_class_user_code(cls.__module__)
+
     @classmethod
     def _mn_ensure_attrspace(cls):
         "Ensure no user-defined class attributes or annotations violate the reserved _mn_ attrspace."
         names = {**cls.__dict__, **getattr(cls, "__annotations__", {})}
-        bad = {n for n in names if isinstance(n, str) and n.startswith("_mn_")}
+        allowed = {"_mn_user_facing"} # allows subclasses of user facing classes to be user facing too
+        bad = {
+            n for n in names
+            if isinstance(n, str)
+            and n.startswith("_mn_")
+            and n not in allowed
+        }
         if bad:
             modpath = f"{cls.__module__}.{cls.__qualname__}"
             names = ", ".join(f"`{cls.__name__}.{n}`" for n in sorted(bad))
@@ -27,7 +52,6 @@ class AsyncLifecycle(ABC):
     def _mn_validate_class_user_code(cls, modpath: str | None = None):
         modpath = modpath or cls.__module__
         isfunction = inspect.isfunction
-        validate = cls._mn_validate_user_code
 
         for name, attr in cls.__dict__.items():
             if not name or not name[0].isalpha():
@@ -37,7 +61,7 @@ class AsyncLifecycle(ABC):
             if not isfunction(func):
                 continue  # avoids builtins / descriptors that don't have user code
 
-            validate(func, modpath)
+            cls._mn_validate_user_code(func, modpath)
 
     @classmethod
     def _mn_validate_user_code(cls, func: Callable, modpath: str):

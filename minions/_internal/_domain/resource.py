@@ -23,10 +23,7 @@ class Resource(AsyncService):
     All public async methods are wrapped with latency/error tracking by default.
     - Use `@Resource.untracked` as a decorator to opt out of tracking for specific methods.
     """
-
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        cls._mn_ensure_attrspace()
+    _mn_user_facing = True
 
     def __init__(self, logger: Logger, metrics: Metrics, resource_modpath: str):
         super().__init__(logger)

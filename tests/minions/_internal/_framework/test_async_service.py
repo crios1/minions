@@ -13,13 +13,13 @@ async def test_wait_until_started_sets_and_waits():
     logger = NoOpLogger()
     service = NoOpService(logger)
 
-    # Start _wait_until_started in the background
-    wait_task = asyncio.create_task(service._wait_until_started())
+    # Start _mn_wait_until_started in the background
+    wait_task = asyncio.create_task(service._mn_wait_until_started())
     await asyncio.sleep(0.01)  # Let the task start and block
     assert not wait_task.done()
 
     # Set _started, should unblock
-    service._started.set()
+    service._mn_started.set()
     await wait_task
     assert wait_task.done()
 
@@ -27,7 +27,7 @@ async def test_wait_until_started_sets_and_waits():
 async def test_wait_until_started_raises_on_start_error():
     logger = NoOpLogger()
     service = NoOpService(logger)
-    service._start_error = RuntimeError("start failed")
-    service._started.set()
+    service._mn_start_error = RuntimeError("start failed")
+    service._mn_started.set()
     with pytest.raises(RuntimeError, match="start failed"):
-        await service._wait_until_started()
+        await service._mn_wait_until_started()

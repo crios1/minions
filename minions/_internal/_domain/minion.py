@@ -41,6 +41,8 @@ from .._utils.serialization import is_type_serializable
 Statuses = Literal["undefined", "aborted", "failed", "succeeded"]
 
 class Minion(AsyncService, Generic[T_Event, T_Ctx]):
+    _mn_user_facing = True
+
     _mn_event_var: contextvars.ContextVar[T_Event] = contextvars.ContextVar("minion_pipeline_event")
     _mn_context_var: contextvars.ContextVar[T_Ctx] = contextvars.ContextVar("minion_workflow_context")
     _mn_event_cls: Type[T_Event]
@@ -51,8 +53,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
 
     def __init_subclass__(cls, *, defer_minion_setup=False, **kwargs):
         super().__init_subclass__(**kwargs)
-
-        cls._mn_ensure_attrspace()
 
         cls._mn_defer_minion_setup = bool(defer_minion_setup)
         cls._mn_workflow_spec = None

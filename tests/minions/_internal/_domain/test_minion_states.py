@@ -42,20 +42,21 @@ async def test_workflow_aborted_increments_aborted_counter():
     metrics = InMemoryMetrics()
     state_store = InMemoryStateStore(logger=logger)
 
-    # start the minion by calling _handle_event directly with a dummy event
+    # start the minion by calling _mn_handle_event directly with a dummy event
     m = AbortMinion('iid', 'ck', 'tests.assets.abort_minion', 'cfg', state_store, metrics, logger)
-    await m._handle_event({})
+    await m._mn_handle_event({})
 
     # wait until the state store has recorded deletion (workflow finished)
     await state_store.wait_for_call('delete_context', count=1, timeout=2)
 
     snap = metrics.snapshot()
     pprint(snap)
-    counters = snap.get('counters', {})
+    counters = snap.get('counter', {})
+    aborted_total = sum(s["value"] for s in counters.get(MINION_WORKFLOW_ABORTED_TOTAL, []))
 
     # workflow started should be incremented and aborted counter incremented
     assert counters.get(MINION_WORKFLOW_STARTED_TOTAL)
-    assert sum(counters.get(MINION_WORKFLOW_ABORTED_TOTAL, {}).values()) == 1
+    assert aborted_total == 1
 
     # no Gru instance created here
 
@@ -81,15 +82,16 @@ async def test_workflow_failed_increments_failed_counter():
     state_store = InMemoryStateStore(logger=logger)
 
     m = FailMinion('iid', 'ck', 'tests.assets.fail_minion', 'cfg', state_store, metrics, logger)
-    await m._handle_event({})
+    await m._mn_handle_event({})
 
     await state_store.wait_for_call('delete_context', count=1, timeout=2)
 
     snap = metrics.snapshot()
     pprint(snap)
-    counters = snap.get('counters', {})
+    counters = snap.get('counter', {})
+    failed_total = sum(s["value"] for s in counters.get(MINION_WORKFLOW_FAILED_TOTAL, []))
 
     assert counters.get(MINION_WORKFLOW_STARTED_TOTAL)
-    assert sum(counters.get(MINION_WORKFLOW_FAILED_TOTAL, {}).values()) == 1
+    assert failed_total == 1
 
     # nothing to shutdown (no Gru instance)

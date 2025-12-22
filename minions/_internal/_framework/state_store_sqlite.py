@@ -183,7 +183,7 @@ class SQLiteStateStore(StateStore):
             p95 = statistics.quantiles(samples, n=20, method="inclusive")[-1]
         except Exception:
             p50, p95 = 6.0, 10.0  # SSD-ish fallback
-            await self._logger._log(
+            await self._mn_logger._log(
                 ERROR,
                 f"{type(self).__name__} calibration failed; using defaults",
                 traceback="".join(traceback.format_exc()),
@@ -218,7 +218,7 @@ class SQLiteStateStore(StateStore):
             "rows_per_sec": (warn_rps, crit_rps),
         }
 
-        await self._logger._log(
+        await self._mn_logger._log(
             DEBUG,
             f"{type(self).__name__} calibrated",
             p50_commit_ms=round(p50, 2),
@@ -302,7 +302,7 @@ class SQLiteStateStore(StateStore):
             "Consider: increase batch caps; confirm WAL + synchronous=NORMAL; "
             "shard by workflow_id across multiple SQLite DBs; or move to Postgres if sustained."
         )
-        asyncio.create_task(self._logger._log(ERROR, msg))
+        asyncio.create_task(self._mn_logger._log(ERROR, msg))
 
     async def save_context(self, ctx: MinionWorkflowContext):
         try:
@@ -314,7 +314,7 @@ class SQLiteStateStore(StateStore):
             now = time.monotonic()
             if pages >= self._size_warn_pages and (now - last) > self._size_warn_cooldown_s:
                 lvl = CRITICAL if pages >= self._size_crit_pages else WARNING
-                asyncio.create_task(self._logger._log(
+                asyncio.create_task(self._mn_logger._log(
                     lvl,
                     f"{type(self).__name__}: Large MinionWorkflowContext Detected",
                     size_bytes=size,
@@ -325,7 +325,7 @@ class SQLiteStateStore(StateStore):
                 ))
                 self._last_size_warn[ctx.workflow_id] = now
         except Exception as e:
-            await self._logger._log(
+            await self._mn_logger._log(
                 ERROR, f"{type(self).__name__}.save_context serialize failed",
                 error_type=type(e).__name__, error_message=str(e),
                 traceback="".join(traceback.format_exception(type(e), e, e.__traceback__)),
@@ -370,7 +370,7 @@ class SQLiteStateStore(StateStore):
             try:
                 out.append(deserialize_context(blob))
             except Exception as e:
-                await self._logger._log(
+                await self._mn_logger._log(
                     ERROR, f"{type(self).__name__}.load_all_contexts deserialize failed",
                     error_type=type(e).__name__,
                     error_message=str(e),

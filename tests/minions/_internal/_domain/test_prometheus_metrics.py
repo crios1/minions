@@ -1,11 +1,12 @@
+import asyncio
 import pytest
 import re
-import time
 import urllib.request
 
 from prometheus_client import CollectorRegistry
 from minions._internal._framework.metrics_prometheus import PrometheusMetrics
 from minions._internal._framework.logger_noop import NoOpLogger
+from tests.assets.support.logger_inmemory import InMemoryLogger
 from minions._internal._framework.metrics_constants import (
     MINION_WORKFLOW_STARTED_TOTAL,
     SYSTEM_MEMORY_USED_PERCENT,
@@ -42,40 +43,46 @@ def find_unused_port():
 
 # Success Cases
 
-def test_counter_exposed_on_http():
+@pytest.mark.asyncio
+async def test_counter_exposed_on_http():
     port = find_unused_port()
     registry = CollectorRegistry()
     metrics = PrometheusMetrics(logger=NoOpLogger(), port=port, registry=registry)
+    await metrics.startup()
 
     counter = metrics.create_metric(MINION_WORKFLOW_STARTED_TOTAL, ["minion"], "counter")
     counter.labels(minion="abc123").inc()
-    time.sleep(0.1)  # give the HTTP server a moment
+    await asyncio.sleep(0.1)  # give the HTTP server a moment
 
     page = read_metrics_from_http(port)
     value = extract_metric_value(page, MINION_WORKFLOW_STARTED_TOTAL, {"minion": "abc123"})
     assert value == 1.0
 
-def test_gauge_exposed_on_http():
+@pytest.mark.asyncio
+async def test_gauge_exposed_on_http():
     port = find_unused_port()
     registry = CollectorRegistry()
     metrics = PrometheusMetrics(logger=NoOpLogger(), port=port, registry=registry)
+    await metrics.startup()
 
     gauge = metrics.create_metric(SYSTEM_MEMORY_USED_PERCENT, [], "gauge")
     gauge.set(42.5)
-    time.sleep(0.1)
+    await asyncio.sleep(0.1)
 
     page = read_metrics_from_http(port)
     value = extract_metric_value(page, SYSTEM_MEMORY_USED_PERCENT, {})
     assert value == 42.5
 
-def test_histogram_exposed_on_http():
+@pytest.mark.asyncio
+async def test_histogram_exposed_on_http():
     port = find_unused_port()
     registry = CollectorRegistry()
     metrics = PrometheusMetrics(logger=NoOpLogger(), port=port, registry=registry)
+    await metrics.startup()
 
     histogram = metrics.create_metric(MINION_WORKFLOW_STEP_DURATION_SECONDS, ["minion", "minion_workflow_step"], "histogram")
     histogram.labels(minion="minion123", minion_workflow_step="step_xyz").observe(0.75)
-    time.sleep(0.1)
+    await asyncio.sleep(0.1)
 
     page = read_metrics_from_http(port)
     labels = {"minion": "minion123", "minion_workflow_step": "step_xyz"}
@@ -103,9 +110,19 @@ async def test_http_server_start_failure_logs_error():
     port = find_unused_port()
     registry = CollectorRegistry()
 
-    PrometheusMetrics(logger=NoOpLogger(), port=port, registry=registry)
+    InMemoryLogger.enable_spy()
+    InMemoryLogger.reset()
+    logger = InMemoryLogger()
+
+    first = PrometheusMetrics(logger=logger, port=port, registry=registry)
+    await first.startup()
+
+    await asyncio.sleep(0.1) # let logging task run
+    assert not logger.has_log("Failed to start metrics HTTP server")
 
     # Second instantiation should fail and trigger safe_create_task logging path
-    PrometheusMetrics(logger=NoOpLogger(), port=port, registry=registry)
+    second = PrometheusMetrics(logger=logger, port=port, registry=registry)
+    await second.startup()
 
-    time.sleep(0.1) # Let logging task run
+    await asyncio.sleep(0.1) # let logging task run
+    assert logger.has_log("Failed to start metrics HTTP server")

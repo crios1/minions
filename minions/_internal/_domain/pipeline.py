@@ -16,10 +16,10 @@ from .._framework.metrics_constants import (
 from .._utils.serialization import is_type_serializable
 
 class Pipeline(AsyncService, Generic[T_Event]):
+    _mn_user_facing = True
+
     def __init_subclass__(cls, *, defer_pipeline_setup=False, **kwargs):
         super().__init_subclass__(**kwargs)
-
-        cls._mn_ensure_attrspace()
 
         if defer_pipeline_setup:
             return

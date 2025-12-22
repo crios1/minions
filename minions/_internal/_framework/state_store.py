@@ -5,6 +5,8 @@ from .._domain.minion_workflow_context import MinionWorkflowContext
 
 
 class StateStore(AsyncComponent):
+    _mn_user_facing = True
+
     @abstractmethod
     async def save_context(self, ctx: MinionWorkflowContext):
         "override to implement your own StateStore, this method must store every field in `ctx`"

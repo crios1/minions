@@ -25,6 +25,8 @@ class Logger(AsyncLifecycle):
     because it is the only sane way to trace workflow behavior, errors, and performance
     in something that behaves like a distributed system.
     """
+    _mn_user_facing = True
+
     def __init__(self, level: int = INFO):
         self._level = level
     
