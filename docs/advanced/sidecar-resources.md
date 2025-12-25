@@ -2,6 +2,19 @@
 
 Some tasks don’t fit comfortably inside a single Python interpreter: calling non-Python SDKs, running CPU-heavy algorithms, or isolating risky code. Minions lets you wrap a separate process as a `Resource`—a “sidecar”—so you can keep the main runtime stable while tapping external capabilities.
 
+“Minions runs everything in one event loop. If you do CPU-heavy or blocking work in a step, you’ll stall the loop and hurt every bot. Offload CPU to a separate process; offload blocking I/O to a thread.”
+
+```python
+# blocking I/O (file/db client lib that isn't async)
+data = await asyncio.to_thread(read_big_file, path)
+
+# CPU-heavy (pandas/numba/compression); create once at process start
+from concurrent.futures import ProcessPoolExecutor
+cpu_pool = ProcessPoolExecutor(max_workers=2)  # small; tune per host
+loop = asyncio.get_running_loop()
+result = await loop.run_in_executor(cpu_pool, heavy_fn, arg1, arg2)
+```
+
 ## Why use a sidecar?
 
 - **Non-native libraries**: talk to JS/Java/Go SDKs that have no Python equivalent.  

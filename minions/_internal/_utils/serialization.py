@@ -1,3 +1,5 @@
+"""Serialization primitives using msgspec for fast, explicit, schema-driven encoding with minimal runtime overhead."""
+
 from __future__ import annotations
 
 from functools import lru_cache

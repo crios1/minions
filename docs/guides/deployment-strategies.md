@@ -60,6 +60,12 @@ Environment=PYTHONUNBUFFERED=1
 StandardOutput=journal
 StandardError=journal
 
+# Memory guardrails (recommended for long-running Python services)
+MemoryAccounting=yes
+MemoryHigh=1G      # soft pressure point — start shedding / throttling
+MemoryMax=1500M   # hard cap — service is OOM-killed and restarted
+OOMPolicy=restart
+
 [Install]
 WantedBy=multi-user.target
 ```
@@ -73,4 +79,10 @@ sudo systemctl enable --now minions.service
 
 If the process crashes, systemd restarts it; `journalctl -u minions.service` shows stdout/err. Keep your project directory (code, configs, state) on durable storage; the runtime will resume workflows from the persisted state store.
 
-As the project matures, expect richer deployment helpers and CI hooks to build docs (`make -C docs html`) and fail on Sphinx warnings.
+- - - - - - - - - - - - - - 
+
+Memory is controlled at two layers:
+- Application-level (Minions runtime): The runtime monitors memory usage and applies backpressure or sheds work before the system is under pressure.
+- Supervisor-level (systemd / cgroups): systemd enforces a hard memory boundary (MemoryHigh / MemoryMax) to protect the host and ensure failures are contained and restartable.
+
+These are complementary: the runtime should react first; systemd is the final safety net.

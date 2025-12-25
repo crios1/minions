@@ -123,8 +123,6 @@ class Gru:
 
         self._loop = loop
 
-        # TODO: use the locks with my datastructures to make helpers and use them in my public method implementations
-
         # per-entity ID locks
         self._minion_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._pipeline_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
@@ -204,7 +202,7 @@ class Gru:
         self._started = True
     
     async def _startup_async_component(self, comp: AsyncComponent, comp_kind: str, log_kwargs: dict | None = None):
-        if not hasattr(comp, "_startup"):
+        if not hasattr(comp, "_mn_startup"):
             return # pragma: no cover
         log_kwargs = log_kwargs or {}
         await self._logger._log(DEBUG, f"{comp_kind} starting", **log_kwargs)
@@ -212,7 +210,7 @@ class Gru:
         await self._logger._log(DEBUG, f"{comp_kind} started", **log_kwargs)
 
     async def _shutdown_async_component(self, comp: AsyncComponent, comp_kind: str, log_kwargs: dict | None = None):
-        if not hasattr(comp, "_shutdown"):
+        if not hasattr(comp, "_mn_shutdown"):
             return # pragma: no cover
         log_kwargs = log_kwargs or {}
         await self._logger._log(DEBUG, f"{comp_kind} shutting down", **log_kwargs)
@@ -553,10 +551,6 @@ class Gru:
             ) # pragma: no cover
 
     # Public API
-
-    # TODO: might need a per minion lock or some thing for the public endpoints
-
-    # TODO: finish implementing start_minion string and class based starts
 
     @overload
     async def start_minion(
@@ -963,16 +957,6 @@ class Gru:
     # Background Tasks
 
     async def _monitor_process_resources(self, interval: int = 5):
-        # https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/69067169-91cc-8331-8cea-542e6cb5d10e
-        # https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/69091dbb-94bc-832c-b5f8-b18c8c5fc012
-        # TODO: on high memory usage:
-        # - "turn off" pipelines (so new workflows don't spawn) & let the user know what's going on
-        # TODO: when memory usage returns to reasonable levels,
-        # - "turn on" pipelines
-        # ...consider how you'd manage potential thrashing between turning pipelines on and off cuz ram usage
-        # ...could increase significantly when turning pipelines back on
-        # ...maybe turn them on gradually or wait til ram reaches a minimum threashold before turning pipelines back on?
-
         process = psutil.Process()
         process.cpu_percent(interval=None)
 
@@ -1002,7 +986,7 @@ class Gru:
                     if not warned_ram_high:
                         await self._logger._log(
                             WARNING,
-                            f"System memory usage is very high. This may impact Gru performance or stability.",
+                            "System memory usage is very high. This may impact Gru performance or stability.",
                             system_memory_used_percent=sys_mem_used_pct
                         )
                         warned_ram_high = True

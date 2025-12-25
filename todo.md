@@ -16,6 +16,25 @@
     - integrate gru tests from other files:
       - test_minion_states.py is basically a gru test where checking for counters should be handled by the reuseable testing routine
 
+- todo: add stop modes to gru.stop_minion and map to GruShell redeploy strategies
+  - default mode: pause (current behavior)
+  - modes and behavior:
+    - pause: stop new workflows; persist in-flight workflows for resume on restart
+    - drain: stop new workflows; await in-flight workflows to finish; then stop
+    - cutover: stop new workflows; abort in-flight workflows; then stop
+  - interruptibility:
+    - if drain is in progress and caller requests cutover or pause, override drain immediately
+    - if drain is requested again, treat as idempotent
+    - if minion already stopped, return success with reason
+  - api sketch:
+    - gru.stop_minion(name_or_instance_id, mode="pause"|"drain"|"cutover")
+    - grushell redeploy maps:
+      - redeploy drain -> stop_minion(mode="drain")
+      - redeploy cutover -> stop_minion(mode="cutover")
+  - tests:
+    - add orchestration helper directives for mode="drain"/"cutover"
+    - add runtime tests for in-flight workflow behavior per mode
+
 - todo: refactor tests/assets naming + organization for long-term maintainability
   - decision:
     - directory-first taxonomy; no hand-maintained manifest
@@ -122,13 +141,26 @@
     - it's a check that says the user's private attr space is clean / we don't accidently ship classes where we use the private attrspace
     - don't ship the check at in the final code, just do the check in the test suite because it gives us assurance
 
-- todo: add "crash testing" to test suite to ensure that minions runtime does the runtime crash guarentees
+- todo: robustify / clean up minions/_internal/_utils/serialization.py and it's respective test file
+  - diff: https://chatgpt.com/codex/tasks/task_e_694a8fe5a8a883299f9aa2c9fc0294af
+
+- todo: add per-entity lifecycle locking to gru for concurrent-safe starts/stops.
+  - guarantees:
+    - no duplicate minion starts for the same composite key; shared pipelines/resources start once; concurrent stops don’t double-cancel.
+  - failure handling:
+    - if an error occurs inside a locked section, undo partial registry inserts before releasing the lock; log skipped work when another op already holds the lock (debug is enough).
+  - tests to add:
+    - concurrent same-key start_minion collapses to one instance; concurrent same-id stop_minion is idempotent; two minions sharing a pipeline/resource don’t double-start it.
+  - note: use the (_minion_locks, _pipeline_locks, _resource_locks) gru attrs
+  - convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/6910f9e9-d76c-8327-92b3-ea4b729b6288
+
+- todo: write tests for gru.start_minion to lock in that it works with class and str based starts
 
 - todo: add early (best-effort) serialization validation for user-provided event and workflow context types at Pipeline / Minion definition time
   - statically check that user type annotations are supported by gru's serialization, and raise when an annotation is not
   - this is an early feedback mechanism, full serializability can only be guaranteed at runtime
 
-- todo: robustify / clean up minions/_internal/_utils/serialization.py and it's respective test file
+- todo: add "crash testing" to test suite to ensure that minions runtime does the runtime crash guarentees
 
 - todo: now w/ the robust reuseable testing routine (from the harden/repair test_gru.py todo) fill out the test suite to cover all the ways the user will interact with gru... mainly the kinds of files they can pass to it.
  - audit each of the test asset in the test suite and ensure they are useful and being used by gru with a reasonable test. otherwise, add the test(s) or delete the asset
@@ -164,6 +196,7 @@
     - wire guard state into `Gru.start_minion(...)` admission path
     - wire guard state into pipeline scheduling / emit admission path (one choke point; no scattered checks)
     - keep all internal fields in `_mn_` attrspace
+    - need to log/notify the user when state changes (and what that means) but not too often
   - tests:
     - test: sustained high memory enters SHED and rejects new `start_minion`
     - test: pipelines stop admitting new work in SHED (no new tasks/events created), but in-flight work continues
@@ -175,6 +208,54 @@
     - explain the philosophy: “single-node, maximize useful work; default runs hot; sheds only when sustained pressure risks OOM”
     - document config knobs and recommended conservative profile for container/shared-host deployments
   - convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/6945f1d2-cdcc-832e-9ce6-a12dfd906992
+  - other convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/6939c2bf-5d7c-8332-b9a7-6baa836491f8
+
+- todo: add event-loop lag monitor & notification (spec decently enough to polish & implement later)
+  - goal:
+    - detect sustained asyncio loop stalls early; surface precise blame (minion/workflow/step + top frame); auto-pause intake on severe lag; never force users to change their plain `await` code
+  - design:
+    - sampling loop (0.5–1.0s) computes lag: `lag_ms = max(0, (now - target) - 1000)`
+    - thresholds & hysteresis:
+      - WARN when `lag_ms >= 100` (log offenders once per sample with rate limiting)
+      - CRIT when `lag_ms >= 500` sustained for ≥5s → set intake state to `PAUSE`
+      - RESUME when `lag_ms < 100` sustained for ≥10s → set intake state to `OK`
+    - attribution:
+      - track INFLIGHT tasks created by `@minion_step` wrapper; set `task.set_name(f"{minion}:{wf}:{step}")`
+      - on WARN/CRIT, capture up to N offenders by longest `elapsed_s` and include top stack frame (`filename:lineno func`)
+    - actions:
+      - WARN → structured log + metrics only
+      - CRIT → call existing intake pause path (same choke point used by memory guard); do not cancel tasks
+      - RESUME → resume intake; drain any on-disk spool first (if present)
+    - config surface (minimal, env/kwargs):
+      - `LagCfg(sample_s=0.5, warn_ms=100, crit_ms=500, crit_sustain_s=5, resume_ms=100, resume_sustain_s=10, max_dump=5, enabled=True)`
+    - DX stance:
+      - no per-step timeouts by default; users keep plain asyncio
+      - docs instruct offloading CPU/blocking work to `ProcessPoolExecutor` / `asyncio.to_thread`
+  - implementation notes:
+    - add lightweight `loop_lag_monitor()` task started with Gru; keep state in `_mn_` attrspace
+    - extend `@minion_step` wrapper to register/unregister tasks in an `_mn_inflight` set + `started_at`
+    - logging:
+      - single structured line per sample at WARN/CRIT with `lag_ms`, `intake_state`, and `offenders=[{task,elapsed_s,top}]`
+      - rate-limit identical WARN lines (e.g., suppress duplicates within 1s)
+    - metrics (Prometheus):
+      - `event_loop_lag_ms` (gauge)
+      - `loop_lag_warnings_total` (counter)
+      - `intake_state{state="ok|pause"}` (gauge 0/1)
+      - optional: `step_runtime_seconds` (histogram, per minion/step labels) if not already present
+    - intake integration:
+      - reuse existing memory-pressure intake controller; add a “lag” reason to enter/exit `PAUSE`
+      - ensure PAUSE/RESUME are idempotent and reason-agnostic (memory or lag can trigger)
+  - tests:
+    - unit: simulate lag by sleeping the event loop in a helper; assert WARN then CRIT transitions with hysteresis
+    - unit: register fake INFLIGHT tasks with names/stacks; assert offender dump ordering by `elapsed_s`
+    - integration: CRIT → intake paused; sustained recovery → intake resumed; verify no new tasks created during pause
+    - logging: snapshot one WARN line (redact paths if needed), assert fields present and rate-limited
+  - docs:
+    - section “Event-loop lag”: what it means, how it’s surfaced, why bots may stall; how to fix (offload CPU/blocking I/O)
+    - clarify policy: signal-only by default; no auto-cancels; intake pauses on severe sustained lag to protect the system
+  - convo: https://chatgpt.com/g/g-p-6854f3157968819196393751e67bd218-minions-python-oss-framework/c/689e81a1-4f78-832f-8a7b-6d2f4fb5973d
+
+- todo: revisit convo https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/68f6c4f3-888c-8333-964d-be052cd06ea1
 
 - todo: decouple orchestration addressing from stable runtime identity (component_id + instance_id)
   - context:
@@ -241,14 +322,8 @@
       - “refactors require either a relink (ref set) or alias mapping; inflight workflows remain resumable”
       - “durable observability requires stable labels; use alias for readable dashboards”
   - convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/69446e9e-053c-832c-abfb-ba40b5123693
-
-- todo: implement "minions gru serve" and "minions gru attach"
-  - basically a redesign of the controller of the runtime, GruShell will remain as perhaps a demo thing or something maybe but the official and best way to use gru and the shell is in a serve-attach model as seperate
-  - convo: https://chatgpt.com/c/69406c80-f478-8327-85b2-e3fb54d89796
-
-- todo: complete GruShell (~90% implemented, needs documentation / user onboarding flow)
-  - users will embed GruShell into thier deployment scripts / use the cookbook to make the script
-  - but maybe it makes sense to let the user experiment with the shell by calling "python -m minions shell"? i need to consider the user onboarding flow further.
+  - other convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/694725cf-a5c4-8326-bdfc-b95f1b289f14
+  - note: consider how cross env (dev,qa,prod) comparison will work: like with grushell snapshot/redeploy, discussed in "other convo"
 
 - todo: add support for resourced pipelines and resourced resources (currenlty partially implemented)
   - requires implementation, testing, and documentation for each
@@ -268,6 +343,14 @@
       # )
       ```
       so in other words, you compose your system at a high level using "raw" resources, "higher level" resources, pipelines, and minions. (todo: i'll flesh this out in the docs as something like a "composing / designing your minion system") ... also maybe talk about commiting your observeability to a repo.
+
+- todo: implement "minions gru serve" and "minions gru attach"
+  - basically a redesign of the controller of the runtime, GruShell will remain as perhaps a demo thing or something maybe but the official and best way to use gru and the shell is in a serve-attach model as seperate
+  - convo: https://chatgpt.com/c/69406c80-f478-8327-85b2-e3fb54d89796
+
+- todo: complete GruShell (~90% implemented, needs documentation / user onboarding flow)
+  - users will embed GruShell into thier deployment scripts / use the cookbook to make the script
+  - but maybe it makes sense to let the user experiment with the shell by calling "python -m minions shell"? i need to consider the user onboarding flow further.
 
 - todo: provide uvloop support for better performance on *nix systems (maybe 2-4x more)
   - design: 
@@ -355,12 +438,18 @@
   - convo: https://chatgpt.com/c/693a8a64-55a0-8326-b383-881b36874aec
 
 ### Docs:
+- todo: autogenerate api tree for minions module using like sphinx autodoc, autosummary, intersphinx
+
 - todo: update my docs and readme with positioning surfaced in this thread (https://chatgpt.com/c/693b751c-bb18-8329-b2d5-b6ece864000b)
   - ctrl+f to read from the following text to end of thread:
     - "Short answer: the angle I suggested is stronger than this one as a primary positioning, but most of what you wrote here is still very good. The difference is where and how it’s used."
   - note: thread also contains additional todos and plans
 
 - todo: my landing page doc and readme are almost the same, i should consider centralizing them to some extent or better to maintain them seperately?
+  - diff: https://chatgpt.com/codex/tasks/task_e_694a7a586ea883299cf280a9bf7fc64a
+  - (just make sure to copy the comment in my current serialization code to the diff since it wasn't present when the diff was created)
+
+- todo: add version switcher to docs
 
 ### Misc:
 - todo: comb the codebase for any remaining todo comments, they shold all be resolved by now, if not consolidate/complete them
