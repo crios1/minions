@@ -143,6 +143,7 @@
 
 - todo: robustify / clean up minions/_internal/_utils/serialization.py and it's respective test file
   - diff: https://chatgpt.com/codex/tasks/task_e_694a8fe5a8a883299f9aa2c9fc0294af
+  - (just make sure to copy the comment in my current serialization code to the diff since it wasn't present when the diff was created)
 
 - todo: add per-entity lifecycle locking to gru for concurrent-safe starts/stops.
   - guarantees:
@@ -447,9 +448,20 @@
 
 - todo: my landing page doc and readme are almost the same, i should consider centralizing them to some extent or better to maintain them seperately?
   - diff: https://chatgpt.com/codex/tasks/task_e_694a7a586ea883299cf280a9bf7fc64a
-  - (just make sure to copy the comment in my current serialization code to the diff since it wasn't present when the diff was created)
 
 - todo: add version switcher to docs
+
+- todo: add example of auto-generating and auto-running paper trading strategies with an LLM
+  - goal:
+    - demonstrate how to secuerly automate business logic within a minions system using an a LLM (in this case: trading strategy ideation and validation)
+  - design:
+    - the llm generates StrategySpecs not python code directly
+    - StrategySpec events are emited by a pipeline (`StrategySpecPipeline(Pipeline[StrategySpec])`)
+    - StrategySpec events are recieved, run, and managed by a minion `StrategySpecRunnerMinion(Minion[StrategySpec, Ctx])`
+  - note:
+    - ideally sample minion system examples should be runable / have tests to assert behaviour 
+  - note (discuss with gpt): consider that emiting StrategySpec events can take a non-trivial amount of time. currenlty, emitting pipeline events has no resumeability because it happens in a single step (Pipeline.emit_event). it might be worth adding resumeablity support for pipeline events. it would basically be implemented in the same way that minions have resumeability (like @pipeline_step and last @pipeline_step must return event type instance). i don't love it because the current emit_event api is simple but maybe it's something to add support for because it seems like the only way to get resumeability for generating events. it's really something to think about.
+  - convo: https://chatgpt.com/c/694e3d91-2ae0-8328-b434-72d8a30af9e2
 
 ### Misc:
 - todo: comb the codebase for any remaining todo comments, they shold all be resolved by now, if not consolidate/complete them
