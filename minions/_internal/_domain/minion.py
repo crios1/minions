@@ -37,6 +37,7 @@ from .._framework.metrics_constants import (
 from .._framework.state_store import StateStore
 from .._utils.get_class import get_class
 from .._utils.serialization import is_type_serializable
+from .._utils.get_original_bases import get_original_bases
 
 Statuses = Literal["undefined", "aborted", "failed", "succeeded"]
 
@@ -70,7 +71,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         )
 
         base = None
-        bases = getattr(cls, '__orig_bases__', ())
+        bases = get_original_bases(cls)
         if minion_bases := [b for b in bases if get_origin(b) is Minion]:
             if len(minion_bases) > 1:
                 raise multi_inheritance_err

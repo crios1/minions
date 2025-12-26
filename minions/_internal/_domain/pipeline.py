@@ -14,6 +14,7 @@ from .._framework.metrics_constants import (
     PIPELINE_EVENT_FANOUT_TOTAL
 )
 from .._utils.serialization import is_type_serializable
+from .._utils.get_original_bases import get_original_bases
 
 class Pipeline(AsyncService, Generic[T_Event]):
     _mn_user_facing = True
@@ -29,7 +30,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
             f"Example: class MyPipeline(Pipeline[MyEvent])"
         )
 
-        for base in getattr(cls, "__orig_bases__", []):
+        for base in get_original_bases(cls):
             if get_origin(base) is Pipeline:
                 args = get_args(base)
                 if len(args) < 1:
