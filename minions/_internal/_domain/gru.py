@@ -16,7 +16,7 @@ from .minion import Minion
 from .pipeline import Pipeline
 from .resource import Resource
 from .types import T_Event, T_Ctx
-from .gru_result_types import StartMinionResult, StopMinionResult, ConflictingMinion
+from .gru_result_types import StartMinionResult, StopMinionResult, ShutdownGruResult, ConflictingMinion
 
 from .._framework.logger import Logger, DEBUG, INFO, WARNING, ERROR, CRITICAL
 from .._framework.logger_noop import NoOpLogger
@@ -86,8 +86,8 @@ class Gru:
         if not Gru._allow_direct_init:
             raise RuntimeError("Use 'await Gru.create(...)' instead of direct instantiation.")
 
-        self._started = False
-        self._shutdown = False
+        self._is_started = False
+        self._is_shutdown = False
 
         if logger is _UNSET:
             self._logger = FileLogger()
@@ -184,38 +184,38 @@ class Gru:
     async def _startup(self):
         if hasattr(self._logger, "_startup"):
             await self._logger._mn_startup()
-
-        startups = [
-            self._startup_async_component(
-                self._state_store,
-                "StateStore",
-                {'state_store': self._state_store.__class__.__name__}
-            ),
-            self._startup_async_component(
-                self._metrics,
-                "Metrics",
-                {'metrics': self._metrics.__class__.__name__}
-            )
-        ]
-        await asyncio.gather(*startups)
-
-        self._started = True
+        await asyncio.gather(
+            self._startup_async_component(self._state_store),
+            self._startup_async_component(self._metrics)
+        )
+        self._is_started = True
     
-    async def _startup_async_component(self, comp: AsyncComponent, comp_kind: str, log_kwargs: dict | None = None):
+    async def _startup_async_component(self, comp: AsyncComponent, log_kwargs: dict | None = None):
         if not hasattr(comp, "_mn_startup"):
             return # pragma: no cover
-        log_kwargs = log_kwargs or {}
-        await self._logger._log(DEBUG, f"{comp_kind} starting", **log_kwargs)
+        log_kwargs = {
+            "component": type(comp).__name__,
+            **(log_kwargs or {}),
+        }
+        await self._logger._log(DEBUG, "async component starting", **log_kwargs)
         await comp._mn_startup()
-        await self._logger._log(DEBUG, f"{comp_kind} started", **log_kwargs)
+        await self._logger._log(DEBUG, "async component started", **log_kwargs)
 
-    async def _shutdown_async_component(self, comp: AsyncComponent, comp_kind: str, log_kwargs: dict | None = None):
+    # todo: extract shutdown logic from self.shutdown?
+    # or put _startup logic in create?
+    async def _shutdown(self):
+        ...
+
+    async def _shutdown_async_component(self, comp: AsyncComponent, log_kwargs: dict | None = None):
         if not hasattr(comp, "_mn_shutdown"):
             return # pragma: no cover
-        log_kwargs = log_kwargs or {}
-        await self._logger._log(DEBUG, f"{comp_kind} shutting down", **log_kwargs)
+        log_kwargs = {
+            "component": type(comp).__name__,
+            **(log_kwargs or {}),
+        }
+        await self._logger._log(DEBUG, "async component shutting down", **log_kwargs)
         await comp._mn_shutdown()
-        await self._logger._log(DEBUG, f"{comp_kind} shutdown complete", **log_kwargs)
+        await self._logger._log(DEBUG, "async component shutdown complete", **log_kwargs)
 
     # Minion Methods
 
@@ -454,6 +454,7 @@ class Gru:
     # Pipeline Methods
 
     def _make_pipeline_id(self, pipeline_modpath: str) -> str:
+        """idempotently make pipeline id"""
         return pipeline_modpath
 
     def _get_pipeline_class(self, pipeline_modpath: str) -> type[Pipeline]:
@@ -540,11 +541,11 @@ class Gru:
         )
 
     def _ensure_started(self):
-        if self._shutdown:
+        if self._is_shutdown:
             raise RuntimeError(
                 "Gru has been shut down. Create a new instance with `await Gru.create(...)`."
             )
-        if not self._started:
+        if not self._is_started:
             raise RuntimeError(
                 "Gru is not started. Either use `await Gru.create(...)` to construct and start it in one step, "
                 "or call `await gru._startup()` manually after instantiating it with `Gru(...)`."
@@ -900,15 +901,15 @@ class Gru:
                 reason=str(e),
             )
 
-    async def shutdown(self):
+    async def shutdown(self) -> ShutdownGruResult:
         global _GRU_INSTANCE
-        if self._shutdown:
-            return
-        if not self._started:
-            self._shutdown = True
+        if self._is_shutdown:
+            return ShutdownGruResult(success=True)
+        if not self._is_started:
+            self._is_shutdown = True
             if _GRU_INSTANCE is self:
                 _GRU_INSTANCE = None
-            return
+            return ShutdownGruResult(success=True)
 
         try:
             await self._logger._log(INFO, "Gru shutting down...")
@@ -924,19 +925,11 @@ class Gru:
                     *[safe_cancel_task(task=t, logger=self._logger) for t in all_tasks if t],
                     return_exceptions=True,
                 )           
-                shutdowns = [
-                    self._shutdown_async_component(
-                        self._state_store,
-                        "StateStore",
-                        {'state_store': self._state_store.__class__.__name__}
-                    ),
-                    self._shutdown_async_component(
-                        self._metrics,
-                        "Metrics",
-                        {'metrics': self._metrics.__class__.__name__}
-                    )
-                ]
-                await asyncio.gather(*shutdowns, return_exceptions=True)
+                await asyncio.gather(
+                    self._shutdown_async_component(self._state_store),
+                    self._shutdown_async_component(self._metrics),
+                    return_exceptions=True
+                )
             
             for key, val in vars(self).items():
                 if isinstance(val, (dict, set)):
@@ -946,11 +939,16 @@ class Gru:
 
             await self._logger._mn_shutdown()
 
+            return ShutdownGruResult(success=True)
         except Exception as e: # pragma: no cover
             await self._log_exception_with_context(e, "Gru.shutdown failed")
+            return ShutdownGruResult(
+                success=False,
+                reason=str(e),
+            )
         finally:
-            self._started = False
-            self._shutdown = True
+            self._is_started = False
+            self._is_shutdown = True
             if _GRU_INSTANCE is self:
                 _GRU_INSTANCE = None
 

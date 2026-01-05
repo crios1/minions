@@ -33,6 +33,10 @@ class StartMinionResult(GruResult):
     instance_id: str | None = None
 
 @dataclass
+class ShutdownGruResult(GruResult):
+    pass
+
+@dataclass
 class MinionStatusResult(GruResult):
     name: str | None = None
     instance_id: str | None = None
