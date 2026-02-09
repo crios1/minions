@@ -9,6 +9,6 @@ class TestPipelineSubclassingInvalid:
                 async def produce_event(self):  # pragma: no cover
                     ...
         assert str(excinfo.value) == (
-            "SomePipeline must declare an event type. "
-            "Example: class MyPipeline(Pipeline[MyEvent])"
+            "SomePipeline must declare an event type "
+            "(e.g. class MyPipeline(Pipeline[MyEvent]): ...)."
         )

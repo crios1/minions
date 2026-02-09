@@ -123,6 +123,8 @@ class Gru:
 
         self._loop = loop
 
+        # TODO: use these locks properly
+
         # per-entity ID locks
         self._minion_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._pipeline_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
@@ -236,7 +238,6 @@ class Gru:
             cfg = ""
         return f"{minion_modpath}|{cfg}|{pipeline_modpath}"
 
-
     def _get_minion_class(self, minion_modpath: str) -> type[Minion]:
         mod = importlib.import_module(minion_modpath)
 
@@ -312,6 +313,21 @@ class Gru:
         task = self._minion_tasks.pop(instance_id, None)
         if task:
             await safe_cancel_task(task=task, logger=self._logger)
+        if not minion._mn_shutting_down:
+            await minion._mn_shutdown()
+
+    # TODO: i need to clean up my helpers
+    # in addition to making helpers that
+    # that ensure thru unit tests
+    # that internal data structures aren't misused
+    # i should have some test(s)
+    # that after running start or stop minion
+    # all the minion data structures contain the expected data
+    # (maybe check the pipeline and resource ones too)
+    async def _get_running_minion(self, identifier) -> Minion | None:
+        ...
+        # given an identifier
+        # return Minion or None
 
     # Resource Methods
 

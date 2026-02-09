@@ -1,5 +1,5 @@
 import threading
-from typing import Any, Dict, Tuple, cast, overload
+from typing import Any, Dict, Tuple, TypeVar, cast
 
 from minions._internal._framework.metrics import (
     CounterSample,
@@ -18,6 +18,7 @@ from minions._internal._framework.metrics_constants import METRIC_LABEL_NAMES
 from .mixin_spy import SpyMixin
 
 LabelKey = Tuple[Tuple[str, str], ...]  # sorted (name, value) pairs for hashing
+SampleT = TypeVar("SampleT", CounterSample, GaugeSample, HistogramSample)
 
 
 def _normalize_labels(metric_name: str, labels: Dict[str, Any]) -> LabelKey:
@@ -134,22 +135,10 @@ class InMemoryMetrics(SpyMixin, Metrics):
     # ----------------- Test helpers (read-only) -----------------
 
     @staticmethod
-    @overload
-    def find_sample(samples: list[CounterSample], labels: dict[str, str]) -> CounterSample: ...
-
-    @staticmethod
-    @overload
-    def find_sample(samples: list[GaugeSample], labels: dict[str, str]) -> GaugeSample: ...
-
-    @staticmethod
-    @overload
-    def find_sample(samples: list[HistogramSample], labels: dict[str, str]) -> HistogramSample: ...
-
-    @staticmethod
     def find_sample(
-        samples: list[CounterSample] | list[GaugeSample] | list[HistogramSample],
+        samples: list[SampleT],
         labels: dict[str, str],
-    ) -> CounterSample | GaugeSample | HistogramSample:
+    ) -> SampleT:
         for sample in samples:
             if sample["labels"] == labels:
                 return sample

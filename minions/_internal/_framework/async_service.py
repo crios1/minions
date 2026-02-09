@@ -16,6 +16,9 @@ class AsyncService(AsyncComponent):
         super().__init__(logger)
         self._mn_started = asyncio.Event()
         self._mn_start_error: BaseException | None = None
+        self._mn_aux_tasks: set[asyncio.Task] = set()
+        self._mn_tasks_lock = asyncio.Lock()
+        self._mn_shutdown_grace_seconds = 1.0
 
     async def _mn_wait_until_started(self):
         await self._mn_started.wait()
@@ -75,6 +78,44 @@ class AsyncService(AsyncComponent):
                 )
             raise e
 
+    async def _mn_shutdown(
+        self,
+        *,
+        log_kwargs: dict | None = None,
+        pre: Callable[..., Any | Awaitable[Any]] | None = None,
+        pre_args: list | None = None,
+        post: Callable[..., Any | Awaitable[Any]] | None = None,
+        post_args: list | None = None
+    ):
+        async def _post():
+            if post:
+                post_args_list = post_args or []
+                result = post(*post_args_list)
+                if inspect.isawaitable(result):
+                    await result
+            async with self._mn_tasks_lock:
+                tasks = list(self._mn_aux_tasks)
+            if tasks:
+                done, pending = await asyncio.wait(
+                    tasks,
+                    timeout=self._mn_shutdown_grace_seconds,
+                )
+                for task in pending:
+                    task.cancel()
+                await asyncio.gather(*pending, return_exceptions=True)
+            async with self._mn_tasks_lock:
+                self._mn_aux_tasks.clear()
+
+        return await super()._mn_shutdown(
+            log_kwargs=log_kwargs,
+            pre=pre,
+            pre_args=pre_args,
+            post=_post,
+        )
+
     def safe_create_task(self, coro: Coroutine, name: str | None = None) -> asyncio.Task:
-        "A safe wrapper around asyncio.create_task that optionally does logging."
-        return safe_create_task(coro, self._mn_logger, name)
+        "A safe wrapper around asyncio.create_task that optionally logs exceptions."
+        task = safe_create_task(coro, self._mn_logger, name)
+        self._mn_aux_tasks.add(task)
+        task.add_done_callback(lambda t: self._mn_aux_tasks.discard(t))
+        return task

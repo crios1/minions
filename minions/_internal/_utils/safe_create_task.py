@@ -5,7 +5,7 @@ from collections.abc import Coroutine
 from .._framework.logger import Logger, ERROR
 
 def safe_create_task(coro: Coroutine, logger: Logger | None = None, name=None) -> asyncio.Task:
-    "A safe wrapper around asyncio.create_task that optionally does logging."
+    "Safely create a task; exceptions are handled and optionally logged (cancellations propagate)."
     if name is None and hasattr(coro, "__name__"):
         name = coro.__name__
 
@@ -18,8 +18,10 @@ def safe_create_task(coro: Coroutine, logger: Logger | None = None, name=None) -
             # Footgun: exit()/sys.exit()
             if logger:
                 tb = "".join(traceback.format_exception(type(e), e, e.__traceback__))
-                try: await logger._log(ERROR, f"[SystemExit in Task]{f' ({name})' if name else ''}: {e}", traceback=tb)
-                except Exception: pass
+                try:
+                    await logger._log(ERROR, f"[SystemExit in Task]{f' ({name})' if name else ''}: {e}", traceback=tb)
+                except Exception:
+                    pass
             # Swallow to keep the process alive.
         except Exception as e:
             msg = f"[Exception in asyncio.Task]{f' ({name})' if name else ''}: {e}"

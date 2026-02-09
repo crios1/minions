@@ -1,9 +1,7 @@
-from minions import Resource
+from .support.resource_spied import SpiedResource
 
-from .support.mixin_spy import SpyMixin
-
-class SimpleResource1(SpyMixin, Resource):
-    name = f"simple-resource"
+class SimpleResource1(SpiedResource):
+    name = "simple-resource"
     
     async def startup(self):
         self.api = {
@@ -17,19 +15,20 @@ class SimpleResource1(SpyMixin, Resource):
         return
 
     # not tracked for latency and errors
-    # user can't use private methods cuz i don't want name collisions with my framework internals
-    @Resource.untracked 
-    async def public_helper_method1(self):
+    @SpiedResource.untracked 
+    async def _method1(self):
         return
 
-    @Resource.untracked()
-    async def public_helper_method2(self):
+    @SpiedResource.untracked()
+    async def _method2(self):
         return
 
-    @Resource.untracked(kwarg='kwargs')
-    async def public_helper_method3(self):
+    @SpiedResource.untracked(kwarg='kwargs')
+    async def _method3(self):
         return
 
-    async def get_price(self):
-        await self.public_helper_method1()
+    async def get_price(self, timestamp: float | None = None):
+        await self._method1()
+        await self._method2()
+        await self._method3()
         return self.api.get('/price?symbol=NVDA', None)

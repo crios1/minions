@@ -16,6 +16,16 @@ Minions is a single-process, event-driven runtime. Instead of spreading work acr
 - **Resource graph**: dependencies are inferred from type hints so Gru can start/stop once and inject safely.
 - **Greedy concurrency**: the runtime pushes as much work as possible; backpressure lives in your resources ({ref}`concurrency-backpressure`).
 
+## Why single Gru per process
+
+`Gru` is a process-level runtime owner, not just a helper object.
+
+- It owns lifecycle coordination for all running minions, pipelines, and resources in the process.
+- It owns process-wide runtime services (metrics endpoint, persistence backend, background monitoring).
+- A single owner keeps startup/shutdown behavior deterministic and avoids conflicting defaults (for example: one metrics port, one default SQLite file).
+
+If you need multiple independent orchestrations at the same time, run multiple processes (one `Gru` per process).
+
 ## Components
 
 - **Gru** – orchestrator; manages lifecycles, dependency wiring, metrics, logging, and persistence.

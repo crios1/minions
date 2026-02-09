@@ -2,12 +2,10 @@ import asyncio
 import time
 import sys
 
-from minions import Pipeline
-
-from .support.mixin_spy import SpyMixin
+from .support.pipeline_spied import SpiedPipeline
 from .event_simple import SimpleEvent
 
-class SimpleSingleEventPipeline1(SpyMixin, Pipeline[SimpleEvent]):
+class SimpleSingleEventPipeline1(SpiedPipeline[SimpleEvent]):
     total_events = 0
 
     async def produce_event(self) -> SimpleEvent:
@@ -18,4 +16,4 @@ class SimpleSingleEventPipeline1(SpyMixin, Pipeline[SimpleEvent]):
             type(self).total_events += 1
         return SimpleEvent(timestamp=time.time())
 
-# pipeline = SimpleSingleEventPipeline1
+pipeline = SimpleSingleEventPipeline1

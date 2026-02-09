@@ -1,9 +1,7 @@
-from minions import Pipeline
+from .support.pipeline_spied import SpiedPipeline
 
-from .support.mixin_spy import SpyMixin
-
-class DictPipeline(SpyMixin, Pipeline[dict]):
+class DictPipeline(SpiedPipeline[dict]):
     async def produce_event(self):
         return {}
 
-# pipeline = DictPipeline
+pipeline = DictPipeline

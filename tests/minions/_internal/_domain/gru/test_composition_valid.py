@@ -1,0 +1,147 @@
+import pytest
+
+from minions._internal._framework.logger_console import ConsoleLogger
+from minions._internal._framework.metrics_noop import NoOpMetrics
+from minions._internal._framework.state_store_noop import NoOpStateStore
+from tests.assets.support.logger_inmemory import InMemoryLogger
+from tests.assets.support.metrics_inmemory import InMemoryMetrics
+from tests.assets.support.state_store_inmemory import InMemoryStateStore
+
+class TestValidComposition:
+    class TestMinionFile:
+        @pytest.mark.asyncio
+        async def test_gru_accepts_file_with_multiple_minions_and_explicit_minion(self, gru_factory, tests_dir):
+            
+            minion_modpath = "tests.assets.file_with_two_minions_and_explicit_minion"
+            pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
+            config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
+
+            async with gru_factory(
+                state_store=NoOpStateStore(),
+                logger=ConsoleLogger(),
+                metrics=NoOpMetrics()
+            ) as gru:
+                result = await gru.start_minion(
+                    minion=minion_modpath,
+                    minion_config_path=config_path,
+                    pipeline=pipeline_modpath
+                )
+
+                assert result.success
+
+        @pytest.mark.asyncio
+        async def test_gru_starts_minion_with_multiple_distinct_resource_dependencies(self, gru_factory, tests_dir):
+            minion_modpath = "tests.assets.minion_simple_resourced_multi"
+            pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
+            config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
+
+            logger = InMemoryLogger()
+            async with gru_factory(
+                state_store=InMemoryStateStore(logger=logger),
+                logger=logger,
+                metrics=InMemoryMetrics()
+            ) as gru:
+                result = await gru.start_minion(
+                    minion=minion_modpath,
+                    minion_config_path=config_path,
+                    pipeline=pipeline_modpath
+                )
+
+                assert result.success
+
+                assert len(gru._pipelines) >= 1
+                assert len(gru._resources) >= 2
+
+                assert result.instance_id is not None
+
+    class TestPipelineFile: # TODO: implement test(s) (maybe like in TestMinionFile?)
+        @pytest.mark.asyncio
+        async def test_gru_accepts_file_with_single_pipeline_class(self, gru_factory, tests_dir):
+            minion_modpath = "tests.assets.minion_simple"
+            pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
+            config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
+
+            async with gru_factory(
+                state_store=NoOpStateStore(),
+                logger=ConsoleLogger(),
+                metrics=NoOpMetrics()
+            ) as gru:
+                result = await gru.start_minion(
+                    minion=minion_modpath,
+                    minion_config_path=config_path,
+                    pipeline=pipeline_modpath
+                )
+
+                assert result.success
+
+
+class TestValidCompositionUsingNewAssets:
+    class TestMinionFile:
+        @pytest.mark.asyncio
+        async def test_gru_accepts_file_with_multiple_minions_and_explicit_minion(
+            self, gru_factory, reload_emit_n_pipeline, tests_dir
+        ):
+            minion_modpath = "tests.assets_new.file_with_two_minions_and_explicit_minion"
+            pipeline_modpath = "tests.assets_new.pipeline_emit_n"
+            config_path = str(tests_dir / "assets_new" / "minion_config_a.toml")
+            reload_emit_n_pipeline(expected_subs=1, total_events=1)
+
+            async with gru_factory(
+                state_store=NoOpStateStore(),
+                logger=ConsoleLogger(),
+                metrics=NoOpMetrics(),
+            ) as gru:
+                result = await gru.start_minion(
+                    minion=minion_modpath,
+                    minion_config_path=config_path,
+                    pipeline=pipeline_modpath,
+                )
+                assert result.success
+
+        @pytest.mark.asyncio
+        async def test_gru_starts_minion_with_multiple_distinct_resource_dependencies(
+            self, gru_factory, reload_emit_n_pipeline, tests_dir
+        ):
+            minion_modpath = "tests.assets_new.minion_two_steps_multi_resources"
+            pipeline_modpath = "tests.assets_new.pipeline_emit_n"
+            config_path = str(tests_dir / "assets_new" / "minion_config_a.toml")
+            reload_emit_n_pipeline(expected_subs=1, total_events=1)
+
+            logger = InMemoryLogger()
+            async with gru_factory(
+                state_store=InMemoryStateStore(logger=logger),
+                logger=logger,
+                metrics=InMemoryMetrics(),
+            ) as gru:
+                result = await gru.start_minion(
+                    minion=minion_modpath,
+                    minion_config_path=config_path,
+                    pipeline=pipeline_modpath,
+                )
+
+                assert result.success
+                assert len(gru._pipelines) >= 1
+                assert len(gru._resources) >= 2
+                assert result.instance_id is not None
+
+    class TestPipelineFile:
+        @pytest.mark.asyncio
+        async def test_gru_accepts_file_with_single_pipeline_class(
+            self, gru_factory, reload_pipeline_module, tests_dir
+        ):
+            minion_modpath = "tests.assets_new.minion_two_steps"
+            pipeline_modpath = "tests.assets_new.pipeline_single_class"
+            config_path = str(tests_dir / "assets_new" / "minion_config_a.toml")
+            reload_pipeline_module(pipeline_modpath)
+
+            async with gru_factory(
+                state_store=NoOpStateStore(),
+                logger=ConsoleLogger(),
+                metrics=NoOpMetrics(),
+            ) as gru:
+                result = await gru.start_minion(
+                    minion=minion_modpath,
+                    minion_config_path=config_path,
+                    pipeline=pipeline_modpath,
+                )
+                assert result.success

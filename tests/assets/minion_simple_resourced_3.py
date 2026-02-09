@@ -1,10 +1,10 @@
-from minions import Minion, minion_step
+from minions import minion_step
 
-from .support.mixin_spy import SpyMixin
+from .support.minion_spied import SpiedMinion
 from .event_simple import SimpleEvent
 from .resource_simple_3 import SimpleResource3
 
-class SimpleResourcedMinion3(SpyMixin, Minion[SimpleEvent, dict]):
+class SimpleResourcedMinion3(SpiedMinion[SimpleEvent, dict]):
     name = "simple-resourced-minion-3"
     simple_resource: SimpleResource3
 
@@ -19,4 +19,4 @@ class SimpleResourcedMinion3(SpyMixin, Minion[SimpleEvent, dict]):
         self.context['step2'] = "step2"
         print(self.context)
 
-# minion = SimpleResourcedMinion3
+minion = SimpleResourcedMinion3

@@ -1,5 +1,5 @@
-import pytest
 import asyncio
+import pytest
 from minions._internal._framework.metrics_constants import (
     MINION_WORKFLOW_ABORTED_TOTAL,
     MINION_WORKFLOW_FAILED_TOTAL,
@@ -52,7 +52,7 @@ async def test_workflow_aborted_increments_aborted_counter():
     snap = metrics.snapshot()
     pprint(snap)
     counters = snap.get('counter', {})
-    aborted_total = sum(s["value"] for s in counters.get(MINION_WORKFLOW_ABORTED_TOTAL, []))
+    aborted_total = sum(s.get("value", 0) for s in counters.get(MINION_WORKFLOW_ABORTED_TOTAL, []))
 
     # workflow started should be incremented and aborted counter incremented
     assert counters.get(MINION_WORKFLOW_STARTED_TOTAL)
@@ -89,7 +89,7 @@ async def test_workflow_failed_increments_failed_counter():
     snap = metrics.snapshot()
     pprint(snap)
     counters = snap.get('counter', {})
-    failed_total = sum(s["value"] for s in counters.get(MINION_WORKFLOW_FAILED_TOTAL, []))
+    failed_total = sum(s.get("value", 0) for s in counters.get(MINION_WORKFLOW_FAILED_TOTAL, []))
 
     assert counters.get(MINION_WORKFLOW_STARTED_TOTAL)
     assert failed_total == 1

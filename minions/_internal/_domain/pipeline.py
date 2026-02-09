@@ -25,23 +25,46 @@ class Pipeline(AsyncService, Generic[T_Event]):
         if defer_pipeline_setup:
             return
 
-        err = TypeError(
-            f"{cls.__name__} must declare an event type. "
-            f"Example: class MyPipeline(Pipeline[MyEvent])"
-        )
+        subclassing_ex = "(e.g. class MyPipeline(Pipeline[MyEvent]): ...)"
 
-        for base in get_original_bases(cls):
-            if get_origin(base) is Pipeline:
-                args = get_args(base)
-                if len(args) < 1:
-                    raise err
-                cls._mn_event_cls = args[0]
-                break
-        
-        if not getattr(cls, '_mn_event_cls', None):
-            raise err
+        bases = get_original_bases(cls)
+        pipelineish = [
+            b for b in bases
+            if (origin := get_origin(b)) is not None and issubclass(origin, Pipeline)
+        ]
+
+        if not pipelineish:
+            raise TypeError(
+                f"{cls.__name__} must declare an event type {subclassing_ex}."
+            )
+
+        if len(pipelineish) > 1:
+            is_direct = any(get_origin(b) is Pipeline for b in pipelineish)
+            if is_direct:
+                raise TypeError(
+                    f"{cls.__name__} inherits from Pipeline more than once. "
+                    "Pipeline subclasses must inherit from Pipeline only once "
+                    f"{subclassing_ex}."
+                )
+            raise TypeError(
+                f"{cls.__name__} inherits from multiple Pipeline subclasses. "
+                "Use a single Pipeline subclass to set the event type "
+                f"{subclassing_ex}."
+            )
+
+        base = pipelineish[0]
+        args = get_args(base)
+
+        if len(args) < 1:
+            raise TypeError(
+                f"{cls.__name__} must declare an event type "
+                f"{subclassing_ex}."
+            )
+
+        cls._mn_event_cls = args[0]
 
         if not is_type_serializable(cls._mn_event_cls):
+            # TODO: need to centralize this error/errormsg (maybe have a is_type_serializable_raises()?)
             raise TypeError(
                 f"{cls.__name__}: event type is not JSON-serializable. "
                 "Only JSON-safe types are supported (str, int, float, bool, None, list, tuple, dict[str, V], dataclass, TypedDict)."
@@ -130,7 +153,8 @@ class Pipeline(AsyncService, Generic[T_Event]):
                 )
                 async with self._mn_subs_lock:
                     for minion in self._mn_subs:
-                        self.safe_create_task(minion._mn_handle_event(event))
+                        # Track event-handling tasks on the minion itself for clean shutdown.
+                        minion.safe_create_task(minion._mn_handle_event(event))
                         await self._mn_metrics._inc(
                             metric_name=PIPELINE_EVENT_FANOUT_TOTAL,
                             labels={

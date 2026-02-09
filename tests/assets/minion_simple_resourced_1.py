@@ -1,10 +1,10 @@
-from minions import Minion, minion_step
+from minions import minion_step
 
-from .support.mixin_spy import SpyMixin
+from .support.minion_spied import SpiedMinion
 from .event_simple import SimpleEvent
 from .resource_simple_1 import SimpleResource1
 
-class SimpleResourcedMinion1(SpyMixin, Minion[SimpleEvent, dict]):
+class SimpleResourcedMinion1(SpiedMinion[SimpleEvent, dict]):
     name = "simple-resourced-minion-1"
     simple_resource: SimpleResource1
 
@@ -18,6 +18,6 @@ class SimpleResourcedMinion1(SpyMixin, Minion[SimpleEvent, dict]):
     async def step_2(self):
         print(self.context)
 
-# minion = SimpleResourcedMinion1
+minion = SimpleResourcedMinion1
 
 # TODO: need to test that i can access self.event in all steps even when starting workflows from state store

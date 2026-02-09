@@ -154,16 +154,16 @@ class SpyMixin(Mixin):
 
         def wrap_callable(name: str, obj: Any) -> Any:
             if isinstance(obj, classmethod):
-                fn, rewrap = obj.__func__, classmethod
+                fn, rewrap, is_static = obj.__func__, classmethod, False
             elif isinstance(obj, staticmethod):
-                fn, rewrap = obj.__func__, staticmethod
+                fn, rewrap, is_static = obj.__func__, staticmethod, True
             else:
-                fn, rewrap = obj, None
+                fn, rewrap, is_static = obj, None, False
 
             if inspect.iscoroutinefunction(fn):
                 @wraps(fn)
                 async def _async_wrapper(*args, **kwargs):
-                    owner = args[0] if args else cls
+                    owner = cls if is_static else (args[0] if args else cls)
                     typ = owner if inspect.isclass(owner) else type(owner)
                     instance_tag = getattr(owner, "_mspy_instance_tag", None)
                     typ._spy_bump(name, instance_tag)
@@ -174,7 +174,7 @@ class SpyMixin(Mixin):
 
             @wraps(fn)
             def _sync_wrapper(*args, **kwargs):
-                owner = args[0] if args else cls
+                owner = cls if is_static else (args[0] if args else cls)
                 typ = owner if inspect.isclass(owner) else type(owner)
                 instance_tag = getattr(owner, "_mspy_instance_tag", None)
                 typ._spy_bump(name, instance_tag)

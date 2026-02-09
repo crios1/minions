@@ -1,9 +1,7 @@
-from minions import Resource
+from .support.resource_spied import SpiedResource
 
-from .support.mixin_spy import SpyMixin
-
-class InvalidResource(SpyMixin, Resource):
-    name = f"invalid-resource"
+class InvalidResource(SpiedResource):
+    name = "invalid-resource"
     
     async def startup(self):
         self.api = {
@@ -16,14 +14,16 @@ class InvalidResource(SpyMixin, Resource):
     async def run(self):
         return
 
+    # TODO: should probably have seperate invalid resource assets for each of these invalid cases
+
     #should raise
-    @Resource.untracked
-    async def _private_helper_method_invalid(self):
+    @SpiedResource.untracked
+    async def _mn_attrspace_method_invalid(self):
         return
     
     #should raise
-    @Resource.untracked # type: ignore
-    def sync_helper_method_invalid(self):
+    @SpiedResource.untracked # type: ignore
+    def sync_method_invalid(self):
         return 
     
     #should raise

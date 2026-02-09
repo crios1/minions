@@ -65,15 +65,6 @@
   - convo:
     - https://chatgpt.com/c/693f9bc9-c46c-8327-bd5a-c9b38f45859b
 
-- todo: restructure test_gru.py into directories by test class:
-  - structure:
-    - tests/gru/conftest.py (for test fixtures)
-    - tests/gru/test_unit.py
-    - tests/gru/test_invalid_composition.py
-    - tests/gru/test_invalid_usage.py
-    - tests/gru/test_valid_composition.py
-    - tests/gru/test_valid_usage.py
-
 - todo: write robust tests that i support persisting state for dict, dataclass, and msgspec.Struct as event and context types (implement and say you support those types in the docs)
   - ```python
     class MyEvent(msgspec.Struct):
@@ -156,6 +147,9 @@
   - convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/6910f9e9-d76c-8327-92b3-ea4b729b6288
 
 - todo: write tests for gru.start_minion to lock in that it works with class and str based starts
+
+- todo: write a gru test that ensures a minion has access to self.event and self.context
+in all steps include when resuming a workflow from statestore
 
 - todo: add early (best-effort) serialization validation for user-provided event and workflow context types at Pipeline / Minion definition time
   - statically check that user type annotations are supported by gru's serialization, and raise when an annotation is not
@@ -465,6 +459,10 @@
 
 ### Misc:
 - todo: comb the codebase for any remaining todo comments, they shold all be resolved by now, if not consolidate/complete them
+
+- todo: manually audit runtime logs and ensure they read as events w/ details in kwargs (also that event msgs are lowercase)
+  - ex: "async component started" , {'component': SQLiteStateStore}
+  - note: would be great to enfore that quality when running gru scenarios, can be done by asserting from a set of log-msg-log-kwargs pairs, than as logs or thier kwargs are changed, test suite will catch them and will suggest to dev that changing logs msg and kwargs is a big deal - which it is since it could be a breaking change for monitoring and such
 
 - todo: setup github repo so feature requests are surfaced thru "discussions" instead of "issues"
   - https://chatgpt.com/c/693f6fff-6bac-8333-9844-b1aade31a4d5
