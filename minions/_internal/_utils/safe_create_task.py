@@ -1,13 +1,57 @@
 import asyncio
+import inspect
 import traceback
+from collections.abc import Awaitable, Callable
 from collections.abc import Coroutine
 
 from .._framework.logger import Logger, ERROR
 
-def safe_create_task(coro: Coroutine, logger: Logger | None = None, name=None) -> asyncio.Task:
-    "Safely create a task; exceptions are handled and optionally logged (cancellations propagate)."
+def safe_create_task(
+    coro: Coroutine,
+    logger: Logger | None = None,
+    name: str | None = None,
+    on_failure: Callable[[BaseException, str | None, str], Awaitable[None] | None] | None = None,
+) -> asyncio.Task:
+    """
+    Create an asyncio task with a strict runtime-safety boundary for user code.
+
+    Runtime invariant:
+    user task failures must not terminate the orchestrator process.
+
+    Behavior:
+    - Propagates `asyncio.CancelledError` so normal task cancellation semantics remain intact.
+    - Swallows all other user task exceptions (`SystemExit` included) after logging.
+    - Emits a structured failure signal through `on_failure` so supervisors can react
+      (restart/backoff/alerts) without relying only on logs.
+    - Never allows logger or failure-hook errors to escape this boundary.
+    """
     if name is None and hasattr(coro, "__name__"):
         name = coro.__name__
+
+    async def _safe_log(msg: str, tb: str) -> None:
+        if not logger:
+            return
+        try:
+            await logger._log(ERROR, msg, traceback=tb)
+        except Exception:
+            # Task safety takes priority; logging failures must never escape.
+            pass
+
+    async def _safe_notify(exception: BaseException, tb: str) -> None:
+        if not on_failure:
+            return
+        try:
+            maybe_awaitable = on_failure(exception, name, tb)
+            if inspect.isawaitable(maybe_awaitable):
+                await maybe_awaitable
+        except Exception as notify_error:
+            notify_tb = "".join(
+                traceback.format_exception(type(notify_error), notify_error, notify_error.__traceback__)
+            )
+            await _safe_log(
+                f"[safe_create_task on_failure failed]{f' ({name})' if name else ''}: {notify_error}",
+                notify_tb,
+            )
 
     async def wrapper():
         try:
@@ -16,57 +60,14 @@ def safe_create_task(coro: Coroutine, logger: Logger | None = None, name=None) -
             raise
         except SystemExit as e:
             # Footgun: exit()/sys.exit()
-            if logger:
-                tb = "".join(traceback.format_exception(type(e), e, e.__traceback__))
-                try:
-                    await logger._log(ERROR, f"[SystemExit in Task]{f' ({name})' if name else ''}: {e}", traceback=tb)
-                except Exception:
-                    pass
-            # Swallow to keep the process alive.
-        except Exception as e:
-            msg = f"[Exception in asyncio.Task]{f' ({name})' if name else ''}: {e}"
             tb = "".join(traceback.format_exception(type(e), e, e.__traceback__))
-            if logger:
-                await logger._log(ERROR, msg, traceback=tb)
-
-    return asyncio.create_task(wrapper(), name=name)
-
-"""
-import asyncio
-import traceback
-from collections.abc import Coroutine
-
-class UnsupportedUserCode(RuntimeError): ...
-ERROR = "error"
-
-def safe_create_task(coro: Coroutine, logger=None, name: str | None = None) -> asyncio.Task:
-    task_name = name or getattr(coro, "__name__", None) or getattr(getattr(coro, "cr_code", None), "co_name", None)
-
-    async def wrapper():
-        try:
-            return await coro
-        except asyncio.CancelledError:
-            # Let cancels propagate so shutdown/timeouts work.
-            raise
-        except SystemExit as e:
-            # Footgun: exit()/sys.exit()
-            if logger:
-                tb = "".join(traceback.format_exception(type(e), e, e.__traceback__))
-                try: await logger._log(ERROR, f"[SystemExit in Task]{f' ({task_name})' if task_name else ''}: {e}", traceback=tb)
-                except Exception: pass
+            await _safe_log(f"[SystemExit in Task]{f' ({name})' if name else ''}: {e}", tb)
+            await _safe_notify(e, tb)
             # Swallow to keep the process alive.
         except BaseException as e:
-            # Optional: allow Ctrl-C to stop the program
-            if isinstance(e, KeyboardInterrupt):
-                raise
-            if logger:
-                tb = "".join(traceback.format_exception(type(e), e, e.__traceback__))
-                try: await logger._log(ERROR, f"[Exception in Task]{f' ({task_name})' if task_name else ''}: {e}", traceback=tb)
-                except Exception: pass
+            msg = f"[Exception in asyncio.Task]{f' ({name})' if name else ''}: {e}"
+            tb = "".join(traceback.format_exception(type(e), e, e.__traceback__))
+            await _safe_log(msg, tb)
+            await _safe_notify(e, tb)
 
-    return asyncio.create_task(wrapper(), name=task_name)
-
-You can “disable Ctrl-C,” but the better, safer UX is:
-First Ctrl-C = graceful shutdown, Second Ctrl-C = hard abort.
-Don't swallow it entirely—just wire it to your shutdown path.
-"""
+    return asyncio.create_task(wrapper(), name=name)
