@@ -347,6 +347,18 @@ in all steps include when resuming a workflow from statestore
   - users will embed GruShell into thier deployment scripts / use the cookbook to make the script
   - but maybe it makes sense to let the user experiment with the shell by calling "python -m minions shell"? i need to consider the user onboarding flow further.
 
+- todo: implement and lock in two-stage Ctrl-C shutdown semantics for GruShell
+  - scope:
+    - implement in GruShell / shell entrypoint (`minions/shell.py`), not in `Gru` core runtime
+  - behavior:
+    - first Ctrl-C triggers graceful runtime shutdown and logs "press Ctrl-C again to force stop"
+    - additional Ctrl-C during graceful shutdown forces immediate hard stop
+  - tests:
+    - requires test coverage in the test suite
+    - first Ctrl-C path starts graceful shutdown (no immediate hard exit)
+    - second Ctrl-C path hard-exits while graceful shutdown is in progress
+    - process-level behavior is reasonable to validate by spawning the shell as a subprocess and asserting exit behavior/log output
+
 - todo: provide uvloop support for better performance on *nix systems (maybe 2-4x more)
   - design: 
     - user does "pip install minions[perf]" and gets uvloop if not on windows
