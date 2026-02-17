@@ -10,6 +10,12 @@ class ConflictingMinion:
     config_modpath: str | None
     pipeline_modpath: str
 
+@dataclass
+class ShutdownError:
+    phase: str
+    component: str
+    error_type: str
+    error_message: str
 
 # === Gru Return Types ===
 
@@ -34,7 +40,7 @@ class StartMinionResult(GruResult):
 
 @dataclass
 class ShutdownGruResult(GruResult):
-    pass
+    errors: list[ShutdownError] = field(default_factory=list)
 
 @dataclass
 class MinionStatusResult(GruResult):

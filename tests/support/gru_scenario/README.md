@@ -96,6 +96,10 @@ Expected workflow counts are derived from `pipeline_event_counts`:
 - Resource classes allow unlisted calls when pinning counts.
 - Unexpected extra calls during pinning are collected and reported after call-order checks.
 
+## Verification Backlog
+- Verification-specific TODOs live in `tests/support/gru_scenario/VERIFICATION_TODOS.md`.
+- Usage tests may reference backlog IDs, but verification capability work should be implemented and tested in this DSL package.
+
 ## Runtime-Dependent Notes
 - Some tolerances intentionally reflect current runtime behavior under concurrency (attempt/success bounds), not idealized singleton assumptions.
 - If runtime lifecycle locking/ordering changes, revisit these tolerances and related verifier tests together.

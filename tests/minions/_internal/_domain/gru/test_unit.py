@@ -11,6 +11,7 @@ from minions._internal._framework.metrics_constants import (
     SYSTEM_CPU_USED_PERCENT,
     SYSTEM_MEMORY_USED_PERCENT,
 )
+from minions._internal._framework.state_store_noop import NoOpStateStore
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 
@@ -164,6 +165,28 @@ class TestUnit:
         assert InMemoryMetrics.find_sample(gsnap[PROCESS_MEMORY_USED_PERCENT], {})["value"] == 10
         assert InMemoryMetrics.find_sample(gsnap[PROCESS_CPU_USED_PERCENT], {})["value"] == 2
 
+    @pytest.mark.asyncio
+    async def test_shutdown_surfaces_internal_shutdown_errors(self, monkeypatch, gru_factory):
+        async with gru_factory(
+            logger=InMemoryLogger(),
+            metrics=InMemoryMetrics(),
+            state_store=NoOpStateStore(),
+        ) as gru:
+            async def failing_shutdown_async_component(_comp, log_kwargs=None):
+                raise RuntimeError("component shutdown boom")
+
+            monkeypatch.setattr(gru, "_shutdown_async_component", failing_shutdown_async_component)
+            result = await gru.shutdown()
+
+            assert not result.success
+            assert result.reason is not None
+            assert "internal error" in result.reason
+            assert len(result.errors) == 2
+            assert all(e.phase == "shutdown_component" for e in result.errors)
+            assert {e.component for e in result.errors} == {"state_store", "metrics"}
+            assert all(e.error_type == "RuntimeError" for e in result.errors)
+            assert all("component shutdown boom" in e.error_message for e in result.errors)
+
 
 
 class TestUnitUsingNewAssets:
@@ -294,5 +317,3 @@ class TestUnitUsingNewAssets:
         assert InMemoryMetrics.find_sample(gsnap[SYSTEM_CPU_USED_PERCENT], {})["value"] == 10
         assert InMemoryMetrics.find_sample(gsnap[PROCESS_MEMORY_USED_PERCENT], {})["value"] == 10
         assert InMemoryMetrics.find_sample(gsnap[PROCESS_CPU_USED_PERCENT], {})["value"] == 2
-
-

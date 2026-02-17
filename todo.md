@@ -146,6 +146,40 @@
   - note: use the (_minion_locks, _pipeline_locks, _resource_locks) gru attrs
   - convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/6910f9e9-d76c-8327-92b3-ea4b729b6288
 
+- todo: add bounded startup concurrency to Gru (`max_concurrent_minion_starts`)
+  - goal:
+    - prevent startup storms (ex: 50+ minions on restart) from overloading event loop / NAS / host I/O
+    - keep startup throughput high but controlled and predictable
+  - api:
+    - add kwarg on `Gru.create(...)` (and ctor path) like:
+      - `max_concurrent_minion_starts: int | None = None`
+    - behavior:
+      - `None` = unbounded (current behavior; preserve backwards compatibility)
+      - `>=1` = bounded concurrent starts via semaphore gate
+      - `<=0` should raise `ValueError`
+  - implementation:
+    - create a startup semaphore on Gru init when bounded:
+      - `_mn_start_minion_sem: asyncio.Semaphore | None`
+    - wrap the full `start_minion(...)` orchestration body in the semaphore scope when enabled
+      - (not just config read) so the whole start lifecycle is bounded consistently
+    - keep `Minion.load_config()` using async read (`await asyncio.to_thread(path.read_text)`)
+      because bounded start concurrency is the global throttle
+    - ensure release on all code paths (`async with`), including failures and early returns
+  - policy:
+    - do not add separate config-read semaphores yet
+    - if needed later, derive read cap from startup cap rather than adding another public knob
+  - tests:
+    - usage test: bounded starts allow at most N in flight (instrument with barrier/gate pipeline/minion assets)
+    - usage test: with cap=1, concurrent start requests serialize deterministically
+    - usage test: failures inside bounded section still release permit (no deadlock/leak)
+    - usage test: `None` keeps current behavior
+    - invalid usage test: cap `0` / negative raises clear error
+  - docs:
+    - document as restart-storm/backpressure control
+    - include guidance:
+      - small local systems: `4-8`
+      - slow NAS / shared hosts: start lower and tune up
+
 - todo: write tests for gru.start_minion to lock in that it works with class and str based starts
 
 - todo: write a gru test that ensures a minion has access to self.event and self.context

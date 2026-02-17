@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import gc
 import importlib
 import psutil
@@ -9,6 +8,7 @@ import traceback
 import uuid
 
 from collections import defaultdict, deque
+from dataclasses import asdict
 from pathlib import Path
 from typing import Iterable, Mapping, Any, get_type_hints, overload
 
@@ -16,7 +16,13 @@ from .minion import Minion
 from .pipeline import Pipeline
 from .resource import Resource
 from .types import T_Event, T_Ctx
-from .gru_result_types import StartMinionResult, StopMinionResult, ShutdownGruResult, ConflictingMinion
+from .gru_result_types import (
+    StartMinionResult,
+    StopMinionResult,
+    ShutdownGruResult,
+    ShutdownError,
+    ConflictingMinion,
+)
 
 from .._framework.logger import Logger, DEBUG, INFO, WARNING, ERROR, CRITICAL
 from .._framework.logger_noop import NoOpLogger
@@ -151,7 +157,11 @@ class Gru:
         self._resource_dependents: dict[str, set[str]] = defaultdict(set)   # resource_id -> set(parent_id)
         self._resource_refcounts: dict[str, int] = defaultdict(int)         # total refs (owners + edges)
         
-        self._resource_monitor_task = safe_create_task(self._monitor_process_resources(), self._logger)
+        self._resource_monitor_task = safe_create_task(
+            self._monitor_process_resources(),
+            self._logger,
+            on_failure=self._make_task_failure_hook("resource_monitor", "process"),
+        )
 
     @classmethod
     async def create(
@@ -293,7 +303,12 @@ class Gru:
         if name:
             self._minions_by_name[name].append(minion)
 
-        self._minion_tasks[id] = safe_create_task(minion._mn_start())
+        self._minion_tasks[id] = safe_create_task(
+            minion._mn_start(),
+            self._logger,
+            name=f"minion:{id}",
+            on_failure=self._make_task_failure_hook("minion", id),
+        )
 
         await minion._mn_wait_until_started()
 
@@ -451,7 +466,12 @@ class Gru:
             resource_modpath=f"{resource_cls.__module__}.{resource_cls.__name__}"
         )
         self._resources[resource_id] = resource
-        self._resource_tasks[resource_id] = safe_create_task(resource._mn_start())
+        self._resource_tasks[resource_id] = safe_create_task(
+            resource._mn_start(),
+            self._logger,
+            name=f"resource:{resource_id}",
+            on_failure=self._make_task_failure_hook("resource", resource_id),
+        )
         await resource._mn_wait_until_started()
         await self._logger._log(DEBUG, "Resource started", resource_id=resource_id)
         return resource
@@ -517,7 +537,12 @@ class Gru:
     async def _start_pipeline(self, pipeline_id: str, pipeline: Pipeline):
         await self._logger._log(DEBUG, "Pipeline starting", pipeline_id=pipeline_id)
         self._pipelines[pipeline_id] = pipeline
-        self._pipeline_tasks[pipeline_id] = safe_create_task(pipeline._mn_start())
+        self._pipeline_tasks[pipeline_id] = safe_create_task(
+            pipeline._mn_start(),
+            self._logger,
+            name=f"pipeline:{pipeline_id}",
+            on_failure=self._make_task_failure_hook("pipeline", pipeline_id),
+        )
         await pipeline._mn_wait_until_started()
         await self._logger._log(DEBUG, "Pipeline started", pipeline_id=pipeline_id)
 
@@ -555,6 +580,20 @@ class Gru:
             traceback="".join(traceback.format_exception(type(trace), trace, trace.__traceback__)),
             **context
         )
+
+    def _make_task_failure_hook(self, component: str, identifier: str | None = None):
+        async def _hook(exception: BaseException, task_name: str | None, tb: str) -> None:
+            await self._logger._log(
+                ERROR,
+                "Gru runtime task failure observed",
+                component=component,
+                identifier=identifier,
+                task_name=task_name,
+                error_type=type(exception).__name__,
+                error_message=str(exception),
+                traceback=tb,
+            )
+        return _hook
 
     def _ensure_started(self):
         if self._is_shutdown:
@@ -935,32 +974,75 @@ class Gru:
                 *self._resource_tasks.values(),
                 getattr(self, "_resource_monitor_task", None)
             ]
-
-            with contextlib.suppress(Exception):
-                await asyncio.gather(
-                    *[safe_cancel_task(task=t, logger=self._logger) for t in all_tasks if t],
+            shutdown_errors: list[ShutdownError] = []
+            
+            async def _collect_phase_errors(phase: str, targets: list[tuple[str, Any]]) -> list[ShutdownError]:
+                results = await asyncio.gather(
+                    *[op for _, op in targets],
                     return_exceptions=True,
-                )           
-                await asyncio.gather(
-                    self._shutdown_async_component(self._state_store),
-                    self._shutdown_async_component(self._metrics),
-                    return_exceptions=True
                 )
+                return [
+                    ShutdownError(
+                        phase=phase,
+                        component=component,
+                        error_type=type(result).__name__,
+                        error_message=str(result),
+                    )
+                    for (component, _), result in zip(targets, results)
+                    if isinstance(result, Exception)
+                ]
+
+            cancel_targets = [
+                (
+                    t.get_name() if hasattr(t, "get_name") else "task",
+                    safe_cancel_task(task=t, logger=self._logger),
+                )
+                for t in all_tasks
+                if t
+            ]
+            shutdown_errors.extend(await _collect_phase_errors("cancel_task", cancel_targets))
+
+            component_targets = [
+                ("state_store", self._shutdown_async_component(self._state_store)),
+                ("metrics", self._shutdown_async_component(self._metrics)),
+            ]
+            shutdown_errors.extend(await _collect_phase_errors("shutdown_component", component_targets))
             
             for key, val in vars(self).items():
                 if isinstance(val, (dict, set)):
                     val.clear()
 
-            await self._logger._log(INFO, "Gru shutdown complete")
+            if shutdown_errors:
+                await self._logger._log(
+                    ERROR,
+                    "Gru shutdown completed with internal errors",
+                    error_count=len(shutdown_errors),
+                    errors=[asdict(e) for e in shutdown_errors],
+                )
+            else:
+                await self._logger._log(INFO, "Gru shutdown complete")
 
             await self._logger._mn_shutdown()
-
+            if shutdown_errors:
+                return ShutdownGruResult(
+                    success=False,
+                    reason=f"Gru shutdown completed with {len(shutdown_errors)} internal error(s).",
+                    errors=shutdown_errors,
+                )
             return ShutdownGruResult(success=True)
         except Exception as e: # pragma: no cover
             await self._log_exception_with_context(e, "Gru.shutdown failed")
             return ShutdownGruResult(
                 success=False,
                 reason=str(e),
+                errors=[
+                    ShutdownError(
+                        phase="shutdown",
+                        component="gru",
+                        error_type=type(e).__name__,
+                        error_message=str(e),
+                    )
+                ],
             )
         finally:
             self._is_started = False

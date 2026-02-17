@@ -96,9 +96,26 @@ class TestInvalidComposition:
                 assert result.reason
                 assert "workflow context is not JSON-serializable" in result.reason
 
-        @pytest.mark.asyncio # TODO: implement
-        async def test_gru_returns_error_on_minion_event_not_serializable(self):
-            ...
+        @pytest.mark.asyncio
+        async def test_gru_returns_error_on_minion_event_not_serializable(self, gru_factory, tests_dir):
+            minion_modpath = "tests.assets_new.minion_bad_event"
+            pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
+            config_path = str(tests_dir / "assets_new" / "minion_config_a.toml")
+
+            async with gru_factory(
+                state_store=NoOpStateStore(),
+                logger=NoOpLogger(),
+                metrics=NoOpMetrics()
+            ) as gru:
+                result = await gru.start_minion(
+                    minion=minion_modpath,
+                    minion_config_path=config_path,
+                    pipeline=pipeline_modpath
+                )
+
+                assert not result.success
+                assert result.reason
+                assert "event type is not JSON-serializable" in result.reason
 
     class TestPipelineFile:
         @pytest.mark.asyncio
@@ -167,8 +184,26 @@ class TestInvalidComposition:
                 assert result.reason
                 assert "is not a subclass of Pipeline" in result.reason
 
-        @pytest.mark.asyncio # TODO: implement
-        async def test_gru_returns_error_on_pipeline_event_not_serializable(self):...
+        @pytest.mark.asyncio
+        async def test_gru_returns_error_on_pipeline_event_not_serializable(self, gru_factory, tests_dir):
+            minion_modpath = "tests.assets.minion_simple"
+            pipeline_modpath = "tests.assets_new.pipeline_unserializable_event"
+            config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
+
+            async with gru_factory(
+                state_store=NoOpStateStore(),
+                logger=NoOpLogger(),
+                metrics=NoOpMetrics()
+            ) as gru:
+                result = await gru.start_minion(
+                    minion=minion_modpath,
+                    minion_config_path=config_path,
+                    pipeline=pipeline_modpath
+                )
+
+                assert not result.success
+                assert result.reason
+                assert "event type is not JSON-serializable" in result.reason
 
     # Resource doesn't have tests like in TestMinion and TestPipeline
     # because Resources dependencies are declared as type hints

@@ -54,7 +54,7 @@ class TestValidComposition:
 
                 assert result.instance_id is not None
 
-    class TestPipelineFile: # TODO: implement test(s) (maybe like in TestMinionFile?)
+    class TestPipelineFile: # TODO: consider implementing tests to be in parity with TestMinionFile class
         @pytest.mark.asyncio
         async def test_gru_accepts_file_with_single_pipeline_class(self, gru_factory, tests_dir):
             minion_modpath = "tests.assets.minion_simple"

@@ -38,13 +38,16 @@ class TestValidUsage:
         ):
             pass
 
-    # TODO: test that pipeline event processed by minion for methods below
+    # Verification ownership: tracked in DSL backlog `tests/support/gru_scenario/VERIFICATION_TODOS.md` (V-001).
 
     @pytest.mark.asyncio
     async def test_gru_start_stop_minion(self, gru_factory, reload_wait_for_subs_pipeline, tests_dir):
         minion_modpath = "tests.assets.minion_simple"
         pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
-        reload_wait_for_subs_pipeline(expected_subs=3)
+        from tests.assets.minion_simple import SimpleMinion
+        SimpleMinion.enable_spy()
+        SimpleMinion.reset_spy()
+        reload_wait_for_subs_pipeline(expected_subs=1)
         config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
 
         async with gru_factory(
@@ -62,32 +65,13 @@ class TestValidUsage:
             assert result.name == "simple-minion"
             assert result.instance_id in gru._minions_by_id
             assert result.instance_id in gru._minion_tasks
+
+            await SimpleMinion.wait_for_calls(
+                expected={"step_1": 1, "step_2": 1},
+                timeout=5.0,
+            )
 
             await gru.stop_minion(result.instance_id)
-
-    @pytest.mark.asyncio
-    async def test_gru_start_minion_shutdown_without_stop(self, gru_factory, tests_dir):
-        minion_modpath = "tests.assets.minion_simple"
-        pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
-        config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
-
-        async with gru_factory(
-            state_store=NoOpStateStore(),
-            logger=ConsoleLogger(),
-            metrics=NoOpMetrics()
-        ) as gru:
-            result = await gru.start_minion(
-                minion=minion_modpath,
-                minion_config_path=config_path,
-                pipeline=pipeline_modpath
-            )
-
-            assert result.success
-            assert result.name == "simple-minion"
-            assert result.instance_id in gru._minions_by_id
-            assert result.instance_id in gru._minion_tasks
-
-    # TODO: check fanouts and such for methods below
 
     @pytest.mark.asyncio
     async def test_gru_start_3_minions_3_pipelines_3_resources_no_sharing(self, gru_factory, tests_dir):
@@ -112,6 +96,13 @@ class TestValidUsage:
             logger=logger,
             metrics=InMemoryMetrics()
         ) as gru:
+            from tests.assets.minion_simple_resourced_1 import SimpleResourcedMinion1
+            from tests.assets.minion_simple_resourced_2 import SimpleResourcedMinion2
+            from tests.assets.minion_simple_resourced_3 import SimpleResourcedMinion3
+            for cls in (SimpleResourcedMinion1, SimpleResourcedMinion2, SimpleResourcedMinion3):
+                cls.enable_spy()
+                cls.reset_spy()
+
             r1 = await gru.start_minion(minion=minion1, minion_config_path=cfg1, pipeline=pipeline1)
             r2 = await gru.start_minion(minion=minion2, minion_config_path=cfg2, pipeline=pipeline2)
             r3 = await gru.start_minion(minion=minion3, minion_config_path=cfg3, pipeline=pipeline3)
@@ -124,6 +115,10 @@ class TestValidUsage:
             # Expect three distinct resource classes started
             assert len(gru._resources) >= 3
 
+            await SimpleResourcedMinion1.wait_for_calls(expected={"step_1": 1, "step_2": 1}, timeout=5.0)
+            await SimpleResourcedMinion2.wait_for_calls(expected={"step_1": 1, "step_2": 1}, timeout=5.0)
+            await SimpleResourcedMinion3.wait_for_calls(expected={"step_1": 1, "step_2": 1}, timeout=5.0)
+
             # stop them
             assert r1.instance_id is not None
             await gru.stop_minion(r1.instance_id)
@@ -131,6 +126,8 @@ class TestValidUsage:
             await gru.stop_minion(r2.instance_id)
             assert r3.instance_id is not None
             await gru.stop_minion(r3.instance_id)
+
+    # Verification ownership: tracked in DSL backlog `tests/support/gru_scenario/VERIFICATION_TODOS.md` (V-002).
 
     @pytest.mark.asyncio
     async def test_gru_start_3_minions_1_pipeline_1_resource_sharing(
@@ -198,6 +195,28 @@ class TestValidUsage:
             assert len(gru._resources) == 0
 
     @pytest.mark.asyncio
+    async def test_gru_start_minion_shutdown_without_stop(self, gru_factory, tests_dir):
+        minion_modpath = "tests.assets.minion_simple"
+        pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
+        config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
+
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=ConsoleLogger(),
+            metrics=NoOpMetrics()
+        ) as gru:
+            result = await gru.start_minion(
+                minion=minion_modpath,
+                minion_config_path=config_path,
+                pipeline=pipeline_modpath
+            )
+
+            assert result.success
+            assert result.name == "simple-minion"
+            assert result.instance_id in gru._minions_by_id
+            assert result.instance_id in gru._minion_tasks
+
+    @pytest.mark.asyncio
     async def test_minion_and_pipeline_share_resource_dependency(self, gru_factory, tests_dir):
         minion_modpath = "tests.assets.minion_simple_resourced_1"
         pipeline_modpath = "tests.assets.pipeline_simple_resourced"
@@ -223,8 +242,6 @@ class TestValidUsage:
             assert len(gru._resources) == 0
 
     # TODO: I need tests for gru's default usages to ensure i stay version 1.x.x compliant
-
-
 
 class TestValidUsageDSL:
     @pytest.mark.asyncio

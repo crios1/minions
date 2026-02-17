@@ -8,6 +8,7 @@ from typing import Any, Awaitable, Callable
 from .async_component import AsyncComponent
 from .logger import Logger, DEBUG, ERROR
 
+from .._utils.safe_cancel_task import safe_cancel_task
 from .._utils.safe_create_task import safe_create_task
 
 
@@ -19,6 +20,16 @@ class AsyncService(AsyncComponent):
         self._mn_aux_tasks: set[asyncio.Task] = set()
         self._mn_tasks_lock = asyncio.Lock()
         self._mn_shutdown_grace_seconds = 1.0
+
+    async def _mn_on_aux_task_failure(self, exception: BaseException, task_name: str | None, tb: str) -> None:
+        await self._mn_logger._log(
+            ERROR,
+            f"{type(self).__name__} auxiliary task failed",
+            task_name=task_name,
+            error_type=type(exception).__name__,
+            error_message=str(exception),
+            traceback=tb,
+        )
 
     async def _mn_wait_until_started(self):
         await self._mn_started.wait()
@@ -93,16 +104,30 @@ class AsyncService(AsyncComponent):
                 result = post(*post_args_list)
                 if inspect.isawaitable(result):
                     await result
-            async with self._mn_tasks_lock:
-                tasks = list(self._mn_aux_tasks)
-            if tasks:
-                done, pending = await asyncio.wait(
-                    tasks,
-                    timeout=self._mn_shutdown_grace_seconds,
+
+            # Two bounded passes:
+            # 1) cancel tasks currently tracked
+            # 2) catch tasks scheduled on the next loop tick during shutdown
+            for _ in range(2):
+                async with self._mn_tasks_lock:
+                    tasks = list(self._mn_aux_tasks)
+                if not tasks:
+                    await asyncio.sleep(0)
+                    continue
+
+                await asyncio.gather(
+                    *[
+                        safe_cancel_task(
+                            task=task,
+                            label=getattr(task, "get_name", lambda: "task")(),
+                            timeout=self._mn_shutdown_grace_seconds,
+                            logger=self._mn_logger,
+                        )
+                        for task in tasks
+                    ],
+                    return_exceptions=True,
                 )
-                for task in pending:
-                    task.cancel()
-                await asyncio.gather(*pending, return_exceptions=True)
+
             async with self._mn_tasks_lock:
                 self._mn_aux_tasks.clear()
 
@@ -115,7 +140,12 @@ class AsyncService(AsyncComponent):
 
     def safe_create_task(self, coro: Coroutine, name: str | None = None) -> asyncio.Task:
         "A safe wrapper around asyncio.create_task that optionally logs exceptions."
-        task = safe_create_task(coro, self._mn_logger, name)
+        task = safe_create_task(
+            coro,
+            self._mn_logger,
+            name,
+            on_failure=self._mn_on_aux_task_failure,
+        )
         self._mn_aux_tasks.add(task)
         task.add_done_callback(lambda t: self._mn_aux_tasks.discard(t))
         return task
