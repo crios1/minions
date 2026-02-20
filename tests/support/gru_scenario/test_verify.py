@@ -4,7 +4,7 @@ from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.assets_new.minion_two_steps import TwoStepMinion
-from tests.assets_new.pipeline_emit_n import EmitNPipeline
+from tests.assets_new.pipeline_emit_1 import Emit1Pipeline
 from tests.support.gru_scenario.directives import MinionRunSpec, MinionStart
 from tests.support.gru_scenario.plan import ScenarioPlan
 from tests.support.gru_scenario.runner import ScenarioRunResult, SpyRegistry, StartReceipt
@@ -29,28 +29,28 @@ def test_compute_minion_expectations_accumulates_overrides_from_successful_recei
     directives = [
         MinionStart(
             minion="tests.assets_new.minion_two_steps",
-            pipeline="tests.assets_new.pipeline_emit_n",
+            pipeline="tests.assets_new.pipeline_emit_1",
             expect=MinionRunSpec(minion_call_overrides={"step_1": 1}),
         ),
         MinionStart(
             minion="tests.assets_new.minion_two_steps",
-            pipeline="tests.assets_new.pipeline_emit_n",
+            pipeline="tests.assets_new.pipeline_emit_1",
             expect=MinionRunSpec(minion_call_overrides={"step_1": 2}),
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets_new.pipeline_emit_n": 1},
+        pipeline_event_counts={"tests.assets_new.pipeline_emit_1": 1},
     )
     spies = SpyRegistry(
         minions={"tests.assets_new.minion_two_steps": TwoStepMinion},
-        pipelines={"tests.assets_new.pipeline_emit_n": EmitNPipeline},
+        pipelines={"tests.assets_new.pipeline_emit_1": Emit1Pipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(0, "tests.assets_new.minion_two_steps", "tests.assets_new.pipeline_emit_n", "id-1", "n1", TwoStepMinion, True),
-            StartReceipt(1, "tests.assets_new.minion_two_steps", "tests.assets_new.pipeline_emit_n", "id-2", "n2", TwoStepMinion, True),
+            StartReceipt(0, "tests.assets_new.minion_two_steps", "tests.assets_new.pipeline_emit_1", "id-1", "n1", TwoStepMinion, True),
+            StartReceipt(1, "tests.assets_new.minion_two_steps", "tests.assets_new.pipeline_emit_1", "id-2", "n2", TwoStepMinion, True),
         ],
     )
 
@@ -64,22 +64,22 @@ def test_compute_minion_expectations_accumulates_overrides_from_successful_recei
 
 def test_build_expected_call_counts_state_store_formula_for_mixed_success_and_failure():
     directives = [
-        MinionStart(minion="tests.assets_new.minion_two_steps", pipeline="tests.assets_new.pipeline_emit_n"),
-        MinionStart(minion="tests.assets_new.minion_two_steps", pipeline="tests.assets_new.pipeline_emit_n", expect_success=False),
+        MinionStart(minion="tests.assets_new.minion_two_steps", pipeline="tests.assets_new.pipeline_emit_1"),
+        MinionStart(minion="tests.assets_new.minion_two_steps", pipeline="tests.assets_new.pipeline_emit_1", expect_success=False),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets_new.pipeline_emit_n": 2},
+        pipeline_event_counts={"tests.assets_new.pipeline_emit_1": 2},
     )
     spies = SpyRegistry(
         minions={"tests.assets_new.minion_two_steps": TwoStepMinion},
-        pipelines={"tests.assets_new.pipeline_emit_n": EmitNPipeline},
+        pipelines={"tests.assets_new.pipeline_emit_1": Emit1Pipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(0, "tests.assets_new.minion_two_steps", "tests.assets_new.pipeline_emit_n", "id-ok", "ok", TwoStepMinion, True),
-            StartReceipt(1, "tests.assets_new.minion_two_steps", "tests.assets_new.pipeline_emit_n", "id-fail", "fail", TwoStepMinion, False),
+            StartReceipt(0, "tests.assets_new.minion_two_steps", "tests.assets_new.pipeline_emit_1", "id-ok", "ok", TwoStepMinion, True),
+            StartReceipt(1, "tests.assets_new.minion_two_steps", "tests.assets_new.pipeline_emit_1", "id-fail", "fail", TwoStepMinion, False),
         ],
         seen_shutdown=True,
     )
@@ -102,22 +102,22 @@ def test_assert_workflow_resolutions_uses_instance_id_filtering():
     directives = [
         MinionStart(
             minion="tests.assets_new.minion_two_steps",
-            pipeline="tests.assets_new.pipeline_emit_n",
+            pipeline="tests.assets_new.pipeline_emit_1",
             expect=MinionRunSpec(workflow_resolutions={"failed": 1}),
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets_new.pipeline_emit_n": 0},
+        pipeline_event_counts={"tests.assets_new.pipeline_emit_1": 0},
     )
     spies = SpyRegistry(
         minions={"tests.assets_new.minion_two_steps": TwoStepMinion},
-        pipelines={"tests.assets_new.pipeline_emit_n": EmitNPipeline},
+        pipelines={"tests.assets_new.pipeline_emit_1": Emit1Pipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(0, "tests.assets_new.minion_two_steps", "tests.assets_new.pipeline_emit_n", "target-id", "n", TwoStepMinion, True),
+            StartReceipt(0, "tests.assets_new.minion_two_steps", "tests.assets_new.pipeline_emit_1", "target-id", "n", TwoStepMinion, True),
         ],
     )
 

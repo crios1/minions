@@ -248,11 +248,10 @@ class TestInvalidUsageDSL:
 class TestInvalidUsageUsingNewAssetsDSL:
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_starting_running_minion(
-        self, gru, logger, metrics, state_store, tests_dir, reload_emit_n_pipeline
+        self, gru, logger, metrics, state_store, tests_dir
     ):
         config_path = str(tests_dir / "assets_new" / "minion_config_a.toml")
-        pipeline_modpath = "tests.assets_new.pipeline_emit_n"
-        reload_emit_n_pipeline(expected_subs=1, total_events=1)
+        pipeline_modpath = "tests.assets_new.pipeline_emit_1"
 
         directives = [
             MinionStart(
@@ -382,12 +381,11 @@ class TestInvalidUsageUsingNewAssets:
 
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_starting_running_minion(
-        self, gru_factory, reload_emit_n_pipeline, tests_dir
+        self, gru_factory, tests_dir
     ):
         minion_modpath = "tests.assets_new.minion_two_steps"
-        pipeline_modpath = "tests.assets_new.pipeline_emit_n"
+        pipeline_modpath = "tests.assets_new.pipeline_emit_1"
         config_path = str(tests_dir / "assets_new" / "minion_config_a.toml")
-        reload_emit_n_pipeline(expected_subs=1, total_events=1)
 
         async with gru_factory(state_store=NoOpStateStore(), logger=ConsoleLogger(), metrics=NoOpMetrics()) as gru:
             result1 = await gru.start_minion(

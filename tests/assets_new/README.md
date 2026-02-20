@@ -4,8 +4,9 @@ Deterministic, DSL-friendly assets for scenario tests.
 
 Core primitives
 - `event_counter.py`: `CounterEvent` with a monotonic `seq`.
-- `pipeline_emit_n.py`: `EmitNPipeline` emits a fixed number of events after N subscribers join.
-- `pipeline_emit_n_a.py`, `pipeline_emit_n_b.py`, `pipeline_emit_n_c.py`: distinct emitters for no-sharing scenarios.
+- `pipeline_emit_1.py`: `Emit1Pipeline` emits one event after one subscriber joins.
+- `pipeline_emit_1_a.py`, `pipeline_emit_1_b.py`, `pipeline_emit_1_c.py`: distinct one-event emitters for no-sharing scenarios.
+- `pipeline_sync_2subs_2events.py`, `pipeline_sync_3subs_1event.py`: synchronization-focused emitters for deterministic shared/fanout scenarios.
 - `pipeline_single_class.py`: single pipeline class without an explicit `pipeline` variable.
 - `pipeline_resourced.py`: pipeline with a `FixedResource` dependency.
 - `pipeline_dict_event.py`: pipeline that emits `dict` events.

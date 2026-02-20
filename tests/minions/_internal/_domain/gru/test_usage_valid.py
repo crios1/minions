@@ -437,12 +437,11 @@ class TestValidUsageUsingNewAssetsDSL:
 
     @pytest.mark.asyncio
     async def test_gru_start_stop_minion(
-        self, gru, logger, metrics, state_store, reload_emit_n_pipeline, tests_dir
+        self, gru, logger, metrics, state_store, tests_dir
     ):
         minion_modpath = "tests.assets_new.minion_two_steps"
-        pipeline_modpath = "tests.assets_new.pipeline_emit_n"
+        pipeline_modpath = "tests.assets_new.pipeline_emit_1"
         config_path = str(tests_dir / "assets_new" / "minion_config_a.toml")
-        reload_emit_n_pipeline(expected_subs=1, total_events=1)
 
         directives: list[Directive] = [
             MinionStart(
@@ -467,12 +466,11 @@ class TestValidUsageUsingNewAssetsDSL:
 
     @pytest.mark.asyncio
     async def test_gru_start_minion_shutdown_without_stop(
-        self, gru, logger, metrics, state_store, reload_emit_n_pipeline, tests_dir
+        self, gru, logger, metrics, state_store, tests_dir
     ):
         minion_modpath = "tests.assets_new.minion_two_steps"
-        pipeline_modpath = "tests.assets_new.pipeline_emit_n"
+        pipeline_modpath = "tests.assets_new.pipeline_emit_1"
         config_path = str(tests_dir / "assets_new" / "minion_config_a.toml")
-        reload_emit_n_pipeline(expected_subs=1, total_events=1)
 
         directives: list[Directive] = [
             MinionStart(
@@ -496,23 +494,19 @@ class TestValidUsageUsingNewAssetsDSL:
 
     @pytest.mark.asyncio
     async def test_gru_start_3_minions_3_pipelines_3_resources_no_sharing(
-        self, gru, logger, metrics, state_store, reload_emit_n_variant, tests_dir
+        self, gru, logger, metrics, state_store, tests_dir
     ):
         minion1 = "tests.assets_new.minion_two_steps_resourced"
         minion2 = "tests.assets_new.minion_two_steps_resourced_b"
         minion3 = "tests.assets_new.minion_two_steps_resourced_c"
 
-        pipeline1 = "tests.assets_new.pipeline_emit_n_a"
-        pipeline2 = "tests.assets_new.pipeline_emit_n_b"
-        pipeline3 = "tests.assets_new.pipeline_emit_n_c"
+        pipeline1 = "tests.assets_new.pipeline_emit_1_a"
+        pipeline2 = "tests.assets_new.pipeline_emit_1_b"
+        pipeline3 = "tests.assets_new.pipeline_emit_1_c"
 
         cfg1 = str(tests_dir / "assets_new" / "minion_config_a.toml")
         cfg2 = str(tests_dir / "assets_new" / "minion_config_b.toml")
         cfg3 = str(tests_dir / "assets_new" / "minion_config_c.toml")
-
-        reload_emit_n_variant(pipeline1, expected_subs=1, total_events=1)
-        reload_emit_n_variant(pipeline2, expected_subs=1, total_events=1)
-        reload_emit_n_variant(pipeline3, expected_subs=1, total_events=1)
 
         directives: list[Directive] = [
             Concurrent(
@@ -538,13 +532,12 @@ class TestValidUsageUsingNewAssetsDSL:
 
     @pytest.mark.asyncio
     async def test_gru_start_3_minions_1_pipeline_1_resource_sharing(
-        self, gru, logger, metrics, state_store, reload_emit_n_pipeline, tests_dir
+        self, gru, logger, metrics, state_store, tests_dir
     ):
         minion_a = "tests.assets_new.minion_two_steps_resourced"
         minion_b = "tests.assets_new.minion_two_steps_resourced_shared_b"
         minion_c = "tests.assets_new.minion_two_steps_resourced_shared_c"
-        pipeline_modpath = "tests.assets_new.pipeline_emit_n"
-        reload_emit_n_pipeline(expected_subs=3, total_events=1)
+        pipeline_modpath = "tests.assets_new.pipeline_sync_3subs_1event"
 
         cfg1 = str(tests_dir / "assets_new" / "minion_config_a.toml")
         cfg2 = str(tests_dir / "assets_new" / "minion_config_b.toml")

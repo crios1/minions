@@ -18,12 +18,11 @@ TESTS_DIR = Path(__file__).resolve().parents[1]
 
 @pytest.mark.asyncio
 async def test_run_gru_scenario_with_new_assets(
-    gru, logger, metrics, state_store, reload_emit_n_pipeline
+    gru, logger, metrics, state_store
 ):
     cfg1 = str(TESTS_DIR / "assets_new" / "minion_config_a.toml")
     cfg2 = str(TESTS_DIR / "assets_new" / "minion_config_b.toml")
-    pipeline_modpath = "tests.assets_new.pipeline_emit_n"
-    reload_emit_n_pipeline(expected_subs=2, total_events=2)
+    pipeline_modpath = "tests.assets_new.pipeline_sync_2subs_2events"
 
     directives: list[Directive] = [
         Concurrent(

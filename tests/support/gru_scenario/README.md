@@ -12,6 +12,28 @@ This package provides a light, test-focused DSL for scripting Gru scenarios and 
 - This DSL is not for composition/loader validation tests (for example: module entrypoint resolution, invalid `minion`/`pipeline` declarations, class-subclass/type declaration checks).
 - Keep composition acceptance/rejection coverage in manual `gru.start_minion(...)` tests.
 
+## Official Contract
+- DSL orchestration tests are deterministic by policy.
+- Tests must declare orchestration and expectations up front (plan-first).
+- Core verification must assert exact expected outcomes, not timing-dependent approximations.
+- No optional nondeterministic mode is supported for DSL confidence/correctness tests.
+- Orchestration testing is DSL-only policy:
+  - add/update orchestration tests in DSL usage classes and DSL verifier tests,
+  - do not add manual orchestration tests or weaker orchestration-only validations outside DSL,
+  - non-DSL/weaker orchestration validation is intentionally not pursued because DSL deterministic verification eclipses its value.
+
+### Why DSL Deterministic Verification Eclipses Weaker Orchestration Checks
+- Deterministic DSL orchestration tests provide higher-value verification because they:
+  - declare orchestration and expected outcomes up front,
+  - enforce synchronization invariants required for exact fanout/subscription assertions,
+  - produce stable, reproducible pass/fail signals with actionable diagnostics.
+- Weaker/non-DSL orchestration checks provide lower confidence because they cannot reliably prove exact runtime behavior across timing-sensitive scenarios.
+
+### Synchronization Invariant
+- Shared/fanout verification requires an explicit subscription barrier before event emission.
+- Until the barrier is owned by DSL internals, tests should use synchronization-capable test pipelines (gated assets) for deterministic fanout checks.
+- Pipeline assets used for deterministic fanout checks are test synchronization assets by design; this does not redefine production runtime semantics.
+
 ## Quick Start
 ```python
 directives = [
@@ -99,6 +121,7 @@ Expected workflow counts are derived from `pipeline_event_counts`:
 ## Verification Backlog
 - Verification-specific TODOs live in `tests/support/gru_scenario/VERIFICATION_TODOS.md`.
 - Usage tests may reference backlog IDs, but verification capability work should be implemented and tested in this DSL package.
+- Backlog implementation must preserve the Official Contract and Synchronization Invariant above.
 
 ## Runtime-Dependent Notes
 - Some tolerances intentionally reflect current runtime behavior under concurrency (attempt/success bounds), not idealized singleton assumptions.
