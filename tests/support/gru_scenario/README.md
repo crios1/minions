@@ -20,8 +20,8 @@ directives = [
         MinionStart(...),
     ),
     WaitWorkflows(),
-    MinionStop(expect_success=True, name_or_instance_id="m1"),
-    MinionStop(expect_success=True, name_or_instance_id="m2"),
+    MinionStop(name_or_instance_id="m1", expect_success=True),
+    MinionStop(name_or_instance_id="m2", expect_success=True),
     GruShutdown(expect_success=True),
 ]
 

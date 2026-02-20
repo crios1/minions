@@ -20,6 +20,9 @@ from tests.support.gru_scenario import (
 
 
 class TestValidUsage:
+    # Legacy/manual baseline during DSL confidence window.
+    # Orchestration-valid coverage should be added/updated in `TestValidUsageDSL`
+    # and `TestValidUsageUsingNewAssetsDSL`.
     @pytest.mark.asyncio
     async def test_gru_accepts_none_logger_metrics_state_store(self, gru_factory):
         async with gru_factory(
@@ -260,7 +263,7 @@ class TestValidUsageDSL:
                 expect=MinionRunSpec(),
             ),
             WaitWorkflows(),
-            MinionStop(expect_success=True, name_or_instance_id="simple-minion"),
+            MinionStop(name_or_instance_id="simple-minion", expect_success=True),
             GruShutdown(expect_success=True),
         ]
 
@@ -305,9 +308,9 @@ class TestValidUsageDSL:
                 expect=MinionRunSpec(),
             ),
             WaitWorkflows(),
-            MinionStop(expect_success=True, name_or_instance_id="simple-resourced-minion-1"),
-            MinionStop(expect_success=True, name_or_instance_id="simple-resourced-minion-2"),
-            MinionStop(expect_success=True, name_or_instance_id="simple-resourced-minion-3"),
+            MinionStop(name_or_instance_id="simple-resourced-minion-1", expect_success=True),
+            MinionStop(name_or_instance_id="simple-resourced-minion-2", expect_success=True),
+            MinionStop(name_or_instance_id="simple-resourced-minion-3", expect_success=True),
             GruShutdown(expect_success=True),
         ]
 
@@ -381,7 +384,7 @@ class TestValidUsageDSL:
                 expect=MinionRunSpec(),
             ),
             WaitWorkflows(),
-            MinionStop(expect_success=True, name_or_instance_id="simple-resourced-minion-1"),
+            MinionStop(name_or_instance_id="simple-resourced-minion-1", expect_success=True),
             GruShutdown(expect_success=True),
         ]
 
@@ -449,7 +452,7 @@ class TestValidUsageUsingNewAssetsDSL:
                 expect=MinionRunSpec(),
             ),
             WaitWorkflows(),
-            MinionStop(expect_success=True, name_or_instance_id="two-step-minion"),
+            MinionStop(name_or_instance_id="two-step-minion", expect_success=True),
             GruShutdown(expect_success=True),
         ]
 
@@ -518,9 +521,9 @@ class TestValidUsageUsingNewAssetsDSL:
                 MinionStart(minion=minion3, minion_config_path=cfg3, pipeline=pipeline3),
             ),
             WaitWorkflows(),
-            MinionStop(expect_success=True, name_or_instance_id="two-step-resourced-minion"),
-            MinionStop(expect_success=True, name_or_instance_id="two-step-resourced-minion-b"),
-            MinionStop(expect_success=True, name_or_instance_id="two-step-resourced-minion-c"),
+            MinionStop(name_or_instance_id="two-step-resourced-minion", expect_success=True),
+            MinionStop(name_or_instance_id="two-step-resourced-minion-b", expect_success=True),
+            MinionStop(name_or_instance_id="two-step-resourced-minion-c", expect_success=True),
             GruShutdown(expect_success=True),
         ]
 
@@ -552,9 +555,9 @@ class TestValidUsageUsingNewAssetsDSL:
             MinionStart(minion=minion_b, minion_config_path=cfg2, pipeline=pipeline_modpath),
             MinionStart(minion=minion_c, minion_config_path=cfg3, pipeline=pipeline_modpath),
             WaitWorkflows(),
-            MinionStop(expect_success=True, name_or_instance_id="two-step-resourced-minion"),
-            MinionStop(expect_success=True, name_or_instance_id="two-step-resourced-shared-minion-b"),
-            MinionStop(expect_success=True, name_or_instance_id="two-step-resourced-shared-minion-c"),
+            MinionStop(name_or_instance_id="two-step-resourced-minion", expect_success=True),
+            MinionStop(name_or_instance_id="two-step-resourced-shared-minion-b", expect_success=True),
+            MinionStop(name_or_instance_id="two-step-resourced-shared-minion-c", expect_success=True),
             GruShutdown(expect_success=True),
         ]
 

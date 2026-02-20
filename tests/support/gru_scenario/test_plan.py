@@ -15,7 +15,7 @@ def test_scenario_plan_flattens_and_indexes_directives():
     d1b = MinionStart(minion="m2", pipeline="p2")
     d1c = MinionStart(minion="m3", pipeline="p3")
     d1 = Concurrent(d1a, d1b, d1c)
-    d2 = MinionStop(expect_success=True, name_or_instance_id="m1")
+    d2 = MinionStop(name_or_instance_id="m1", expect_success=True)
     d3 = WaitWorkflows()
     d4 = GruShutdown()
 
@@ -38,8 +38,8 @@ def test_scenario_plan_copies_pipeline_event_counts():
 
 
 def test_scenario_plan_uses_identity_for_index_lookup():
-    d1 = MinionStop(expect_success=True, name_or_instance_id="m1")
-    d2 = MinionStop(expect_success=True, name_or_instance_id="m1")
+    d1 = MinionStop(name_or_instance_id="m1", expect_success=True)
+    d2 = MinionStop(name_or_instance_id="m1", expect_success=True)
 
     plan = ScenarioPlan([d1], pipeline_event_counts={})
 
@@ -56,7 +56,7 @@ def test_scenario_plan_accepts_empty_directives():
 
 
 def test_scenario_plan_accepts_stop_and_shutdown_only_directives():
-    d1 = MinionStop(expect_success=False, name_or_instance_id="missing")
+    d1 = MinionStop(name_or_instance_id="missing", expect_success=False)
     d2 = GruShutdown(expect_success=True)
 
     plan = ScenarioPlan([d1, d2], pipeline_event_counts={})
@@ -76,8 +76,8 @@ def test_scenario_plan_accepts_zero_pipeline_event_count_for_started_pipeline():
 def test_scenario_plan_flattens_nested_concurrent_and_indexes_all_children():
     d1 = MinionStart(minion="m1", pipeline="p1")
     d2 = MinionStart(minion="m2", pipeline="p2")
-    d3 = MinionStop(expect_success=True, name_or_instance_id="m1")
-    d4 = MinionStop(expect_success=True, name_or_instance_id="m2")
+    d3 = MinionStop(name_or_instance_id="m1", expect_success=True)
+    d4 = MinionStop(name_or_instance_id="m2", expect_success=True)
     d5 = GruShutdown(expect_success=True)
 
     nested = Concurrent(

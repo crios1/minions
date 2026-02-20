@@ -16,6 +16,9 @@ from tests.support.gru_scenario import (
 )
 
 class TestInvalidUsage:
+    # Legacy/manual baseline during DSL confidence window.
+    # Orchestration-invalid coverage should be added/updated in `TestInvalidUsageDSL`
+    # and `TestInvalidUsageUsingNewAssetsDSL`.
     @pytest.mark.asyncio
     async def test_gru_raises_on_direct_instantiation(self):
         with pytest.raises(RuntimeError):
@@ -203,7 +206,7 @@ class TestInvalidUsageDSL:
         self, gru, logger, metrics, state_store
     ):
         directives = [
-            MinionStop(expect_success=False, name_or_instance_id="mock"),
+            MinionStop(name_or_instance_id="mock", expect_success=False),
             GruShutdown(expect_success=True),
         ]
 
@@ -240,7 +243,89 @@ class TestInvalidUsageDSL:
             directives,
             pipeline_event_counts={},
         )
+
+
+class TestInvalidUsageUsingNewAssetsDSL:
+    @pytest.mark.asyncio
+    async def test_gru_returns_error_when_starting_running_minion(
+        self, gru, logger, metrics, state_store, tests_dir, reload_emit_n_pipeline
+    ):
+        config_path = str(tests_dir / "assets_new" / "minion_config_a.toml")
+        pipeline_modpath = "tests.assets_new.pipeline_emit_n"
+        reload_emit_n_pipeline(expected_subs=1, total_events=1)
+
+        directives = [
+            MinionStart(
+                minion="tests.assets_new.minion_two_steps",
+                minion_config_path=config_path,
+                pipeline=pipeline_modpath,
+                expect=MinionRunSpec(),
+            ),
+            MinionStart(
+                minion="tests.assets_new.minion_two_steps",
+                minion_config_path=config_path,
+                pipeline=pipeline_modpath,
+                expect_success=False,
+            ),
+            WaitWorkflows(),
+            GruShutdown(expect_success=True),
+        ]
+
+        await run_gru_scenario(
+            gru,
+            logger,
+            metrics,
+            state_store,
+            directives,
+            pipeline_event_counts={pipeline_modpath: 1},
+        )
+
+    @pytest.mark.asyncio
+    async def test_gru_returns_error_when_stopping_nonexistant_minion(
+        self, gru, logger, metrics, state_store
+    ):
+        directives = [
+            MinionStop(name_or_instance_id="mock", expect_success=False),
+            GruShutdown(expect_success=True),
+        ]
+
+        await run_gru_scenario(
+            gru,
+            logger,
+            metrics,
+            state_store,
+            directives,
+            pipeline_event_counts={},
+        )
+
+    @pytest.mark.asyncio
+    async def test_gru_returns_error_when_mismatched_minion_and_pipeline_event_types(
+        self, gru, logger, metrics, state_store, tests_dir
+    ):
+        config_path = str(tests_dir / "assets_new" / "minion_config_a.toml")
+
+        directives = [
+            MinionStart(
+                minion="tests.assets_new.minion_two_steps",
+                minion_config_path=config_path,
+                pipeline="tests.assets_new.pipeline_dict_event",
+                expect_success=False,
+            ),
+            GruShutdown(expect_success=True),
+        ]
+
+        await run_gru_scenario(
+            gru,
+            logger,
+            metrics,
+            state_store,
+            directives,
+            pipeline_event_counts={},
+        )
 class TestInvalidUsageUsingNewAssets:
+    # Legacy/manual baseline during DSL confidence window.
+    # Orchestration-invalid coverage should be added/updated in
+    # `TestInvalidUsageUsingNewAssetsDSL`.
     @pytest.mark.asyncio
     async def test_gru_raises_on_direct_instantiation(self):
         with pytest.raises(RuntimeError):

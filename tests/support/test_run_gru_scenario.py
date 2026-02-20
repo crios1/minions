@@ -40,8 +40,8 @@ async def test_run_gru_scenario_with_new_assets(
             ),
         ),
         WaitWorkflows(),
-        MinionStop(expect_success=True, name_or_instance_id="two-step-minion"),
-        MinionStop(expect_success=True, name_or_instance_id="two-step-resourced-minion"),
+        MinionStop(name_or_instance_id="two-step-minion", expect_success=True),
+        MinionStop(name_or_instance_id="two-step-resourced-minion", expect_success=True),
         GruShutdown(expect_success=True),
     ]
 
@@ -101,8 +101,8 @@ async def test_run_gru_scenario_batches_stops_serial(
             pipeline=pipeline_modpath,
         ),
         WaitWorkflows(),
-        MinionStop(expect_success=True, name_or_instance_id="simple-minion"),
-        MinionStop(expect_success=True, name_or_instance_id="simple-resourced-minion-2"),
+        MinionStop(name_or_instance_id="simple-minion", expect_success=True),
+        MinionStop(name_or_instance_id="simple-resourced-minion-2", expect_success=True),
         GruShutdown(expect_success=True),
     ]
 
@@ -184,7 +184,7 @@ async def test_run_gru_scenario_stop_unknown_fails(gru, logger, metrics, state_s
             expect=MinionRunSpec(),
         ),
         WaitWorkflows(),
-        MinionStop(expect_success=False, name_or_instance_id="missing-minion"),
+        MinionStop(name_or_instance_id="missing-minion", expect_success=False),
         GruShutdown(expect_success=True),
     ]
 
@@ -221,8 +221,8 @@ async def test_run_gru_scenario_parallel_starts(
             ),
         ),
         WaitWorkflows(),
-        MinionStop(expect_success=True, name_or_instance_id="simple-minion"),
-        MinionStop(expect_success=True, name_or_instance_id="simple-resourced-minion-2"),
+        MinionStop(name_or_instance_id="simple-minion", expect_success=True),
+        MinionStop(name_or_instance_id="simple-resourced-minion-2", expect_success=True),
         GruShutdown(expect_success=True),
     ]
 
@@ -257,8 +257,8 @@ async def test_run_gru_scenario_wait_workflows_subset(
             pipeline=pipeline_modpath,
         ),
         WaitWorkflows(minion_names={"simple-minion"}),
-        MinionStop(expect_success=True, name_or_instance_id="simple-minion"),
-        MinionStop(expect_success=True, name_or_instance_id="simple-resourced-minion-2"),
+        MinionStop(name_or_instance_id="simple-minion", expect_success=True),
+        MinionStop(name_or_instance_id="simple-resourced-minion-2", expect_success=True),
         GruShutdown(expect_success=True),
     ]
 
@@ -314,7 +314,7 @@ async def test_run_gru_scenario_wait_workflows_empty_is_noop(gru, logger, metric
         ),
         WaitWorkflows(minion_names=set()),
         WaitWorkflows(),
-        MinionStop(expect_success=True, name_or_instance_id="simple-minion"),
+        MinionStop(name_or_instance_id="simple-minion", expect_success=True),
         GruShutdown(expect_success=True),
     ]
 
@@ -353,9 +353,9 @@ async def test_run_gru_scenario_parallel_mixed_directives(
         WaitWorkflows(),
         Concurrent(
             WaitWorkflows(minion_names=set()),
-            MinionStop(expect_success=True, name_or_instance_id="simple-resourced-minion-2"),
+            MinionStop(name_or_instance_id="simple-resourced-minion-2", expect_success=True),
         ),
-        MinionStop(expect_success=True, name_or_instance_id="simple-minion"),
+        MinionStop(name_or_instance_id="simple-minion", expect_success=True),
         GruShutdown(expect_success=True),
     ]
 
@@ -415,8 +415,8 @@ async def test_dsl_exploration(gru, logger, metrics, state_store):
             ),
         ),
         WaitWorkflows(),
-        MinionStop(expect_success=True, name_or_instance_id="simple-minion"),
-        MinionStop(expect_success=True, name_or_instance_id="simple-resourced-minion-2"),
+        MinionStop(name_or_instance_id="simple-minion", expect_success=True),
+        MinionStop(name_or_instance_id="simple-resourced-minion-2", expect_success=True),
         GruShutdown(expect_success=True),
     ]
 
@@ -455,7 +455,7 @@ async def test_run_gru_scenario_golden_regression_mixed_concurrent_wait_subset(
             ),
         ),
         WaitWorkflows(minion_names={"simple-minion"}),
-        MinionStop(expect_success=True, name_or_instance_id="simple-minion"),
+        MinionStop(name_or_instance_id="simple-minion", expect_success=True),
         GruShutdown(expect_success=True),
     ]
 

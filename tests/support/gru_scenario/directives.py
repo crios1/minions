@@ -33,8 +33,8 @@ class MinionStart(Directive):
 
 @dataclass(frozen=True)
 class MinionStop(Directive):
-    expect_success: bool
     name_or_instance_id: str
+    expect_success: bool
 
     def as_kwargs(self) -> dict:
         return {k: v for k, v in self.__dict__.items() if k in _MINION_STOP_PARAMS}
