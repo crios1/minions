@@ -2,7 +2,7 @@ import asyncio
 import time
 import sys
 
-from .support.pipeline_spied import SpiedPipeline
+from tests.assets.support.pipeline_spied import SpiedPipeline
 from .event_simple import SimpleEvent
 
 class SimpleSingleEventPipeline1(SpiedPipeline[SimpleEvent]):

@@ -3,7 +3,7 @@ import time
 import sys
 
 from .event_simple import SimpleEvent
-from .support.pipeline_spied import SpiedPipeline
+from tests.assets.support.pipeline_spied import SpiedPipeline
 
 class SimpleSingleEventPipeline3(SpiedPipeline[SimpleEvent]):
     total_events = 0

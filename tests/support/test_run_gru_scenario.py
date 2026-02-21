@@ -20,20 +20,20 @@ TESTS_DIR = Path(__file__).resolve().parents[1]
 async def test_run_gru_scenario_with_new_assets(
     gru, logger, metrics, state_store
 ):
-    cfg1 = str(TESTS_DIR / "assets_revamp" / "config" / "minions" / "a.toml")
-    cfg2 = str(TESTS_DIR / "assets_revamp" / "config" / "minions" / "b.toml")
-    pipeline_modpath = "tests.assets_revamp.pipelines.sync.sync_2subs_2events"
+    cfg1 = str(TESTS_DIR / "assets" / "config" / "minions" / "a.toml")
+    cfg2 = str(TESTS_DIR / "assets" / "config" / "minions" / "b.toml")
+    pipeline_modpath = "tests.assets.pipelines.sync.sync_2subs_2events"
 
     directives: list[Directive] = [
         Concurrent(
             MinionStart(
-                minion="tests.assets_revamp.minions.two_steps.basic",
+                minion="tests.assets.minions.two_steps.basic",
                 minion_config_path=cfg1,
                 pipeline=pipeline_modpath,
                 expect=MinionRunSpec(),
             ),
             MinionStart(
-                minion="tests.assets_revamp.minions.two_steps.resourced",
+                minion="tests.assets.minions.two_steps.resourced",
                 minion_config_path=cfg2,
                 pipeline=pipeline_modpath,
             ),

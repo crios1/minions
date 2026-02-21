@@ -1,4 +1,4 @@
-from .support.resource_spied import SpiedResource
+from tests.assets.support.resource_spied import SpiedResource
 
 class SimpleResource3(SpiedResource):
     name = f"simple-resource-3"

@@ -12,6 +12,15 @@ from tests.assets.support.minion_spied import SpiedMinion
 from tests.assets.support.pipeline_spied import SpiedPipeline
 from tests.assets.support.resource_spied import SpiedResource
 
+try:
+    from tests.assets.support.minion_spied import SpiedMinion as LegacySpiedMinion
+    from tests.assets.support.pipeline_spied import SpiedPipeline as LegacySpiedPipeline
+    from tests.assets.support.resource_spied import SpiedResource as LegacySpiedResource
+except Exception:  # pragma: no cover - legacy assets may be removed later
+    LegacySpiedMinion = None
+    LegacySpiedPipeline = None
+    LegacySpiedResource = None
+
 from .directives import (
     Concurrent,
     Directive,
@@ -90,6 +99,16 @@ class ScenarioRunner:
         return self._result
 
     def _discover_spies(self) -> None:
+        minion_bases = tuple(
+            base for base in (SpiedMinion, LegacySpiedMinion) if base is not None
+        )
+        pipeline_bases = tuple(
+            base for base in (SpiedPipeline, LegacySpiedPipeline) if base is not None
+        )
+        resource_bases = tuple(
+            base for base in (SpiedResource, LegacySpiedResource) if base is not None
+        )
+
         for d in iter_directives_flat(self._plan.directives):
             if not isinstance(d, MinionStart):
                 continue
@@ -98,20 +117,20 @@ class ScenarioRunner:
 
             if d.minion not in self._spies.minions:
                 m_cls = self._insp.get_minion_class(d.minion)
-                assert issubclass(m_cls, SpiedMinion)
+                assert minion_bases and issubclass(m_cls, minion_bases)
                 self._spies.minions[d.minion] = m_cls
 
                 for r_cls in self._insp.get_all_resource_dependencies(m_cls):
-                    assert issubclass(r_cls, SpiedResource)
+                    assert resource_bases and issubclass(r_cls, resource_bases)
                     self._spies.resources.add(r_cls)
 
             if d.pipeline not in self._spies.pipelines:
                 p_cls = self._insp.get_pipeline_class(d.pipeline)
-                assert issubclass(p_cls, SpiedPipeline)
+                assert pipeline_bases and issubclass(p_cls, pipeline_bases)
                 self._spies.pipelines[d.pipeline] = p_cls
 
                 for r_cls in self._insp.get_all_resource_dependencies(p_cls):
-                    assert issubclass(r_cls, SpiedResource)
+                    assert resource_bases and issubclass(r_cls, resource_bases)
                     self._spies.resources.add(r_cls)
 
     async def _execute(self, d: Directive) -> None:

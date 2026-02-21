@@ -17,8 +17,6 @@ def scrub_asset_modules():
     importlib.invalidate_caches()
 
     def is_asset_module(name: str) -> bool:
-        if name.startswith("tests.assets_revamp."):
-            return True
         return name.startswith("tests.assets.") and not name.startswith("tests.assets.support")
 
     for name in [n for n in list(sys.modules) if is_asset_module(n)]:

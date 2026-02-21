@@ -1,6 +1,6 @@
 from minions import minion_step
 
-from .support.minion_spied import SpiedMinion
+from tests.assets.support.minion_spied import SpiedMinion
 from .event_simple import SimpleEvent
 from .resource_simple_3 import SimpleResource3
 

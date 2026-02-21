@@ -1,5 +1,5 @@
 import asyncio
-from .support.pipeline_spied import SpiedPipeline
+from tests.assets.support.pipeline_spied import SpiedPipeline
 from .event_simple import SimpleEvent
 from .resource_simple_1 import SimpleResource1
 
