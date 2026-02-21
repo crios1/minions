@@ -12,9 +12,9 @@ class TestInvalidComposition:
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_empty_minion_file(self, gru_factory, tests_dir):
 
-            minion_modpath = "tests.assets.file_empty"
-            pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
-            config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
+            minion_modpath = "tests.assets.entrypoints.invalid.empty_simple"
+            pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
                 state_store=NoOpStateStore(),
@@ -34,9 +34,9 @@ class TestInvalidComposition:
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_minion_file_with_multiple_minions_and_no_explicit_minion(self, gru_factory, tests_dir):
             
-            minion_modpath = "tests.assets.file_with_two_minions"
-            pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
-            config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
+            minion_modpath = "tests.assets.entrypoints.invalid.two_minions_simple"
+            pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
                 state_store=NoOpStateStore(),
@@ -56,9 +56,9 @@ class TestInvalidComposition:
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_minion_file_with_invalid_explicit_minion(self, gru_factory, tests_dir):
 
-            minion_modpath = "tests.assets.file_with_invalid_explicit_minion"
-            pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
-            config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
+            minion_modpath = "tests.assets.entrypoints.invalid.invalid_explicit_minion_simple"
+            pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
                 state_store=NoOpStateStore(),
@@ -77,9 +77,9 @@ class TestInvalidComposition:
 
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_minion_workflow_context_not_serializable(self, gru_factory, tests_dir):
-            minion_modpath = "tests.assets.file_with_unserializable_workflow_context_minion"
+            minion_modpath = "tests.assets.entrypoints.invalid.unserializable_workflow_context_minion_simple"
             pipeline_modpath = "tests.assets.pipeline_single_event"
-            config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
+            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
                 state_store=NoOpStateStore(),
@@ -99,7 +99,7 @@ class TestInvalidComposition:
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_minion_event_not_serializable(self, gru_factory, tests_dir):
             minion_modpath = "tests.assets.minions.invalid.bad_event"
-            pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
+            pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(
@@ -121,9 +121,9 @@ class TestInvalidComposition:
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_empty_pipeline_file(self, gru_factory, tests_dir):
 
-            minion_modpath = "tests.assets.minion_simple"
-            pipeline_modpath = "tests.assets.file_empty"
-            config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
+            minion_modpath = "tests.assets.minions.two_steps.simple.basic"
+            pipeline_modpath = "tests.assets.entrypoints.invalid.empty_simple"
+            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
                 state_store=NoOpStateStore(),
@@ -143,9 +143,9 @@ class TestInvalidComposition:
         @pytest.mark.asyncio 
         async def test_gru_returns_error_on_pipeline_file_with_multiple_pipelines_and_no_explicit_pipeline(self, gru_factory, tests_dir):
             
-            minion_modpath = "tests.assets.minion_simple"
-            pipeline_modpath = "tests.assets.file_with_two_pipelines"
-            config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
+            minion_modpath = "tests.assets.minions.two_steps.simple.basic"
+            pipeline_modpath = "tests.assets.entrypoints.invalid.two_pipelines_simple"
+            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
                 state_store=NoOpStateStore(),
@@ -165,9 +165,9 @@ class TestInvalidComposition:
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_pipeline_file_with_invalid_explicit_pipeline(self, gru_factory, tests_dir):
 
-            minion_modpath = "tests.assets.minion_simple"
-            pipeline_modpath = "tests.assets.file_with_invalid_explicit_pipeline"
-            config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
+            minion_modpath = "tests.assets.minions.two_steps.simple.basic"
+            pipeline_modpath = "tests.assets.entrypoints.invalid.invalid_explicit_pipeline_simple"
+            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
                 state_store=NoOpStateStore(),
@@ -186,9 +186,9 @@ class TestInvalidComposition:
 
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_pipeline_event_not_serializable(self, gru_factory, tests_dir):
-            minion_modpath = "tests.assets.minion_simple"
+            minion_modpath = "tests.assets.minions.two_steps.simple.basic"
             pipeline_modpath = "tests.assets.pipelines.invalid.unserializable_event"
-            config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
+            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
                 state_store=NoOpStateStore(),
@@ -217,7 +217,7 @@ class TestInvalidCompositionUsingNewAssets:
             self, gru_factory, tests_dir
         ):
             minion_modpath = "tests.assets.entrypoints.invalid.empty"
-            pipeline_modpath = "tests.assets.pipelines.emit1.emit_1"
+            pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
@@ -236,7 +236,7 @@ class TestInvalidCompositionUsingNewAssets:
             self, gru_factory, tests_dir
         ):
             minion_modpath = "tests.assets.entrypoints.invalid.two_minions"
-            pipeline_modpath = "tests.assets.pipelines.emit1.emit_1"
+            pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
@@ -255,7 +255,7 @@ class TestInvalidCompositionUsingNewAssets:
             self, gru_factory, tests_dir
         ):
             minion_modpath = "tests.assets.entrypoints.invalid.invalid_explicit_minion"
-            pipeline_modpath = "tests.assets.pipelines.emit1.emit_1"
+            pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
@@ -274,7 +274,7 @@ class TestInvalidCompositionUsingNewAssets:
             self, gru_factory, tests_dir
         ):
             minion_modpath = "tests.assets.minions.invalid.bad_context"
-            pipeline_modpath = "tests.assets.pipelines.emit1.emit_1"
+            pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
@@ -293,7 +293,7 @@ class TestInvalidCompositionUsingNewAssets:
             self, gru_factory, tests_dir
         ):
             minion_modpath = "tests.assets.minions.invalid.bad_event"
-            pipeline_modpath = "tests.assets.pipelines.emit1.emit_1"
+            pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
@@ -310,7 +310,7 @@ class TestInvalidCompositionUsingNewAssets:
     class TestPipelineFile:
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_empty_pipeline_file(self, gru_factory, tests_dir):
-            minion_modpath = "tests.assets.minions.two_steps.basic"
+            minion_modpath = "tests.assets.minions.two_steps.counter.basic"
             pipeline_modpath = "tests.assets.entrypoints.invalid.empty"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
@@ -327,7 +327,7 @@ class TestInvalidCompositionUsingNewAssets:
 
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_pipeline_file_with_multiple_pipelines_and_no_explicit_pipeline(self, gru_factory, tests_dir):
-            minion_modpath = "tests.assets.minions.two_steps.basic"
+            minion_modpath = "tests.assets.minions.two_steps.counter.basic"
             pipeline_modpath = "tests.assets.entrypoints.invalid.two_pipelines"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
@@ -344,7 +344,7 @@ class TestInvalidCompositionUsingNewAssets:
 
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_pipeline_file_with_invalid_explicit_pipeline(self, gru_factory, tests_dir):
-            minion_modpath = "tests.assets.minions.two_steps.basic"
+            minion_modpath = "tests.assets.minions.two_steps.counter.basic"
             pipeline_modpath = "tests.assets.entrypoints.invalid.invalid_explicit_pipeline"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
@@ -361,7 +361,7 @@ class TestInvalidCompositionUsingNewAssets:
 
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_pipeline_event_not_serializable(self, gru_factory, tests_dir):
-            minion_modpath = "tests.assets.minions.two_steps.basic"
+            minion_modpath = "tests.assets.minions.two_steps.counter.basic"
             pipeline_modpath = "tests.assets.pipelines.invalid.unserializable_event"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 

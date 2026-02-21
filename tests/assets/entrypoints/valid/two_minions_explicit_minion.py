@@ -1,7 +1,7 @@
 from minions import minion_step
 
 from tests.assets.support.minion_spied import SpiedMinion
-from tests.assets.support.event_counter import CounterEvent
+from tests.assets.events.counter import CounterEvent
 
 
 class AlphaMinion(SpiedMinion[CounterEvent, dict]):

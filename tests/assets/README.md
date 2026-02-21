@@ -8,6 +8,16 @@ Directory-first taxonomy for test assets.
 - `minions/`: minion fixtures.
 - `pipelines/`: pipeline fixtures.
 - `entrypoints/`: module-entrypoint composition fixtures.
+- `events/`: shared event types used by simple-event assets.
+
+Layout convention:
+- `tests/assets/<kind>/<scenario_family>/<case>.py`
+- If a scenario family exists for multiple event types, use:
+  - `tests/assets/<kind>/<scenario_family>/<event_family>/<case>.py`
+
+Event-family policy:
+- `counter` is the default event family for orchestration scenarios.
+- `simple` is a secondary event family for generic type-shape coverage.
 
 Naming rules:
 - Use semantic scenario families as directories.

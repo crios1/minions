@@ -1,12 +1,11 @@
 import asyncio
 import sys
-import time
 
-from .pipeline_spied import SpiedPipeline
-from ..events.simple import SimpleEvent
+from tests.assets.events.counter import CounterEvent
+from tests.assets.support.pipeline_spied import SpiedPipeline as _SpiedPipeline
 
 
-class WaitForSubsPipeline(SpiedPipeline[SimpleEvent]):
+class SinglePipeline(_SpiedPipeline[CounterEvent]):
     expected_subs = 1
     _emitted = False
 
@@ -16,18 +15,15 @@ class WaitForSubsPipeline(SpiedPipeline[SimpleEvent]):
             cls.expected_subs = expected_subs
         cls._emitted = False
 
-    async def produce_event(self) -> SimpleEvent:
+    async def produce_event(self) -> CounterEvent:
         if type(self)._emitted:
             await asyncio.sleep(sys.maxsize)
-
         while True:
             async with self._mn_subs_lock:
                 if len(self._mn_subs) >= type(self).expected_subs:
                     break
             await asyncio.sleep(0.01)
-
         type(self)._emitted = True
-        return SimpleEvent(timestamp=time.time())
+        return CounterEvent(seq=0)
 
-
-pipeline = WaitForSubsPipeline
+del _SpiedPipeline

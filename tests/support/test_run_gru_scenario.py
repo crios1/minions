@@ -22,18 +22,18 @@ async def test_run_gru_scenario_with_new_assets(
 ):
     cfg1 = str(TESTS_DIR / "assets" / "config" / "minions" / "a.toml")
     cfg2 = str(TESTS_DIR / "assets" / "config" / "minions" / "b.toml")
-    pipeline_modpath = "tests.assets.pipelines.sync.sync_2subs_2events"
+    pipeline_modpath = "tests.assets.pipelines.sync.counter.sync_2subs_2events"
 
     directives: list[Directive] = [
         Concurrent(
             MinionStart(
-                minion="tests.assets.minions.two_steps.basic",
+                minion="tests.assets.minions.two_steps.counter.basic",
                 minion_config_path=cfg1,
                 pipeline=pipeline_modpath,
                 expect=MinionRunSpec(),
             ),
             MinionStart(
-                minion="tests.assets.minions.two_steps.resourced",
+                minion="tests.assets.minions.two_steps.counter.resourced",
                 minion_config_path=cfg2,
                 pipeline=pipeline_modpath,
             ),
@@ -55,12 +55,12 @@ async def test_run_gru_scenario_with_new_assets(
 
 @pytest.mark.asyncio
 async def test_run_gru_scenario_helper_basic(gru, logger, metrics, state_store):
-    config_path = str(TESTS_DIR / "assets" / "minion_config_simple_1.toml")
-    pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
+    config_path = str(TESTS_DIR / "assets" / "config/minions/a.toml")
+    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
 
     directives: list[Directive] = [
         MinionStart(
-            minion="tests.assets.minion_simple",
+            minion="tests.assets.minions.two_steps.simple.basic",
             minion_config_path=config_path,
             pipeline=pipeline_modpath,
             expect=MinionRunSpec(),
@@ -82,20 +82,20 @@ async def test_run_gru_scenario_helper_basic(gru, logger, metrics, state_store):
 async def test_run_gru_scenario_batches_stops_serial(
     gru, logger, metrics, state_store, reload_wait_for_subs_pipeline
 ):
-    cfg1 = str(TESTS_DIR / "assets" / "minion_config_simple_1.toml")
-    cfg2 = str(TESTS_DIR / "assets" / "minion_config_simple_2.toml")
+    cfg1 = str(TESTS_DIR / "assets" / "config/minions/a.toml")
+    cfg2 = str(TESTS_DIR / "assets" / "config/minions/b.toml")
     pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
     reload_wait_for_subs_pipeline(expected_subs=2)
 
     directives: list[Directive] = [
         MinionStart(
-            minion="tests.assets.minion_simple",
+            minion="tests.assets.minions.two_steps.simple.basic",
             minion_config_path=cfg1,
             pipeline=pipeline_modpath,
             expect=MinionRunSpec(),
         ),
         MinionStart(
-            minion="tests.assets.minion_simple_resourced_2",
+            minion="tests.assets.minions.two_steps.simple.resourced_2",
             minion_config_path=cfg2,
             pipeline=pipeline_modpath,
         ),
@@ -116,18 +116,18 @@ async def test_run_gru_scenario_batches_stops_serial(
 
 @pytest.mark.asyncio
 async def test_run_gru_scenario_duplicate_start_fails(gru, logger, metrics, state_store):
-    config_path = str(TESTS_DIR / "assets" / "minion_config_simple_1.toml")
-    pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
+    config_path = str(TESTS_DIR / "assets" / "config/minions/a.toml")
+    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
 
     directives: list[Directive] = [
         MinionStart(
-            minion="tests.assets.minion_simple",
+            minion="tests.assets.minions.two_steps.simple.basic",
             minion_config_path=config_path,
             pipeline=pipeline_modpath,
             expect=MinionRunSpec(),
         ),
         MinionStart(
-            minion="tests.assets.minion_simple",
+            minion="tests.assets.minions.two_steps.simple.basic",
             minion_config_path=config_path,
             pipeline=pipeline_modpath,
             expect_success=False,
@@ -147,9 +147,9 @@ async def test_run_gru_scenario_duplicate_start_fails(gru, logger, metrics, stat
 
 @pytest.mark.asyncio
 async def test_run_gru_scenario_failed_start_does_not_require_minion_startup(gru, logger, metrics, state_store):
-    config_path = str(TESTS_DIR / "assets" / "minion_config_simple_1.toml")
-    minion_modpath = "tests.assets.minion_simple"
-    pipeline_modpath = "tests.assets.pipeline_dict"
+    config_path = str(TESTS_DIR / "assets" / "config/minions/a.toml")
+    minion_modpath = "tests.assets.minions.two_steps.simple.basic"
+    pipeline_modpath = "tests.assets.pipelines.simple.dict_event"
 
     directives: list[Directive] = [
         MinionStart(
@@ -172,12 +172,12 @@ async def test_run_gru_scenario_failed_start_does_not_require_minion_startup(gru
 
 @pytest.mark.asyncio
 async def test_run_gru_scenario_stop_unknown_fails(gru, logger, metrics, state_store):
-    config_path = str(TESTS_DIR / "assets" / "minion_config_simple_1.toml")
-    pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
+    config_path = str(TESTS_DIR / "assets" / "config/minions/a.toml")
+    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
 
     directives: list[Directive] = [
         MinionStart(
-            minion="tests.assets.minion_simple",
+            minion="tests.assets.minions.two_steps.simple.basic",
             minion_config_path=config_path,
             pipeline=pipeline_modpath,
             expect=MinionRunSpec(),
@@ -200,21 +200,21 @@ async def test_run_gru_scenario_stop_unknown_fails(gru, logger, metrics, state_s
 async def test_run_gru_scenario_parallel_starts(
     gru, logger, metrics, state_store, reload_wait_for_subs_pipeline
 ):
-    cfg1 = str(TESTS_DIR / "assets" / "minion_config_simple_1.toml")
-    cfg2 = str(TESTS_DIR / "assets" / "minion_config_simple_2.toml")
+    cfg1 = str(TESTS_DIR / "assets" / "config/minions/a.toml")
+    cfg2 = str(TESTS_DIR / "assets" / "config/minions/b.toml")
     pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
     reload_wait_for_subs_pipeline(expected_subs=2)
 
     directives: list[Directive] = [
         Concurrent(
             MinionStart(
-                minion="tests.assets.minion_simple",
+                minion="tests.assets.minions.two_steps.simple.basic",
                 minion_config_path=cfg1,
                 pipeline=pipeline_modpath,
                 expect=MinionRunSpec(),
             ),
             MinionStart(
-                minion="tests.assets.minion_simple_resourced_2",
+                minion="tests.assets.minions.two_steps.simple.resourced_2",
                 minion_config_path=cfg2,
                 pipeline=pipeline_modpath,
             ),
@@ -238,20 +238,20 @@ async def test_run_gru_scenario_parallel_starts(
 async def test_run_gru_scenario_wait_workflows_subset(
     gru, logger, metrics, state_store, reload_wait_for_subs_pipeline
 ):
-    cfg1 = str(TESTS_DIR / "assets" / "minion_config_simple_1.toml")
-    cfg2 = str(TESTS_DIR / "assets" / "minion_config_simple_2.toml")
+    cfg1 = str(TESTS_DIR / "assets" / "config/minions/a.toml")
+    cfg2 = str(TESTS_DIR / "assets" / "config/minions/b.toml")
     pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
     reload_wait_for_subs_pipeline(expected_subs=2)
 
     directives: list[Directive] = [
         MinionStart(
-            minion="tests.assets.minion_simple",
+            minion="tests.assets.minions.two_steps.simple.basic",
             minion_config_path=cfg1,
             pipeline=pipeline_modpath,
             expect=MinionRunSpec(),
         ),
         MinionStart(
-            minion="tests.assets.minion_simple_resourced_2",
+            minion="tests.assets.minions.two_steps.simple.resourced_2",
             minion_config_path=cfg2,
             pipeline=pipeline_modpath,
         ),
@@ -274,13 +274,13 @@ async def test_run_gru_scenario_wait_workflows_subset(
 async def test_run_gru_scenario_wait_workflows_unknown_name_fails(
     gru, logger, metrics, state_store, reload_wait_for_subs_pipeline
 ):
-    cfg1 = str(TESTS_DIR / "assets" / "minion_config_simple_1.toml")
+    cfg1 = str(TESTS_DIR / "assets" / "config/minions/a.toml")
     pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
     reload_wait_for_subs_pipeline(expected_subs=1)
 
     directives: list[Directive] = [
         MinionStart(
-            minion="tests.assets.minion_simple",
+            minion="tests.assets.minions.two_steps.simple.basic",
             minion_config_path=cfg1,
             pipeline=pipeline_modpath,
             expect=MinionRunSpec(),
@@ -301,12 +301,12 @@ async def test_run_gru_scenario_wait_workflows_unknown_name_fails(
 
 @pytest.mark.asyncio
 async def test_run_gru_scenario_wait_workflows_empty_is_noop(gru, logger, metrics, state_store):
-    cfg1 = str(TESTS_DIR / "assets" / "minion_config_simple_1.toml")
-    pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
+    cfg1 = str(TESTS_DIR / "assets" / "config/minions/a.toml")
+    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
 
     directives: list[Directive] = [
         MinionStart(
-            minion="tests.assets.minion_simple",
+            minion="tests.assets.minions.two_steps.simple.basic",
             minion_config_path=cfg1,
             pipeline=pipeline_modpath,
             expect=MinionRunSpec(),
@@ -330,21 +330,21 @@ async def test_run_gru_scenario_wait_workflows_empty_is_noop(gru, logger, metric
 async def test_run_gru_scenario_parallel_mixed_directives(
     gru, logger, metrics, state_store, reload_wait_for_subs_pipeline
 ):
-    cfg1 = str(TESTS_DIR / "assets" / "minion_config_simple_1.toml")
-    cfg2 = str(TESTS_DIR / "assets" / "minion_config_simple_2.toml")
+    cfg1 = str(TESTS_DIR / "assets" / "config/minions/a.toml")
+    cfg2 = str(TESTS_DIR / "assets" / "config/minions/b.toml")
     pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
     reload_wait_for_subs_pipeline(expected_subs=2)
 
     directives: list[Directive] = [
         Concurrent(
             MinionStart(
-                minion="tests.assets.minion_simple",
+                minion="tests.assets.minions.two_steps.simple.basic",
                 minion_config_path=cfg1,
                 pipeline=pipeline_modpath,
                 expect=MinionRunSpec(),
             ),
             MinionStart(
-                minion="tests.assets.minion_simple_resourced_2",
+                minion="tests.assets.minions.two_steps.simple.resourced_2",
                 minion_config_path=cfg2,
                 pipeline=pipeline_modpath,
             ),
@@ -369,12 +369,12 @@ async def test_run_gru_scenario_parallel_mixed_directives(
 
 @pytest.mark.asyncio
 async def test_run_gru_scenario_minion_call_overrides(gru, logger, metrics, state_store):
-    cfg1 = str(TESTS_DIR / "assets" / "minion_config_simple_1.toml")
-    pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
+    cfg1 = str(TESTS_DIR / "assets" / "config/minions/a.toml")
+    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
 
     directives: list[Directive] = [
         MinionStart(
-            minion="tests.assets.minion_simple",
+            minion="tests.assets.minions.two_steps.simple.basic",
             minion_config_path=cfg1,
             pipeline=pipeline_modpath,
             expect=MinionRunSpec(minion_call_overrides={"step_1": 0}),
@@ -396,19 +396,19 @@ async def test_run_gru_scenario_minion_call_overrides(gru, logger, metrics, stat
 
 @pytest.mark.asyncio
 async def test_dsl_exploration(gru, logger, metrics, state_store):
-    pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
+    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
 
     directives = [
         Concurrent(
             MinionStart(
-                minion="tests.assets.minion_simple",
-                minion_config_path=str(TESTS_DIR / "assets" / "minion_config_simple_1.toml"),
+                minion="tests.assets.minions.two_steps.simple.basic",
+                minion_config_path=str(TESTS_DIR / "assets" / "config/minions/a.toml"),
                 pipeline=pipeline_modpath,
                 expect=MinionRunSpec(minion_call_overrides={"step_1": 0}),
             ),
             MinionStart(
-                minion="tests.assets.minion_simple_resourced_2",
-                minion_config_path=str(TESTS_DIR / "assets" / "minion_config_simple_2.toml"),
+                minion="tests.assets.minions.two_steps.simple.resourced_2",
+                minion_config_path=str(TESTS_DIR / "assets" / "config/minions/b.toml"),
                 pipeline=pipeline_modpath,
                 expect=MinionRunSpec(),
             ),
@@ -433,8 +433,8 @@ async def test_dsl_exploration(gru, logger, metrics, state_store):
 async def test_run_gru_scenario_golden_regression_mixed_concurrent_wait_subset(
     gru, logger, metrics, state_store, reload_wait_for_subs_pipeline
 ):
-    cfg = str(TESTS_DIR / "assets" / "minion_config_simple_1.toml")
-    minion_modpath = "tests.assets.minion_simple"
+    cfg = str(TESTS_DIR / "assets" / "config/minions/a.toml")
+    minion_modpath = "tests.assets.minions.two_steps.simple.basic"
     pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
     reload_wait_for_subs_pipeline(expected_subs=1)
 

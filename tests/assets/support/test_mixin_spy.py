@@ -230,6 +230,26 @@ async def test_multiple_waiters_remaining_behavior():
     assert X.get_call_counts() == {'__init__': 1, 'foo': 2}
 
 @pytest.mark.asyncio
+async def test_wait_for_call_uses_absolute_target_count():
+    class Base():
+        async def foo(self): ...
+
+    class X(Base, SpyMixin):
+        ...
+
+    X.enable_spy()
+    x = X()
+
+    await x.foo()  # foo count = 1
+
+    waiter = asyncio.create_task(X.wait_for_call('foo', count=2, timeout=1))
+    await asyncio.sleep(0)  # let waiter register
+    assert not waiter.done()
+
+    await x.foo()  # foo count = 2
+    await asyncio.wait_for(waiter, timeout=1)
+
+@pytest.mark.asyncio
 async def test__spy_bump_race_guard_skips_cancelled_waiter():
     """White-box test for _spy_bump's race-guard behavior.
 

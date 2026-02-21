@@ -1,14 +1,15 @@
 import asyncio
 import sys
-import time
 
-from .pipeline_spied import SpiedPipeline
-from ..events.simple import SimpleEvent
+from tests.assets.support.pipeline_spied import SpiedPipeline
+from tests.assets.events.counter import CounterEvent
+from tests.assets.resources.fixed.base import FixedResource
 
 
-class WaitForSubsPipeline(SpiedPipeline[SimpleEvent]):
-    expected_subs = 1
+class ResourcedPipeline(SpiedPipeline[CounterEvent]):
+    fixed_resource: FixedResource
     _emitted = False
+    expected_subs = 1
 
     @classmethod
     def reset_gate(cls, *, expected_subs: int | None = None) -> None:
@@ -16,18 +17,17 @@ class WaitForSubsPipeline(SpiedPipeline[SimpleEvent]):
             cls.expected_subs = expected_subs
         cls._emitted = False
 
-    async def produce_event(self) -> SimpleEvent:
+    async def produce_event(self) -> CounterEvent:
         if type(self)._emitted:
             await asyncio.sleep(sys.maxsize)
-
         while True:
             async with self._mn_subs_lock:
                 if len(self._mn_subs) >= type(self).expected_subs:
                     break
             await asyncio.sleep(0.01)
-
+        value = await self.fixed_resource.get_value(0)
         type(self)._emitted = True
-        return SimpleEvent(timestamp=time.time())
+        return CounterEvent(seq=value)
 
 
-pipeline = WaitForSubsPipeline
+pipeline = ResourcedPipeline

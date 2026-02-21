@@ -12,9 +12,9 @@ class TestValidComposition:
         @pytest.mark.asyncio
         async def test_gru_accepts_file_with_multiple_minions_and_explicit_minion(self, gru_factory, tests_dir):
             
-            minion_modpath = "tests.assets.file_with_two_minions_and_explicit_minion"
-            pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
-            config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
+            minion_modpath = "tests.assets.entrypoints.valid.two_minions_explicit_minion_simple"
+            pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
                 state_store=NoOpStateStore(),
@@ -31,9 +31,9 @@ class TestValidComposition:
 
         @pytest.mark.asyncio
         async def test_gru_starts_minion_with_multiple_distinct_resource_dependencies(self, gru_factory, tests_dir):
-            minion_modpath = "tests.assets.minion_simple_resourced_multi"
-            pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
-            config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
+            minion_modpath = "tests.assets.minions.two_steps.simple.resourced_multi"
+            pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             logger = InMemoryLogger()
             async with gru_factory(
@@ -57,9 +57,9 @@ class TestValidComposition:
     class TestPipelineFile: # TODO: consider implementing tests to be in parity with TestMinionFile class
         @pytest.mark.asyncio
         async def test_gru_accepts_file_with_single_pipeline_class(self, gru_factory, tests_dir):
-            minion_modpath = "tests.assets.minion_simple"
-            pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
-            config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
+            minion_modpath = "tests.assets.minions.two_steps.simple.basic"
+            pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
                 state_store=NoOpStateStore(),
@@ -82,7 +82,7 @@ class TestValidCompositionUsingNewAssets:
             self, gru_factory, tests_dir
         ):
             minion_modpath = "tests.assets.entrypoints.valid.two_minions_explicit_minion"
-            pipeline_modpath = "tests.assets.pipelines.emit1.emit_1"
+            pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(
@@ -101,8 +101,8 @@ class TestValidCompositionUsingNewAssets:
         async def test_gru_starts_minion_with_multiple_distinct_resource_dependencies(
             self, gru_factory, tests_dir
         ):
-            minion_modpath = "tests.assets.minions.two_steps.multi_resources"
-            pipeline_modpath = "tests.assets.pipelines.emit1.emit_1"
+            minion_modpath = "tests.assets.minions.two_steps.counter.multi_resources"
+            pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             logger = InMemoryLogger()
@@ -127,8 +127,8 @@ class TestValidCompositionUsingNewAssets:
         async def test_gru_accepts_file_with_single_pipeline_class(
             self, gru_factory, reload_pipeline_module, tests_dir
         ):
-            minion_modpath = "tests.assets.minions.two_steps.basic"
-            pipeline_modpath = "tests.assets.pipelines.entrypoint.single_class"
+            minion_modpath = "tests.assets.minions.two_steps.counter.basic"
+            pipeline_modpath = "tests.assets.pipelines.entrypoint.counter.single_class"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
             reload_pipeline_module(pipeline_modpath)
 

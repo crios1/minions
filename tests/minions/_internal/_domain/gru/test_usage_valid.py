@@ -45,13 +45,13 @@ class TestValidUsage:
 
     @pytest.mark.asyncio
     async def test_gru_start_stop_minion(self, gru_factory, reload_wait_for_subs_pipeline, tests_dir):
-        minion_modpath = "tests.assets.minion_simple"
+        minion_modpath = "tests.assets.minions.two_steps.simple.basic"
         pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
-        from tests.assets.minion_simple import SimpleMinion
+        from tests.assets.minions.two_steps.simple.basic import SimpleMinion
         SimpleMinion.enable_spy()
         SimpleMinion.reset_spy()
         reload_wait_for_subs_pipeline(expected_subs=1)
-        config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
+        config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
         async with gru_factory(
             state_store=NoOpStateStore(),
@@ -82,16 +82,16 @@ class TestValidUsage:
         Start three minions each with their own pipeline and their own Resource type
         so there is no sharing of pipelines or resources between minions.
         """
-        minion1 = "tests.assets.minion_simple_resourced_1"
-        minion2 = "tests.assets.minion_simple_resourced_2"
-        minion3 = "tests.assets.minion_simple_resourced_3"
+        minion1 = "tests.assets.minions.two_steps.simple.resourced_1"
+        minion2 = "tests.assets.minions.two_steps.simple.resourced_2"
+        minion3 = "tests.assets.minions.two_steps.simple.resourced_3"
 
-        pipeline1 = "tests.assets.pipeline_simple_single_event_1"
-        pipeline2 = "tests.assets.pipeline_simple_single_event_2"
-        pipeline3 = "tests.assets.pipeline_simple_single_event_3"
-        cfg1 = str(tests_dir / "assets" / "minion_config_simple_1.toml")
-        cfg2 = str(tests_dir / "assets" / "minion_config_simple_2.toml")
-        cfg3 = str(tests_dir / "assets" / "minion_config_simple_3.toml")
+        pipeline1 = "tests.assets.pipelines.simple.simple_event.single_event_1"
+        pipeline2 = "tests.assets.pipelines.simple.simple_event.single_event_2"
+        pipeline3 = "tests.assets.pipelines.simple.simple_event.single_event_3"
+        cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
+        cfg2 = str(tests_dir / "assets" / "config/minions/b.toml")
+        cfg3 = str(tests_dir / "assets" / "config/minions/c.toml")
 
         logger = InMemoryLogger()
         async with gru_factory(
@@ -99,9 +99,9 @@ class TestValidUsage:
             logger=logger,
             metrics=InMemoryMetrics()
         ) as gru:
-            from tests.assets.minion_simple_resourced_1 import SimpleResourcedMinion1
-            from tests.assets.minion_simple_resourced_2 import SimpleResourcedMinion2
-            from tests.assets.minion_simple_resourced_3 import SimpleResourcedMinion3
+            from tests.assets.minions.two_steps.simple.resourced_1 import SimpleResourcedMinion1
+            from tests.assets.minions.two_steps.simple.resourced_2 import SimpleResourcedMinion2
+            from tests.assets.minions.two_steps.simple.resourced_3 import SimpleResourcedMinion3
             for cls in (SimpleResourcedMinion1, SimpleResourcedMinion2, SimpleResourcedMinion3):
                 cls.enable_spy()
                 cls.reset_spy()
@@ -140,18 +140,18 @@ class TestValidUsage:
         Start three minions that share the same pipeline and a single Resource type.
         Verify pipeline and resource are shared and cleaned up after stopping all minions.
         """
-        minion_modpath = "tests.assets.minion_simple_resourced_1"
+        minion_modpath = "tests.assets.minions.two_steps.simple.resourced_1"
         pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
         reload_wait_for_subs_pipeline(expected_subs=3)
-        from tests.assets.minion_simple_resourced_1 import SimpleResourcedMinion1
+        from tests.assets.minions.two_steps.simple.resourced_1 import SimpleResourcedMinion1
         SimpleResourcedMinion1.enable_spy()
         SimpleResourcedMinion1.reset_spy()
 
         # TODO: i'm testing resource sharing between minions spawned from same minion class but different configs
         # i should also test the case where i spawn from seperate minion classes/files
-        cfg1 = str(tests_dir / "assets" / "minion_config_simple_1.toml")
-        cfg2 = str(tests_dir / "assets" / "minion_config_simple_2.toml")
-        cfg3 = str(tests_dir / "assets" / "minion_config_simple_3.toml")
+        cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
+        cfg2 = str(tests_dir / "assets" / "config/minions/b.toml")
+        cfg3 = str(tests_dir / "assets" / "config/minions/c.toml")
 
         # TODO: consider refactoring gru to have the kwargs be classes instead of instances
         # it might be cleaner and then the user wont have to manually wire things like this
@@ -199,9 +199,9 @@ class TestValidUsage:
 
     @pytest.mark.asyncio
     async def test_gru_start_minion_shutdown_without_stop(self, gru_factory, tests_dir):
-        minion_modpath = "tests.assets.minion_simple"
-        pipeline_modpath = "tests.assets.pipeline_simple_single_event_1"
-        config_path = str(tests_dir / "assets" / "minion_config_simple_1.toml")
+        minion_modpath = "tests.assets.minions.two_steps.simple.basic"
+        pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+        config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
         async with gru_factory(
             state_store=NoOpStateStore(),
@@ -221,9 +221,9 @@ class TestValidUsage:
 
     @pytest.mark.asyncio
     async def test_minion_and_pipeline_share_resource_dependency(self, gru_factory, tests_dir):
-        minion_modpath = "tests.assets.minion_simple_resourced_1"
-        pipeline_modpath = "tests.assets.pipeline_simple_resourced"
-        cfg1 = str(tests_dir / "assets" / "minion_config_simple_1.toml")
+        minion_modpath = "tests.assets.minions.two_steps.simple.resourced_1"
+        pipeline_modpath = "tests.assets.pipelines.simple.simple_event.resourced"
+        cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
 
         logger = InMemoryLogger()
         async with gru_factory(
@@ -252,11 +252,11 @@ class TestValidUsageDSL:
         self, gru, logger, metrics, state_store, tests_dir
     ):
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
-        pipeline_modpath = "tests.assets.pipelines.emit1.emit_1"
+        pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
 
         directives = [
             MinionStart(
-                minion="tests.assets.minions.two_steps.basic",
+                minion="tests.assets.minions.two_steps.counter.basic",
                 minion_config_path=config_path,
                 pipeline=pipeline_modpath,
                 expect=MinionRunSpec(),
@@ -283,25 +283,25 @@ class TestValidUsageDSL:
         cfg2 = str(tests_dir / "assets" / "config" / "minions" / "b.toml")
         cfg3 = str(tests_dir / "assets" / "config" / "minions" / "c.toml")
 
-        pipeline1 = "tests.assets.pipelines.emit1.emit_1_a"
-        pipeline2 = "tests.assets.pipelines.emit1.emit_1_b"
-        pipeline3 = "tests.assets.pipelines.emit1.emit_1_c"
+        pipeline1 = "tests.assets.pipelines.emit1.counter.emit_1_a"
+        pipeline2 = "tests.assets.pipelines.emit1.counter.emit_1_b"
+        pipeline3 = "tests.assets.pipelines.emit1.counter.emit_1_c"
 
         directives = [
             MinionStart(
-                minion="tests.assets.minions.two_steps.resourced",
+                minion="tests.assets.minions.two_steps.counter.resourced",
                 minion_config_path=cfg1,
                 pipeline=pipeline1,
                 expect=MinionRunSpec(),
             ),
             MinionStart(
-                minion="tests.assets.minions.two_steps.resourced_b",
+                minion="tests.assets.minions.two_steps.counter.resourced_b",
                 minion_config_path=cfg2,
                 pipeline=pipeline2,
                 expect=MinionRunSpec(),
             ),
             MinionStart(
-                minion="tests.assets.minions.two_steps.resourced_c",
+                minion="tests.assets.minions.two_steps.counter.resourced_c",
                 minion_config_path=cfg3,
                 pipeline=pipeline3,
                 expect=MinionRunSpec(),
@@ -333,23 +333,23 @@ class TestValidUsageDSL:
         cfg1 = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
         cfg2 = str(tests_dir / "assets" / "config" / "minions" / "b.toml")
         cfg3 = str(tests_dir / "assets" / "config" / "minions" / "c.toml")
-        pipeline_modpath = "tests.assets.pipelines.sync.sync_3subs_1event"
+        pipeline_modpath = "tests.assets.pipelines.sync.counter.sync_3subs_1event"
 
         directives = [
             MinionStart(
-                minion="tests.assets.minions.two_steps.resourced",
+                minion="tests.assets.minions.two_steps.counter.resourced",
                 minion_config_path=cfg1,
                 pipeline=pipeline_modpath,
                 expect=MinionRunSpec(),
             ),
             MinionStart(
-                minion="tests.assets.minions.two_steps.resourced_shared_b",
+                minion="tests.assets.minions.two_steps.counter.resourced_shared_b",
                 minion_config_path=cfg2,
                 pipeline=pipeline_modpath,
                 expect=MinionRunSpec(),
             ),
             MinionStart(
-                minion="tests.assets.minions.two_steps.resourced_shared_c",
+                minion="tests.assets.minions.two_steps.counter.resourced_shared_c",
                 minion_config_path=cfg3,
                 pipeline=pipeline_modpath,
                 expect=MinionRunSpec(),
@@ -375,11 +375,11 @@ class TestValidUsageDSL:
         self, gru, logger, metrics, state_store, tests_dir
     ):
         cfg1 = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
-        pipeline_modpath = "tests.assets.pipelines.resourced.with_fixed_resource"
+        pipeline_modpath = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
 
         directives = [
             MinionStart(
-                minion="tests.assets.minions.two_steps.resourced",
+                minion="tests.assets.minions.two_steps.counter.resourced",
                 minion_config_path=cfg1,
                 pipeline=pipeline_modpath,
                 expect=MinionRunSpec(),
@@ -403,11 +403,11 @@ class TestValidUsageDSL:
         self, gru, logger, metrics, state_store, tests_dir
     ):
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
-        pipeline_modpath = "tests.assets.pipelines.emit1.emit_1"
+        pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
 
         directives = [
             MinionStart(
-                minion="tests.assets.minions.two_steps.basic",
+                minion="tests.assets.minions.two_steps.counter.basic",
                 minion_config_path=config_path,
                 pipeline=pipeline_modpath,
                 expect=MinionRunSpec(),
@@ -440,8 +440,8 @@ class TestValidUsageUsingNewAssetsDSL:
     async def test_gru_start_stop_minion(
         self, gru, logger, metrics, state_store, tests_dir
     ):
-        minion_modpath = "tests.assets.minions.two_steps.basic"
-        pipeline_modpath = "tests.assets.pipelines.emit1.emit_1"
+        minion_modpath = "tests.assets.minions.two_steps.counter.basic"
+        pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
         directives: list[Directive] = [
@@ -469,8 +469,8 @@ class TestValidUsageUsingNewAssetsDSL:
     async def test_gru_start_minion_shutdown_without_stop(
         self, gru, logger, metrics, state_store, tests_dir
     ):
-        minion_modpath = "tests.assets.minions.two_steps.basic"
-        pipeline_modpath = "tests.assets.pipelines.emit1.emit_1"
+        minion_modpath = "tests.assets.minions.two_steps.counter.basic"
+        pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
         directives: list[Directive] = [
@@ -497,13 +497,13 @@ class TestValidUsageUsingNewAssetsDSL:
     async def test_gru_start_3_minions_3_pipelines_3_resources_no_sharing(
         self, gru, logger, metrics, state_store, tests_dir
     ):
-        minion1 = "tests.assets.minions.two_steps.resourced"
-        minion2 = "tests.assets.minions.two_steps.resourced_b"
-        minion3 = "tests.assets.minions.two_steps.resourced_c"
+        minion1 = "tests.assets.minions.two_steps.counter.resourced"
+        minion2 = "tests.assets.minions.two_steps.counter.resourced_b"
+        minion3 = "tests.assets.minions.two_steps.counter.resourced_c"
 
-        pipeline1 = "tests.assets.pipelines.emit1.emit_1_a"
-        pipeline2 = "tests.assets.pipelines.emit1.emit_1_b"
-        pipeline3 = "tests.assets.pipelines.emit1.emit_1_c"
+        pipeline1 = "tests.assets.pipelines.emit1.counter.emit_1_a"
+        pipeline2 = "tests.assets.pipelines.emit1.counter.emit_1_b"
+        pipeline3 = "tests.assets.pipelines.emit1.counter.emit_1_c"
 
         cfg1 = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
         cfg2 = str(tests_dir / "assets" / "config" / "minions" / "b.toml")
@@ -535,10 +535,10 @@ class TestValidUsageUsingNewAssetsDSL:
     async def test_gru_start_3_minions_1_pipeline_1_resource_sharing(
         self, gru, logger, metrics, state_store, tests_dir
     ):
-        minion_a = "tests.assets.minions.two_steps.resourced"
-        minion_b = "tests.assets.minions.two_steps.resourced_shared_b"
-        minion_c = "tests.assets.minions.two_steps.resourced_shared_c"
-        pipeline_modpath = "tests.assets.pipelines.sync.sync_3subs_1event"
+        minion_a = "tests.assets.minions.two_steps.counter.resourced"
+        minion_b = "tests.assets.minions.two_steps.counter.resourced_shared_b"
+        minion_c = "tests.assets.minions.two_steps.counter.resourced_shared_c"
+        pipeline_modpath = "tests.assets.pipelines.sync.counter.sync_3subs_1event"
 
         cfg1 = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
         cfg2 = str(tests_dir / "assets" / "config" / "minions" / "b.toml")
@@ -568,8 +568,8 @@ class TestValidUsageUsingNewAssetsDSL:
     async def test_minion_and_pipeline_share_resource_dependency(
         self, gru, logger, metrics, state_store, reload_pipeline_module, tests_dir
     ):
-        minion_modpath = "tests.assets.minions.two_steps.resourced"
-        pipeline_modpath = "tests.assets.pipelines.resourced.with_fixed_resource"
+        minion_modpath = "tests.assets.minions.two_steps.counter.resourced"
+        pipeline_modpath = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
         reload_pipeline_module(pipeline_modpath)
 

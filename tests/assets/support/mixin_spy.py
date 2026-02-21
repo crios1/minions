@@ -298,7 +298,7 @@ class SpyMixin(Mixin):
             current = getattr(cls, '_mspy_counts', {}).get(name, 0)
             if current >= count:
                 return
-            target = current + count
+            target = count
             cls._mspy_waiters.setdefault(name, []).append((target, fut))
 
         try:

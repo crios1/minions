@@ -2,7 +2,7 @@ from minions import minion_step
 from minions._internal._domain.exceptions import AbortWorkflow
 
 from tests.assets.support.minion_spied import SpiedMinion
-from tests.assets.support.event_counter import CounterEvent
+from tests.assets.events.counter import CounterEvent
 
 
 class AbortStepMinion(SpiedMinion[CounterEvent, dict]):
