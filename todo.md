@@ -38,6 +38,7 @@
 - todo: refactor tests/assets naming + organization for long-term maintainability
   - decision:
     - directory-first taxonomy; no hand-maintained manifest
+    - execution style: atomic migration slices (rename/review/settle -> update tests -> run suite)
   - goals:
     - scale to ~100–200 assets without filename bloat or collisions
     - encode intent in paths + semantic names; avoid “mystery variants”
@@ -45,7 +46,7 @@
   - conventions:
     - layout is the primary index:
       - `tests/assets/<kind>/<scenario_family>/...`
-      - kinds: `pipelines/`, `minions/`, `resources/`, `workflow_files/`, `config/`, `support/`
+      - kinds: `pipelines/`, `minions/`, `resources/`, `entrypoints/`, `config/`, `support/`
       - `scenario_family` = the human-meaningful scenario bucket (e.g. `emit1`, `emit_loop`, `on_simple_event`, `invalid_explicit`, etc.)
     - filenames are short + semantic:
       - `tests/assets/<...>/<case>.py` (snake_case)
@@ -62,6 +63,17 @@
       - examples for each kind
       - when to use `_a/_b/_c` clones
       - where invalid fixtures live and how to name them
+  - deterministic orchestration note:
+    - determinism is an orchestration property, not a generic asset property.
+    - currently determinism is achieved by sync-style pipeline behavior (pipelines that emit only after expected subscriptions are present).
+    - this sync behavior exists to enable deterministic orchestration verification.
+  - migration order:
+    - create new layout first in `tests/assets_revamp/`
+    - migrate assets into `tests/assets_revamp/`
+    - update tests/imports to `tests/assets_revamp/...`
+    - run suite and review
+    - do not delete old paths during this phase
+    - once fully reviewed/approved, decide deletions/cleanup in a follow-up pass
   - convo:
     - https://chatgpt.com/c/693f9bc9-c46c-8327-bd5a-c9b38f45859b
 

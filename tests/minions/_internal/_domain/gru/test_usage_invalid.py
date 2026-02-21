@@ -250,18 +250,18 @@ class TestInvalidUsageUsingNewAssetsDSL:
     async def test_gru_returns_error_when_starting_running_minion(
         self, gru, logger, metrics, state_store, tests_dir
     ):
-        config_path = str(tests_dir / "assets_new" / "minion_config_a.toml")
-        pipeline_modpath = "tests.assets_new.pipeline_emit_1"
+        config_path = str(tests_dir / "assets_revamp" / "config" / "minions" / "a.toml")
+        pipeline_modpath = "tests.assets_revamp.pipelines.emit1.emit_1"
 
         directives = [
             MinionStart(
-                minion="tests.assets_new.minion_two_steps",
+                minion="tests.assets_revamp.minions.two_steps.basic",
                 minion_config_path=config_path,
                 pipeline=pipeline_modpath,
                 expect=MinionRunSpec(),
             ),
             MinionStart(
-                minion="tests.assets_new.minion_two_steps",
+                minion="tests.assets_revamp.minions.two_steps.basic",
                 minion_config_path=config_path,
                 pipeline=pipeline_modpath,
                 expect_success=False,
@@ -301,13 +301,13 @@ class TestInvalidUsageUsingNewAssetsDSL:
     async def test_gru_returns_error_when_mismatched_minion_and_pipeline_event_types(
         self, gru, logger, metrics, state_store, tests_dir
     ):
-        config_path = str(tests_dir / "assets_new" / "minion_config_a.toml")
+        config_path = str(tests_dir / "assets_revamp" / "config" / "minions" / "a.toml")
 
         directives = [
             MinionStart(
-                minion="tests.assets_new.minion_two_steps",
+                minion="tests.assets_revamp.minions.two_steps.basic",
                 minion_config_path=config_path,
-                pipeline="tests.assets_new.pipeline_dict_event",
+                pipeline="tests.assets_revamp.pipelines.types.dict_event",
                 expect_success=False,
             ),
             GruShutdown(expect_success=True),
@@ -383,9 +383,9 @@ class TestInvalidUsageUsingNewAssets:
     async def test_gru_returns_error_when_starting_running_minion(
         self, gru_factory, tests_dir
     ):
-        minion_modpath = "tests.assets_new.minion_two_steps"
-        pipeline_modpath = "tests.assets_new.pipeline_emit_1"
-        config_path = str(tests_dir / "assets_new" / "minion_config_a.toml")
+        minion_modpath = "tests.assets_revamp.minions.two_steps.basic"
+        pipeline_modpath = "tests.assets_revamp.pipelines.emit1.emit_1"
+        config_path = str(tests_dir / "assets_revamp" / "config" / "minions" / "a.toml")
 
         async with gru_factory(state_store=NoOpStateStore(), logger=ConsoleLogger(), metrics=NoOpMetrics()) as gru:
             result1 = await gru.start_minion(
@@ -420,9 +420,9 @@ class TestInvalidUsageUsingNewAssets:
 
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_mismatched_minion_and_pipeline_event_types(self, gru_factory, tests_dir):
-        minion_modpath = "tests.assets_new.minion_two_steps"
-        pipeline_modpath = "tests.assets_new.pipeline_dict_event"
-        config_path = str(tests_dir / "assets_new" / "minion_config_a.toml")
+        minion_modpath = "tests.assets_revamp.minions.two_steps.basic"
+        pipeline_modpath = "tests.assets_revamp.pipelines.types.dict_event"
+        config_path = str(tests_dir / "assets_revamp" / "config" / "minions" / "a.toml")
 
         async with gru_factory(state_store=NoOpStateStore(), logger=ConsoleLogger(), metrics=NoOpMetrics()) as gru:
             result = await gru.start_minion(
