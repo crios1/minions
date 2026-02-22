@@ -121,3 +121,20 @@ def test_scenario_plan_raises_when_pipeline_event_count_is_not_int():
 
     with pytest.raises(ValueError, match="must be an int"):
         ScenarioPlan([d1], pipeline_event_counts={"p1": 1.5})  # type: ignore[arg-type]
+
+
+def test_scenario_plan_raises_when_reusing_same_directive_instance():
+    shared = MinionStart(minion="m1", pipeline="p1")
+
+    with pytest.raises(ValueError, match="Directives must be unique instances"):
+        ScenarioPlan([Concurrent(shared, shared)], pipeline_event_counts={"p1": 1})
+
+
+def test_scenario_plan_copies_directives_input_list():
+    directives = [MinionStop(name_or_instance_id="m1", expect_success=True)]
+    plan = ScenarioPlan(directives, pipeline_event_counts={})
+
+    directives.append(GruShutdown(expect_success=True))
+
+    assert len(plan.directives) == 1
+    assert len(plan.flat_directives) == 1

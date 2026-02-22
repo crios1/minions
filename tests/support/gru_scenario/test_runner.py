@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -9,7 +10,7 @@ from tests.support.gru_scenario.directives import (
     WaitWorkflows,
 )
 from tests.support.gru_scenario.plan import ScenarioPlan
-from tests.support.gru_scenario.runner import ScenarioRunner
+from tests.support.gru_scenario.runner import ScenarioRunResult, ScenarioRunner, ScenarioWaiter, SpyRegistry
 
 
 TESTS_DIR = Path(__file__).resolve().parents[2]
@@ -123,3 +124,54 @@ async def test_runner_wait_workflows_subset_handles_mixed_success_and_failure(gr
     assert sum(1 for r in result.receipts if r.success) == 1
     assert sum(1 for r in result.receipts if not r.success) == 1
     assert len(result.started_minions) == 1
+
+
+@pytest.mark.asyncio
+async def test_wait_minion_tasks_times_out_instead_of_blocking_indefinitely(gru):
+    class _DummyMinion:
+        def __init__(self):
+            self._mn_tasks_lock = asyncio.Lock()
+            self._mn_tasks: set[asyncio.Task] = set()
+            self._mn_aux_tasks: set[asyncio.Task] = set()
+
+    plan = ScenarioPlan([], pipeline_event_counts={})
+    waiter = ScenarioWaiter(
+        plan,
+        ScenarioRunner(gru, plan, per_verification_timeout=0.01)._insp,
+        timeout=0.01,
+        spies=SpyRegistry(),
+        result=ScenarioRunResult(),
+    )
+
+    dummy = _DummyMinion()
+    task = asyncio.create_task(asyncio.sleep(60), name="never-finishes")
+    dummy._mn_tasks.add(task)
+
+    try:
+        with pytest.raises(pytest.fail.Exception, match="WaitWorkflows timed out"):
+            await waiter._wait_minion_tasks({dummy})  # type: ignore[arg-type]
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+
+@pytest.mark.asyncio
+async def test_wait_workflows_named_lookup_is_scenario_local_only(gru, monkeypatch):
+    plan = ScenarioPlan([], pipeline_event_counts={})
+    runner = ScenarioRunner(gru, plan, per_verification_timeout=0.1)
+    waiter = ScenarioWaiter(
+        plan,
+        runner._insp,
+        timeout=0.1,
+        spies=SpyRegistry(),
+        result=ScenarioRunResult(),
+    )
+
+    def _should_not_be_called(*_args, **_kwargs):
+        raise AssertionError("runtime-global lookup must not be used by WaitWorkflows")
+
+    monkeypatch.setattr(waiter._insp, "get_minions_by_name", _should_not_be_called)
+
+    with pytest.raises(pytest.fail.Exception, match="Unknown minion names in WaitWorkflows"):
+        await waiter.wait(minion_names={"not-started-in-scenario"})

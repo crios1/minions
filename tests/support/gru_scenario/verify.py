@@ -230,10 +230,11 @@ class ScenarioVerifier:
                         f"Unknown workflow resolution '{status}' for {receipt.minion_modpath}"
                     )
                 actual = counts[status]
-                assert actual == expected_count, (
-                    f"{receipt.minion_modpath} workflow {status} mismatch: "
-                    f"expected {expected_count}, got {actual}"
-                )
+                if actual != expected_count:
+                    raise AssertionError(
+                        f"{receipt.minion_modpath} workflow {status} mismatch: "
+                        f"expected {expected_count}, got {actual}"
+                    )
 
     def _assert_pipeline_events(self) -> None:
         spies = self._require_spies()

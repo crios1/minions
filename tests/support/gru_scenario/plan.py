@@ -15,8 +15,9 @@ class ScenarioPlan:
         *,
         pipeline_event_counts: dict[str, int],
     ) -> None:
-        self.directives = directives
-        self.flat_directives = list(iter_directives_flat(directives))
+        self.directives = list(directives)
+        self.flat_directives = list(iter_directives_flat(self.directives))
+        self._validate_unique_directive_instances()
         self.directive_index_map = {id(d): idx for idx, d in enumerate(self.flat_directives)}
         self.pipeline_event_targets = dict(pipeline_event_counts)
         self._validate()
@@ -52,3 +53,26 @@ class ScenarioPlan:
                 "pipeline_event_counts contains entries for pipelines not started in directives: "
                 + ", ".join(unused)
             )
+
+    def _validate_unique_directive_instances(self) -> None:
+        indices_by_id: dict[int, list[int]] = {}
+        for idx, directive in enumerate(self.flat_directives):
+            indices_by_id.setdefault(id(directive), []).append(idx)
+
+        collisions = [
+            (self.flat_directives[idxs[0]], idxs)
+            for idxs in indices_by_id.values()
+            if len(idxs) > 1
+        ]
+        if not collisions:
+            return
+
+        parts = [
+            f"{type(directive).__name__} at flat indices {idxs}"
+            for directive, idxs in collisions
+        ]
+        raise ValueError(
+            "Directives must be unique instances in a ScenarioPlan; "
+            "reusing the same directive object is not supported: "
+            + "; ".join(parts)
+        )

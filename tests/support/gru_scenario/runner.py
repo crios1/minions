@@ -155,7 +155,8 @@ class ScenarioRunner:
     async def _run_start(self, d: MinionStart) -> None:
         result = self._require_result()
         r = await self._gru.start_minion(**d.as_kwargs())
-        assert r.success == d.expect_success, f"start_minion mismatch: {d} -> {r}"
+        if r.success != d.expect_success:
+            raise AssertionError(f"start_minion mismatch: {d} -> {r}")
 
         receipt = StartReceipt(
             directive_index=self._plan.directive_index(d),
@@ -189,12 +190,14 @@ class ScenarioRunner:
 
     async def _run_stop(self, d: MinionStop) -> None:
         r = await self._gru.stop_minion(**d.as_kwargs())
-        assert r.success == d.expect_success, f"stop_minion mismatch: {d} -> {r}"
+        if r.success != d.expect_success:
+            raise AssertionError(f"stop_minion mismatch: {d} -> {r}")
 
     async def _run_shutdown(self, d: GruShutdown) -> None:
         result = self._require_result()
         r = await self._gru.shutdown()
-        assert r.success == d.expect_success, f"shutdown mismatch: expected {d.expect_success}, got {r}"
+        if r.success != d.expect_success:
+            raise AssertionError(f"shutdown mismatch: expected {d.expect_success}, got {r}")
         result.seen_shutdown = r.success
 
     async def _wait_workflows(self, minion_names: set[str] | None) -> None:
@@ -282,25 +285,7 @@ class ScenarioWaiter:
                 if receipts:
                     self._add_expected_for_receipts(expected_per_class, receipts)
                     continue
-
-                minions = self._insp.get_minions_by_name(name)
-                if not minions:
-                    missing.append(name)
-                    continue
-
-                for minion in minions:
-                    m_cls = type(minion)
-                    if not issubclass(m_cls, SpiedMinion):
-                        continue
-                    pipeline_modpath = self._insp.get_pipeline_modpath_for_minion(minion._mn_minion_instance_id)
-                    expected_events = (
-                        self._plan.pipeline_event_targets.get(pipeline_modpath)
-                        if pipeline_modpath is not None
-                        else None
-                    )
-                    if expected_events is None:
-                        continue
-                    expected_per_class[m_cls] += expected_events
+                missing.append(name)
 
             if missing:
                 pytest.fail(f"Unknown minion names in WaitWorkflows: {missing}")
@@ -339,11 +324,14 @@ class ScenarioWaiter:
         deadline = loop.time() + self._timeout
 
         while True:
+            # todo: consider making Minion._mn_* methods that centralize testing utilitizes that depend on Minion's implementation
             waits: list[asyncio.Future] = []
+            pending_tasks: list[asyncio.Task] = []
             for m in minions:
                 async with m._mn_tasks_lock:
                     tasks = list(m._mn_tasks | m._mn_aux_tasks)
                 if tasks:
+                    pending_tasks.extend(tasks)
                     waits.append(asyncio.gather(*tasks, return_exceptions=True))
 
             if not waits:
@@ -351,7 +339,23 @@ class ScenarioWaiter:
 
             remaining = deadline - loop.time()
             if remaining <= 0:
-                await asyncio.gather(*waits)
-                return
+                names = [
+                    task.get_name() if hasattr(task, "get_name") else "task"
+                    for task in pending_tasks
+                ]
+                pytest.fail(
+                    "WaitWorkflows timed out while waiting for minion tasks to complete. "
+                    f"Pending tasks={len(pending_tasks)} names={names}"
+                )
 
-            await asyncio.wait_for(asyncio.gather(*waits), timeout=remaining)
+            try:
+                await asyncio.wait_for(asyncio.gather(*waits), timeout=remaining)
+            except asyncio.TimeoutError:
+                names = [
+                    task.get_name() if hasattr(task, "get_name") else "task"
+                    for task in pending_tasks
+                ]
+                pytest.fail(
+                    "WaitWorkflows timed out while waiting for minion tasks to complete. "
+                    f"Pending tasks={len(pending_tasks)} names={names}"
+                )

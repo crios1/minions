@@ -9,6 +9,11 @@
 -->
 
 ### Test Suite:
+- todo: audit `assert` usage across the codebase and replace runtime/library assertions with explicit check-raise wiring (`if ...: raise ...`)
+  - scope:
+    - keep `assert` in tests where pytest introspection is desired
+    - replace `assert` in runtime/support code paths where behavior must remain enforced under `python -O` / `-OO`
+
 - todo: harden test_gru.py:
   - steps:
     - complete the robust reuseable gru testing routine
