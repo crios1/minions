@@ -149,7 +149,7 @@ class ScenarioVerifier:
         state_store_counts = type(self._state_store).get_call_counts()
         get_all_calls = state_store_counts.get("get_all_contexts", 0)
         if get_all_calls > minion_starts:
-            raise AssertionError(
+            pytest.fail(
                 "StateStore.get_all_contexts called more times than minion starts: "
                 f"{get_all_calls} > {minion_starts}"
             )
@@ -226,12 +226,12 @@ class ScenarioVerifier:
 
             for status, expected_count in expected.items():
                 if status not in counts:
-                    raise AssertionError(
+                    pytest.fail(
                         f"Unknown workflow resolution '{status}' for {receipt.minion_modpath}"
                     )
                 actual = counts[status]
                 if actual != expected_count:
-                    raise AssertionError(
+                    pytest.fail(
                         f"{receipt.minion_modpath} workflow {status} mismatch: "
                         f"expected {expected_count}, got {actual}"
                     )
@@ -256,26 +256,26 @@ class ScenarioVerifier:
             min_inits = 1 if successes > 0 else 0
             max_inits = attempts
             if actual_inits < min_inits or actual_inits > max_inits:
-                raise AssertionError(
+                pytest.fail(
                     f"{p_cls.__name__} __init__ mismatch: expected {min_inits}..{max_inits}, got {actual_inits}"
                 )
 
             actual_startup = counts.get("startup", 0)
             if actual_startup < min_started or actual_startup > max_started:
-                raise AssertionError(
+                pytest.fail(
                     f"{p_cls.__name__} startup mismatch: expected {min_started}..{max_started}, got {actual_startup}"
                 )
 
             actual_run = counts.get("run", 0)
             if actual_run < min_started or actual_run > actual_startup:
-                raise AssertionError(
+                pytest.fail(
                     f"{p_cls.__name__} run mismatch: expected {min_started}..{actual_startup}, got {actual_run}"
                 )
 
             if self._result.seen_shutdown:
                 actual_shutdown = counts.get("shutdown", 0)
                 if actual_shutdown < 0 or actual_shutdown > actual_startup:
-                    raise AssertionError(
+                    pytest.fail(
                         f"{p_cls.__name__} shutdown mismatch: expected 0..{actual_startup}, got {actual_shutdown}"
                     )
 
@@ -283,12 +283,12 @@ class ScenarioVerifier:
                 actual = counts.get("produce_event", 0)
                 if successes > 0:
                     if actual not in (expected_events, expected_events + 1):
-                        raise AssertionError(
+                        pytest.fail(
                             f"{p_cls.__name__} produce_event mismatch: "
                             f"expected {expected_events} or {expected_events + 1}, got {actual}"
                         )
                 elif actual != 0:
-                    raise AssertionError(
+                    pytest.fail(
                         f"{p_cls.__name__} produce_event mismatch: expected 0 when no starts succeeded, got {actual}"
                     )
 
@@ -319,7 +319,7 @@ class ScenarioVerifier:
                 )
                 for cls, counts in call_counts.items()
             ])
-        except Exception as e:
+        except Exception:
             mismatches: list[str] = []
             for cls, expected in call_counts.items():
                 actual = cls.get_call_counts()
@@ -330,7 +330,7 @@ class ScenarioVerifier:
                 }
                 if diff:
                     mismatches.append(f"{cls.__name__}: {diff}")
-            raise AssertionError("Call counts did not reach expected values. " + "; ".join(mismatches)) from e
+            pytest.fail("Call counts did not reach expected values. " + "; ".join(mismatches))
 
     def _assert_call_order(self, call_counts: dict[type[SpyMixin], dict[str, int]]) -> None:
         spies = self._require_spies()

@@ -22,6 +22,18 @@ This package provides a light, test-focused DSL for scripting Gru scenarios and 
   - do not add manual orchestration tests or weaker orchestration-only validations outside DSL,
   - non-DSL/weaker orchestration validation is intentionally not pursued because DSL deterministic verification eclipses its value.
 
+### Failure Semantics
+- Use `pytest.fail(...)` for scenario-contract failures:
+  - invalid scenario usage (for example unknown names/directives),
+  - timeout/verification failures,
+  - expectation mismatches between declared directives and observed runtime behavior.
+- Use `AssertionError` only for strict internal invariants in DSL internals:
+  - impossible internal state that indicates a DSL implementation bug (not a scenario-authoring issue).
+- Reasoning:
+  - scenario-contract failures should surface as explicit test failures with actionable diagnostics;
+  - internal invariants should clearly indicate framework bugs;
+  - neither category should depend on Python `assert` statements, which can be stripped under `-O`/`-OO`.
+
 ### Why DSL Deterministic Verification Eclipses Weaker Orchestration Checks
 - Deterministic DSL orchestration tests provide higher-value verification because they:
   - declare orchestration and expected outcomes up front,

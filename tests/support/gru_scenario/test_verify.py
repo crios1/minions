@@ -211,5 +211,5 @@ def test_assert_state_store_read_call_bounds_rejects_excess_get_all_calls(monkey
 
     monkeypatch.setattr(type(verifier._state_store), "get_call_counts", classmethod(lambda cls: {"get_all_contexts": 2}))
 
-    with pytest.raises(AssertionError, match="get_all_contexts called more times than minion starts"):
+    with pytest.raises(pytest.fail.Exception, match="get_all_contexts called more times than minion starts"):
         verifier._assert_state_store_read_call_bounds()

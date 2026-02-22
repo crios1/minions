@@ -117,20 +117,36 @@ class ScenarioRunner:
 
             if d.minion not in self._spies.minions:
                 m_cls = self._insp.get_minion_class(d.minion)
-                assert minion_bases and issubclass(m_cls, minion_bases)
+                if not minion_bases or not issubclass(m_cls, minion_bases):
+                    pytest.fail(
+                        "MinionStart minion must resolve to a spy-enabled minion subclass; "
+                        f"got {m_cls!r} for '{d.minion}'"
+                    )
                 self._spies.minions[d.minion] = m_cls
 
                 for r_cls in self._insp.get_all_resource_dependencies(m_cls):
-                    assert resource_bases and issubclass(r_cls, resource_bases)
+                    if not resource_bases or not issubclass(r_cls, resource_bases):
+                        pytest.fail(
+                            "Minion resource dependency must be spy-enabled; "
+                            f"got {r_cls!r} while resolving '{d.minion}'"
+                        )
                     self._spies.resources.add(r_cls)
 
             if d.pipeline not in self._spies.pipelines:
                 p_cls = self._insp.get_pipeline_class(d.pipeline)
-                assert pipeline_bases and issubclass(p_cls, pipeline_bases)
+                if not pipeline_bases or not issubclass(p_cls, pipeline_bases):
+                    pytest.fail(
+                        "MinionStart pipeline must resolve to a spy-enabled pipeline subclass; "
+                        f"got {p_cls!r} for '{d.pipeline}'"
+                    )
                 self._spies.pipelines[d.pipeline] = p_cls
 
                 for r_cls in self._insp.get_all_resource_dependencies(p_cls):
-                    assert resource_bases and issubclass(r_cls, resource_bases)
+                    if not resource_bases or not issubclass(r_cls, resource_bases):
+                        pytest.fail(
+                            "Pipeline resource dependency must be spy-enabled; "
+                            f"got {r_cls!r} while resolving '{d.pipeline}'"
+                        )
                     self._spies.resources.add(r_cls)
 
     async def _execute(self, d: Directive) -> None:
@@ -156,7 +172,7 @@ class ScenarioRunner:
         result = self._require_result()
         r = await self._gru.start_minion(**d.as_kwargs())
         if r.success != d.expect_success:
-            raise AssertionError(f"start_minion mismatch: {d} -> {r}")
+            pytest.fail(f"start_minion mismatch: {d} -> {r}")
 
         receipt = StartReceipt(
             directive_index=self._plan.directive_index(d),
@@ -191,13 +207,13 @@ class ScenarioRunner:
     async def _run_stop(self, d: MinionStop) -> None:
         r = await self._gru.stop_minion(**d.as_kwargs())
         if r.success != d.expect_success:
-            raise AssertionError(f"stop_minion mismatch: {d} -> {r}")
+            pytest.fail(f"stop_minion mismatch: {d} -> {r}")
 
     async def _run_shutdown(self, d: GruShutdown) -> None:
         result = self._require_result()
         r = await self._gru.shutdown()
         if r.success != d.expect_success:
-            raise AssertionError(f"shutdown mismatch: expected {d.expect_success}, got {r}")
+            pytest.fail(f"shutdown mismatch: expected {d.expect_success}, got {r}")
         result.seen_shutdown = r.success
 
     async def _wait_workflows(self, minion_names: set[str] | None) -> None:
