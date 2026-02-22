@@ -286,7 +286,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 self._mn_config = await self._mn_load_config(self._mn_config_path)
         
         async def _post():
-            contexts = await self._mn_state_store._load_all_contexts()
+            contexts = await self._mn_state_store._get_contexts_for_minion(
+                self._mn_minion_modpath
+            )
             if contexts:
                 await asyncio.gather( 
                     *(self._mn_run_workflow(ctx) for ctx in contexts),
@@ -341,7 +343,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     import tomllib  # Python 3.11+
                 except ImportError:
                     try:
-                        import tomli as tomllib  # fallback for <3.11
+                        import tomli as tomllib  # fallback for <3.11  # pyright: ignore[reportMissingImports]
                     except ImportError:
                         raise RuntimeError(
                             "TOML support requires Python 3.11+ or installing 'tomli'. "

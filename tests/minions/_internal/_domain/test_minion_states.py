@@ -95,3 +95,57 @@ async def test_workflow_failed_increments_failed_counter():
     assert failed_total == 1
 
     # nothing to shutdown (no Gru instance)
+
+
+@pytest.mark.asyncio
+async def test_minion_startup_replays_only_own_contexts():
+    class ReplayMinion(Minion[dict, dict]):
+        name = "replay-minion"
+
+        @minion_step
+        async def step_1(self):
+            return
+
+    logger = InMemoryLogger()
+    metrics = InMemoryMetrics()
+    state_store = InMemoryStateStore(logger=logger)
+
+    from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
+
+    state_store._contexts = {
+        "wf-own": MinionWorkflowContext(
+            minion_modpath="mock.modpath.minion_replay_own",
+            workflow_id="wf-own",
+            event={},
+            context={},
+            context_cls=dict,
+        ),
+        "wf-other": MinionWorkflowContext(
+            minion_modpath="mock.modpath.minion_replay_other",
+            workflow_id="wf-other",
+            event={},
+            context={},
+            context_cls=dict,
+        ),
+    }
+
+    m = ReplayMinion(
+        "iid",
+        "ck",
+        "mock.modpath.minion_replay_own",
+        None,
+        state_store,
+        metrics,
+        logger,
+    )
+
+    replayed_ids: list[str] = []
+
+    async def _capture(ctx):
+        replayed_ids.append(ctx.workflow_id)
+
+    m._mn_run_workflow = _capture  # type: ignore[method-assign]
+
+    await m._mn_startup()
+
+    assert replayed_ids == ["wf-own"]

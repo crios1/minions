@@ -22,6 +22,6 @@ class InMemoryStateStore(StateStore, SpyMixin):
         async with self._lock:
             self._contexts.pop(workflow_id, None)
 
-    async def load_all_contexts(self) -> list[MinionWorkflowContext]:
+    async def get_all_contexts(self) -> list[MinionWorkflowContext]:
         async with self._lock:
             return list(self._contexts.values())

@@ -11,10 +11,15 @@ from tests.support.gru_scenario.runner import ScenarioRunResult, SpyRegistry, St
 from tests.support.gru_scenario.verify import ScenarioVerifier
 
 
-def _mk_verifier(plan: ScenarioPlan, result: ScenarioRunResult) -> ScenarioVerifier:
+def _mk_verifier(
+    plan: ScenarioPlan,
+    result: ScenarioRunResult,
+    *,
+    state_store: InMemoryStateStore | None = None,
+) -> ScenarioVerifier:
     logger = InMemoryLogger()
     metrics = InMemoryMetrics()
-    state_store = InMemoryStateStore(logger=logger)
+    state_store = state_store or InMemoryStateStore(logger=logger)
     return ScenarioVerifier(
         plan,
         result,
@@ -89,13 +94,51 @@ def test_build_expected_call_counts_state_store_formula_for_mixed_success_and_fa
     state_store_counts = expected.call_counts[type(verifier._state_store)]
 
     # one successful start, two workflows, two steps per workflow
-    assert state_store_counts["load_all_contexts"] == 1
-    assert state_store_counts["_load_all_contexts"] == 1
+    assert state_store_counts["get_contexts_for_minion"] == 1
+    assert state_store_counts["_get_contexts_for_minion"] == 1
+    assert "get_all_contexts" not in state_store_counts
     assert state_store_counts["save_context"] == 6
     assert state_store_counts["_save_context"] == 4
     assert state_store_counts["delete_context"] == 2
     assert state_store_counts["_delete_context"] == 2
     assert state_store_counts["shutdown"] == 1
+
+
+@pytest.mark.asyncio
+async def test_build_expected_call_counts_does_not_require_get_all_for_overridden_context_lookup():
+    class IndexedStateStore(InMemoryStateStore):
+        async def get_contexts_for_minion(self, minion_modpath: str):
+            return []
+
+    directives = [
+        MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-ok", "ok", TwoStepMinion, True),
+        ],
+    )
+
+    verifier = _mk_verifier(
+        plan,
+        result,
+        state_store=IndexedStateStore(logger=InMemoryLogger()),
+    )
+    expected = verifier._build_expected_call_counts()
+    state_store_counts = expected.call_counts[type(verifier._state_store)]
+
+    assert state_store_counts["get_contexts_for_minion"] == 1
+    assert state_store_counts["_get_contexts_for_minion"] == 1
+    assert "get_all_contexts" not in state_store_counts
 
 
 def test_assert_workflow_resolutions_uses_instance_id_filtering():
@@ -144,3 +187,29 @@ def test_assert_call_order_reports_extra_calls_with_details():
 
     with pytest.raises(pytest.fail.Exception, match="Unexpected extra calls detected:"):
         verifier._assert_call_order(call_counts={})
+
+
+def test_assert_state_store_read_call_bounds_rejects_excess_get_all_calls(monkeypatch):
+    directives = [
+        MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-ok", "ok", TwoStepMinion, True),
+        ],
+    )
+    verifier = _mk_verifier(plan, result)
+
+    monkeypatch.setattr(type(verifier._state_store), "get_call_counts", classmethod(lambda cls: {"get_all_contexts": 2}))
+
+    with pytest.raises(AssertionError, match="get_all_contexts called more times than minion starts"):
+        verifier._assert_state_store_read_call_bounds()

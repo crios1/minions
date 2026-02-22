@@ -74,7 +74,7 @@ async def test_save_coalesces_and_debounce(store):
     await s.save_context(mk_ctx(i=2))
     await wait_flush(s)
     assert len(s._batch) == 0
-    rows = await s.load_all_contexts()
+    rows = await s.get_all_contexts()
     ids = {r.workflow_id for r in rows}
     assert {"wf-1", "wf-2"}.issubset(ids)
 
@@ -86,7 +86,7 @@ async def test_flush_on_batch_cap(store):
         await s.save_context(mk_ctx(i=i))
     # immediate flush because size cap
     assert len(s._batch) == 0
-    rows = await s.load_all_contexts()
+    rows = await s.get_all_contexts()
     assert len(rows) >= 3
 
 async def test_large_state_warning(store):
@@ -126,7 +126,7 @@ async def test_shutdown_flushes(store):
     logger2 = InMemoryLogger()
     s2 = SQLiteStateStore(db_path=s.db_path, logger=logger2)
     await s2.startup()
-    rows = await s2.load_all_contexts()
+    rows = await s2.get_all_contexts()
     await s2.shutdown()
     assert any(r.workflow_id == "wf-42" for r in rows)
 
@@ -135,11 +135,11 @@ async def test_delete_context_removes_row(store):
     c = mk_ctx(i=77)
     await s.save_context(c)
     await wait_flush(s)
-    rows = await s.load_all_contexts()
+    rows = await s.get_all_contexts()
     assert any(r.workflow_id == "wf-77" for r in rows)
 
     await s.delete_context("wf-77")
-    rows2 = await s.load_all_contexts()
+    rows2 = await s.get_all_contexts()
     assert all(r.workflow_id != "wf-77" for r in rows2)
 
 async def test_commit_p95_warning(store, monkeypatch):

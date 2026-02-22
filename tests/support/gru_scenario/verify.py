@@ -84,6 +84,7 @@ class ScenarioVerifier:
         unpin_fns: list[Callable[[], None]] = []
         try:
             unpin_fns = await self._pin_and_assert_calls(expected.call_counts, expected.allow_unlisted)
+            self._assert_state_store_read_call_bounds()
             self._assert_call_order(expected.call_counts)
         finally:
             for unpin in unpin_fns:
@@ -128,8 +129,8 @@ class ScenarioVerifier:
         ss = {
             "__init__": 1,
             "startup": 1,
-            "load_all_contexts": minion_starts,
-            "_load_all_contexts": minion_starts,
+            "get_contexts_for_minion": minion_starts,
+            "_get_contexts_for_minion": minion_starts,
             "save_context": workflows_started + workflow_steps,
             "_save_context": workflow_steps,
             "delete_context": workflows_started,
@@ -140,6 +141,18 @@ class ScenarioVerifier:
         call_counts[type(self._state_store)] = ss
 
         return ExpectedCallCounts(call_counts=call_counts, allow_unlisted=allow_unlisted)
+
+    def _assert_state_store_read_call_bounds(self) -> None:
+        spies = self._require_spies()
+        expectations = self._compute_minion_expectations(spies)
+        minion_starts = sum(expectations.minion_start_counts.values())
+        state_store_counts = type(self._state_store).get_call_counts()
+        get_all_calls = state_store_counts.get("get_all_contexts", 0)
+        if get_all_calls > minion_starts:
+            raise AssertionError(
+                "StateStore.get_all_contexts called more times than minion starts: "
+                f"{get_all_calls} > {minion_starts}"
+            )
 
     def _compute_minion_expectations(
         self,

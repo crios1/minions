@@ -359,7 +359,7 @@ class SQLiteStateStore(StateStore):
         await self._db.execute("DELETE FROM workflows WHERE workflow_id = ?", (workflow_id,))  # type: ignore
         await self._db.commit() # type: ignore
 
-    async def load_all_contexts(self) -> List[MinionWorkflowContext]:
+    async def get_all_contexts(self) -> List[MinionWorkflowContext]:
         await self._flush()
         async with self._db.execute("SELECT context_json FROM workflows") as c: # type: ignore
             rows = await c.fetchall()
@@ -371,7 +371,7 @@ class SQLiteStateStore(StateStore):
                 out.append(deserialize_context(blob))
             except Exception as e:
                 await self._mn_logger._log(
-                    ERROR, f"{type(self).__name__}.load_all_contexts deserialize failed",
+                    ERROR, f"{type(self).__name__}.get_all_contexts deserialize failed",
                     error_type=type(e).__name__,
                     error_message=str(e),
                     traceback="".join(traceback.format_exception(type(e), e, e.__traceback__))

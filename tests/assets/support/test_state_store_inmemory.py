@@ -26,15 +26,15 @@ async def test_inmemory_state_store_crud():
     await store.save_context(ctx1)
     await store.save_context(ctx2)
 
-    contexts = await store.load_all_contexts()
+    contexts = await store.get_all_contexts()
     workflow_ids = {ctx.workflow_id for ctx in contexts}
     assert workflow_ids == {"wf1", "wf2"}
 
     await store.delete_context("wf1")
-    contexts = await store.load_all_contexts()
+    contexts = await store.get_all_contexts()
     workflow_ids = {ctx.workflow_id for ctx in contexts}
     assert workflow_ids == {"wf2"}
 
     await store.delete_context("wf2")
-    contexts = await store.load_all_contexts()
+    contexts = await store.get_all_contexts()
     assert contexts == []

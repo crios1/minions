@@ -225,7 +225,7 @@ class SpyMixin(Mixin):
 
         Example:
             SubClass.assert_call_order([
-                '__init__', 'load_all_contexts',
+                '__init__', 'get_all_contexts',
                 'save_context', 'delete_context'
             ])
         """
