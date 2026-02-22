@@ -85,6 +85,7 @@ class ScenarioVerifier:
         try:
             unpin_fns = await self._pin_and_assert_calls(expected.call_counts, expected.allow_unlisted)
             self._assert_state_store_read_call_bounds()
+            self._assert_minion_fanout_delivery()
             self._assert_call_order(expected.call_counts)
         finally:
             for unpin in unpin_fns:
@@ -191,6 +192,32 @@ class ScenarioVerifier:
             expected_workflows_by_class=expected_workflows_by_class,
             minion_call_overrides=minion_call_overrides,
         )
+
+    def _assert_minion_fanout_delivery(self) -> None:
+        """Assert explicit per-minion fanout delivery from pipeline event targets.
+
+        For each minion class with successful starts, each workflow step is expected
+        to execute exactly once per expected workflow unless explicitly overridden.
+        """
+        spies = self._require_spies()
+        expectations = self._compute_minion_expectations(spies)
+
+        for m_cls, expected_workflows in expectations.expected_workflows_by_class.items():
+            if expected_workflows < 0:
+                pytest.fail(f"Invalid expected workflow count for {m_cls.__name__}: {expected_workflows}")
+
+            overrides = expectations.minion_call_overrides.get(m_cls, {})
+            actual_counts = m_cls.get_call_counts()
+
+            for step_name in m_cls._mn_workflow_spec:  # type: ignore
+                if step_name in overrides:
+                    continue
+                actual = actual_counts.get(step_name, 0)
+                if actual != expected_workflows:
+                    pytest.fail(
+                        f"Fanout mismatch for {m_cls.__name__}.{step_name}: "
+                        f"expected {expected_workflows} workflow calls from pipeline events, got {actual}."
+                    )
 
     def _assert_workflow_resolutions(self) -> None:
         counters = self._metrics.snapshot_counters()

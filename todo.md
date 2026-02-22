@@ -14,6 +14,12 @@
     - keep `assert` in tests where pytest introspection is desired
     - replace `assert` in runtime/support code paths where behavior must remain enforced under `python -O` / `-OO`
 
+- todo: clean up remaining DSL runtime contract edges in `tests/support/gru_scenario`
+  - replace remaining discovery-path runtime `assert` checks with explicit typed failures
+  - remove redundant legacy spy alias branch in `runner.py` once migration residue is no longer needed
+  - revisit typing/coupling for `run_gru_scenario(...)` entrypoint and document intended contract
+  - re-audit DSL hot paths to ensure no optimization-sensitive runtime `assert` checks remain
+
 - todo: harden test_gru.py:
   - steps:
     - complete the robust reuseable gru testing routine

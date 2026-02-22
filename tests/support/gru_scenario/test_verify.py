@@ -4,6 +4,7 @@ from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.assets.minions.two_steps.counter.basic import TwoStepMinion
+from tests.assets.minions.two_steps.counter.resourced import TwoStepResourcedMinion
 from tests.assets.pipelines.emit1.counter.emit_1 import Emit1Pipeline
 from tests.support.gru_scenario.directives import MinionRunSpec, MinionStart
 from tests.support.gru_scenario.plan import ScenarioPlan
@@ -213,3 +214,105 @@ def test_assert_state_store_read_call_bounds_rejects_excess_get_all_calls(monkey
 
     with pytest.raises(pytest.fail.Exception, match="get_all_contexts called more times than minion starts"):
         verifier._assert_state_store_read_call_bounds()
+
+
+def test_assert_minion_fanout_delivery_proves_pipeline_event_delivery_to_steps(monkeypatch):
+    directives = [
+        MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 2},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-ok", "ok", TwoStepMinion, True),
+        ],
+    )
+
+    verifier = _mk_verifier(plan, result)
+    monkeypatch.setattr(
+        TwoStepMinion,
+        "get_call_counts",
+        classmethod(lambda cls: {"step_1": 2, "step_2": 2}),
+    )
+
+    verifier._assert_minion_fanout_delivery()
+
+
+def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnostics(monkeypatch):
+    directives = [
+        MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        MinionStart(minion="tests.assets.minions.two_steps.counter.resourced", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 2},
+    )
+    spies = SpyRegistry(
+        minions={
+            "tests.assets.minions.two_steps.counter.basic": TwoStepMinion,
+            "tests.assets.minions.two_steps.counter.resourced": TwoStepResourcedMinion,
+        },
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-a", "a", TwoStepMinion, True),
+            StartReceipt(1, "tests.assets.minions.two_steps.counter.resourced", "tests.assets.pipelines.emit1.counter.emit_1", "id-b", "b", TwoStepResourcedMinion, True),
+        ],
+    )
+
+    verifier = _mk_verifier(plan, result)
+    monkeypatch.setattr(
+        TwoStepMinion,
+        "get_call_counts",
+        classmethod(lambda cls: {"step_1": 2, "step_2": 2}),
+    )
+    monkeypatch.setattr(
+        TwoStepResourcedMinion,
+        "get_call_counts",
+        classmethod(lambda cls: {"step_1": 1, "step_2": 2}),
+    )
+
+    with pytest.raises(pytest.fail.Exception, match="Fanout mismatch for TwoStepResourcedMinion.step_1"):
+        verifier._assert_minion_fanout_delivery()
+
+
+def test_assert_minion_fanout_delivery_respects_step_overrides(monkeypatch):
+    directives = [
+        MinionStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            expect=MinionRunSpec(minion_call_overrides={"step_1": 1}),
+        ),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 2},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-ok", "ok", TwoStepMinion, True),
+        ],
+    )
+
+    verifier = _mk_verifier(plan, result)
+    monkeypatch.setattr(
+        TwoStepMinion,
+        "get_call_counts",
+        classmethod(lambda cls: {"step_1": 1, "step_2": 2}),
+    )
+
+    verifier._assert_minion_fanout_delivery()

@@ -97,6 +97,7 @@ MinionStart(
     ),
 )
 ```
+- Use `minion_call_overrides` when workflow control flow intentionally diverges from default fanout-derived step counts (for example: conditional abort/fail paths).
 
 ## Waiting for Workflows
 - `WaitWorkflows()` waits for all workflows expected from successful starts so far.
