@@ -491,3 +491,16 @@ in all steps include when resuming a workflow from statestore
 - todo: after building all features for v0.1.0 release, read thru the docs start to finish to see if anything needs adding/updating
 
 - todo: dogfood the runtime and refine it based on findings
+
+### Consider:
+- consider: adopt a two-lane test execution model to surface intermittent runtime bugs without slowing normal dev loops
+  - lane 1 (fast): run full suite once on every change (`pytest`)
+  - lane 2 (flake/stress): run only concurrency/orchestration/lifecycle-sensitive tests in loops (`30x` for risky PRs, `100x` nightly/pre-release)
+  - rationale:
+    - recent GRU startup replay bug was only surfaced under repeated stress runs (single-pass was often green)
+    - looping all tests is too expensive/noisy, but looping high-risk tests gives strong signal for race/timing bugs
+    - policy-driven stress runs improve confidence before release while keeping day-to-day feedback fast
+  - possible implementation:
+    - maintain a small curated target list (or pytest marker like `@pytest.mark.flake`)
+    - add scripts/commands for `fast` and `flake` lanes
+    - fail-fast in flake lane with iteration index and failing test output
