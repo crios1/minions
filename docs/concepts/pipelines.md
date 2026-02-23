@@ -27,5 +27,6 @@ Guidelines from the runtime:
 ## Resources and fanout
 
 Pipelines can declare resource dependencies via type hints just like minions. Gru starts those resources first, injects them, and reuses them across subscribers.
+Events are shared fanout inputs: fanout delivers the same event object to each subscribed minion, prefer immutable event types (like frozen dataclasses) and store mutable per-workflow state in context.
 
 Each produced event increments `PIPELINE_EVENT_PRODUCED_TOTAL`. Fanout to minions increments `PIPELINE_EVENT_FANOUT_TOTAL` and is logged in debug mode for traceability.

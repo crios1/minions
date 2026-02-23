@@ -13,6 +13,7 @@ The library itself is still pre-alpha; expect churn while APIs settle.
 ## Define your domain types
 
 Pick a structured event type (dataclasses and TypedDicts are supported) and a workflow context to carry state between steps.
+Use immutable event types when possible (for example, frozen dataclasses) and keep mutable state in `WorkflowCtx`.
 
 ```python
 # my_app/types.py
