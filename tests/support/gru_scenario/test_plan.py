@@ -2,6 +2,7 @@ import pytest
 
 from tests.support.gru_scenario.directives import (
     Concurrent,
+    Directive,
     GruShutdown,
     MinionStart,
     MinionStop,
@@ -131,7 +132,7 @@ def test_scenario_plan_raises_when_reusing_same_directive_instance():
 
 
 def test_scenario_plan_copies_directives_input_list():
-    directives = [MinionStop(name_or_instance_id="m1", expect_success=True)]
+    directives: list[Directive] = [MinionStop(name_or_instance_id="m1", expect_success=True)]
     plan = ScenarioPlan(directives, pipeline_event_counts={})
 
     directives.append(GruShutdown(expect_success=True))

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from collections.abc import Sequence
 from .directives import Directive, MinionStart, iter_directives_flat
 
 
@@ -11,7 +12,7 @@ class ScenarioPlan:
 
     def __init__(
         self,
-        directives: list[Directive],
+        directives: Sequence[Directive],
         *,
         pipeline_event_counts: dict[str, int],
     ) -> None:

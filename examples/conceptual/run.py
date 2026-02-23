@@ -1,3 +1,5 @@
+# type: ignore
+
 import asyncio
 
 from minions import Gru, GruShell

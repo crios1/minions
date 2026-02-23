@@ -1,5 +1,6 @@
 import asyncio
 from collections import defaultdict
+from collections.abc import Awaitable
 from dataclasses import dataclass, field
 
 import pytest
@@ -68,7 +69,7 @@ class StartReceipt:
 class ScenarioRunResult:
     seen_shutdown: bool = False
     spies: SpyRegistry | None = None
-    started_minions: set[Minion] = field(default_factory=set)
+    started_minions: set[SpiedMinion] = field(default_factory=set)
     instance_tags: defaultdict[type[SpyMixin], set[int]] = field(default_factory=lambda: defaultdict(set))
     extra_calls: list[tuple[type[SpyMixin], tuple, dict]] = field(default_factory=list)
     receipts: list[StartReceipt] = field(default_factory=list)
@@ -199,7 +200,8 @@ class ScenarioRunner:
             receipt = StartReceipt(
                 **{**receipt.__dict__, "resolved_name": resolved_name, "minion_cls": minion_cls}
             )
-            result.started_minions.add(minion_inst)
+            if isinstance(minion_inst, SpiedMinion):
+                result.started_minions.add(minion_inst)
 
         result.receipts.append(receipt)
         self._record_instance_tags(minion_inst, d.pipeline, receipt.instance_id)
@@ -249,6 +251,8 @@ class ScenarioRunner:
 
     def _record_tag_if_present(self, inst: object | None) -> None:
         if inst is None:
+            return
+        if not isinstance(inst, SpyMixin):
             return
         tag = getattr(inst, "_mspy_instance_tag", None)
         if tag is None:
@@ -306,7 +310,7 @@ class ScenarioWaiter:
             if missing:
                 pytest.fail(f"Unknown minion names in WaitWorkflows: {missing}")
 
-        waits: list[asyncio.Future] = []
+        waits: list[Awaitable[None]] = []
         for m_cls, count in expected_per_class.items():
             if count <= 0:
                 continue
@@ -332,7 +336,7 @@ class ScenarioWaiter:
                 continue
             expected_per_class[m_cls] += expected_events
 
-    async def _wait_minion_tasks(self, minions: set[Minion]) -> None:
+    async def _wait_minion_tasks(self, minions: set[SpiedMinion]) -> None:
         if not minions:
             return
 

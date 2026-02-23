@@ -142,7 +142,7 @@ async def test_build_expected_call_counts_does_not_require_get_all_for_overridde
     assert "get_all_contexts" not in state_store_counts
 
 
-def test_assert_workflow_resolutions_uses_instance_id_filtering():
+def test_assert_workflow_resolutions_uses_instance_id_filtering(monkeypatch):
     directives = [
         MinionStart(
             minion="tests.assets.minions.two_steps.counter.basic",
@@ -166,12 +166,12 @@ def test_assert_workflow_resolutions_uses_instance_id_filtering():
     )
 
     verifier = _mk_verifier(plan, result)
-    verifier._metrics.snapshot_counters = lambda: {
+    monkeypatch.setattr(verifier._metrics, "snapshot_counters", lambda: {
         "minion_workflow_failed_total": [
             {"labels": {"minion_instance_id": "target-id"}, "value": 1},
             {"labels": {"minion_instance_id": "other-id"}, "value": 999},
         ]
-    }
+    })
 
     verifier._assert_workflow_resolutions()
 
@@ -184,7 +184,7 @@ def test_assert_call_order_reports_extra_calls_with_details():
     )
     verifier = _mk_verifier(plan, result)
     # Scope this test to the extra-call diagnostics branch only.
-    verifier._state_store._mspy_instance_tag = None
+    setattr(verifier._state_store, "_mspy_instance_tag", None)
 
     with pytest.raises(pytest.fail.Exception, match="Unexpected extra calls detected:"):
         verifier._assert_call_order(call_counts={})
