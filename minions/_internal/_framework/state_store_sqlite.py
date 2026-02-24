@@ -41,7 +41,7 @@ class SQLiteStateStore(StateStore):
     Design Goals
     ------------
     - **Single long-lived connection** tuned with WAL + synchronous=NORMAL
-    - **BLOB storage** (binary-encoded JSON)
+    - **BLOB storage** (binary-encoded payloads via `msgspec`)
     - **Micro-batching** with coalescing:
         * Buffer up to `batch_max_n` contexts or `batch_max_ms` elapsed time
         * Coalesce by workflow_id (last-write-wins within batch)

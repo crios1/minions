@@ -113,10 +113,6 @@
     - it's a check that says the user's private attr space is clean / we don't accidently ship classes where we use the private attrspace
     - don't ship the check at in the final code, just do the check in the test suite because it gives us assurance
 
-- todo: robustify / clean up minions/_internal/_utils/serialization.py and it's respective test file
-  - diff: https://chatgpt.com/codex/tasks/task_e_694a8fe5a8a883299f9aa2c9fc0294af
-  - (just make sure to copy the comment in my current serialization code to the diff since it wasn't present when the diff was created)
-
 - todo: add per-entity lifecycle locking to gru for concurrent-safe starts/stops.
   - guarantees:
     - no duplicate minion starts for the same composite key; shared pipelines/resources start once; concurrent stops don’t double-cancel.
@@ -169,6 +165,7 @@ in all steps include when resuming a workflow from statestore
 - todo: add early (best-effort) serialization validation for user-provided event and workflow context types at Pipeline / Minion definition time
   - statically check that user type annotations are supported by gru's serialization, and raise when an annotation is not
   - this is an early feedback mechanism, full serializability can only be guaranteed at runtime
+  - ensure no on-going validations; just validation once at class definition time  
 
 - todo: add "crash testing" to test suite to ensure that minions runtime does the runtime crash guarentees
 
