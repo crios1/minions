@@ -456,6 +456,71 @@ in all steps include when resuming a workflow from statestore
       - says requires Linux/macOS or WSL2
   - convo: https://chatgpt.com/c/693a8a64-55a0-8326-b383-881b36874aec
 
+### Benchmarks:
+- todo: build a benchmark harness in `benchmarks/`
+  - define repeatable workload profiles:
+    - `io_light_many` (many pipelines/minions, mostly waiting on I/O)
+    - `io_mixed` (I/O + moderate transformation)
+    - `startup_storm` (cold start of many minions at once)
+  - write run outputs to `benchmarks/results/` as json/csv
+  - capture metadata per run:
+    - git sha
+    - python version
+    - loop backend (asyncio/uvloop)
+    - machine specs
+    - timestamp
+
+- todo: measure max sustained concurrency
+  - max concurrent pipelines
+  - max concurrent minions
+  - define sustained as stable operation for N minutes without errors/backlog explosion
+
+- todo: measure throughput and latency
+  - events/sec at steady state
+  - end-to-end latency p50/p95/p99
+  - startup latency for `Gru.create` and `start_minion`
+
+- todo: measure memory footprint and stability over time
+  - rss over time (baseline + under load + long soak)
+  - detect leaks/drift across 1h+ runs
+  - include gc stats if practical
+
+- todo: compare loop backends where applicable
+  - run each benchmark with default asyncio loop
+  - run same benchmark with uvloop (if available)
+  - report deltas with same workload and hardware
+
+- todo: add cloud cost comparison against equivalent minions workload
+  - estimate monthly cost for equivalent sustained throughput/latency
+  - include assumptions:
+    - instance type
+    - region
+    - uptime model
+    - storage/network estimates
+  - include a simple break-even table
+
+- todo: benchmark an equivalent microservices baseline (narrow scope)
+  - pick one representative workflow shape
+  - implement minimal equivalent using queue + worker services
+  - compare:
+    - throughput
+    - p95/p99 latency
+    - memory
+    - operational complexity
+    - monthly cost
+
+- todo: publish a benchmark methodology doc
+  - workloads
+  - assumptions
+  - limitations
+  - fairness constraints
+  - exact commands to reproduce
+  - include a "what this does not prove" section
+
+- todo: define benchmark release gates
+  - set thresholds for p95/p99, memory ceiling, and error rate
+  - fail release checklist if regressions exceed threshold
+
 ### Docs:
 - todo: autogenerate api tree for minions module using like sphinx autodoc, autosummary, intersphinx
 
