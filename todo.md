@@ -9,11 +9,6 @@
 -->
 
 ### Test Suite:
-- todo: audit `assert` usage across the codebase and replace runtime/library assertions with explicit check-raise wiring (`if ...: raise ...`)
-  - scope:
-    - keep `assert` in tests where pytest introspection is desired
-    - replace `assert` in runtime/support code paths where behavior must remain enforced under `python -O` / `-OO`
-
 - todo: clean up remaining DSL runtime contract edges in `tests/support/gru_scenario`
   - replace remaining discovery-path runtime `assert` checks with explicit typed failures
   - remove redundant legacy spy alias branch in `runner.py` once migration residue is no longer needed
