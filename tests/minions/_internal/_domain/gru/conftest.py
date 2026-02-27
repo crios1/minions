@@ -1,14 +1,8 @@
 import importlib
-from pathlib import Path
 
 import pytest
 
 collect_ignore_glob = ["archived/*.py"]
-
-
-@pytest.fixture
-def tests_dir() -> Path:
-    return Path(__file__).resolve().parents[4]
 
 
 @pytest.fixture

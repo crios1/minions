@@ -1,6 +1,7 @@
 import contextlib
 import importlib
 import sys
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -9,6 +10,11 @@ from minions._internal._domain.gru import Gru
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
+
+
+@pytest.fixture
+def tests_dir() -> Path:
+    return Path(__file__).resolve().parent
 
 
 @pytest.fixture(autouse=True)

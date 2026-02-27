@@ -1,6 +1,4 @@
 import asyncio
-from pathlib import Path
-
 import pytest
 
 from tests.support.gru_scenario.directives import (
@@ -13,12 +11,10 @@ from tests.support.gru_scenario.plan import ScenarioPlan
 from tests.support.gru_scenario.runner import ScenarioRunResult, ScenarioRunner, ScenarioWaiter, SpyRegistry
 
 
-TESTS_DIR = Path(__file__).resolve().parents[2]
-
 
 @pytest.mark.asyncio
-async def test_runner_records_receipts_for_success_and_expected_failure(gru):
-    config_path = str(TESTS_DIR / "assets" / "config/minions/a.toml")
+async def test_runner_records_receipts_for_success_and_expected_failure(gru, tests_dir):
+    config_path = str(tests_dir / "assets" / "config/minions/a.toml")
     pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
 
     directives = [
@@ -52,11 +48,10 @@ async def test_runner_records_receipts_for_success_and_expected_failure(gru):
 
 
 @pytest.mark.asyncio
-async def test_runner_concurrent_starts_capture_started_minions_and_instance_tags(
-    gru, reload_wait_for_subs_pipeline
+async def test_runner_concurrent_starts_capture_started_minions_and_instance_tags(gru, tests_dir, reload_wait_for_subs_pipeline
 ):
-    cfg1 = str(TESTS_DIR / "assets" / "config/minions/a.toml")
-    cfg2 = str(TESTS_DIR / "assets" / "config/minions/b.toml")
+    cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
+    cfg2 = str(tests_dir / "assets" / "config/minions/b.toml")
     pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
     reload_wait_for_subs_pipeline(expected_subs=2)
 
@@ -97,8 +92,8 @@ async def test_runner_concurrent_starts_capture_started_minions_and_instance_tag
 
 
 @pytest.mark.asyncio
-async def test_runner_wait_workflows_subset_handles_mixed_success_and_failure(gru):
-    config_path = str(TESTS_DIR / "assets" / "config/minions/a.toml")
+async def test_runner_wait_workflows_subset_handles_mixed_success_and_failure(gru, tests_dir):
+    config_path = str(tests_dir / "assets" / "config/minions/a.toml")
     pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
 
     directives = [
@@ -127,7 +122,7 @@ async def test_runner_wait_workflows_subset_handles_mixed_success_and_failure(gr
 
 
 @pytest.mark.asyncio
-async def test_wait_minion_tasks_times_out_instead_of_blocking_indefinitely(gru):
+async def test_wait_minion_tasks_times_out_instead_of_blocking_indefinitely(gru, tests_dir):
     class _DummyMinion:
         def __init__(self):
             self._mn_tasks_lock = asyncio.Lock()
@@ -157,7 +152,7 @@ async def test_wait_minion_tasks_times_out_instead_of_blocking_indefinitely(gru)
 
 
 @pytest.mark.asyncio
-async def test_wait_workflows_named_lookup_is_scenario_local_only(gru, monkeypatch):
+async def test_wait_workflows_named_lookup_is_scenario_local_only(gru, tests_dir, monkeypatch):
     plan = ScenarioPlan([], pipeline_event_counts={})
     runner = ScenarioRunner(gru, plan, per_verification_timeout=0.1)
     waiter = ScenarioWaiter(
