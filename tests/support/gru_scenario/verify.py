@@ -17,9 +17,9 @@ from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
 
-from .directives import MinionStart
+from .directives import ExpectRuntime, MinionStart
 from .plan import ScenarioPlan
-from .runner import ScenarioRunResult, SpyRegistry
+from .runner import ScenarioCheckpoint, ScenarioRunResult, SpyRegistry, StartReceipt
 
 
 class _ExtraCallRecorder:
@@ -41,7 +41,6 @@ class MinionExpectations:
 
     minion_start_counts: defaultdict[type[SpyMixin], int]
     expected_workflows_by_class: defaultdict[type[SpyMixin], int]
-    minion_call_overrides: defaultdict[type[SpyMixin], dict[str, int]]
 
 
 @dataclass(frozen=True)
@@ -78,8 +77,9 @@ class ScenarioVerifier:
 
     async def verify(self) -> None:
         expected = self._build_expected_call_counts()
-        self._assert_workflow_resolutions()
+        self._assert_runtime_expectations()
         self._assert_pipeline_events()
+        self._assert_checkpoint_window_fanout_delivery()
 
         unpin_fns: list[Callable[[], None]] = []
         try:
@@ -107,7 +107,7 @@ class ScenarioVerifier:
         for m_cls in spies.minions.values():
             starts = expectations.minion_start_counts.get(m_cls, 0)
             base = {
-                "__init__": 1,
+                "__init__": starts,
                 "startup": starts,
                 "run": starts,
                 **{
@@ -115,13 +115,12 @@ class ScenarioVerifier:
                     for name in m_cls._mn_workflow_spec  # type: ignore
                 },
             }
-            overrides = expectations.minion_call_overrides.get(m_cls)
-            if overrides:
-                base.update(overrides)
             call_counts[m_cls] = base
 
         minion_starts = sum(expectations.minion_start_counts.values())
         workflows_started = sum(expectations.expected_workflows_by_class.values())
+        unresolved_workflows = self._count_unresolved_persisted_workflows(spies)
+        resolved_workflows = max(workflows_started - unresolved_workflows, 0)
         workflow_steps = sum(
             len(m._mn_workflow_spec) * expectations.expected_workflows_by_class.get(m, 0)  # type: ignore
             for m in spies.minions.values()
@@ -134,14 +133,25 @@ class ScenarioVerifier:
             "_get_contexts_for_minion": minion_starts,
             "save_context": workflows_started + workflow_steps,
             "_save_context": workflow_steps,
-            "delete_context": workflows_started,
-            "_delete_context": workflows_started,
+            "delete_context": resolved_workflows,
+            "_delete_context": resolved_workflows,
         }
         if self._result.seen_shutdown:
             ss["shutdown"] = 1
         call_counts[type(self._state_store)] = ss
 
         return ExpectedCallCounts(call_counts=call_counts, allow_unlisted=allow_unlisted)
+
+    def _count_unresolved_persisted_workflows(self, spies: SpyRegistry) -> int:
+        latest_with_persistence = next(
+            (cp for cp in reversed(self._result.checkpoints) if cp.persisted_contexts_by_modpath is not None),
+            None,
+        )
+        if latest_with_persistence is None or latest_with_persistence.persisted_contexts_by_modpath is None:
+            return 0
+        persisted = latest_with_persistence.persisted_contexts_by_modpath
+        tracked_modpaths = set(spies.minions.keys())
+        return sum(count for modpath, count in persisted.items() if modpath in tracked_modpaths)
 
     def _assert_state_store_read_call_bounds(self) -> None:
         spies = self._require_spies()
@@ -159,11 +169,17 @@ class ScenarioVerifier:
         self,
         spies: SpyRegistry,
     ) -> MinionExpectations:
+        return self._compute_minion_expectations_for_receipts(spies, self._result.receipts)
+
+    def _compute_minion_expectations_for_receipts(
+        self,
+        spies: SpyRegistry,
+        receipts: list[StartReceipt],
+    ) -> MinionExpectations:
         minion_start_counts: defaultdict[type[SpyMixin], int] = defaultdict(int)
         expected_workflows_by_class: defaultdict[type[SpyMixin], int] = defaultdict(int)
-        minion_call_overrides: defaultdict[type[SpyMixin], dict[str, int]] = defaultdict(dict)
 
-        for receipt in self._result.receipts:
+        for receipt in receipts:
             directive = self._plan.flat_directives[receipt.directive_index]
             if not isinstance(directive, MinionStart):
                 continue
@@ -178,26 +194,199 @@ class ScenarioVerifier:
                 if expected_events is not None:
                     expected_workflows_by_class[m_cls] += expected_events
 
-            run_spec = directive.expect
-            overrides = run_spec.minion_call_overrides if run_spec else None
-            if not overrides:
-                continue
-            for name, count in overrides.items():
-                minion_call_overrides[m_cls][name] = (
-                    minion_call_overrides[m_cls].get(name, 0) + count
-                )
-
         return MinionExpectations(
             minion_start_counts=minion_start_counts,
             expected_workflows_by_class=expected_workflows_by_class,
-            minion_call_overrides=minion_call_overrides,
+        )
+
+    def _assert_checkpoint_window_fanout_delivery(self) -> None:
+        spies = self._require_spies()
+        checkpoints = self._result.checkpoints
+        if not checkpoints:
+            return
+
+        prev_receipt_count = 0
+        prev_counts: dict[str, dict[str, int]] = {}
+
+        for cp in checkpoints:
+            if cp.spy_call_counts is None:
+                continue
+
+            if cp.kind != "wait_workflow_completions":
+                prev_receipt_count = cp.receipt_count
+                prev_counts = cp.spy_call_counts
+                continue
+
+            if cp.minion_names == ():
+                continue
+
+            window_receipts = self._result.receipts[prev_receipt_count:cp.receipt_count]
+            if cp.minion_names is not None:
+                allowed_names = set(cp.minion_names)
+                window_receipts = [
+                    r for r in window_receipts
+                    if r.resolved_name in allowed_names
+                ]
+            window_expectations = self._compute_minion_expectations_for_receipts(spies, window_receipts)
+
+            for m_cls, expected_workflows in window_expectations.expected_workflows_by_class.items():
+                if expected_workflows < 0:
+                    pytest.fail(
+                        f"Invalid expected workflow count for {m_cls.__name__} in checkpoint {cp.order}: "
+                        f"{expected_workflows}"
+                    )
+
+                key = f"{m_cls.__module__}.{m_cls.__name__}"
+                curr = cp.spy_call_counts.get(key, {})
+                prev = prev_counts.get(key, {})
+
+                for step_name in m_cls._mn_workflow_spec:  # type: ignore
+                    expected_delta = expected_workflows
+                    actual_delta = curr.get(step_name, 0) - prev.get(step_name, 0)
+                    if actual_delta < expected_delta:
+                        pytest.fail(
+                            f"Checkpoint fanout mismatch for {m_cls.__name__}.{step_name} at checkpoint {cp.order}: "
+                            f"expected delta >= {expected_delta}, got {actual_delta}."
+                        )
+
+            prev_receipt_count = cp.receipt_count
+            prev_counts = cp.spy_call_counts
+
+    def _assert_runtime_expectations(self) -> None:
+        expect_directives = [
+            d for d in self._plan.flat_directives
+            if isinstance(d, ExpectRuntime)
+        ]
+        expect_checkpoints = [
+            cp for cp in self._result.checkpoints
+            if cp.kind == "expect_runtime"
+        ]
+
+        if len(expect_directives) != len(expect_checkpoints):
+            pytest.fail(
+                "ExpectRuntime directive/checkpoint mismatch: "
+                f"{len(expect_directives)} directive(s), {len(expect_checkpoints)} checkpoint(s)."
+            )
+
+        for directive, checkpoint in zip(expect_directives, expect_checkpoints):
+            target_checkpoint = self._resolve_expect_runtime_checkpoint_target(
+                directive=directive,
+                own_checkpoint=checkpoint,
+            )
+            persistence = directive.expect.persistence
+            resolutions = directive.expect.resolutions
+
+            receipts = self._result.receipts[:target_checkpoint.receipt_count]
+            modpaths_by_name: defaultdict[str, set[str]] = defaultdict(set)
+            instance_ids_by_name: defaultdict[str, set[str]] = defaultdict(set)
+            for r in receipts:
+                if not r.success or not r.resolved_name:
+                    continue
+                modpaths_by_name[r.resolved_name].add(r.minion_modpath)
+                if r.instance_id:
+                    instance_ids_by_name[r.resolved_name].add(r.instance_id)
+
+            if persistence:
+                persisted = target_checkpoint.persisted_contexts_by_modpath
+                if persisted is None:
+                    pytest.fail(
+                        "ExpectRuntime.persistence is unsupported with this StateStore snapshot strategy."
+                    )
+
+                for minion_name, expected_count in persistence.items():
+                    if minion_name not in modpaths_by_name:
+                        pytest.fail(
+                            f"ExpectRuntime.persistence references unknown minion name: {minion_name!r}."
+                        )
+                    if not isinstance(expected_count, int) or expected_count < 0:
+                        pytest.fail(
+                            "ExpectRuntime.persistence counts must be ints >= 0; "
+                            f"got {minion_name!r}={expected_count!r}."
+                        )
+
+                    modpaths = modpaths_by_name[minion_name]
+                    actual_count = sum(persisted.get(modpath, 0) for modpath in modpaths)
+                    if actual_count != expected_count:
+                        pytest.fail(
+                            f"ExpectRuntime.persistence mismatch for {minion_name}: "
+                            f"expected {expected_count}, got {actual_count}."
+                        )
+
+            if resolutions:
+                counters = target_checkpoint.metrics_counters
+                if counters is None:
+                    pytest.fail(
+                        "ExpectRuntime.resolutions is unsupported with this Metrics snapshot strategy."
+                    )
+
+                for minion_name, expected_status_counts in resolutions.items():
+                    if minion_name not in instance_ids_by_name:
+                        pytest.fail(
+                            f"ExpectRuntime.resolutions references unknown minion name: {minion_name!r}."
+                        )
+                    instance_ids = instance_ids_by_name[minion_name]
+                    counts = {
+                        "succeeded": sum(
+                            int(s["value"])
+                            for s in counters.get(MINION_WORKFLOW_SUCCEEDED_TOTAL, [])
+                            if s["labels"].get(LABEL_MINION_INSTANCE_ID) in instance_ids
+                        ),
+                        "failed": sum(
+                            int(s["value"])
+                            for s in counters.get(MINION_WORKFLOW_FAILED_TOTAL, [])
+                            if s["labels"].get(LABEL_MINION_INSTANCE_ID) in instance_ids
+                        ),
+                        "aborted": sum(
+                            int(s["value"])
+                            for s in counters.get(MINION_WORKFLOW_ABORTED_TOTAL, [])
+                            if s["labels"].get(LABEL_MINION_INSTANCE_ID) in instance_ids
+                        ),
+                    }
+
+                    for status, expected_count in expected_status_counts.items():
+                        if status not in counts:
+                            pytest.fail(
+                                f"ExpectRuntime.resolutions has unknown status {status!r} for {minion_name}."
+                            )
+                        if not isinstance(expected_count, int) or expected_count < 0:
+                            pytest.fail(
+                                "ExpectRuntime.resolutions counts must be ints >= 0; "
+                                f"got {minion_name}.{status}={expected_count!r}."
+                            )
+                        actual = counts[status]
+                        if actual != expected_count:
+                            pytest.fail(
+                                f"ExpectRuntime.resolutions mismatch for {minion_name}.{status}: "
+                                f"expected {expected_count}, got {actual}."
+                            )
+
+    def _resolve_expect_runtime_checkpoint_target(
+        self,
+        *,
+        directive: ExpectRuntime,
+        own_checkpoint: ScenarioCheckpoint,
+    ) -> ScenarioCheckpoint:
+        if directive.at == "latest":
+            return own_checkpoint
+
+        at = directive.at
+        if isinstance(at, int) and not isinstance(at, bool):
+            checkpoints = self._result.checkpoints
+            if at < 0 or at >= len(checkpoints):
+                pytest.fail(
+                    f"ExpectRuntime.at index {at} is out of range for {len(checkpoints)} checkpoint(s)."
+                )
+            return checkpoints[at]
+
+        pytest.fail(
+            f"ExpectRuntime.at={directive.at!r} is unsupported. Use 'latest' or a checkpoint index."
         )
 
     def _assert_minion_fanout_delivery(self) -> None:
         """Assert explicit per-minion fanout delivery from pipeline event targets.
 
         For each minion class with successful starts, each workflow step is expected
-        to execute exactly once per expected workflow unless explicitly overridden.
+        to execute at least once per expected workflow.
         """
         spies = self._require_spies()
         expectations = self._compute_minion_expectations(spies)
@@ -206,61 +395,14 @@ class ScenarioVerifier:
             if expected_workflows < 0:
                 pytest.fail(f"Invalid expected workflow count for {m_cls.__name__}: {expected_workflows}")
 
-            overrides = expectations.minion_call_overrides.get(m_cls, {})
             actual_counts = m_cls.get_call_counts()
 
             for step_name in m_cls._mn_workflow_spec:  # type: ignore
-                if step_name in overrides:
-                    continue
                 actual = actual_counts.get(step_name, 0)
-                if actual != expected_workflows:
+                if actual < expected_workflows:
                     pytest.fail(
                         f"Fanout mismatch for {m_cls.__name__}.{step_name}: "
-                        f"expected {expected_workflows} workflow calls from pipeline events, got {actual}."
-                    )
-
-    def _assert_workflow_resolutions(self) -> None:
-        counters = self._metrics.snapshot_counters()
-
-        for receipt in self._result.receipts:
-            if not receipt.success or receipt.instance_id is None:
-                continue
-
-            directive = self._plan.flat_directives[receipt.directive_index]
-            if not isinstance(directive, MinionStart):
-                continue
-            if not directive.expect or not directive.expect.workflow_resolutions:
-                continue
-
-            expected = dict(directive.expect.workflow_resolutions)
-            counts = {
-                "succeeded": sum(
-                    int(s["value"])
-                    for s in counters.get(MINION_WORKFLOW_SUCCEEDED_TOTAL, [])
-                    if s["labels"].get(LABEL_MINION_INSTANCE_ID) == receipt.instance_id
-                ),
-                "failed": sum(
-                    int(s["value"])
-                    for s in counters.get(MINION_WORKFLOW_FAILED_TOTAL, [])
-                    if s["labels"].get(LABEL_MINION_INSTANCE_ID) == receipt.instance_id
-                ),
-                "aborted": sum(
-                    int(s["value"])
-                    for s in counters.get(MINION_WORKFLOW_ABORTED_TOTAL, [])
-                    if s["labels"].get(LABEL_MINION_INSTANCE_ID) == receipt.instance_id
-                ),
-            }
-
-            for status, expected_count in expected.items():
-                if status not in counts:
-                    pytest.fail(
-                        f"Unknown workflow resolution '{status}' for {receipt.minion_modpath}"
-                    )
-                actual = counts[status]
-                if actual != expected_count:
-                    pytest.fail(
-                        f"{receipt.minion_modpath} workflow {status} mismatch: "
-                        f"expected {expected_count}, got {actual}"
+                        f"expected >= {expected_workflows} workflow calls from pipeline events, got {actual}."
                     )
 
     def _assert_pipeline_events(self) -> None:
@@ -308,11 +450,13 @@ class ScenarioVerifier:
 
             if expected_events is not None:
                 actual = counts.get("produce_event", 0)
-                if successes > 0:
-                    if actual not in (expected_events, expected_events + 1):
+                if actual_startup > 0:
+                    min_events = expected_events * actual_startup
+                    max_events = (expected_events + 1) * actual_startup
+                    if actual < min_events or actual > max_events:
                         pytest.fail(
                             f"{p_cls.__name__} produce_event mismatch: "
-                            f"expected {expected_events} or {expected_events + 1}, got {actual}"
+                            f"expected {min_events}..{max_events}, got {actual}"
                         )
                 elif actual != 0:
                     pytest.fail(

@@ -600,18 +600,29 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     )
                 ])
             finally: # measure workflow duration, update inflight gauge, remove context from statestore
-                duration = time.time() - ctx.started_at # type: ignore[reportOperatorIssue]
-                await _shielded_gather(*[
-                    self._mn_metrics._observe(
-                        metric_name=MINION_WORKFLOW_DURATION_SECONDS,
-                        value=duration,
-                        labels={
-                            LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id,
-                            "status": workflow_status,
-                        },
-                    ),
-                    self._mn_state_store._delete_context(ctx.workflow_id)
-                ])
+                started_at = ctx.started_at
+                if started_at is not None:
+                    duration = time.time() - started_at
+                else:
+                    # Cancellation can happen before step 0 sets started_at.
+                    duration = -1.0
+
+                metric_obs = self._mn_metrics._observe(
+                    metric_name=MINION_WORKFLOW_DURATION_SECONDS,
+                    value=duration,
+                    labels={
+                        LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id,
+                        "status": workflow_status,
+                    },
+                )
+                if workflow_status in ("succeeded", "failed", "aborted"):
+                    # Persist unresolved/cancelled workflows for replay on next startup.
+                    await _shielded_gather(*[
+                        metric_obs,
+                        self._mn_state_store._delete_context(ctx.workflow_id),
+                    ])
+                else:
+                    await metric_obs
                 task = asyncio.current_task()
                 if task is not None:
                     async with self._mn_tasks_lock:

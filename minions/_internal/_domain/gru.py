@@ -939,6 +939,7 @@ class Gru:
 
             # stop minion
             await self._stop_minion(minion)
+            self._minions_by_composite_key.pop(minion._mn_minion_composite_key, None)
 
             await self._logger._log(
                 INFO,

@@ -1,5 +1,5 @@
 import inspect
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable, Iterator
 
 from minions._internal._domain.gru import Gru
@@ -14,9 +14,9 @@ class Directive:
 
 
 @dataclass(frozen=True)
-class MinionRunSpec:
-    workflow_resolutions: dict[str, int] | None = None  # {'succeeded': 1, 'failed': 1, 'aborted': 1}
-    minion_call_overrides: dict[str, int] | None = None
+class RuntimeExpectSpec:
+    persistence: dict[str, int] | None = None
+    resolutions: dict[str, dict[str, int]] | None = None
 
 
 @dataclass(frozen=True)
@@ -25,7 +25,6 @@ class MinionStart(Directive):
     pipeline: str
     minion_config_path: str | None = None
     expect_success: bool = True
-    expect: MinionRunSpec | None = None
 
     def as_kwargs(self) -> dict:
         return {k: v for k, v in self.__dict__.items() if k in _MINION_START_PARAMS}
@@ -49,8 +48,25 @@ class Concurrent(Directive):
 
 
 @dataclass(frozen=True)
-class WaitWorkflows(Directive):
+class WaitWorkflowCompletions(Directive):
     minion_names: set[str] | None = None
+
+
+@dataclass(frozen=True)
+class WaitWorkflowStartsThen(Directive):
+    expected: dict[str, int]
+    directive: Directive
+
+
+@dataclass(frozen=True)
+class WaitWorkflows(WaitWorkflowCompletions):
+    """Temporary compatibility alias for WaitWorkflowCompletions."""
+
+
+@dataclass(frozen=True)
+class ExpectRuntime(Directive):
+    at: str | int = "latest"
+    expect: RuntimeExpectSpec = field(default_factory=RuntimeExpectSpec)
 
 
 @dataclass(frozen=True)
@@ -62,5 +78,8 @@ def iter_directives_flat(directives: Iterable["Directive"]) -> Iterator["Directi
     for d in directives:
         if isinstance(d, Concurrent):
             yield from iter_directives_flat(d.directives)
+            continue
+        if isinstance(d, WaitWorkflowStartsThen):
+            yield from iter_directives_flat((d.directive,))
             continue
         yield d

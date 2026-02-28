@@ -27,6 +27,8 @@ This package provides a light, test-focused DSL for scripting Gru scenarios and 
   - invalid scenario usage (for example unknown names/directives),
   - timeout/verification failures,
   - expectation mismatches between declared directives and observed runtime behavior.
+- `ScenarioPlan(...)` raises `ValueError` for plan-construction validation errors
+  (for example missing/unused `pipeline_event_counts` entries or invalid counts).
 - Use `AssertionError` only for strict internal invariants in DSL internals:
   - impossible internal state that indicates a DSL implementation bug (not a scenario-authoring issue).
 - Reasoning:
@@ -70,11 +72,17 @@ await run_gru_scenario(
 ```
 
 ## Directives
-- `MinionStart(...)` starts a minion with a pipeline and optional run spec.
+- `MinionStart(...)` starts a minion with a pipeline.
   - `minion` and `pipeline` are module path strings in the canonical DSL.
 - `MinionStop(...)` stops a minion by name or instance id.
 - `Concurrent(...)` runs child directives concurrently.
-- `WaitWorkflows(...)` waits for workflow completion.
+- `WaitWorkflowCompletions(...)` waits for workflow completion.
+- `WaitWorkflowStartsThen(expected, directive)` waits for workflow starts then immediately executes a wrapped directive.
+  - Initial supported wrapped directive: `MinionStop(...)`.
+- `ExpectRuntime(...)` evaluates runtime expectations at the current scenario checkpoint.
+  - Initial supported section: `expect=RuntimeExpectSpec(persistence={minion_name: count})`.
+  - Supported targets: `at="latest"` (directive checkpoint) or `at=<checkpoint_index>` (0-based).
+- `WaitWorkflows(...)` is a temporary compatibility alias to `WaitWorkflowCompletions(...)`.
 - `GruShutdown(...)` shuts down the Gru runtime.
 
 ## Directive Effects
@@ -83,27 +91,40 @@ await run_gru_scenario(
 | `MinionStart` | Yes (`success`, `instance_id`, `resolved_name`, directive index) | Yes (successful starts contribute expected workflow waits) | Yes (minion start counts, workflow-step counts, pipeline attempt/success bounds, state-store totals) |
 | `MinionStop` | No | No | Indirect only (runtime state changes that may affect later call histories) |
 | `Concurrent` | No (container only) | No (container only) | No (container only) |
-| `WaitWorkflows` | No | Yes (waits by all started or named subset) | No direct counts; ensures async work is drained before assertions |
+| `WaitWorkflowCompletions` | No | Yes (waits by all started or named subset) | No direct counts; ensures async work is drained before assertions |
+| `WaitWorkflowStartsThen` | No | Yes (waits for start targets before running wrapped directive) | Indirect only (wrapped directive effects) |
+| `ExpectRuntime` | No | No | Yes (checkpoint-scoped runtime expectations such as persisted-context counts) |
 | `GruShutdown` | No | No | Yes (`seen_shutdown` gates shutdown-related expectations) |
 
-## Minion Run Spec
-Attach this to `MinionStart` when you need workflow-level checks or overrides:
+## Waiting for Workflows
+- `WaitWorkflowCompletions()` waits for all workflows expected from successful starts so far.
+- `WaitWorkflowCompletions(minion_names=set())` is a no-op.
+- `WaitWorkflowCompletions(minion_names={...})` waits only for those names and fails on unknown names.
+- The wait first blocks on workflow-step spy call counts, then drains minion tasks.
+- `WaitWorkflowStartsThen(expected={...}, directive=MinionStop(...))` is the race-safe primitive for restart/resume stop points.
+- `WaitWorkflows(...)` remains supported as a compatibility alias.
+
+## Runtime Expectations
+- `ExpectRuntime(at="latest", expect=RuntimeExpectSpec(...))` asserts runtime state at the current checkpoint.
+- `ExpectRuntime(at=0, expect=RuntimeExpectSpec(...))` asserts runtime state at an explicit checkpoint index.
+- Initial persistence section:
 ```python
-MinionStart(
-    ...,
-    expect=MinionRunSpec(
-        workflow_resolutions={"succeeded": 1, "failed": 0, "aborted": 0},
-        minion_call_overrides={"some_step": 0},
+ExpectRuntime(
+    expect=RuntimeExpectSpec(
+        persistence={"my-minion-name": 1},
     ),
 )
 ```
-- Use `minion_call_overrides` when workflow control flow intentionally diverges from default fanout-derived step counts (for example: conditional abort/fail paths).
-
-## Waiting for Workflows
-- `WaitWorkflows()` waits for all workflows expected from successful starts so far.
-- `WaitWorkflows(minion_names=set())` is a no-op.
-- `WaitWorkflows(minion_names={...})` waits only for those names and fails on unknown names.
-- The wait first blocks on workflow-step spy call counts, then drains minion tasks.
+- Initial resolutions section:
+```python
+ExpectRuntime(
+    expect=RuntimeExpectSpec(
+        resolutions={"my-minion-name": {"succeeded": 1, "failed": 0, "aborted": 0}},
+    ),
+)
+```
+- Persistence counts are resolved by scenario-local minion names observed from successful starts.
+- Resolution counts are evaluated from checkpoint metrics snapshots for scenario-local minion instances.
 
 ## Per-Run Expectations
 Provide `pipeline_event_counts` for exactly the pipelines started by successful `MinionStart(...)` directives:
@@ -116,7 +137,7 @@ await run_gru_scenario(
 Expected workflow counts are derived from `pipeline_event_counts`:
 - For each successful `MinionStart`, expected workflows = `pipeline_event_counts[pipeline_modpath]`.
 - Counts are summed per minion class.
-- These counts drive `WaitWorkflows`, workflow-step expectations, and state store save/delete totals.
+- These counts drive `WaitWorkflowCompletions`, workflow-step expectations, and state store save/delete totals.
 - Validation is strict:
   - Missing counts for started pipelines fail plan creation.
   - Unused pipeline keys in `pipeline_event_counts` fail plan creation.

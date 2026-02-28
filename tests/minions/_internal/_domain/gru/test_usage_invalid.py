@@ -8,7 +8,6 @@ from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_noop import NoOpStateStore
 from tests.support.gru_scenario import (
     GruShutdown,
-    MinionRunSpec,
     MinionStart,
     MinionStop,
     WaitWorkflows,
@@ -180,7 +179,6 @@ class TestInvalidUsageDSL:
                 minion="tests.assets.minions.two_steps.counter.basic",
                 minion_config_path=config_path,
                 pipeline=pipeline_modpath,
-                expect=MinionRunSpec(),
             ),
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
@@ -258,7 +256,6 @@ class TestInvalidUsageUsingNewAssetsDSL:
                 minion="tests.assets.minions.two_steps.counter.basic",
                 minion_config_path=config_path,
                 pipeline=pipeline_modpath,
-                expect=MinionRunSpec(),
             ),
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.basic",

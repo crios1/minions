@@ -10,10 +10,11 @@ from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.support.gru_scenario import (
     Directive,
     Concurrent,
+    ExpectRuntime,
     GruShutdown,
-    MinionRunSpec,
     MinionStart,
     MinionStop,
+    RuntimeExpectSpec,
     WaitWorkflows,
     run_gru_scenario,
 )
@@ -259,9 +260,15 @@ class TestValidUsageDSL:
                 minion="tests.assets.minions.two_steps.counter.basic",
                 minion_config_path=config_path,
                 pipeline=pipeline_modpath,
-                expect=MinionRunSpec(),
             ),
             WaitWorkflows(),
+            ExpectRuntime(
+                expect=RuntimeExpectSpec(
+                    resolutions={
+                        "two-step-minion": {"succeeded": 1, "failed": 0, "aborted": 0},
+                    }
+                ),
+            ),
             MinionStop(name_or_instance_id="two-step-minion", expect_success=True),
             GruShutdown(expect_success=True),
         ]
@@ -292,21 +299,27 @@ class TestValidUsageDSL:
                 minion="tests.assets.minions.two_steps.counter.resourced",
                 minion_config_path=cfg1,
                 pipeline=pipeline1,
-                expect=MinionRunSpec(),
             ),
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.resourced_b",
                 minion_config_path=cfg2,
                 pipeline=pipeline2,
-                expect=MinionRunSpec(),
             ),
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.resourced_c",
                 minion_config_path=cfg3,
                 pipeline=pipeline3,
-                expect=MinionRunSpec(),
             ),
             WaitWorkflows(),
+            ExpectRuntime(
+                expect=RuntimeExpectSpec(
+                    resolutions={
+                        "two-step-resourced-minion": {"succeeded": 1, "failed": 0, "aborted": 0},
+                        "two-step-resourced-minion-b": {"succeeded": 1, "failed": 0, "aborted": 0},
+                        "two-step-resourced-minion-c": {"succeeded": 1, "failed": 0, "aborted": 0},
+                    }
+                ),
+            ),
             MinionStop(name_or_instance_id="two-step-resourced-minion", expect_success=True),
             MinionStop(name_or_instance_id="two-step-resourced-minion-b", expect_success=True),
             MinionStop(name_or_instance_id="two-step-resourced-minion-c", expect_success=True),
@@ -340,21 +353,27 @@ class TestValidUsageDSL:
                 minion="tests.assets.minions.two_steps.counter.resourced",
                 minion_config_path=cfg1,
                 pipeline=pipeline_modpath,
-                expect=MinionRunSpec(),
             ),
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.resourced_shared_b",
                 minion_config_path=cfg2,
                 pipeline=pipeline_modpath,
-                expect=MinionRunSpec(),
             ),
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.resourced_shared_c",
                 minion_config_path=cfg3,
                 pipeline=pipeline_modpath,
-                expect=MinionRunSpec(),
             ),
             WaitWorkflows(),
+            ExpectRuntime(
+                expect=RuntimeExpectSpec(
+                    resolutions={
+                        "two-step-resourced-minion": {"succeeded": 1, "failed": 0, "aborted": 0},
+                        "two-step-resourced-shared-minion-b": {"succeeded": 1, "failed": 0, "aborted": 0},
+                        "two-step-resourced-shared-minion-c": {"succeeded": 1, "failed": 0, "aborted": 0},
+                    }
+                ),
+            ),
             MinionStop(name_or_instance_id="two-step-resourced-minion", expect_success=True),
             MinionStop(name_or_instance_id="two-step-resourced-shared-minion-b", expect_success=True),
             MinionStop(name_or_instance_id="two-step-resourced-shared-minion-c", expect_success=True),
@@ -382,9 +401,15 @@ class TestValidUsageDSL:
                 minion="tests.assets.minions.two_steps.counter.resourced",
                 minion_config_path=cfg1,
                 pipeline=pipeline_modpath,
-                expect=MinionRunSpec(),
             ),
             WaitWorkflows(),
+            ExpectRuntime(
+                expect=RuntimeExpectSpec(
+                    resolutions={
+                        "two-step-resourced-minion": {"succeeded": 1, "failed": 0, "aborted": 0},
+                    }
+                ),
+            ),
             MinionStop(name_or_instance_id="two-step-resourced-minion", expect_success=True),
             GruShutdown(expect_success=True),
         ]
@@ -410,9 +435,15 @@ class TestValidUsageDSL:
                 minion="tests.assets.minions.two_steps.counter.basic",
                 minion_config_path=config_path,
                 pipeline=pipeline_modpath,
-                expect=MinionRunSpec(),
             ),
             WaitWorkflows(),
+            ExpectRuntime(
+                expect=RuntimeExpectSpec(
+                    resolutions={
+                        "two-step-minion": {"succeeded": 1, "failed": 0, "aborted": 0},
+                    }
+                ),
+            ),
             GruShutdown(expect_success=True),
         ]
 
@@ -449,9 +480,15 @@ class TestValidUsageUsingNewAssetsDSL:
                 minion=minion_modpath,
                 minion_config_path=config_path,
                 pipeline=pipeline_modpath,
-                expect=MinionRunSpec(),
             ),
             WaitWorkflows(),
+            ExpectRuntime(
+                expect=RuntimeExpectSpec(
+                    resolutions={
+                        "two-step-minion": {"succeeded": 1, "failed": 0, "aborted": 0},
+                    }
+                ),
+            ),
             MinionStop(name_or_instance_id="two-step-minion", expect_success=True),
             GruShutdown(expect_success=True),
         ]
@@ -478,9 +515,15 @@ class TestValidUsageUsingNewAssetsDSL:
                 minion=minion_modpath,
                 minion_config_path=config_path,
                 pipeline=pipeline_modpath,
-                expect=MinionRunSpec(),
             ),
             WaitWorkflows(),
+            ExpectRuntime(
+                expect=RuntimeExpectSpec(
+                    resolutions={
+                        "two-step-minion": {"succeeded": 1, "failed": 0, "aborted": 0},
+                    }
+                ),
+            ),
             GruShutdown(expect_success=True),
         ]
 

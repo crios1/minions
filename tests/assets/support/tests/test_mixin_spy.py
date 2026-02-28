@@ -250,6 +250,39 @@ async def test_wait_for_call_uses_absolute_target_count():
     await asyncio.wait_for(waiter, timeout=1)
 
 @pytest.mark.asyncio
+async def test_wait_for_call_resolves_before_long_running_call_completes():
+    started = asyncio.Event()
+    release = asyncio.Event()
+    finished = asyncio.Event()
+
+    class Base():
+        async def foo(self):
+            started.set()
+            await release.wait()
+            finished.set()
+
+    class X(Base, SpyMixin):
+        ...
+
+    X.enable_spy()
+    x = X()
+
+    waiter = asyncio.create_task(X.wait_for_call('foo', count=1, timeout=1))
+    await asyncio.sleep(0)  # ensure waiter task runs
+    foo_task = asyncio.create_task(x.foo())
+
+    await asyncio.wait_for(started.wait(), timeout=1)
+    await asyncio.wait_for(waiter, timeout=1)
+
+    assert not foo_task.done()
+    assert not finished.is_set()
+
+    release.set()
+    await asyncio.wait_for(foo_task, timeout=1)
+    assert finished.is_set()
+    assert X.get_call_counts().get("foo") == 1
+
+@pytest.mark.asyncio
 async def test__spy_bump_race_guard_skips_cancelled_waiter():
     """White-box test for _spy_bump's race-guard behavior.
 

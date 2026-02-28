@@ -3,8 +3,12 @@ import pytest
 
 from tests.support.gru_scenario.directives import (
     Concurrent,
+    ExpectRuntime,
     GruShutdown,
     MinionStart,
+    MinionStop,
+    RuntimeExpectSpec,
+    WaitWorkflowStartsThen,
     WaitWorkflows,
 )
 from tests.support.gru_scenario.plan import ScenarioPlan
@@ -170,3 +174,182 @@ async def test_wait_workflows_named_lookup_is_scenario_local_only(gru, tests_dir
 
     with pytest.raises(pytest.fail.Exception, match="Unknown minion names in WaitWorkflows"):
         await waiter.wait(minion_names={"not-started-in-scenario"})
+
+
+@pytest.mark.asyncio
+async def test_runner_wait_workflow_starts_then_rejects_unsupported_wrapped_directive(gru):
+    directives = [
+        WaitWorkflowStartsThen(
+            expected={"simple-minion": 1},
+            directive=GruShutdown(expect_success=True),
+        ),
+    ]
+    plan = ScenarioPlan(directives, pipeline_event_counts={})
+    runner = ScenarioRunner(gru, plan, per_verification_timeout=0.1)
+
+    with pytest.raises(pytest.fail.Exception, match="supports wrapping MinionStop only"):
+        await runner.run()
+
+
+@pytest.mark.asyncio
+async def test_runner_wait_workflow_starts_then_rejects_unknown_names(gru):
+    directives = [
+        WaitWorkflowStartsThen(
+            expected={"missing": 1},
+            directive=MinionStop(name_or_instance_id="missing", expect_success=False),
+        ),
+    ]
+    plan = ScenarioPlan(directives, pipeline_event_counts={})
+    runner = ScenarioRunner(gru, plan, per_verification_timeout=0.1)
+
+    with pytest.raises(pytest.fail.Exception, match="Unknown minion names in WaitWorkflowStartsThen.expected"):
+        await runner.run()
+
+
+@pytest.mark.asyncio
+async def test_runner_records_checkpoints_for_wait_workflow_completions_and_shutdown(gru, tests_dir):
+    config_path = str(tests_dir / "assets" / "config/minions/a.toml")
+    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+
+    directives = [
+        MinionStart(
+            minion="tests.assets.minions.two_steps.simple.basic",
+            minion_config_path=config_path,
+            pipeline=pipeline_modpath,
+        ),
+        WaitWorkflows(),
+        GruShutdown(expect_success=True),
+    ]
+
+    plan = ScenarioPlan(directives, pipeline_event_counts={pipeline_modpath: 1})
+    result = await ScenarioRunner(gru, plan, per_verification_timeout=5.0).run()
+
+    assert [cp.kind for cp in result.checkpoints] == [
+        "wait_workflow_completions",
+        "gru_shutdown",
+    ]
+    assert [cp.order for cp in result.checkpoints] == [0, 1]
+    assert result.checkpoints[0].directive_type == "WaitWorkflows"
+    assert result.checkpoints[0].minion_names is None
+    assert result.checkpoints[1].directive_type == "GruShutdown"
+    assert result.checkpoints[1].seen_shutdown is True
+
+
+@pytest.mark.asyncio
+async def test_runner_records_checkpoint_for_wait_workflow_starts_then(gru):
+    directives = [
+        MinionStart(
+            minion="tests.assets.minions.failure.abort_step",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+        ),
+        WaitWorkflowStartsThen(
+            expected={"abort-step-minion": 1},
+            directive=MinionStop(name_or_instance_id="abort-step-minion", expect_success=True),
+        ),
+        GruShutdown(expect_success=True),
+    ]
+
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    result = await ScenarioRunner(gru, plan, per_verification_timeout=5.0).run()
+
+    checkpoints = result.checkpoints
+    assert [cp.kind for cp in checkpoints] == ["wait_workflow_starts_then", "gru_shutdown"]
+    assert checkpoints[0].directive_type == "WaitWorkflowStartsThen"
+    assert checkpoints[0].expected_starts == {"abort-step-minion": 1}
+    assert checkpoints[0].wrapped_directive_type == "MinionStop"
+
+
+@pytest.mark.asyncio
+async def test_runner_restart_flow_checkpoints_separate_pre_stop_and_post_restart_windows(gru, tests_dir):
+    pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+    minion_modpath = "tests.assets.minions.two_steps.counter.basic"
+    cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
+
+    directives = [
+        MinionStart(minion=minion_modpath, minion_config_path=cfg1, pipeline=pipeline_modpath),
+        WaitWorkflowStartsThen(
+            expected={"two-step-minion": 1},
+            directive=MinionStop(name_or_instance_id="two-step-minion", expect_success=True),
+        ),
+        MinionStart(minion=minion_modpath, minion_config_path=cfg1, pipeline=pipeline_modpath),
+        WaitWorkflows(),
+        GruShutdown(expect_success=True),
+    ]
+
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={pipeline_modpath: 1},
+    )
+    result = await ScenarioRunner(gru, plan, per_verification_timeout=5.0).run()
+
+    checkpoints = result.checkpoints
+    assert [cp.kind for cp in checkpoints] == [
+        "wait_workflow_starts_then",
+        "wait_workflow_completions",
+        "gru_shutdown",
+    ]
+
+    pre_stop_cp = checkpoints[0]
+    post_restart_cp = checkpoints[1]
+
+    assert pre_stop_cp.receipt_count == 1
+    assert post_restart_cp.receipt_count == 2
+
+    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    assert pre_stop_cp.spy_call_counts is not None
+    assert post_restart_cp.spy_call_counts is not None
+
+    pre_step1 = pre_stop_cp.spy_call_counts.get(key, {}).get("step_1", 0)
+    post_step1 = post_restart_cp.spy_call_counts.get(key, {}).get("step_1", 0)
+    assert post_step1 >= pre_step1 + 1
+
+
+@pytest.mark.asyncio
+async def test_runner_restart_same_composite_key_after_stop_succeeds(gru):
+    pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+    minion_modpath = "tests.assets.minions.failure.abort_step"
+
+    directives = [
+        MinionStart(minion=minion_modpath, pipeline=pipeline_modpath),
+        WaitWorkflowStartsThen(
+            expected={"abort-step-minion": 1},
+            directive=MinionStop(name_or_instance_id="abort-step-minion", expect_success=True),
+        ),
+        MinionStart(minion=minion_modpath, pipeline=pipeline_modpath, expect_success=True),
+        GruShutdown(expect_success=True),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={pipeline_modpath: 1},
+    )
+    await ScenarioRunner(gru, plan, per_verification_timeout=5.0).run()
+
+
+@pytest.mark.asyncio
+async def test_runner_records_expect_runtime_checkpoint_with_persistence_snapshot(gru):
+    directives = [
+        MinionStart(
+            minion="tests.assets.minions.failure.slow_step",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+        ),
+        WaitWorkflowStartsThen(
+            expected={"slow-step-minion": 1},
+            directive=MinionStop(name_or_instance_id="slow-step-minion", expect_success=True),
+        ),
+        ExpectRuntime(expect=RuntimeExpectSpec(persistence={"slow-step-minion": 1})),
+        GruShutdown(expect_success=True),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    result = await ScenarioRunner(gru, plan, per_verification_timeout=5.0).run()
+
+    expect_cps = [cp for cp in result.checkpoints if cp.kind == "expect_runtime"]
+    assert len(expect_cps) == 1
+    persisted = expect_cps[0].persisted_contexts_by_modpath
+    assert persisted is not None
+    assert persisted.get("tests.assets.minions.failure.slow_step", 0) >= 1
