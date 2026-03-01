@@ -287,6 +287,68 @@ def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnost
         verifier._assert_minion_fanout_delivery()
 
 
+def test_assert_minion_fanout_delivery_allows_plus_one_per_start_tolerance(monkeypatch):
+    directives = [
+        MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 2},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-ok", "ok", TwoStepMinion, True),
+        ],
+    )
+
+    verifier = _mk_verifier(plan, result)
+    monkeypatch.setattr(
+        TwoStepMinion,
+        "get_call_counts",
+        classmethod(lambda cls: {"step_1": 3, "step_2": 3}),
+    )
+
+    verifier._assert_minion_fanout_delivery()
+
+
+def test_assert_minion_fanout_delivery_rejects_overage_beyond_plus_one_per_start(monkeypatch):
+    directives = [
+        MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 2},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-ok", "ok", TwoStepMinion, True),
+        ],
+    )
+
+    verifier = _mk_verifier(plan, result)
+    monkeypatch.setattr(
+        TwoStepMinion,
+        "get_call_counts",
+        classmethod(lambda cls: {"step_1": 4, "step_2": 3}),
+    )
+
+    with pytest.raises(
+        pytest.fail.Exception,
+        match=r"Fanout mismatch for TwoStepMinion\.step_1: expected 2\.\.3 workflow calls from pipeline events, got 4",
+    ):
+        verifier._assert_minion_fanout_delivery()
+
+
 def test_assert_pipeline_events_allows_restarted_pipeline_produce_event_totals(monkeypatch):
     directives = [
         MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
@@ -349,7 +411,7 @@ def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_ch
             ScenarioCheckpoint(
                 order=0,
                 kind="wait_workflow_completions",
-                directive_type="WaitWorkflows",
+                directive_type="WaitWorkflowCompletions",
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
@@ -364,7 +426,7 @@ def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_ch
             ScenarioCheckpoint(
                 order=1,
                 kind="wait_workflow_completions",
-                directive_type="WaitWorkflows",
+                directive_type="WaitWorkflowCompletions",
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
@@ -444,7 +506,7 @@ def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phas
             ScenarioCheckpoint(
                 order=1,
                 kind="wait_workflow_completions",
-                directive_type="WaitWorkflows",
+                directive_type="WaitWorkflowCompletions",
                 receipt_count=2,
                 successful_receipt_count=2,
                 seen_shutdown=False,
@@ -495,7 +557,7 @@ def test_checkpoint_window_workflow_step_progression_exact_fails_on_overage():
             ScenarioCheckpoint(
                 order=0,
                 kind="wait_workflow_completions",
-                directive_type="WaitWorkflows",
+                directive_type="WaitWorkflowCompletions",
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
@@ -554,7 +616,7 @@ def test_checkpoint_window_workflow_step_progression_rejects_invalid_mode():
             ScenarioCheckpoint(
                 order=0,
                 kind="wait_workflow_completions",
-                directive_type="WaitWorkflows",
+                directive_type="WaitWorkflowCompletions",
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
@@ -624,7 +686,7 @@ def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_wi
             ScenarioCheckpoint(
                 order=0,
                 kind="wait_workflow_completions",
-                directive_type="WaitWorkflows",
+                directive_type="WaitWorkflowCompletions",
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
@@ -646,7 +708,7 @@ def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_wi
             ScenarioCheckpoint(
                 order=1,
                 kind="wait_workflow_completions",
-                directive_type="WaitWorkflows",
+                directive_type="WaitWorkflowCompletions",
                 receipt_count=2,
                 successful_receipt_count=2,
                 seen_shutdown=False,
@@ -704,7 +766,7 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_all
             ScenarioCheckpoint(
                 order=0,
                 kind="wait_workflow_completions",
-                directive_type="WaitWorkflows",
+                directive_type="WaitWorkflowCompletions",
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
@@ -727,6 +789,68 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_all
     )
     verifier = _mk_verifier(plan, result)
     verifier._assert_checkpoint_window_workflow_step_progression()
+
+
+def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_rejects_overage_beyond_start_tolerance():
+    directives = [
+        MinionStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+        ),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(
+                0,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "id-ok",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+            ),
+        ],
+        checkpoints=[
+            ScenarioCheckpoint(
+                order=0,
+                kind="wait_workflow_completions",
+                directive_type="WaitWorkflowCompletions",
+                receipt_count=1,
+                successful_receipt_count=1,
+                seen_shutdown=False,
+                minion_names=None,
+                workflow_steps_mode="exact",
+                spy_call_counts={
+                    key: {
+                        "step_1": 3,  # expected 1, max tolerated 2 (start_count=1)
+                        "step_2": 2,
+                    }
+                },
+                workflow_step_started_ids_by_class={
+                    key: {
+                        "step_1": ("workflow-1",),
+                        "step_2": ("workflow-1",),
+                    }
+                },
+            ),
+        ],
+    )
+    verifier = _mk_verifier(plan, result)
+    with pytest.raises(
+        pytest.fail.Exception,
+        match=r"Checkpoint workflow-step progression mismatch.*expected call-count delta 1\.\.2, got 3",
+    ):
+        verifier._assert_checkpoint_window_workflow_step_progression()
 
 
 def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overlap_passes_with_workflow_id_exactness():
@@ -775,7 +899,7 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
             ScenarioCheckpoint(
                 order=0,
                 kind="wait_workflow_completions",
-                directive_type="WaitWorkflows",
+                directive_type="WaitWorkflowCompletions",
                 receipt_count=2,
                 successful_receipt_count=2,
                 seen_shutdown=False,
@@ -852,7 +976,7 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
             ScenarioCheckpoint(
                 order=0,
                 kind="wait_workflow_completions",
-                directive_type="WaitWorkflows",
+                directive_type="WaitWorkflowCompletions",
                 receipt_count=2,
                 successful_receipt_count=2,
                 seen_shutdown=False,
@@ -884,6 +1008,68 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
     with pytest.raises(
         pytest.fail.Exception,
         match=r"expected workflow-id delta 2, got 1\..*Per-instance deltas: \{1: 2, 2: 1\}",
+    ):
+        verifier._assert_checkpoint_window_workflow_step_progression()
+
+
+def test_checkpoint_window_workflow_step_progression_exact_prioritizes_workflow_id_mismatch_when_both_fail():
+    directives = [
+        MinionStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+        ),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(
+                0,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "id-1",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+            ),
+        ],
+        checkpoints=[
+            ScenarioCheckpoint(
+                order=0,
+                kind="wait_workflow_completions",
+                directive_type="WaitWorkflowCompletions",
+                receipt_count=1,
+                successful_receipt_count=1,
+                seen_shutdown=False,
+                minion_names=None,
+                workflow_steps_mode="exact",
+                spy_call_counts={
+                    key: {
+                        "step_1": 3,  # expected 1..2
+                        "step_2": 1,
+                    }
+                },
+                workflow_step_started_ids_by_class={
+                    key: {
+                        "step_1": tuple(),  # expected workflow-id delta 1
+                        "step_2": ("workflow-1",),
+                    }
+                },
+            ),
+        ],
+    )
+    verifier = _mk_verifier(plan, result)
+    with pytest.raises(
+        pytest.fail.Exception,
+        match=r"Checkpoint workflow-id progression mismatch.*expected workflow-id delta 1, got 0\..*Call-count delta: 3 \(expected 1\.\.2\)",
     ):
         verifier._assert_checkpoint_window_workflow_step_progression()
 
@@ -952,7 +1138,7 @@ def test_checkpoint_window_fanout_fails_when_workflow_id_delta_below_expected():
             ScenarioCheckpoint(
                 order=0,
                 kind="wait_workflow_completions",
-                directive_type="WaitWorkflows",
+                directive_type="WaitWorkflowCompletions",
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,

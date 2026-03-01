@@ -57,6 +57,19 @@ class PipelineAttemptOutcomes:
     successes_by_modpath: defaultdict[str, int]
 
 
+@dataclass(frozen=True)
+class WindowStepProgressionCheck:
+    call_expected_min: int
+    call_expected_max: int
+    call_actual: int
+    workflow_id_expected_min: int
+    workflow_id_expected_max: int
+    workflow_id_actual: int
+    has_workflow_id_evidence: bool
+    workflow_id_mismatch: bool
+    call_mismatch: bool
+
+
 class ScenarioVerifier:
     def __init__(
         self,
@@ -256,60 +269,124 @@ class ScenarioVerifier:
 
                 for step_name in m_cls._mn_workflow_spec:  # type: ignore
                     expected_delta = expected_workflows
+                    start_count_in_window = window_expectations.minion_start_counts.get(m_cls, 0)
+                    max_tolerated_delta = expected_delta + start_count_in_window
                     actual_delta = curr.get(step_name, 0) - prev.get(step_name, 0)
                     workflow_id_delta = self._workflow_id_delta_count(
                         curr=curr_workflow_ids_by_step.get(step_name, ()),
                         prev=prev_workflow_ids_by_step.get(step_name, ()),
                     )
                     has_workflow_id_evidence = cp.workflow_step_started_ids_by_class is not None
-                    call_count_mismatch = (
-                        actual_delta < expected_delta
-                        if mode == "at_least" or has_workflow_id_evidence
-                        else actual_delta != expected_delta
+                    check = self._evaluate_window_step_progression(
+                        mode=mode,
+                        expected_delta=expected_delta,
+                        max_tolerated_delta=max_tolerated_delta,
+                        actual_delta=actual_delta,
+                        workflow_id_delta=workflow_id_delta,
+                        has_workflow_id_evidence=has_workflow_id_evidence,
                     )
-                    if call_count_mismatch:
+                    if check.has_workflow_id_evidence and check.workflow_id_mismatch:
                         instance_deltas = self._instance_step_deltas(
                             step_name=step_name,
                             curr_by_instance=curr_by_instance,
                             prev_by_instance=prev_by_instance,
-                        )
-                        expected_phrase = (
-                            f">= {expected_delta}" if mode == "at_least" else str(expected_delta)
-                        )
-                        pytest.fail(
-                            "Checkpoint workflow-step progression mismatch for "
-                            f"{m_cls.__name__}.{step_name} at checkpoint {cp.order}: "
-                            f"expected delta {expected_phrase}, got {actual_delta}. "
-                            f"Per-instance deltas: {instance_deltas}. "
-                            f"Workflow-id delta: {workflow_id_delta}"
-                        )
-                    workflow_id_mismatch = (
-                        workflow_id_delta < expected_delta
-                        if mode == "at_least"
-                        else workflow_id_delta != expected_delta
-                    )
-                    if has_workflow_id_evidence and workflow_id_mismatch:
-                        instance_deltas = self._instance_step_deltas(
-                            step_name=step_name,
-                            curr_by_instance=curr_by_instance,
-                            prev_by_instance=prev_by_instance,
-                        )
-                        expected_workflow_id_phrase = (
-                            f">= {expected_delta}" if mode == "at_least" else str(expected_delta)
                         )
                         pytest.fail(
                             "Checkpoint workflow-id progression mismatch for "
                             f"{m_cls.__name__}.{step_name} at checkpoint {cp.order}: "
                             "expected workflow-id delta "
-                            f"{expected_workflow_id_phrase}, got {workflow_id_delta}. "
-                            f"Call-count delta: {actual_delta}. "
+                            f"{self._format_expected_range(check.workflow_id_expected_min, check.workflow_id_expected_max)}, "
+                            f"got {check.workflow_id_actual}. "
+                            "Call-count delta: "
+                            f"{check.call_actual} (expected "
+                            f"{self._format_expected_range(check.call_expected_min, check.call_expected_max)}). "
                             f"Per-instance deltas: {instance_deltas}"
+                        )
+                    if check.call_mismatch:
+                        instance_deltas = self._instance_step_deltas(
+                            step_name=step_name,
+                            curr_by_instance=curr_by_instance,
+                            prev_by_instance=prev_by_instance,
+                        )
+                        pytest.fail(
+                            "Checkpoint workflow-step progression mismatch for "
+                            f"{m_cls.__name__}.{step_name} at checkpoint {cp.order}: "
+                            "expected call-count delta "
+                            f"{self._format_expected_range(check.call_expected_min, check.call_expected_max)}, "
+                            f"got {check.call_actual}. "
+                            "Workflow-id delta: "
+                            f"{check.workflow_id_actual} (expected "
+                            f"{self._format_expected_range(check.workflow_id_expected_min, check.workflow_id_expected_max)}). "
+                            f"Per-instance deltas: {instance_deltas}."
                         )
 
             prev_receipt_count = cp.receipt_count
             prev_counts = cp.spy_call_counts
             prev_counts_by_instance = cp.spy_call_counts_by_instance or {}
             prev_workflow_step_ids = cp.workflow_step_started_ids_by_class or {}
+
+    def _evaluate_window_step_progression(
+        self,
+        *,
+        mode: str,
+        expected_delta: int,
+        max_tolerated_delta: int,
+        actual_delta: int,
+        workflow_id_delta: int,
+        has_workflow_id_evidence: bool,
+    ) -> WindowStepProgressionCheck:
+        if mode == "at_least":
+            call_expected_min = expected_delta
+            call_expected_max = -1
+            workflow_id_expected_min = expected_delta
+            workflow_id_expected_max = -1
+            call_mismatch = actual_delta < call_expected_min
+            workflow_id_mismatch = workflow_id_delta < workflow_id_expected_min
+            return WindowStepProgressionCheck(
+                call_expected_min=call_expected_min,
+                call_expected_max=call_expected_max,
+                call_actual=actual_delta,
+                workflow_id_expected_min=workflow_id_expected_min,
+                workflow_id_expected_max=workflow_id_expected_max,
+                workflow_id_actual=workflow_id_delta,
+                has_workflow_id_evidence=has_workflow_id_evidence,
+                workflow_id_mismatch=workflow_id_mismatch,
+                call_mismatch=call_mismatch,
+            )
+
+        # exact mode
+        if has_workflow_id_evidence:
+            call_expected_min = expected_delta
+            call_expected_max = max_tolerated_delta
+        else:
+            call_expected_min = expected_delta
+            call_expected_max = expected_delta
+        workflow_id_expected_min = expected_delta
+        workflow_id_expected_max = expected_delta
+
+        call_mismatch = (
+            actual_delta < call_expected_min
+            or actual_delta > call_expected_max
+        )
+        workflow_id_mismatch = workflow_id_delta != workflow_id_expected_min
+        return WindowStepProgressionCheck(
+            call_expected_min=call_expected_min,
+            call_expected_max=call_expected_max,
+            call_actual=actual_delta,
+            workflow_id_expected_min=workflow_id_expected_min,
+            workflow_id_expected_max=workflow_id_expected_max,
+            workflow_id_actual=workflow_id_delta,
+            has_workflow_id_evidence=has_workflow_id_evidence,
+            workflow_id_mismatch=workflow_id_mismatch,
+            call_mismatch=call_mismatch,
+        )
+
+    def _format_expected_range(self, expected_min: int, expected_max: int) -> str:
+        if expected_max < 0:
+            return f">= {expected_min}"
+        if expected_min == expected_max:
+            return str(expected_min)
+        return f"{expected_min}..{expected_max}"
 
     def _instance_step_deltas(
         self,
@@ -527,7 +604,8 @@ class ScenarioVerifier:
         """Assert explicit per-minion fanout delivery from pipeline event targets.
 
         For each minion class with successful starts, each workflow step is expected
-        to execute at least once per expected workflow.
+        to execute within explicit runtime-tolerated bounds:
+        expected workflows per successful starts, allowing +1 per start.
         """
         spies = self._require_spies()
         expectations = self._compute_minion_expectations(spies)
@@ -535,15 +613,19 @@ class ScenarioVerifier:
         for m_cls, expected_workflows in expectations.expected_workflows_by_class.items():
             if expected_workflows < 0:
                 pytest.fail(f"Invalid expected workflow count for {m_cls.__name__}: {expected_workflows}")
+            start_count = expectations.minion_start_counts.get(m_cls, 0)
+            max_expected_workflows = expected_workflows + start_count
 
             actual_counts = m_cls.get_call_counts()
 
             for step_name in m_cls._mn_workflow_spec:  # type: ignore
                 actual = actual_counts.get(step_name, 0)
-                if actual < expected_workflows:
+                if actual < expected_workflows or actual > max_expected_workflows:
                     pytest.fail(
                         f"Fanout mismatch for {m_cls.__name__}.{step_name}: "
-                        f"expected >= {expected_workflows} workflow calls from pipeline events, got {actual}."
+                        "expected "
+                        f"{expected_workflows}..{max_expected_workflows} workflow calls "
+                        f"from pipeline events, got {actual}."
                     )
 
     def _assert_pipeline_events(self) -> None:

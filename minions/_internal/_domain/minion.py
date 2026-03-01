@@ -1,7 +1,9 @@
 import asyncio
+import ast
 import contextvars
 import inspect
 import sys
+import textwrap
 import time
 import traceback
 import uuid
@@ -172,9 +174,45 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         cls._mn_workflow_spec = tuple(name for _, name in steps)
 
         modpath = cls.__module__
+        step_names = set(cls._mn_workflow_spec)
         for name in cls._mn_workflow_spec:
             fn = cls.__dict__[name]
+            cls._mn_validate_no_step_to_step_calls(
+                step_name=name,
+                step_fn=fn,
+                step_names=step_names,
+            )
             cls._mn_validate_user_code(fn, modpath)
+
+    @classmethod
+    def _mn_validate_no_step_to_step_calls(
+        cls,
+        *,
+        step_name: str,
+        step_fn: Callable[..., Any],
+        step_names: set[str],
+    ) -> None:
+        raw_fn = inspect.unwrap(step_fn)
+        try:
+            source = inspect.getsource(raw_fn)
+        except (OSError, TypeError):
+            return
+
+        tree = ast.parse(textwrap.dedent(source))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            target = node.func
+            if not isinstance(target, ast.Attribute):
+                continue
+            if not isinstance(target.value, ast.Name) or target.value.id != "self":
+                continue
+            if target.attr not in step_names:
+                continue
+            raise TypeError(
+                f"{cls.__name__}.{step_name} cannot call workflow step '{target.attr}'; "
+                "minion steps must be orchestrated only by the runtime workflow engine."
+            )
 
     def __init__(
         self,

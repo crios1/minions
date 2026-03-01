@@ -137,3 +137,19 @@ class TestMinionSubclassingInvalid:
             f"{resource_id} -> ['r1', 'r2']. "
             "Define only one class-level Resource per Resource type."
         )
+
+    def test_reject_direct_step_to_step_call_on_self(self):
+        with pytest.raises(TypeError) as excinfo:
+            class MyMinion(Minion[MyEvent, MyContext]):
+                @minion_step
+                async def step_1(self):
+                    await self.step_2()
+
+                @minion_step
+                async def step_2(self):
+                    ...
+
+        assert str(excinfo.value) == (
+            "MyMinion.step_1 cannot call workflow step 'step_2'; "
+            "minion steps must be orchestrated only by the runtime workflow engine."
+        )

@@ -62,11 +62,6 @@ class WaitWorkflowStartsThen(Directive):
 
 
 @dataclass(frozen=True)
-class WaitWorkflows(WaitWorkflowCompletions):
-    """Temporary compatibility alias for WaitWorkflowCompletions."""
-
-
-@dataclass(frozen=True)
 class ExpectRuntime(Directive):
     at: str | int = "latest"
     expect: RuntimeExpectSpec = field(default_factory=RuntimeExpectSpec)

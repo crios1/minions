@@ -536,7 +536,7 @@ class ScenarioWaiter:
                 missing.append(name)
 
             if missing:
-                pytest.fail(f"Unknown minion names in WaitWorkflows: {missing}")
+                pytest.fail(f"Unknown minion names in WaitWorkflowCompletions: {missing}")
 
         waits: list[Awaitable[None]] = []
         for m_cls, count in expected_per_class.items():
@@ -592,7 +592,7 @@ class ScenarioWaiter:
                     for task in pending_tasks
                 ]
                 pytest.fail(
-                    "WaitWorkflows timed out while waiting for minion tasks to complete. "
+                    "WaitWorkflowCompletions timed out while waiting for minion tasks to complete. "
                     f"Pending tasks={len(pending_tasks)} names={names}"
                 )
 
@@ -604,6 +604,6 @@ class ScenarioWaiter:
                     for task in pending_tasks
                 ]
                 pytest.fail(
-                    "WaitWorkflows timed out while waiting for minion tasks to complete. "
+                    "WaitWorkflowCompletions timed out while waiting for minion tasks to complete. "
                     f"Pending tasks={len(pending_tasks)} names={names}"
                 )

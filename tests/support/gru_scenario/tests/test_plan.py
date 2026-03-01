@@ -6,7 +6,7 @@ from tests.support.gru_scenario.directives import (
     GruShutdown,
     MinionStart,
     MinionStop,
-    WaitWorkflows,
+    WaitWorkflowCompletions,
 )
 from tests.support.gru_scenario.plan import ScenarioPlan
 
@@ -17,7 +17,7 @@ def test_scenario_plan_flattens_and_indexes_directives():
     d1c = MinionStart(minion="m3", pipeline="p3")
     d1 = Concurrent(d1a, d1b, d1c)
     d2 = MinionStop(name_or_instance_id="m1", expect_success=True)
-    d3 = WaitWorkflows()
+    d3 = WaitWorkflowCompletions()
     d4 = GruShutdown()
 
     plan = ScenarioPlan([d1, d2, d3, d4], pipeline_event_counts={"p1": 1, "p2": 1, "p3": 1})

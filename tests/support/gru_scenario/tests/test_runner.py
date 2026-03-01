@@ -9,7 +9,7 @@ from tests.support.gru_scenario.directives import (
     MinionStop,
     RuntimeExpectSpec,
     WaitWorkflowStartsThen,
-    WaitWorkflows,
+    WaitWorkflowCompletions,
 )
 from tests.support.gru_scenario.plan import ScenarioPlan
 from tests.support.gru_scenario.runner import ScenarioRunResult, ScenarioRunner, ScenarioWaiter, SpyRegistry
@@ -72,7 +72,7 @@ async def test_runner_concurrent_starts_capture_started_minions_and_instance_tag
                 pipeline=pipeline_modpath,
             ),
         ),
-        WaitWorkflows(),
+        WaitWorkflowCompletions(),
         GruShutdown(expect_success=True),
     ]
 
@@ -112,7 +112,7 @@ async def test_runner_wait_workflows_subset_handles_mixed_success_and_failure(gr
             pipeline=pipeline_modpath,
             expect_success=False,
         ),
-        WaitWorkflows(minion_names={"simple-minion"}),
+        WaitWorkflowCompletions(minion_names={"simple-minion"}),
         GruShutdown(expect_success=True),
     ]
 
@@ -147,7 +147,7 @@ async def test_wait_minion_tasks_times_out_instead_of_blocking_indefinitely(gru,
     dummy._mn_tasks.add(task)
 
     try:
-        with pytest.raises(pytest.fail.Exception, match="WaitWorkflows timed out"):
+        with pytest.raises(pytest.fail.Exception, match="WaitWorkflowCompletions timed out"):
             await waiter._wait_minion_tasks({dummy})  # type: ignore[arg-type]
     finally:
         task.cancel()
@@ -168,11 +168,11 @@ async def test_wait_workflows_named_lookup_is_scenario_local_only(gru, tests_dir
     )
 
     def _should_not_be_called(*_args, **_kwargs):
-        raise AssertionError("runtime-global lookup must not be used by WaitWorkflows")
+        raise AssertionError("runtime-global lookup must not be used by WaitWorkflowCompletions")
 
     monkeypatch.setattr(waiter._insp, "get_minions_by_name", _should_not_be_called)
 
-    with pytest.raises(pytest.fail.Exception, match="Unknown minion names in WaitWorkflows"):
+    with pytest.raises(pytest.fail.Exception, match="Unknown minion names in WaitWorkflowCompletions"):
         await waiter.wait(minion_names={"not-started-in-scenario"})
 
 
@@ -217,7 +217,7 @@ async def test_runner_records_checkpoints_for_wait_workflow_completions_and_shut
             minion_config_path=config_path,
             pipeline=pipeline_modpath,
         ),
-        WaitWorkflows(),
+        WaitWorkflowCompletions(),
         GruShutdown(expect_success=True),
     ]
 
@@ -229,7 +229,7 @@ async def test_runner_records_checkpoints_for_wait_workflow_completions_and_shut
         "gru_shutdown",
     ]
     assert [cp.order for cp in result.checkpoints] == [0, 1]
-    assert result.checkpoints[0].directive_type == "WaitWorkflows"
+    assert result.checkpoints[0].directive_type == "WaitWorkflowCompletions"
     assert result.checkpoints[0].minion_names is None
     assert result.checkpoints[0].workflow_steps_mode == "at_least"
     assert result.checkpoints[0].spy_call_counts_by_instance is not None
@@ -278,7 +278,7 @@ async def test_runner_restart_flow_checkpoints_separate_pre_stop_and_post_restar
             directive=MinionStop(name_or_instance_id="two-step-minion", expect_success=True),
         ),
         MinionStart(minion=minion_modpath, minion_config_path=cfg1, pipeline=pipeline_modpath),
-        WaitWorkflows(),
+        WaitWorkflowCompletions(),
         GruShutdown(expect_success=True),
     ]
 

@@ -10,7 +10,7 @@ from tests.support.gru_scenario import (
     GruShutdown,
     MinionStart,
     MinionStop,
-    WaitWorkflows,
+    WaitWorkflowCompletions,
     run_gru_scenario,
 )
 
@@ -186,7 +186,7 @@ class TestInvalidUsageDSL:
                 pipeline=pipeline_modpath,
                 expect_success=False,
             ),
-            WaitWorkflows(),
+            WaitWorkflowCompletions(),
             GruShutdown(expect_success=True),
         ]
 
@@ -263,7 +263,7 @@ class TestInvalidUsageUsingNewAssetsDSL:
                 pipeline=pipeline_modpath,
                 expect_success=False,
             ),
-            WaitWorkflows(),
+            WaitWorkflowCompletions(),
             GruShutdown(expect_success=True),
         ]
 

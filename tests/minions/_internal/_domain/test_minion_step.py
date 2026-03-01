@@ -1,4 +1,4 @@
-import asyncio
+import inspect
 import pytest
 from typing import Callable
 
@@ -14,7 +14,7 @@ async def test_minion_step_no_parens():
     async def step1():
         ...
 
-    assert asyncio.iscoroutinefunction(step1)
+    assert inspect.iscoroutinefunction(step1)
     assert is_minion_step(step1)
     assert getattr(step1, "__minion_step__")["name"] == "step1"
 
@@ -24,7 +24,7 @@ async def test_minion_step_with_parens():
     async def step2():
         ...
 
-    assert asyncio.iscoroutinefunction(step2)
+    assert inspect.iscoroutinefunction(step2)
     assert is_minion_step(step2)
     assert getattr(step2, "__minion_step__")["name"] == "step2"
 

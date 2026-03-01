@@ -1,7 +1,7 @@
 import asyncio
 
 from abc import abstractmethod
-from typing import Awaitable, Callable, Generic, Mapping, Any, get_args, get_origin
+from typing import Awaitable, Callable, Generic, Any, get_args, get_origin
 
 from .types import T_Event
 from .minion import Minion
@@ -130,50 +130,52 @@ class Pipeline(AsyncService, Generic[T_Event]):
 
     async def run(self):
         while True:
-            try:
-                event = await self.produce_event()
-                
-                await self._mn_logger._log(
-                    DEBUG,
-                    "Pipeline produced event",
-                    pipeline_id=self._mn_pipeline_id,
-                    pipeline_modpath=self._mn_pipeline_modpath,
-                    event=repr(event)
-                )
-            except Exception:
-                await self._mn_metrics._inc(
-                    metric_name=PIPELINE_ERROR_TOTAL,
-                    labels={LABEL_PIPELINE: self._mn_pipeline_id},
-                )
-                raise
-            else:
-                await self._mn_metrics._inc(
-                    metric_name=PIPELINE_EVENT_PRODUCED_TOTAL,
-                    labels={LABEL_PIPELINE: self._mn_pipeline_id},
-                )
-                async with self._mn_subs_lock:
-                    for minion in self._mn_subs:
-                        # Track event-handling tasks on the minion itself for clean shutdown.
-                        minion.safe_create_task(minion._mn_handle_event(event))
-                        await self._mn_metrics._inc(
-                            metric_name=PIPELINE_EVENT_FANOUT_TOTAL,
-                            labels={
-                                LABEL_PIPELINE: self._mn_pipeline_id,
-                                LABEL_MINION_INSTANCE_ID: minion._mn_minion_instance_id,
-                            },
-                        )
-                    await asyncio.gather(*[
-                        self._mn_logger._log(
-                            DEBUG,
-                            "Pipeline Fanout: dispatched event to minion",
-                            pipeline_id=self._mn_pipeline_id,
-                            minion_name=minion._mn_name,
-                            minion_instance_id=minion._mn_minion_instance_id,
-                            minion_composite_key=minion._mn_minion_composite_key,
-                            minion_modpath=minion._mn_minion_modpath
-                        )
-                        for minion in self._mn_subs
-                    ], return_exceptions=True)
+            await self._mn_produce_and_handle_event()
+
+    async def _mn_produce_and_handle_event(self) -> None:
+        try:
+            event = await self.produce_event()
+            await self._mn_logger._log(
+                DEBUG,
+                "Pipeline produced event",
+                pipeline_id=self._mn_pipeline_id,
+                pipeline_modpath=self._mn_pipeline_modpath,
+                event=repr(event),
+            )
+            await self._mn_metrics._inc(
+                metric_name=PIPELINE_EVENT_PRODUCED_TOTAL,
+                labels={LABEL_PIPELINE: self._mn_pipeline_id},
+            )
+            async with self._mn_subs_lock:
+                subs = tuple(self._mn_subs)
+                for minion in subs:
+                    # Track event-handling tasks on the minion itself for clean shutdown.
+                    minion.safe_create_task(minion._mn_handle_event(event))
+                    await self._mn_metrics._inc(
+                        metric_name=PIPELINE_EVENT_FANOUT_TOTAL,
+                        labels={
+                            LABEL_PIPELINE: self._mn_pipeline_id,
+                            LABEL_MINION_INSTANCE_ID: minion._mn_minion_instance_id,
+                        },
+                    )
+                await asyncio.gather(*[
+                    self._mn_logger._log(
+                        DEBUG,
+                        "Pipeline Fanout: dispatched event to minion",
+                        pipeline_id=self._mn_pipeline_id,
+                        minion_name=minion._mn_name,
+                        minion_instance_id=minion._mn_minion_instance_id,
+                        minion_composite_key=minion._mn_minion_composite_key,
+                        minion_modpath=minion._mn_minion_modpath,
+                    )
+                    for minion in subs
+                ], return_exceptions=True)
+        except Exception:
+            await self._mn_metrics._inc(
+                metric_name=PIPELINE_ERROR_TOTAL,
+                labels={LABEL_PIPELINE: self._mn_pipeline_id},
+            )
+            raise
 
     async def _mn_subscribe(self, minion: Minion):
         async with self._mn_subs_lock:

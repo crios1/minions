@@ -7,7 +7,6 @@ from tests.support.gru_scenario.directives import (
     RuntimeExpectSpec,
     WaitWorkflowCompletions,
     WaitWorkflowStartsThen,
-    WaitWorkflows,
     iter_directives_flat,
 )
 
@@ -15,7 +14,7 @@ from tests.support.gru_scenario.directives import (
 def test_iter_directives_flattens_concurrent():
     d1a = MinionStart(minion="m1", pipeline="p1")
     d1b = MinionStart(minion="m2", pipeline="p2")
-    d2 = WaitWorkflows()
+    d2 = WaitWorkflowCompletions()
     d3a = MinionStop(name_or_instance_id="m1", expect_success=True)
     d3b = MinionStop(name_or_instance_id="m2", expect_success=True)
     d4 = GruShutdown()
@@ -25,8 +24,8 @@ def test_iter_directives_flattens_concurrent():
     assert list(iter_directives_flat(directives)) == [d1a, d1b, d2, d3a, d3b, d4]
 
 
-def test_wait_workflows_is_compatibility_alias_of_wait_workflow_completions():
-    directive = WaitWorkflows(minion_names={"m1"}, workflow_steps_mode="exact")
+def test_wait_workflow_completions_accepts_minion_names_and_mode():
+    directive = WaitWorkflowCompletions(minion_names={"m1"}, workflow_steps_mode="exact")
     assert isinstance(directive, WaitWorkflowCompletions)
     assert directive.minion_names == {"m1"}
     assert directive.workflow_steps_mode == "exact"

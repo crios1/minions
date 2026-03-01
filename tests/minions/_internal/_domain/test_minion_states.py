@@ -149,3 +149,50 @@ async def test_minion_startup_replays_only_own_contexts():
     await m._mn_startup()
 
     assert replayed_ids == ["wf-own"]
+
+
+@pytest.mark.asyncio
+async def test_runtime_guard_rejects_nested_step_invocation_via_indirect_call():
+    class NestedCallMinion(Minion[dict, dict]):
+        name = "nested-call-minion"
+
+        @minion_step
+        async def step_1(self):
+            nested = getattr(self, "step_2")
+            await nested()
+
+        @minion_step
+        async def step_2(self):
+            self.context["step2"] = "step2"
+
+    InMemoryLogger.enable_spy()
+    InMemoryLogger.reset_spy()
+    InMemoryMetrics.enable_spy()
+    InMemoryMetrics.reset_spy()
+    InMemoryStateStore.enable_spy()
+    InMemoryStateStore.reset_spy()
+
+    logger = InMemoryLogger()
+    metrics = InMemoryMetrics()
+    state_store = InMemoryStateStore(logger=logger)
+
+    m = NestedCallMinion(
+        "iid",
+        "ck",
+        "tests.assets.nested_call_minion",
+        None,
+        state_store,
+        metrics,
+        logger,
+    )
+
+    await m._mn_handle_event({})
+    await state_store.wait_for_call("delete_context", count=1, timeout=2)
+
+    snap = metrics.snapshot()
+    counters = snap.get("counter", {})
+    step_failed_total = sum(
+        s.get("value", 0)
+        for s in counters.get(MINION_WORKFLOW_STEP_FAILED_TOTAL, [])
+    )
+    assert step_failed_total == 1

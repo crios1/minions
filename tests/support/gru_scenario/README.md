@@ -47,6 +47,10 @@ This package provides a light, test-focused DSL for scripting Gru scenarios and 
 - Shared/fanout verification requires an explicit subscription barrier before event emission.
 - Until the barrier is owned by DSL internals, tests should use synchronization-capable test pipelines (gated assets) for deterministic fanout checks.
 - Pipeline assets used for deterministic fanout checks are test synchronization assets by design; this does not redefine production runtime semantics.
+- For strict overlap-window assertions, prefer scripted deterministic fixtures:
+  - base: `tests.assets.support.pipeline_scripted.ScriptedSpiedPipeline`,
+  - overlap fixture: `tests.assets.support.pipeline_overlap_window`.
+- Reason: base `Pipeline.run` loops indefinitely and may produce an additional `produce_event` call beyond target counts; scripted fixtures bound event emission so strict window mismatches fail for the intended reason.
 
 ## Quick Start
 ```python
@@ -55,7 +59,7 @@ directives = [
         MinionStart(...),
         MinionStart(...),
     ),
-    WaitWorkflows(),
+    WaitWorkflowCompletions(),
     MinionStop(name_or_instance_id="m1", expect_success=True),
     MinionStop(name_or_instance_id="m2", expect_success=True),
     GruShutdown(expect_success=True),
@@ -82,7 +86,6 @@ await run_gru_scenario(
 - `ExpectRuntime(...)` evaluates runtime expectations at the current scenario checkpoint.
   - Initial supported section: `expect=RuntimeExpectSpec(persistence={minion_name: count})`.
   - Supported targets: `at="latest"` (directive checkpoint) or `at=<checkpoint_index>` (0-based).
-- `WaitWorkflows(...)` is a temporary compatibility alias to `WaitWorkflowCompletions(...)`.
 - `GruShutdown(...)` shuts down the Gru runtime.
 
 ## Directive Effects
@@ -103,9 +106,15 @@ await run_gru_scenario(
 - `WaitWorkflowCompletions(workflow_steps_mode="at_least"|"exact")` controls checkpoint-window step-delta strictness.
   - default is `"at_least"` (compatibility mode).
   - use `"exact"` for deterministic windows where over-production should fail.
+  - in `"exact"`:
+    - workflow-id deltas must be exact (`expected`),
+    - call-count deltas must stay within `expected..expected+successful_starts_in_window` when workflow-id evidence is available,
+    - otherwise call-count deltas must be strict equality (`expected`).
+  - mismatch diagnostics are deterministic:
+    - if workflow-id evidence exists and workflow-id delta mismatches, that mismatch is reported first,
+    - otherwise call-count mismatch is reported with explicit expected range and actual delta.
 - The wait first blocks on workflow-step spy call counts, then drains minion tasks.
 - `WaitWorkflowStartsThen(expected={...}, directive=MinionStop(...))` is the race-safe primitive for restart/resume stop points.
-- `WaitWorkflows(...)` remains supported as a compatibility alias.
 
 ## Runtime Expectations
 - `ExpectRuntime(at="latest", expect=RuntimeExpectSpec(...))` asserts runtime state at the current checkpoint.
@@ -138,6 +147,10 @@ ExpectRuntime(
 - Persistence counts are resolved by scenario-local minion names observed from successful starts.
 - Resolution counts are evaluated from checkpoint metrics snapshots for scenario-local minion instances.
 - Workflow-step progression counts are evaluated from checkpoint workflow step-start workflow IDs.
+- `ExpectRuntime.workflow_steps_mode="exact"` is checkpoint-total exactness (strict equality for declared counts at target checkpoint), not window-tolerance mode.
+- Strictness policy lock:
+  - `ExpectRuntime.workflow_steps_mode="exact"` does not apply wait-window `+successful_starts_in_window` tolerance.
+  - That bounded tolerance is intentionally scoped to `WaitWorkflowCompletions(workflow_steps_mode="exact")` window checks only.
 - Restart/resume (strict) example:
 ```python
 directives = [
@@ -154,7 +167,7 @@ directives = [
         ),
     ),
     MinionStart(minion=minion_modpath, pipeline=pipeline_modpath),
-    WaitWorkflows(),
+    WaitWorkflowCompletions(),
     ExpectRuntime(
         expect=RuntimeExpectSpec(
             resolutions={"slow-step-minion": {"succeeded": 2, "failed": 0, "aborted": 0}},
@@ -184,6 +197,8 @@ Expected workflow counts are derived from `pipeline_event_counts`:
 
 ## Verification Tolerances
 - Pipeline `produce_event` counts allow off-by-one: expected `N` or `N+1`.
+- Minion workflow-step fanout counts are bounded by successful starts:
+  expected workflow calls per class are `N..N+starts` (reflecting the same +1-per-start tolerance).
 - Pipeline lifecycle counts are bounded by observed start attempts and successes.
   - `__init__`: between `0/1` (depending on successful starts) and start attempts.
   - `startup` and `run`: bounded similarly, with `run <= startup`.
@@ -199,6 +214,7 @@ Expected workflow counts are derived from `pipeline_event_counts`:
 ## Runtime-Dependent Notes
 - Some tolerances intentionally reflect current runtime behavior under concurrency (attempt/success bounds), not idealized singleton assumptions.
 - If runtime lifecycle locking/ordering changes, revisit these tolerances and related verifier tests together.
+- Minion composition rule: workflow steps cannot call other workflow steps directly (`self.step_x(...)`); step sequencing is owned by the runtime workflow engine.
 
 ## Options
 - `per_verification_timeout`: timeout for waits and spy assertions.
