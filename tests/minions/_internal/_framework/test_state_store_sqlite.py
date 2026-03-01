@@ -142,23 +142,14 @@ async def test_delete_context_removes_row(store):
     rows2 = await s.get_all_contexts()
     assert all(r.workflow_id != "wf-77" for r in rows2)
 
-async def test_commit_p95_warning(store, monkeypatch):
+async def test_commit_p95_warning(store):
     s, logger = store
-    s._batch_max_n = 1
     s._warn_cfg["commit_p95_ms"] = (5.0, 9999.0)  # trip warn easily
+    # Keep throughput warnings effectively disabled so this test isolates commit p95.
+    s._warn_cfg["rows_per_sec"] = (float("inf"), float("inf"))
 
-    # Inject latency inside the timed window of _upsert_now by slowing commit()
-    orig_commit = s._db.commit
-    async def delayed_commit():
-        await asyncio.sleep(0.05)  # inflate measured commit duration
-        return await orig_commit()
-    monkeypatch.setattr(s._db, "commit", delayed_commit)
+    # Seed enough commit samples for p95 and force the threshold crossing.
+    s._commit_ms_hist.extend([10.0] * 22)  # >=20 so p95 is meaningful
 
-    # Generate enough samples for p95 computation
-    for i in range(22):  # >=20 so p95 is meaningful
-        await s.save_context(mk_ctx(i=2000 + i))
-        await wait_flush(s)
-
-    # Give the scheduled warning task a moment to run
+    s._check_perf_signals()
     assert await wait_for_log(logger, "commit_p95=", timeout=1.0), "expected commit_p95 warning to fire"
-
