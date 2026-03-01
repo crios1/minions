@@ -15,6 +15,19 @@ from tests.support.gru_scenario.plan import ScenarioPlan
 from tests.support.gru_scenario.runner import ScenarioRunResult, ScenarioRunner, ScenarioWaiter, SpyRegistry
 
 
+@pytest.mark.asyncio
+async def test_runner_require_result_invariant_message_is_actionable(gru):
+    runner = ScenarioRunner(
+        gru,
+        ScenarioPlan([], pipeline_event_counts={}),
+        per_verification_timeout=0.1,
+    )
+    with pytest.raises(
+        AssertionError,
+        match=r"internal invariant violated: _result is None.*ScenarioRunner\.run\(\)",
+    ):
+        runner._require_result()
+
 
 @pytest.mark.asyncio
 async def test_runner_records_receipts_for_success_and_expected_failure(gru, tests_dir):

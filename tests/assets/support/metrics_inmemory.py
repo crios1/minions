@@ -15,7 +15,7 @@ from minions._internal._framework.metrics_interface import LabelledMetric
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_constants import METRIC_LABEL_NAMES
 
-from .mixin_spy import SpyMixin
+from .metrics_spied import SpiedMetrics
 
 LabelKey = Tuple[Tuple[str, str], ...]  # sorted (name, value) pairs for hashing
 SampleT = TypeVar("SampleT", CounterSample, GaugeSample, HistogramSample)
@@ -119,7 +119,7 @@ class _InMemoryMetric(LabelledMetric):
         raise TypeError("Call .labels(...).observe() on a histogram metric") # pragma: no cover
 
 
-class InMemoryMetrics(SpyMixin, Metrics):
+class InMemoryMetrics(SpiedMetrics):
     """
     In-memory metrics backend.
     Thread-safe, test-friendly; stores per-label values and provides snapshot helpers.

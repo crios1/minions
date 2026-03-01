@@ -1,6 +1,7 @@
 from dataclasses import dataclass
-from minions._internal._framework.logger import Logger, DEBUG, INFO, WARNING, ERROR, CRITICAL
-from .mixin_spy import SpyMixin
+from minions._internal._framework.logger import DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+from .logger_spied import SpiedLogger
 
 @dataclass
 class Log:
@@ -8,7 +9,7 @@ class Log:
     msg: str
     kwargs: dict
 
-class InMemoryLogger(SpyMixin, Logger):
+class InMemoryLogger(SpiedLogger):
     """In-memory implementation of Logger for testing."""
 
     def __init__(self, level: int = INFO):

@@ -6,6 +6,11 @@ This package provides a light, test-focused DSL for scripting Gru scenarios and 
 - Canonical package: `tests.support.gru_scenario`
 - Canonical entrypoint: `run_gru_scenario(...)` from this package
 - Scope: this is the only supported Gru scenario DSL implementation under `tests/support`
+- Canonical component contract for DSL runs:
+  - logger: `tests.assets.support.logger_spied.SpiedLogger`
+  - metrics: `tests.assets.support.metrics_spied.SpiedMetrics`
+  - state store: `tests.assets.support.state_store_spied.SpiedStateStore`
+  - default fixtures (`InMemoryLogger`, `InMemoryMetrics`, `InMemoryStateStore`) satisfy this contract.
 
 ## Scope Boundary
 - This DSL is for orchestration tests: lifecycle sequencing, waits, stop/shutdown behavior, concurrency, and shared-resource runtime behavior.
@@ -215,6 +220,9 @@ Expected workflow counts are derived from `pipeline_event_counts`:
 - Some tolerances intentionally reflect current runtime behavior under concurrency (attempt/success bounds), not idealized singleton assumptions.
 - If runtime lifecycle locking/ordering changes, revisit these tolerances and related verifier tests together.
 - Minion composition rule: workflow steps cannot call other workflow steps directly (`self.step_x(...)`); step sequencing is owned by the runtime workflow engine.
+- Alternate backend note:
+  - non-in-memory logger/metrics/state-store backends can be used with DSL scenarios if they implement the spied component contract above.
+  - required capabilities include spy call-history/count surfaces plus snapshot surfaces consumed by runner/verifier (for example logs, metrics counters, persisted contexts).
 
 ## Options
 - `per_verification_timeout`: timeout for waits and spy assertions.

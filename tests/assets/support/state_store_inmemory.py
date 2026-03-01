@@ -1,12 +1,12 @@
 import asyncio
 
 from minions._internal._framework.logger import Logger
-from minions._internal._framework.state_store import StateStore
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 
-from tests.assets.support.mixin_spy import SpyMixin
+from tests.assets.support.state_store_spied import SpiedStateStore
 
-class InMemoryStateStore(StateStore, SpyMixin):
+
+class InMemoryStateStore(SpiedStateStore):
     """In-memory implementation of StateStore for testing."""
 
     def __init__(self, logger: Logger):

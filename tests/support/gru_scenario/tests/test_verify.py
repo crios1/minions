@@ -40,6 +40,18 @@ def _mk_verifier(
     )
 
 
+def test_verifier_require_spies_invariant_message_is_actionable():
+    verifier = _mk_verifier(
+        ScenarioPlan([], pipeline_event_counts={}),
+        ScenarioRunResult(spies=None, receipts=[]),
+    )
+    with pytest.raises(
+        AssertionError,
+        match=r"internal invariant violated: result\.spies is None.*ScenarioRunner\.run\(\)",
+    ):
+        verifier._require_spies()
+
+
 def test_compute_minion_expectations_accumulates_starts_from_successful_receipts():
     directives = [
         MinionStart(

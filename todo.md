@@ -9,12 +9,6 @@
 -->
 
 ### Test Suite:
-- todo: clean up remaining DSL runtime contract edges in `tests/support/gru_scenario`
-  - replace remaining discovery-path runtime `assert` checks with explicit typed failures
-  - remove redundant legacy spy alias branch in `runner.py` once migration residue is no longer needed
-  - revisit typing/coupling for `run_gru_scenario(...)` entrypoint and document intended contract
-  - re-audit DSL hot paths to ensure no optimization-sensitive runtime `assert` checks remain
-
 - todo: harden test_gru.py:
   - steps:
     - complete the robust reuseable gru testing routine
@@ -118,6 +112,9 @@
   - note: use the (_minion_locks, _pipeline_locks, _resource_locks) gru attrs
   - convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/6910f9e9-d76c-8327-92b3-ea4b729b6288
 
+- todo: add Minion `max_inflight_workflows` class arg (per minion configuration)
+  - codex://threads/019ca819-0afe-7591-b59f-53d06718a48b
+
 - todo: add bounded startup concurrency to Gru (`max_concurrent_minion_starts`)
   - goal:
     - prevent startup storms (ex: 50+ minions on restart) from overloading event loop / NAS / host I/O
@@ -156,6 +153,7 @@
 
 - todo: write a gru test that ensures a minion has access to self.event and self.context
 in all steps include when resuming a workflow from statestore
+  - possibly done except for the resuming bit
 
 - todo: add early (best-effort) serialization validation for user-provided event and workflow context types at Pipeline / Minion definition time
   - statically check that user type annotations are supported by gru's serialization, and raise when an annotation is not
@@ -349,12 +347,13 @@ in all steps include when resuming a workflow from statestore
 - todo: implement "minions gru serve" and "minions gru attach"
   - basically a redesign of the controller of the runtime, GruShell will remain as perhaps a demo thing or something maybe but the official and best way to use gru and the shell is in a serve-attach model as seperate
   - convo: https://chatgpt.com/c/69406c80-f478-8327-85b2-e3fb54d89796
+  - should consider creating a golang cli for a cli option of 'minions gru attach'
 
 - todo: complete GruShell (~90% implemented, needs documentation / user onboarding flow)
   - users will embed GruShell into thier deployment scripts / use the cookbook to make the script
   - but maybe it makes sense to let the user experiment with the shell by calling "python -m minions shell"? i need to consider the user onboarding flow further.
 
-- todo: implement and lock in two-stage Ctrl-C shutdown semantics for GruShell
+- todo: implement and lock in two-stage Ctrl-C shutdown semantics for GruShell (for Gru too if not implemented)
   - scope:
     - implement in GruShell / shell entrypoint (`minions/shell.py`), not in `Gru` core runtime
   - behavior:
@@ -526,6 +525,7 @@ in all steps include when resuming a workflow from statestore
 
 - todo: my landing page doc and readme are almost the same, i should consider centralizing them to some extent or better to maintain them seperately?
   - diff: https://chatgpt.com/codex/tasks/task_e_694a7a586ea883299cf280a9bf7fc64a
+  - don't centralize cuz the optimal way to structure things may only make sense when deploying the docs site
 
 - todo: add version switcher to docs
 

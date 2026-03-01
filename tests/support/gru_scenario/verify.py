@@ -13,9 +13,9 @@ from minions._internal._framework.metrics_constants import (
 )
 
 from tests.assets.support.mixin_spy import SpyMixin
-from tests.assets.support.logger_inmemory import InMemoryLogger
-from tests.assets.support.metrics_inmemory import InMemoryMetrics
-from tests.assets.support.state_store_inmemory import InMemoryStateStore
+from tests.assets.support.logger_spied import SpiedLogger
+from tests.assets.support.metrics_spied import SpiedMetrics
+from tests.assets.support.state_store_spied import SpiedStateStore
 
 from .directives import ExpectRuntime, MinionStart
 from .plan import ScenarioPlan
@@ -76,9 +76,9 @@ class ScenarioVerifier:
         plan: ScenarioPlan,
         result: ScenarioRunResult,
         *,
-        logger: InMemoryLogger,
-        metrics: InMemoryMetrics,
-        state_store: InMemoryStateStore,
+        logger: SpiedLogger,
+        metrics: SpiedMetrics,
+        state_store: SpiedStateStore,
         per_verification_timeout: float,
     ):
         self._plan = plan
@@ -783,5 +783,8 @@ class ScenarioVerifier:
 
     def _require_spies(self) -> SpyRegistry:
         if self._result.spies is None:
-            raise AssertionError("ScenarioRunner did not populate spies.")
+            raise AssertionError(
+                "ScenarioVerifier internal invariant violated: result.spies is None. "
+                "Ensure verification runs on a ScenarioRunResult produced by ScenarioRunner.run()."
+            )
         return self._result.spies

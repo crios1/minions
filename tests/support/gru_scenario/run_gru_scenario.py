@@ -1,8 +1,8 @@
 from minions._internal._domain.gru import Gru
 
-from tests.assets.support.logger_inmemory import InMemoryLogger
-from tests.assets.support.metrics_inmemory import InMemoryMetrics
-from tests.assets.support.state_store_inmemory import InMemoryStateStore
+from tests.assets.support.logger_spied import SpiedLogger
+from tests.assets.support.metrics_spied import SpiedMetrics
+from tests.assets.support.state_store_spied import SpiedStateStore
 
 from .directives import Directive
 from .plan import ScenarioPlan
@@ -12,9 +12,9 @@ from .verify import ScenarioVerifier
 
 async def run_gru_scenario(
     gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
+    logger: SpiedLogger,
+    metrics: SpiedMetrics,
+    state_store: SpiedStateStore,
     directives: list[Directive],
     *,
     pipeline_event_counts: dict[str, int],
