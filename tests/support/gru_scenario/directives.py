@@ -56,10 +56,9 @@ class WaitWorkflowCompletions(Directive):
 
 
 @dataclass(frozen=True)
-class WaitWorkflowStartsThen(Directive):
+class AfterWorkflowStarts(Directive):
     expected: dict[str, int]
     directive: Directive
-
 
 @dataclass(frozen=True)
 class ExpectRuntime(Directive):
@@ -77,7 +76,7 @@ def iter_directives_flat(directives: Iterable["Directive"]) -> Iterator["Directi
         if isinstance(d, Concurrent):
             yield from iter_directives_flat(d.directives)
             continue
-        if isinstance(d, WaitWorkflowStartsThen):
+        if isinstance(d, AfterWorkflowStarts):
             yield from iter_directives_flat((d.directive,))
             continue
         yield d

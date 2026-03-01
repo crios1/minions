@@ -30,7 +30,7 @@ from .directives import (
     MinionStart,
     MinionStop,
     WaitWorkflowCompletions,
-    WaitWorkflowStartsThen,
+    AfterWorkflowStarts,
     iter_directives_flat,
 )
 from .introspect import GruIntrospector
@@ -185,7 +185,7 @@ class ScenarioRunner:
         elif isinstance(d, WaitWorkflowCompletions):
             await self._wait_workflows(d)
 
-        elif isinstance(d, WaitWorkflowStartsThen):
+        elif isinstance(d, AfterWorkflowStarts):
             await self._wait_workflow_starts_then(d)
 
         elif isinstance(d, ExpectRuntime):
@@ -263,10 +263,10 @@ class ScenarioRunner:
             workflow_steps_mode=d.workflow_steps_mode,
         )
 
-    async def _wait_workflow_starts_then(self, d: WaitWorkflowStartsThen) -> None:
+    async def _wait_workflow_starts_then(self, d: AfterWorkflowStarts) -> None:
         if not isinstance(d.directive, MinionStop):
             pytest.fail(
-                "WaitWorkflowStartsThen currently supports wrapping MinionStop only; "
+                "AfterWorkflowStarts currently supports wrapping MinionStop only; "
                 f"got {type(d.directive).__name__}"
             )
         waiter = ScenarioWaiter(
@@ -485,22 +485,22 @@ class ScenarioWaiter:
 
     async def wait_for_starts(self, *, expected: dict[str, int]) -> None:
         if not expected:
-            pytest.fail("WaitWorkflowStartsThen.expected must be a non-empty dict.")
+            pytest.fail("AfterWorkflowStarts.expected must be a non-empty dict.")
         waits: list[Awaitable[None]] = []
         for name, count in expected.items():
             if not isinstance(count, int):
                 pytest.fail(
-                    f"WaitWorkflowStartsThen.expected[{name!r}] must be an int, got {type(count).__name__}."
+                    f"AfterWorkflowStarts.expected[{name!r}] must be an int, got {type(count).__name__}."
                 )
             if count <= 0:
                 pytest.fail(
-                    f"WaitWorkflowStartsThen.expected[{name!r}] must be >= 1, got {count}."
+                    f"AfterWorkflowStarts.expected[{name!r}] must be >= 1, got {count}."
                 )
 
             receipts = [r for r in self._result.receipts if r.resolved_name == name and r.success]
             if not receipts:
                 pytest.fail(
-                    "Unknown minion names in WaitWorkflowStartsThen.expected: "
+                    "Unknown minion names in AfterWorkflowStarts.expected: "
                     f"{[name]}"
                 )
 

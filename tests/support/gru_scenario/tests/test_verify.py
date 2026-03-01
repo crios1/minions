@@ -490,7 +490,7 @@ def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phas
             ScenarioCheckpoint(
                 order=0,
                 kind="wait_workflow_starts_then",
-                directive_type="WaitWorkflowStartsThen",
+                directive_type="AfterWorkflowStarts",
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
@@ -1541,7 +1541,7 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
             ScenarioCheckpoint(
                 order=0,
                 kind="wait_workflow_starts_then",
-                directive_type="WaitWorkflowStartsThen",
+                directive_type="AfterWorkflowStarts",
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,

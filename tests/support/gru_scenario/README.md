@@ -81,7 +81,7 @@ await run_gru_scenario(
 - `MinionStop(...)` stops a minion by name or instance id.
 - `Concurrent(...)` runs child directives concurrently.
 - `WaitWorkflowCompletions(...)` waits for workflow completion.
-- `WaitWorkflowStartsThen(expected, directive)` waits for workflow starts then immediately executes a wrapped directive.
+- `AfterWorkflowStarts(expected, directive)` waits for workflow starts then immediately executes a wrapped directive.
   - Initial supported wrapped directive: `MinionStop(...)`.
 - `ExpectRuntime(...)` evaluates runtime expectations at the current scenario checkpoint.
   - Initial supported section: `expect=RuntimeExpectSpec(persistence={minion_name: count})`.
@@ -95,7 +95,7 @@ await run_gru_scenario(
 | `MinionStop` | No | No | Indirect only (runtime state changes that may affect later call histories) |
 | `Concurrent` | No (container only) | No (container only) | No (container only) |
 | `WaitWorkflowCompletions` | No | Yes (waits by all started or named subset) | No direct counts; ensures async work is drained before assertions |
-| `WaitWorkflowStartsThen` | No | Yes (waits for start targets before running wrapped directive) | Indirect only (wrapped directive effects) |
+| `AfterWorkflowStarts` | No | Yes (waits for start targets before running wrapped directive) | Indirect only (wrapped directive effects) |
 | `ExpectRuntime` | No | No | Yes (checkpoint-scoped runtime expectations such as persisted-context counts) |
 | `GruShutdown` | No | No | Yes (`seen_shutdown` gates shutdown-related expectations) |
 
@@ -114,7 +114,7 @@ await run_gru_scenario(
     - if workflow-id evidence exists and workflow-id delta mismatches, that mismatch is reported first,
     - otherwise call-count mismatch is reported with explicit expected range and actual delta.
 - The wait first blocks on workflow-step spy call counts, then drains minion tasks.
-- `WaitWorkflowStartsThen(expected={...}, directive=MinionStop(...))` is the race-safe primitive for restart/resume stop points.
+- `AfterWorkflowStarts(expected={...}, directive=MinionStop(...))` is the race-safe primitive for restart/resume stop points.
 
 ## Runtime Expectations
 - `ExpectRuntime(at="latest", expect=RuntimeExpectSpec(...))` asserts runtime state at the current checkpoint.
@@ -155,7 +155,7 @@ ExpectRuntime(
 ```python
 directives = [
     MinionStart(minion=minion_modpath, pipeline=pipeline_modpath),
-    WaitWorkflowStartsThen(
+    AfterWorkflowStarts(
         expected={"slow-step-minion": 1},
         directive=MinionStop(name_or_instance_id="slow-step-minion", expect_success=True),
     ),

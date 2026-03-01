@@ -6,7 +6,7 @@ from tests.support.gru_scenario.directives import (
     MinionStop,
     RuntimeExpectSpec,
     WaitWorkflowCompletions,
-    WaitWorkflowStartsThen,
+    AfterWorkflowStarts,
     iter_directives_flat,
 )
 
@@ -34,7 +34,7 @@ def test_wait_workflow_completions_accepts_minion_names_and_mode():
 def test_iter_directives_flattens_wait_workflow_starts_then_wrapped_directive():
     d1 = MinionStart(minion="m1", pipeline="p1")
     d2 = MinionStop(name_or_instance_id="m1", expect_success=True)
-    wrapped = WaitWorkflowStartsThen(expected={"m1": 1}, directive=d2)
+    wrapped = AfterWorkflowStarts(expected={"m1": 1}, directive=d2)
     d3 = GruShutdown()
 
     directives = [d1, wrapped, d3]

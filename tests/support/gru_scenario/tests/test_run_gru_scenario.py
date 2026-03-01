@@ -8,7 +8,7 @@ from tests.support.gru_scenario import (
     MinionStop,
     Concurrent,
     RuntimeExpectSpec,
-    WaitWorkflowStartsThen,
+    AfterWorkflowStarts,
     WaitWorkflowCompletions,
     run_gru_scenario,
 )
@@ -89,7 +89,7 @@ async def test_run_gru_scenario_wait_workflow_starts_then_stop_happy_path(
             minion=minion_modpath,
             pipeline=pipeline_modpath,
         ),
-        WaitWorkflowStartsThen(
+        AfterWorkflowStarts(
             expected={"abort-step-minion": 1},
             directive=MinionStop(name_or_instance_id="abort-step-minion", expect_success=True),
         ),
@@ -121,7 +121,7 @@ async def test_run_gru_scenario_expect_runtime_persistence_after_stop(
             minion=minion_modpath,
             pipeline=pipeline_modpath,
         ),
-        WaitWorkflowStartsThen(
+        AfterWorkflowStarts(
             expected={"slow-step-minion": 1},
             directive=MinionStop(name_or_instance_id="slow-step-minion", expect_success=True),
         ),
@@ -293,7 +293,7 @@ async def test_run_gru_scenario_expect_runtime_at_checkpoint_index(
             minion=minion_modpath,
             pipeline=pipeline_modpath,
         ),
-        WaitWorkflowStartsThen(
+        AfterWorkflowStarts(
             expected={"slow-step-minion": 1},
             directive=MinionStop(name_or_instance_id="slow-step-minion", expect_success=True),
         ),
@@ -329,7 +329,7 @@ async def test_run_gru_scenario_restart_same_pipeline_with_persistence_and_resol
             minion=minion_modpath,
             pipeline=pipeline_modpath,
         ),
-        WaitWorkflowStartsThen(
+        AfterWorkflowStarts(
             expected={"slow-step-minion": 1},
             directive=MinionStop(name_or_instance_id="slow-step-minion", expect_success=True),
         ),

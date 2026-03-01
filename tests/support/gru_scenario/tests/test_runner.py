@@ -8,7 +8,7 @@ from tests.support.gru_scenario.directives import (
     MinionStart,
     MinionStop,
     RuntimeExpectSpec,
-    WaitWorkflowStartsThen,
+    AfterWorkflowStarts,
     WaitWorkflowCompletions,
 )
 from tests.support.gru_scenario.plan import ScenarioPlan
@@ -179,7 +179,7 @@ async def test_wait_workflows_named_lookup_is_scenario_local_only(gru, tests_dir
 @pytest.mark.asyncio
 async def test_runner_wait_workflow_starts_then_rejects_unsupported_wrapped_directive(gru):
     directives = [
-        WaitWorkflowStartsThen(
+        AfterWorkflowStarts(
             expected={"simple-minion": 1},
             directive=GruShutdown(expect_success=True),
         ),
@@ -194,7 +194,7 @@ async def test_runner_wait_workflow_starts_then_rejects_unsupported_wrapped_dire
 @pytest.mark.asyncio
 async def test_runner_wait_workflow_starts_then_rejects_unknown_names(gru):
     directives = [
-        WaitWorkflowStartsThen(
+        AfterWorkflowStarts(
             expected={"missing": 1},
             directive=MinionStop(name_or_instance_id="missing", expect_success=False),
         ),
@@ -202,7 +202,7 @@ async def test_runner_wait_workflow_starts_then_rejects_unknown_names(gru):
     plan = ScenarioPlan(directives, pipeline_event_counts={})
     runner = ScenarioRunner(gru, plan, per_verification_timeout=0.1)
 
-    with pytest.raises(pytest.fail.Exception, match="Unknown minion names in WaitWorkflowStartsThen.expected"):
+    with pytest.raises(pytest.fail.Exception, match="Unknown minion names in AfterWorkflowStarts.expected"):
         await runner.run()
 
 
@@ -245,7 +245,7 @@ async def test_runner_records_checkpoint_for_wait_workflow_starts_then(gru):
             minion="tests.assets.minions.failure.abort_step",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
-        WaitWorkflowStartsThen(
+        AfterWorkflowStarts(
             expected={"abort-step-minion": 1},
             directive=MinionStop(name_or_instance_id="abort-step-minion", expect_success=True),
         ),
@@ -260,7 +260,7 @@ async def test_runner_records_checkpoint_for_wait_workflow_starts_then(gru):
 
     checkpoints = result.checkpoints
     assert [cp.kind for cp in checkpoints] == ["wait_workflow_starts_then", "gru_shutdown"]
-    assert checkpoints[0].directive_type == "WaitWorkflowStartsThen"
+    assert checkpoints[0].directive_type == "AfterWorkflowStarts"
     assert checkpoints[0].expected_starts == {"abort-step-minion": 1}
     assert checkpoints[0].wrapped_directive_type == "MinionStop"
 
@@ -273,7 +273,7 @@ async def test_runner_restart_flow_checkpoints_separate_pre_stop_and_post_restar
 
     directives = [
         MinionStart(minion=minion_modpath, minion_config_path=cfg1, pipeline=pipeline_modpath),
-        WaitWorkflowStartsThen(
+        AfterWorkflowStarts(
             expected={"two-step-minion": 1},
             directive=MinionStop(name_or_instance_id="two-step-minion", expect_success=True),
         ),
@@ -329,7 +329,7 @@ async def test_runner_restart_same_composite_key_after_stop_succeeds(gru):
 
     directives = [
         MinionStart(minion=minion_modpath, pipeline=pipeline_modpath),
-        WaitWorkflowStartsThen(
+        AfterWorkflowStarts(
             expected={"abort-step-minion": 1},
             directive=MinionStop(name_or_instance_id="abort-step-minion", expect_success=True),
         ),
@@ -350,7 +350,7 @@ async def test_runner_records_expect_runtime_checkpoint_with_persistence_snapsho
             minion="tests.assets.minions.failure.slow_step",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
-        WaitWorkflowStartsThen(
+        AfterWorkflowStarts(
             expected={"slow-step-minion": 1},
             directive=MinionStop(name_or_instance_id="slow-step-minion", expect_success=True),
         ),

@@ -7,7 +7,7 @@ from .directives import (
     MinionStop,
     RuntimeExpectSpec,
     WaitWorkflowCompletions,
-    WaitWorkflowStartsThen,
+    AfterWorkflowStarts,
 )
 from .run_gru_scenario import run_gru_scenario
 
@@ -20,7 +20,7 @@ __all__ = [
     "RuntimeExpectSpec",
     "Concurrent",
     "WaitWorkflowCompletions",
-    "WaitWorkflowStartsThen",
+    "AfterWorkflowStarts",
     "GruShutdown",
     "run_gru_scenario",
 ]
