@@ -17,6 +17,8 @@ class Directive:
 class RuntimeExpectSpec:
     persistence: dict[str, int] | None = None
     resolutions: dict[str, dict[str, int]] | None = None
+    workflow_steps: dict[str, dict[str, int]] | None = None
+    workflow_steps_mode: str = "at_least"
 
 
 @dataclass(frozen=True)
@@ -50,6 +52,7 @@ class Concurrent(Directive):
 @dataclass(frozen=True)
 class WaitWorkflowCompletions(Directive):
     minion_names: set[str] | None = None
+    workflow_steps_mode: str = "at_least"
 
 
 @dataclass(frozen=True)

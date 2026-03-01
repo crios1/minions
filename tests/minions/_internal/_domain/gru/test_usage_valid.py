@@ -261,7 +261,7 @@ class TestValidUsageDSL:
                 minion_config_path=config_path,
                 pipeline=pipeline_modpath,
             ),
-            WaitWorkflows(),
+            WaitWorkflows(workflow_steps_mode="exact"),
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
@@ -310,7 +310,7 @@ class TestValidUsageDSL:
                 minion_config_path=cfg3,
                 pipeline=pipeline3,
             ),
-            WaitWorkflows(),
+            WaitWorkflows(workflow_steps_mode="exact"),
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
@@ -364,7 +364,7 @@ class TestValidUsageDSL:
                 minion_config_path=cfg3,
                 pipeline=pipeline_modpath,
             ),
-            WaitWorkflows(),
+            WaitWorkflows(workflow_steps_mode="exact"),
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
@@ -402,7 +402,7 @@ class TestValidUsageDSL:
                 minion_config_path=cfg1,
                 pipeline=pipeline_modpath,
             ),
-            WaitWorkflows(),
+            WaitWorkflows(workflow_steps_mode="exact"),
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
@@ -436,7 +436,7 @@ class TestValidUsageDSL:
                 minion_config_path=config_path,
                 pipeline=pipeline_modpath,
             ),
-            WaitWorkflows(),
+            WaitWorkflows(workflow_steps_mode="exact"),
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
@@ -481,7 +481,7 @@ class TestValidUsageUsingNewAssetsDSL:
                 minion_config_path=config_path,
                 pipeline=pipeline_modpath,
             ),
-            WaitWorkflows(),
+            WaitWorkflows(workflow_steps_mode="exact"),
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
@@ -516,7 +516,7 @@ class TestValidUsageUsingNewAssetsDSL:
                 minion_config_path=config_path,
                 pipeline=pipeline_modpath,
             ),
-            WaitWorkflows(),
+            WaitWorkflows(workflow_steps_mode="exact"),
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
@@ -558,7 +558,7 @@ class TestValidUsageUsingNewAssetsDSL:
                 MinionStart(minion=minion2, minion_config_path=cfg2, pipeline=pipeline2),
                 MinionStart(minion=minion3, minion_config_path=cfg3, pipeline=pipeline3),
             ),
-            WaitWorkflows(),
+            WaitWorkflows(workflow_steps_mode="exact"),
             MinionStop(name_or_instance_id="two-step-resourced-minion", expect_success=True),
             MinionStop(name_or_instance_id="two-step-resourced-minion-b", expect_success=True),
             MinionStop(name_or_instance_id="two-step-resourced-minion-c", expect_success=True),
@@ -591,7 +591,7 @@ class TestValidUsageUsingNewAssetsDSL:
             MinionStart(minion=minion_a, minion_config_path=cfg1, pipeline=pipeline_modpath),
             MinionStart(minion=minion_b, minion_config_path=cfg2, pipeline=pipeline_modpath),
             MinionStart(minion=minion_c, minion_config_path=cfg3, pipeline=pipeline_modpath),
-            WaitWorkflows(),
+            WaitWorkflows(workflow_steps_mode="exact"),
             MinionStop(name_or_instance_id="two-step-resourced-minion", expect_success=True),
             MinionStop(name_or_instance_id="two-step-resourced-shared-minion-b", expect_success=True),
             MinionStop(name_or_instance_id="two-step-resourced-shared-minion-c", expect_success=True),
@@ -618,7 +618,7 @@ class TestValidUsageUsingNewAssetsDSL:
 
         directives: list[Directive] = [
             MinionStart(minion=minion_modpath, minion_config_path=config_path, pipeline=pipeline_modpath),
-            WaitWorkflows(),
+            WaitWorkflows(workflow_steps_mode="exact"),
             GruShutdown(expect_success=True),
         ]
 

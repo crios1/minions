@@ -79,7 +79,7 @@ class ScenarioVerifier:
         expected = self._build_expected_call_counts()
         self._assert_runtime_expectations()
         self._assert_pipeline_events()
-        self._assert_checkpoint_window_fanout_delivery()
+        self._assert_checkpoint_window_workflow_step_progression()
 
         unpin_fns: list[Callable[[], None]] = []
         try:
@@ -199,7 +199,7 @@ class ScenarioVerifier:
             expected_workflows_by_class=expected_workflows_by_class,
         )
 
-    def _assert_checkpoint_window_fanout_delivery(self) -> None:
+    def _assert_checkpoint_window_workflow_step_progression(self) -> None:
         spies = self._require_spies()
         checkpoints = self._result.checkpoints
         if not checkpoints:
@@ -207,6 +207,8 @@ class ScenarioVerifier:
 
         prev_receipt_count = 0
         prev_counts: dict[str, dict[str, int]] = {}
+        prev_counts_by_instance: dict[str, dict[int, dict[str, int]]] = {}
+        prev_workflow_step_ids: dict[str, dict[str, tuple[str, ...]]] = {}
 
         for cp in checkpoints:
             if cp.spy_call_counts is None:
@@ -215,10 +217,18 @@ class ScenarioVerifier:
             if cp.kind != "wait_workflow_completions":
                 prev_receipt_count = cp.receipt_count
                 prev_counts = cp.spy_call_counts
+                prev_counts_by_instance = cp.spy_call_counts_by_instance or {}
+                prev_workflow_step_ids = cp.workflow_step_started_ids_by_class or {}
                 continue
 
             if cp.minion_names == ():
                 continue
+            mode = cp.workflow_steps_mode or "at_least"
+            if mode not in ("at_least", "exact"):
+                pytest.fail(
+                    "WaitWorkflowCompletions.workflow_steps_mode="
+                    f"{mode!r} is unsupported. Use 'at_least' or 'exact'."
+                )
 
             window_receipts = self._result.receipts[prev_receipt_count:cp.receipt_count]
             if cp.minion_names is not None:
@@ -239,18 +249,94 @@ class ScenarioVerifier:
                 key = f"{m_cls.__module__}.{m_cls.__name__}"
                 curr = cp.spy_call_counts.get(key, {})
                 prev = prev_counts.get(key, {})
+                curr_by_instance = (cp.spy_call_counts_by_instance or {}).get(key, {})
+                prev_by_instance = prev_counts_by_instance.get(key, {})
+                curr_workflow_ids_by_step = (cp.workflow_step_started_ids_by_class or {}).get(key, {})
+                prev_workflow_ids_by_step = prev_workflow_step_ids.get(key, {})
 
                 for step_name in m_cls._mn_workflow_spec:  # type: ignore
                     expected_delta = expected_workflows
                     actual_delta = curr.get(step_name, 0) - prev.get(step_name, 0)
-                    if actual_delta < expected_delta:
+                    workflow_id_delta = self._workflow_id_delta_count(
+                        curr=curr_workflow_ids_by_step.get(step_name, ()),
+                        prev=prev_workflow_ids_by_step.get(step_name, ()),
+                    )
+                    has_workflow_id_evidence = cp.workflow_step_started_ids_by_class is not None
+                    call_count_mismatch = (
+                        actual_delta < expected_delta
+                        if mode == "at_least" or has_workflow_id_evidence
+                        else actual_delta != expected_delta
+                    )
+                    if call_count_mismatch:
+                        instance_deltas = self._instance_step_deltas(
+                            step_name=step_name,
+                            curr_by_instance=curr_by_instance,
+                            prev_by_instance=prev_by_instance,
+                        )
+                        expected_phrase = (
+                            f">= {expected_delta}" if mode == "at_least" else str(expected_delta)
+                        )
                         pytest.fail(
-                            f"Checkpoint fanout mismatch for {m_cls.__name__}.{step_name} at checkpoint {cp.order}: "
-                            f"expected delta >= {expected_delta}, got {actual_delta}."
+                            "Checkpoint workflow-step progression mismatch for "
+                            f"{m_cls.__name__}.{step_name} at checkpoint {cp.order}: "
+                            f"expected delta {expected_phrase}, got {actual_delta}. "
+                            f"Per-instance deltas: {instance_deltas}. "
+                            f"Workflow-id delta: {workflow_id_delta}"
+                        )
+                    workflow_id_mismatch = (
+                        workflow_id_delta < expected_delta
+                        if mode == "at_least"
+                        else workflow_id_delta != expected_delta
+                    )
+                    if has_workflow_id_evidence and workflow_id_mismatch:
+                        instance_deltas = self._instance_step_deltas(
+                            step_name=step_name,
+                            curr_by_instance=curr_by_instance,
+                            prev_by_instance=prev_by_instance,
+                        )
+                        expected_workflow_id_phrase = (
+                            f">= {expected_delta}" if mode == "at_least" else str(expected_delta)
+                        )
+                        pytest.fail(
+                            "Checkpoint workflow-id progression mismatch for "
+                            f"{m_cls.__name__}.{step_name} at checkpoint {cp.order}: "
+                            "expected workflow-id delta "
+                            f"{expected_workflow_id_phrase}, got {workflow_id_delta}. "
+                            f"Call-count delta: {actual_delta}. "
+                            f"Per-instance deltas: {instance_deltas}"
                         )
 
             prev_receipt_count = cp.receipt_count
             prev_counts = cp.spy_call_counts
+            prev_counts_by_instance = cp.spy_call_counts_by_instance or {}
+            prev_workflow_step_ids = cp.workflow_step_started_ids_by_class or {}
+
+    def _instance_step_deltas(
+        self,
+        *,
+        step_name: str,
+        curr_by_instance: dict[int, dict[str, int]],
+        prev_by_instance: dict[int, dict[str, int]],
+    ) -> dict[int, int]:
+        deltas: dict[int, int] = {}
+        tags = set(curr_by_instance) | set(prev_by_instance)
+        for tag in tags:
+            curr_val = curr_by_instance.get(tag, {}).get(step_name, 0)
+            prev_val = prev_by_instance.get(tag, {}).get(step_name, 0)
+            delta = curr_val - prev_val
+            if delta != 0:
+                deltas[tag] = delta
+        return dict(sorted(deltas.items()))
+
+    def _workflow_id_delta_count(
+        self,
+        *,
+        curr: tuple[str, ...],
+        prev: tuple[str, ...],
+    ) -> int:
+        curr_ids = set(curr)
+        prev_ids = set(prev)
+        return len(curr_ids - prev_ids)
 
     def _assert_runtime_expectations(self) -> None:
         expect_directives = [
@@ -275,6 +361,8 @@ class ScenarioVerifier:
             )
             persistence = directive.expect.persistence
             resolutions = directive.expect.resolutions
+            workflow_steps = directive.expect.workflow_steps
+            workflow_steps_mode = directive.expect.workflow_steps_mode
 
             receipts = self._result.receipts[:target_checkpoint.receipt_count]
             modpaths_by_name: defaultdict[str, set[str]] = defaultdict(set)
@@ -359,6 +447,59 @@ class ScenarioVerifier:
                                 f"ExpectRuntime.resolutions mismatch for {minion_name}.{status}: "
                                 f"expected {expected_count}, got {actual}."
                             )
+
+            if workflow_steps:
+                if workflow_steps_mode not in ("at_least", "exact"):
+                    pytest.fail(
+                        "ExpectRuntime.workflow_steps_mode="
+                        f"{workflow_steps_mode!r} is unsupported. Use 'at_least' or 'exact'."
+                    )
+                workflow_step_ids = target_checkpoint.workflow_step_started_ids_by_class
+                if workflow_step_ids is None:
+                    pytest.fail(
+                        "ExpectRuntime.workflow_steps is unsupported without workflow step-id "
+                        "checkpoint snapshots."
+                    )
+
+                spies = self._require_spies()
+                class_key_by_modpath = {
+                    modpath: f"{cls.__module__}.{cls.__name__}"
+                    for modpath, cls in spies.minions.items()
+                }
+
+                for minion_name, expected_steps in workflow_steps.items():
+                    if minion_name not in modpaths_by_name:
+                        pytest.fail(
+                            "ExpectRuntime.workflow_steps references unknown minion name: "
+                            f"{minion_name!r}."
+                        )
+                    modpaths = modpaths_by_name[minion_name]
+                    class_keys = [class_key_by_modpath[m] for m in modpaths if m in class_key_by_modpath]
+
+                    for step_name, expected_count in expected_steps.items():
+                        if not isinstance(expected_count, int) or expected_count < 0:
+                            pytest.fail(
+                                "ExpectRuntime.workflow_steps counts must be ints >= 0; "
+                                f"got {minion_name}.{step_name}={expected_count!r}."
+                            )
+                        actual_count = sum(
+                            len(workflow_step_ids.get(class_key, {}).get(step_name, ()))
+                            for class_key in class_keys
+                        )
+                        if workflow_steps_mode == "at_least":
+                            if actual_count < expected_count:
+                                pytest.fail(
+                                    "ExpectRuntime.workflow_steps mismatch for "
+                                    f"{minion_name}.{step_name}: "
+                                    f"expected >= {expected_count}, got {actual_count}."
+                                )
+                        else:
+                            if actual_count != expected_count:
+                                pytest.fail(
+                                    "ExpectRuntime.workflow_steps mismatch for "
+                                    f"{minion_name}.{step_name}: "
+                                    f"expected {expected_count}, got {actual_count}."
+                                )
 
     def _resolve_expect_runtime_checkpoint_target(
         self,

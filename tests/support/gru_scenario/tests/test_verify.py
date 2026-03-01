@@ -317,7 +317,7 @@ def test_assert_pipeline_events_allows_restarted_pipeline_produce_event_totals(m
     verifier._assert_pipeline_events()
 
 
-def test_assert_checkpoint_window_fanout_delivery_ignores_noop_wait_checkpoint():
+def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_checkpoint():
     directives = [
         MinionStart(
             minion="tests.assets.minions.two_steps.counter.basic",
@@ -380,10 +380,10 @@ def test_assert_checkpoint_window_fanout_delivery_ignores_noop_wait_checkpoint()
     )
 
     verifier = _mk_verifier(plan, result)
-    verifier._assert_checkpoint_window_fanout_delivery()
+    verifier._assert_checkpoint_window_workflow_step_progression()
 
 
-def test_assert_checkpoint_window_fanout_delivery_handles_restart_phase_windows():
+def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phase_windows():
     directives = [
         MinionStart(
             minion="tests.assets.minions.two_steps.counter.basic",
@@ -460,7 +460,522 @@ def test_assert_checkpoint_window_fanout_delivery_handles_restart_phase_windows(
     )
 
     verifier = _mk_verifier(plan, result)
-    verifier._assert_checkpoint_window_fanout_delivery()
+    verifier._assert_checkpoint_window_workflow_step_progression()
+
+
+def test_checkpoint_window_workflow_step_progression_exact_fails_on_overage():
+    directives = [
+        MinionStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+        ),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(
+                0,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "id-ok",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+            ),
+        ],
+        checkpoints=[
+            ScenarioCheckpoint(
+                order=0,
+                kind="wait_workflow_completions",
+                directive_type="WaitWorkflows",
+                receipt_count=1,
+                successful_receipt_count=1,
+                seen_shutdown=False,
+                minion_names=None,
+                workflow_steps_mode="exact",
+                spy_call_counts={
+                    "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
+                        "step_1": 2,
+                        "step_2": 2,
+                    }
+                },
+                workflow_step_started_ids_by_class={
+                    "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
+                        "step_1": ("workflow-1", "workflow-2"),
+                        "step_2": ("workflow-1", "workflow-2"),
+                    }
+                },
+            ),
+        ],
+    )
+    verifier = _mk_verifier(plan, result)
+
+    with pytest.raises(pytest.fail.Exception, match="expected workflow-id delta 1, got 2"):
+        verifier._assert_checkpoint_window_workflow_step_progression()
+
+
+def test_checkpoint_window_workflow_step_progression_rejects_invalid_mode():
+    directives = [
+        MinionStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+        ),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(
+                0,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "id-ok",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+            ),
+        ],
+        checkpoints=[
+            ScenarioCheckpoint(
+                order=0,
+                kind="wait_workflow_completions",
+                directive_type="WaitWorkflows",
+                receipt_count=1,
+                successful_receipt_count=1,
+                seen_shutdown=False,
+                minion_names=None,
+                workflow_steps_mode="strictly",
+                spy_call_counts={
+                    "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
+                        "step_1": 1,
+                        "step_2": 1,
+                    }
+                },
+            ),
+        ],
+    )
+    verifier = _mk_verifier(plan, result)
+
+    with pytest.raises(
+        pytest.fail.Exception,
+        match="WaitWorkflowCompletions.workflow_steps_mode='strictly' is unsupported",
+    ):
+        verifier._assert_checkpoint_window_workflow_step_progression()
+
+
+def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_window():
+    directives = [
+        MinionStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+        ),
+        MinionStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+        ),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(
+                0,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "id-1",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+            ),
+            StartReceipt(
+                1,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "id-2",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+            ),
+        ],
+        checkpoints=[
+            ScenarioCheckpoint(
+                order=0,
+                kind="wait_workflow_completions",
+                directive_type="WaitWorkflows",
+                receipt_count=1,
+                successful_receipt_count=1,
+                seen_shutdown=False,
+                minion_names=None,
+                workflow_steps_mode="at_least",
+                spy_call_counts={
+                    key: {
+                        "step_1": 2,  # tolerated overage for first window
+                        "step_2": 2,
+                    }
+                },
+                workflow_step_started_ids_by_class={
+                    key: {
+                        "step_1": ("workflow-1", "workflow-2"),
+                        "step_2": ("workflow-1", "workflow-2"),
+                    }
+                },
+            ),
+            ScenarioCheckpoint(
+                order=1,
+                kind="wait_workflow_completions",
+                directive_type="WaitWorkflows",
+                receipt_count=2,
+                successful_receipt_count=2,
+                seen_shutdown=False,
+                minion_names=None,
+                workflow_steps_mode="exact",
+                spy_call_counts={
+                    key: {
+                        "step_1": 3,  # exact +1 delta over prior checkpoint
+                        "step_2": 3,
+                    }
+                },
+                workflow_step_started_ids_by_class={
+                    key: {
+                        "step_1": ("workflow-1", "workflow-2", "workflow-3"),
+                        "step_2": ("workflow-1", "workflow-2", "workflow-3"),
+                    }
+                },
+            ),
+        ],
+    )
+    verifier = _mk_verifier(plan, result)
+    verifier._assert_checkpoint_window_workflow_step_progression()
+
+
+def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_allows_call_count_overage():
+    directives = [
+        MinionStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+        ),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(
+                0,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "id-ok",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+            ),
+        ],
+        checkpoints=[
+            ScenarioCheckpoint(
+                order=0,
+                kind="wait_workflow_completions",
+                directive_type="WaitWorkflows",
+                receipt_count=1,
+                successful_receipt_count=1,
+                seen_shutdown=False,
+                minion_names=None,
+                workflow_steps_mode="exact",
+                spy_call_counts={
+                    key: {
+                        "step_1": 2,  # overage tolerated when workflow-id exactness is available
+                        "step_2": 2,
+                    }
+                },
+                workflow_step_started_ids_by_class={
+                    key: {
+                        "step_1": ("workflow-1",),
+                        "step_2": ("workflow-1",),
+                    }
+                },
+            ),
+        ],
+    )
+    verifier = _mk_verifier(plan, result)
+    verifier._assert_checkpoint_window_workflow_step_progression()
+
+
+def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overlap_passes_with_workflow_id_exactness():
+    directives = [
+        MinionStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+        ),
+        MinionStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+        ),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(
+                0,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "id-1",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+            ),
+            StartReceipt(
+                1,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "id-2",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+            ),
+        ],
+        checkpoints=[
+            ScenarioCheckpoint(
+                order=0,
+                kind="wait_workflow_completions",
+                directive_type="WaitWorkflows",
+                receipt_count=2,
+                successful_receipt_count=2,
+                seen_shutdown=False,
+                minion_names=None,
+                workflow_steps_mode="exact",
+                spy_call_counts={
+                    key: {
+                        "step_1": 3,  # overage tolerated with workflow-id evidence
+                        "step_2": 3,
+                    }
+                },
+                spy_call_counts_by_instance={
+                    key: {
+                        1: {"step_1": 2, "step_2": 2},
+                        2: {"step_1": 1, "step_2": 1},
+                    }
+                },
+                workflow_step_started_ids_by_class={
+                    key: {
+                        "step_1": ("workflow-1", "workflow-2"),
+                        "step_2": ("workflow-1", "workflow-2"),
+                    }
+                },
+            ),
+        ],
+    )
+    verifier = _mk_verifier(plan, result)
+    verifier._assert_checkpoint_window_workflow_step_progression()
+
+
+def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overlap_reports_instance_deltas_on_workflow_id_mismatch():
+    directives = [
+        MinionStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+        ),
+        MinionStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+        ),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(
+                0,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "id-1",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+            ),
+            StartReceipt(
+                1,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "id-2",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+            ),
+        ],
+        checkpoints=[
+            ScenarioCheckpoint(
+                order=0,
+                kind="wait_workflow_completions",
+                directive_type="WaitWorkflows",
+                receipt_count=2,
+                successful_receipt_count=2,
+                seen_shutdown=False,
+                minion_names=None,
+                workflow_steps_mode="exact",
+                spy_call_counts={
+                    key: {
+                        "step_1": 3,
+                        "step_2": 3,
+                    }
+                },
+                spy_call_counts_by_instance={
+                    key: {
+                        1: {"step_1": 2, "step_2": 2},
+                        2: {"step_1": 1, "step_2": 1},
+                    }
+                },
+                workflow_step_started_ids_by_class={
+                    key: {
+                        # exact mode expects 2 new workflow ids for this window
+                        "step_1": ("workflow-1",),
+                        "step_2": ("workflow-1",),
+                    }
+                },
+            ),
+        ],
+    )
+    verifier = _mk_verifier(plan, result)
+    with pytest.raises(
+        pytest.fail.Exception,
+        match=r"expected workflow-id delta 2, got 1\..*Per-instance deltas: \{1: 2, 2: 1\}",
+    ):
+        verifier._assert_checkpoint_window_workflow_step_progression()
+
+
+def test_instance_step_deltas_reports_non_zero_deltas_sorted():
+    verifier = _mk_verifier(
+        ScenarioPlan([], pipeline_event_counts={}),
+        ScenarioRunResult(spies=SpyRegistry(), receipts=[]),
+    )
+    deltas = verifier._instance_step_deltas(
+        step_name="step_1",
+        curr_by_instance={
+            3: {"step_1": 4},
+            1: {"step_1": 2},
+            2: {"step_1": 1},
+        },
+        prev_by_instance={
+            1: {"step_1": 1},
+            2: {"step_1": 1},
+            4: {"step_1": 5},
+        },
+    )
+
+    assert deltas == {1: 1, 3: 4, 4: -5}
+
+
+def test_workflow_id_delta_count_computes_new_ids_only():
+    verifier = _mk_verifier(
+        ScenarioPlan([], pipeline_event_counts={}),
+        ScenarioRunResult(spies=SpyRegistry(), receipts=[]),
+    )
+
+    assert verifier._workflow_id_delta_count(curr=("w1", "w2", "w3"), prev=("w2",)) == 2
+    assert verifier._workflow_id_delta_count(curr=("w1",), prev=("w1", "w2")) == 0
+
+
+def test_checkpoint_window_fanout_fails_when_workflow_id_delta_below_expected():
+    directives = [
+        MinionStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+        ),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 2},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(
+                0,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "id-ok",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+            ),
+        ],
+        checkpoints=[
+            ScenarioCheckpoint(
+                order=0,
+                kind="wait_workflow_completions",
+                directive_type="WaitWorkflows",
+                receipt_count=1,
+                successful_receipt_count=1,
+                seen_shutdown=False,
+                minion_names=None,
+                spy_call_counts={
+                    "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
+                        "step_1": 2,
+                        "step_2": 2,
+                    }
+                },
+                workflow_step_started_ids_by_class={
+                    "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
+                        "step_1": ("workflow-1",),
+                        "step_2": ("workflow-1",),
+                    }
+                },
+            ),
+        ],
+    )
+    verifier = _mk_verifier(plan, result)
+
+    with pytest.raises(pytest.fail.Exception, match="Checkpoint workflow-id progression mismatch"):
+        verifier._assert_checkpoint_window_workflow_step_progression()
 
 
 def test_assert_runtime_expectations_persistence_at_latest_checkpoint():
@@ -571,6 +1086,174 @@ def test_assert_runtime_expectations_resolutions_at_latest_checkpoint():
     verifier._assert_runtime_expectations()
 
 
+def test_assert_runtime_expectations_workflow_steps_exact_at_latest_checkpoint():
+    directives = [
+        MinionStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+        ),
+        ExpectRuntime(
+            expect=RuntimeExpectSpec(
+                workflow_steps={"two-step-minion": {"step_1": 1, "step_2": 1}},
+                workflow_steps_mode="exact",
+            ),
+        ),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(
+                0,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "instance-1",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+            ),
+        ],
+        checkpoints=[
+            ScenarioCheckpoint(
+                order=0,
+                kind="expect_runtime",
+                directive_type="ExpectRuntime",
+                receipt_count=1,
+                successful_receipt_count=1,
+                seen_shutdown=False,
+                workflow_step_started_ids_by_class={
+                    key: {
+                        "step_1": ("workflow-1",),
+                        "step_2": ("workflow-1",),
+                    }
+                },
+            ),
+        ],
+    )
+    verifier = _mk_verifier(plan, result)
+    verifier._assert_runtime_expectations()
+
+
+def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage():
+    directives = [
+        MinionStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+        ),
+        ExpectRuntime(
+            expect=RuntimeExpectSpec(
+                workflow_steps={"two-step-minion": {"step_1": 1}},
+                workflow_steps_mode="at_least",
+            ),
+        ),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(
+                0,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "instance-1",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+            ),
+        ],
+        checkpoints=[
+            ScenarioCheckpoint(
+                order=0,
+                kind="expect_runtime",
+                directive_type="ExpectRuntime",
+                receipt_count=1,
+                successful_receipt_count=1,
+                seen_shutdown=False,
+                workflow_step_started_ids_by_class={
+                    key: {
+                        "step_1": ("workflow-1", "workflow-2"),
+                    }
+                },
+            ),
+        ],
+    )
+    verifier = _mk_verifier(plan, result)
+    verifier._assert_runtime_expectations()
+
+
+def test_assert_runtime_expectations_workflow_steps_rejects_invalid_mode():
+    directives = [
+        MinionStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+        ),
+        ExpectRuntime(
+            expect=RuntimeExpectSpec(
+                workflow_steps={"two-step-minion": {"step_1": 1}},
+                workflow_steps_mode="strictly",
+            ),
+        ),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(
+                0,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "instance-1",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+            ),
+        ],
+        checkpoints=[
+            ScenarioCheckpoint(
+                order=0,
+                kind="expect_runtime",
+                directive_type="ExpectRuntime",
+                receipt_count=1,
+                successful_receipt_count=1,
+                seen_shutdown=False,
+                workflow_step_started_ids_by_class={
+                    key: {"step_1": ("workflow-1",)}
+                },
+            ),
+        ],
+    )
+    verifier = _mk_verifier(plan, result)
+    with pytest.raises(
+        pytest.fail.Exception,
+        match="ExpectRuntime.workflow_steps_mode='strictly' is unsupported",
+    ):
+        verifier._assert_runtime_expectations()
+
+
 def test_assert_runtime_expectations_persistence_at_checkpoint_index():
     directives = [
         MinionStart(
@@ -624,6 +1307,79 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
                 seen_shutdown=False,
                 persisted_contexts_by_modpath={
                     "tests.assets.minions.two_steps.counter.basic": 99
+                },
+            ),
+        ],
+    )
+    verifier = _mk_verifier(plan, result)
+    verifier._assert_runtime_expectations()
+
+
+def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
+    directives = [
+        MinionStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+        ),
+        ExpectRuntime(
+            at=0,
+            expect=RuntimeExpectSpec(
+                workflow_steps={"two-step-minion": {"step_1": 1, "step_2": 0}},
+                workflow_steps_mode="exact",
+            ),
+        ),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(
+                0,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "instance-1",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+            ),
+        ],
+        checkpoints=[
+            ScenarioCheckpoint(
+                order=0,
+                kind="wait_workflow_starts_then",
+                directive_type="WaitWorkflowStartsThen",
+                receipt_count=1,
+                successful_receipt_count=1,
+                seen_shutdown=False,
+                expected_starts={"two-step-minion": 1},
+                wrapped_directive_type="MinionStop",
+                workflow_step_started_ids_by_class={
+                    key: {
+                        "step_1": ("workflow-1",),
+                        "step_2": (),
+                    }
+                },
+            ),
+            ScenarioCheckpoint(
+                order=1,
+                kind="expect_runtime",
+                directive_type="ExpectRuntime",
+                receipt_count=1,
+                successful_receipt_count=1,
+                seen_shutdown=False,
+                workflow_step_started_ids_by_class={
+                    key: {
+                        "step_1": ("workflow-1",),
+                        "step_2": ("workflow-1",),
+                    }
                 },
             ),
         ],

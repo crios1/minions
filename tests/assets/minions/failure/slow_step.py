@@ -9,10 +9,15 @@ from tests.assets.events.counter import CounterEvent
 class SlowStepMinion(SpiedMinion[CounterEvent, dict]):
     name = "slow-step-minion"
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Instance-level override for this test fixture.
+        setattr(self, "_mn_shutdown_grace_seconds", 0.05)
+
     @minion_step
     async def step_1(self):
-        # Keep workflow in-flight long enough for stop/persistence assertions.
-        await asyncio.sleep(2)
+        # Intentionally "slow" relative to immediate-step fixtures.
+        await asyncio.sleep(0.2)
 
 
 minion = SlowStepMinion

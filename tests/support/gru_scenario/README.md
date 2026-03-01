@@ -100,6 +100,9 @@ await run_gru_scenario(
 - `WaitWorkflowCompletions()` waits for all workflows expected from successful starts so far.
 - `WaitWorkflowCompletions(minion_names=set())` is a no-op.
 - `WaitWorkflowCompletions(minion_names={...})` waits only for those names and fails on unknown names.
+- `WaitWorkflowCompletions(workflow_steps_mode="at_least"|"exact")` controls checkpoint-window step-delta strictness.
+  - default is `"at_least"` (compatibility mode).
+  - use `"exact"` for deterministic windows where over-production should fail.
 - The wait first blocks on workflow-step spy call counts, then drains minion tasks.
 - `WaitWorkflowStartsThen(expected={...}, directive=MinionStop(...))` is the race-safe primitive for restart/resume stop points.
 - `WaitWorkflows(...)` remains supported as a compatibility alias.
@@ -123,8 +126,44 @@ ExpectRuntime(
     ),
 )
 ```
+- Workflow-step progression section (step workflow-id counts by minion name):
+```python
+ExpectRuntime(
+    expect=RuntimeExpectSpec(
+        workflow_steps={"my-minion-name": {"step_1": 1, "step_2": 1}},
+        workflow_steps_mode="exact",  # "exact" or "at_least"
+    ),
+)
+```
 - Persistence counts are resolved by scenario-local minion names observed from successful starts.
 - Resolution counts are evaluated from checkpoint metrics snapshots for scenario-local minion instances.
+- Workflow-step progression counts are evaluated from checkpoint workflow step-start workflow IDs.
+- Restart/resume (strict) example:
+```python
+directives = [
+    MinionStart(minion=minion_modpath, pipeline=pipeline_modpath),
+    WaitWorkflowStartsThen(
+        expected={"slow-step-minion": 1},
+        directive=MinionStop(name_or_instance_id="slow-step-minion", expect_success=True),
+    ),
+    ExpectRuntime(
+        expect=RuntimeExpectSpec(
+            persistence={"slow-step-minion": 1},
+            workflow_steps={"slow-step-minion": {"step_1": 1}},
+            workflow_steps_mode="exact",
+        ),
+    ),
+    MinionStart(minion=minion_modpath, pipeline=pipeline_modpath),
+    WaitWorkflows(),
+    ExpectRuntime(
+        expect=RuntimeExpectSpec(
+            resolutions={"slow-step-minion": {"succeeded": 2, "failed": 0, "aborted": 0}},
+            workflow_steps={"slow-step-minion": {"step_1": 2}},
+            workflow_steps_mode="exact",
+        ),
+    ),
+]
+```
 
 ## Per-Run Expectations
 Provide `pipeline_event_counts` for exactly the pipelines started by successful `MinionStart(...)` directives:

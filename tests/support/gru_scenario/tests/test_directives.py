@@ -26,9 +26,10 @@ def test_iter_directives_flattens_concurrent():
 
 
 def test_wait_workflows_is_compatibility_alias_of_wait_workflow_completions():
-    directive = WaitWorkflows(minion_names={"m1"})
+    directive = WaitWorkflows(minion_names={"m1"}, workflow_steps_mode="exact")
     assert isinstance(directive, WaitWorkflowCompletions)
     assert directive.minion_names == {"m1"}
+    assert directive.workflow_steps_mode == "exact"
 
 
 def test_iter_directives_flattens_wait_workflow_starts_then_wrapped_directive():

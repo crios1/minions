@@ -2,6 +2,7 @@ logs/
 docs/private
 */_build/
 .github/
+.codex/
 
 
 # Byte-compiled / optimized / DLL files

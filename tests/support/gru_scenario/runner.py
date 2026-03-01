@@ -87,9 +87,12 @@ class ScenarioCheckpoint:
     successful_receipt_count: int
     seen_shutdown: bool
     minion_names: tuple[str, ...] | None = None
+    workflow_steps_mode: str | None = None
     expected_starts: dict[str, int] | None = None
     wrapped_directive_type: str | None = None
     spy_call_counts: dict[str, dict[str, int]] | None = None
+    spy_call_counts_by_instance: dict[str, dict[int, dict[str, int]]] | None = None
+    workflow_step_started_ids_by_class: dict[str, dict[str, tuple[str, ...]]] | None = None
     persisted_contexts_by_modpath: dict[str, int] | None = None
     metrics_counters: dict[str, list[dict]] | None = None
 
@@ -257,6 +260,7 @@ class ScenarioRunner:
             kind="wait_workflow_completions",
             directive=d,
             minion_names=d.minion_names,
+            workflow_steps_mode=d.workflow_steps_mode,
         )
 
     async def _wait_workflow_starts_then(self, d: WaitWorkflowStartsThen) -> None:
@@ -330,6 +334,7 @@ class ScenarioRunner:
         kind: str,
         directive: Directive,
         minion_names: set[str] | None = None,
+        workflow_steps_mode: str | None = None,
         expected_starts: dict[str, int] | None = None,
         wrapped_directive_type: str | None = None,
     ) -> None:
@@ -342,9 +347,12 @@ class ScenarioRunner:
             successful_receipt_count=sum(1 for r in result.receipts if r.success),
             seen_shutdown=result.seen_shutdown,
             minion_names=tuple(sorted(minion_names)) if minion_names is not None else None,
+            workflow_steps_mode=workflow_steps_mode,
             expected_starts=dict(expected_starts) if expected_starts is not None else None,
             wrapped_directive_type=wrapped_directive_type,
             spy_call_counts=self._snapshot_spy_call_counts(),
+            spy_call_counts_by_instance=self._snapshot_spy_call_counts_by_instance(),
+            workflow_step_started_ids_by_class=self._snapshot_workflow_step_started_ids_by_class(),
             persisted_contexts_by_modpath=self._snapshot_persisted_contexts_by_modpath(),
             metrics_counters=self._snapshot_metrics_counters(),
         )
@@ -365,6 +373,71 @@ class ScenarioRunner:
             key = f"{cls.__module__}.{cls.__name__}"
             snapshots[key] = cls.get_call_counts()
         return snapshots
+
+    def _snapshot_spy_call_counts_by_instance(self) -> dict[str, dict[int, dict[str, int]]]:
+        classes: set[type[SpyMixin]] = set()
+        classes.update(self._spies.minions.values())
+        classes.update(self._spies.pipelines.values())
+        classes.update(self._spies.resources)
+
+        state_store = getattr(self._gru, "_state_store", None)
+        if isinstance(state_store, SpyMixin):
+            classes.add(type(state_store))
+
+        snapshots: dict[str, dict[int, dict[str, int]]] = {}
+        for cls in classes:
+            by_tag: defaultdict[int, defaultdict[str, int]] = defaultdict(lambda: defaultdict(int))
+            for name, _, tag in cls.get_call_history():
+                if tag is None:
+                    continue
+                by_tag[tag][name] += 1
+
+            key = f"{cls.__module__}.{cls.__name__}"
+            snapshots[key] = {
+                tag: dict(counts)
+                for tag, counts in by_tag.items()
+            }
+        return snapshots
+
+    def _snapshot_workflow_step_started_ids_by_class(self) -> dict[str, dict[str, tuple[str, ...]]] | None:
+        logger = getattr(self._gru, "_logger", None)
+        logs = getattr(logger, "logs", None)
+        if not isinstance(logs, list):
+            return None
+
+        class_key_by_modpath = {
+            modpath: f"{cls.__module__}.{cls.__name__}"
+            for modpath, cls in self._spies.minions.items()
+        }
+        by_class_step: defaultdict[str, defaultdict[str, set[str]]] = defaultdict(
+            lambda: defaultdict(set)
+        )
+
+        for entry in logs:
+            if getattr(entry, "msg", None) != "Workflow Step started":
+                continue
+            kwargs = getattr(entry, "kwargs", None)
+            if not isinstance(kwargs, dict):
+                continue
+
+            modpath = kwargs.get("minion_modpath")
+            step_name = kwargs.get("step_name")
+            workflow_id = kwargs.get("workflow_id")
+            if not isinstance(modpath, str) or not isinstance(step_name, str) or not isinstance(workflow_id, str):
+                continue
+
+            class_key = class_key_by_modpath.get(modpath)
+            if class_key is None:
+                continue
+            by_class_step[class_key][step_name].add(workflow_id)
+
+        return {
+            class_key: {
+                step_name: tuple(sorted(workflow_ids))
+                for step_name, workflow_ids in by_step.items()
+            }
+            for class_key, by_step in by_class_step.items()
+        }
 
     def _snapshot_persisted_contexts_by_modpath(self) -> dict[str, int] | None:
         state_store = getattr(self._gru, "_state_store", None)
