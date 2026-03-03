@@ -1,6 +1,5 @@
 import asyncio
 from dataclasses import dataclass
-from typing import Any
 
 from minions import Minion, Pipeline, Gru, minion_step
 
@@ -18,7 +17,7 @@ class MyPipeline(Pipeline[MyEvent]):
 
 @dataclass
 class MyContext:
-    last_greeting: Any = None
+    last_greeting: str | None = None
 
 class MyMinion(Minion[MyEvent, MyContext]):
     @minion_step

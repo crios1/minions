@@ -18,6 +18,7 @@ from tests.assets.support.state_store_inmemory import InMemoryStateStore
 
 from minions import minion_step, Minion
 from minions._internal._domain.exceptions import AbortWorkflow
+from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 
 from pprint import pprint
 
@@ -196,3 +197,104 @@ async def test_runtime_guard_rejects_nested_step_invocation_via_indirect_call():
         for s in counters.get(MINION_WORKFLOW_STEP_FAILED_TOTAL, [])
     )
     assert step_failed_total == 1
+
+
+@pytest.mark.asyncio
+async def test_minion_steps_can_access_event_and_context_across_workflow_steps():
+    observed: list[tuple[str, int, int | None]] = []
+
+    class AccessMinion(Minion[dict, dict]):
+        name = "access-minion"
+
+        @minion_step
+        async def step_1(self):
+            event_value = self.event["value"]
+            self.context["from_step_1"] = event_value + 1
+            observed.append(("step_1", event_value, self.context.get("from_step_1")))
+
+        @minion_step
+        async def step_2(self):
+            event_value = self.event["value"]
+            observed.append(("step_2", event_value, self.context.get("from_step_1")))
+
+    InMemoryLogger.enable_spy()
+    InMemoryLogger.reset_spy()
+    InMemoryMetrics.enable_spy()
+    InMemoryMetrics.reset_spy()
+    InMemoryStateStore.enable_spy()
+    InMemoryStateStore.reset_spy()
+
+    logger = InMemoryLogger()
+    metrics = InMemoryMetrics()
+    state_store = InMemoryStateStore(logger=logger)
+
+    m = AccessMinion(
+        "iid",
+        "ck",
+        "tests.assets.access_minion",
+        None,
+        state_store,
+        metrics,
+        logger,
+    )
+    await m._mn_handle_event({"value": 10})
+    await state_store.wait_for_call("delete_context", count=1, timeout=2)
+
+    assert observed == [
+        ("step_1", 10, 11),
+        ("step_2", 10, 11),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_resumed_workflow_step_can_access_event_and_context_from_state_store():
+    observed: list[tuple[str, int, int | None]] = []
+
+    class ResumeAccessMinion(Minion[dict, dict]):
+        name = "resume-access-minion"
+
+        @minion_step
+        async def step_1(self):
+            pytest.fail("step_1 should not execute when replay resumes at step_index=1")
+
+        @minion_step
+        async def step_2(self):
+            event_value = self.event["value"]
+            observed.append(("step_2", event_value, self.context.get("from_step_1")))
+
+    InMemoryLogger.enable_spy()
+    InMemoryLogger.reset_spy()
+    InMemoryMetrics.enable_spy()
+    InMemoryMetrics.reset_spy()
+    InMemoryStateStore.enable_spy()
+    InMemoryStateStore.reset_spy()
+
+    logger = InMemoryLogger()
+    metrics = InMemoryMetrics()
+    state_store = InMemoryStateStore(logger=logger)
+
+    state_store._contexts = {
+        "wf-resume": MinionWorkflowContext(
+            minion_modpath="tests.assets.resume_access_minion",
+            workflow_id="wf-resume",
+            event={"value": 7},
+            context={"from_step_1": 8},
+            context_cls=dict,
+            step_index=1,
+        )
+    }
+
+    m = ResumeAccessMinion(
+        "iid",
+        "ck",
+        "tests.assets.resume_access_minion",
+        None,
+        state_store,
+        metrics,
+        logger,
+    )
+
+    await m._mn_startup()
+    await state_store.wait_for_call("delete_context", count=1, timeout=2)
+
+    assert observed == [("step_2", 7, 8)]

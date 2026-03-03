@@ -151,10 +151,6 @@
 
 - todo: write tests for gru.start_minion to lock in that it works with class and str based starts
 
-- todo: write a gru test that ensures a minion has access to self.event and self.context
-in all steps include when resuming a workflow from statestore
-  - possibly done except for the resuming bit
-
 - todo: add early (best-effort) serialization validation for user-provided event and workflow context types at Pipeline / Minion definition time
   - statically check that user type annotations are supported by gru's serialization, and raise when an annotation is not
   - this is an early feedback mechanism, full serializability can only be guaranteed at runtime
