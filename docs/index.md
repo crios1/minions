@@ -12,6 +12,7 @@ reference/api/minions_core
 reference/api/minions_cli
 guides/patterns-and-anti-patterns
 guides/testing-minions
+guides/updating-minions
 guides/deployment-strategies
 guides/migrating-to-microservices
 guides/scale-out-strategies
