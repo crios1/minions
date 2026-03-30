@@ -149,6 +149,10 @@ class ScenarioVerifier:
             "delete_context": resolved_workflows,
             "_delete_context": resolved_workflows,
         }
+        checkpoint_reads = len(self._result.checkpoints)
+        if checkpoint_reads > 0:
+            ss["get_all_contexts"] = checkpoint_reads
+            ss["_get_all_contexts"] = checkpoint_reads
         if self._result.seen_shutdown:
             ss["shutdown"] = 1
         call_counts[type(self._state_store)] = ss
@@ -170,12 +174,15 @@ class ScenarioVerifier:
         spies = self._require_spies()
         expectations = self._compute_minion_expectations(spies)
         minion_starts = sum(expectations.minion_start_counts.values())
+        checkpoint_reads = len(self._result.checkpoints)
         state_store_counts = type(self._state_store).get_call_counts()
         get_all_calls = state_store_counts.get("get_all_contexts", 0)
-        if get_all_calls > minion_starts:
+        allowed_reads = minion_starts + checkpoint_reads
+        if get_all_calls > allowed_reads:
             pytest.fail(
-                "StateStore.get_all_contexts called more times than minion starts: "
-                f"{get_all_calls} > {minion_starts}"
+                "StateStore.get_all_contexts called more times than allowed "
+                "(minion starts + checkpoint snapshots): "
+                f"{get_all_calls} > {allowed_reads}"
             )
 
     def _compute_minion_expectations(

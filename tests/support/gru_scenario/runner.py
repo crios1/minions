@@ -338,7 +338,7 @@ class ScenarioRunner:
             spy_call_counts=self._snapshot_spy_call_counts(),
             spy_call_counts_by_instance=self._snapshot_spy_call_counts_by_instance(),
             workflow_step_started_ids_by_class=self._snapshot_workflow_step_started_ids_by_class(),
-            persisted_contexts_by_modpath=self._snapshot_persisted_contexts_by_modpath(),
+            persisted_contexts_by_modpath=await self._snapshot_persisted_contexts_by_modpath(),
             metrics_counters=self._snapshot_metrics_counters(),
         )
         result.checkpoints.append(checkpoint)
@@ -424,15 +424,22 @@ class ScenarioRunner:
             for class_key, by_step in by_class_step.items()
         }
 
-    def _snapshot_persisted_contexts_by_modpath(self) -> dict[str, int] | None:
+    async def _snapshot_persisted_contexts_by_modpath(self) -> dict[str, int] | None:
         state_store = getattr(self._gru, "_state_store", None)
-        contexts_map = getattr(state_store, "_contexts", None)
-        if not isinstance(contexts_map, dict):
+        snapshot_fn = getattr(state_store, "_get_all_contexts", None)
+        if not callable(snapshot_fn):
+            return None
+        try:
+            contexts = await snapshot_fn()
+        except Exception:
             return None
 
         counts: defaultdict[str, int] = defaultdict(int)
-        for ctx in contexts_map.values():
+        for ctx in contexts:
             modpath = getattr(ctx, "minion_modpath", None)
+            if modpath is None and isinstance(ctx, dict):
+                maybe_modpath = ctx.get("minion_modpath")
+                modpath = maybe_modpath if isinstance(maybe_modpath, str) else None
             if isinstance(modpath, str):
                 counts[modpath] += 1
         return dict(counts)
