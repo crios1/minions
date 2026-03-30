@@ -228,7 +228,7 @@ class AsyncLifecycle(ABC):
         pre_args: list | None = None,
         post: Callable[..., T | Awaitable[T]] | None = None,
         post_args: list | None = None
-    ):
+    ) -> None:
         pre_args = pre_args or []
         async def _pre():
             self._mn_validate_user_code(self.startup, type(self).__module__)
@@ -255,7 +255,7 @@ class AsyncLifecycle(ABC):
         pre_args: list | None = None,
         post: Callable[..., T | Awaitable[T]] | None = None,
         post_args: list | None = None
-    ):
+    ) -> None:
         await self._mn_run_lifecycle_phase(
             name="shutdown",
             lifecyle_method=self.shutdown,
@@ -266,10 +266,10 @@ class AsyncLifecycle(ABC):
             post_args=post_args,
         )
 
-    async def startup(self):
+    async def startup(self) -> None:
         "Prepare internal state or dependencies"
         # self._raise_not_implemented("startup", type(self))
 
-    async def shutdown(self):
+    async def shutdown(self) -> None:
         "Clean up anything async-allocated in startup"
         # self._raise_not_implemented("shutdown", type(self))

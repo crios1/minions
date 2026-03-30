@@ -33,7 +33,7 @@ class PrometheusMetrics(Metrics):
         self._started = False
         self._started_lock = threading.Lock()
 
-    async def startup(self):
+    async def startup(self) -> None:
         try:
             with self._started_lock:
                 if not self._started:

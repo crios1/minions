@@ -1,6 +1,7 @@
 import contextlib
 import importlib
 import sys
+from collections.abc import AsyncGenerator, AsyncIterator
 from pathlib import Path
 
 import pytest
@@ -86,7 +87,7 @@ def gru_factory():
     active_context = False
 
     @contextlib.asynccontextmanager
-    async def _factory(**kwargs):
+    async def _factory(**kwargs) -> AsyncIterator[Gru]:
         nonlocal active_context
         if active_context:
             raise RuntimeError(
@@ -105,7 +106,9 @@ def gru_factory():
     return _factory
 
 @pytest_asyncio.fixture
-async def gru(logger, metrics, state_store, gru_factory):
+async def gru(
+    logger, metrics, state_store, gru_factory
+) -> AsyncGenerator[Gru, None]:
     async with gru_factory(
         logger=logger,
         metrics=metrics,

@@ -44,7 +44,7 @@ class AsyncService(AsyncComponent):
         pre_args: list | None = None,
         post: Callable[..., Any | Awaitable[Any]] | None = None,
         post_args: list | None = None
-    ):
+    ) -> None:
         pre_args = pre_args or []
         async def _pre():
             self._mn_validate_user_code(self.run, type(self).__module__)
@@ -62,7 +62,7 @@ class AsyncService(AsyncComponent):
             post_args=post_args,
         )
 
-    async def run(self):
+    async def run(self) -> None:
         "Long-running loop or wait, override in user facing classes (Minion, Pipeline, Resource)"
         # self._raise_not_implemented("run", type(self))
 
@@ -97,7 +97,7 @@ class AsyncService(AsyncComponent):
         pre_args: list | None = None,
         post: Callable[..., Any | Awaitable[Any]] | None = None,
         post_args: list | None = None
-    ):
+    ) -> None:
         async def _post():
             if post:
                 post_args_list = post_args or []

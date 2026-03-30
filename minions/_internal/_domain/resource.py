@@ -38,7 +38,7 @@ class Resource(AsyncService):
         pre_args: list | None = None,
         post: Callable[..., T | Awaitable[T]] | None = None,
         post_args: list | None = None
-    ):
+    ) -> None:
         return await super()._mn_startup(
             log_kwargs={'resource_id': self._mn_resource_modpath},
             pre=self._mn_validate_and_wrap_public_async_methods
@@ -52,7 +52,7 @@ class Resource(AsyncService):
         pre_args: list | None = None,
         post: Callable[..., T | Awaitable[T]] | None = None,
         post_args: list | None = None
-    ):
+    ) -> None:
         return await super()._mn_shutdown(
             log_kwargs={'resource_id': self._mn_resource_modpath}
         )
@@ -65,7 +65,7 @@ class Resource(AsyncService):
         pre_args: list | None = None,
         post: Callable[..., Any | Awaitable[Any]] | None = None,
         post_args: list | None = None
-    ):
+    ) -> None:
         return await super()._mn_run(log_kwargs={'resource_id': self._mn_resource_modpath})
 
     def _mn_validate_and_wrap_public_async_methods(self):

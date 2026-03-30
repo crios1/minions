@@ -95,7 +95,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
         pre_args: list | None = None,
         post: Callable[..., Any | Awaitable[Any]] | None = None,
         post_args: list | None = None
-    ):
+    ) -> None:
         return await super()._mn_startup(
             log_kwargs={'pipeline_id': self._mn_pipeline_id},
             pre=self._mn_validate_user_code,
@@ -110,7 +110,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
         pre_args: list | None = None,
         post: Callable[..., Any | Awaitable[Any]] | None = None,
         post_args: list | None = None
-    ):
+    ) -> None:
         return await super()._mn_shutdown(
             log_kwargs={'pipeline_id': self._mn_pipeline_id}
         )
@@ -123,12 +123,12 @@ class Pipeline(AsyncService, Generic[T_Event]):
         pre_args: list | None = None,
         post: Callable[..., Any | Awaitable[Any]] | None = None,
         post_args: list | None = None
-    ):
+    ) -> None:
         return await super()._mn_run(
             log_kwargs={'pipeline_id': self._mn_pipeline_id}
         )
 
-    async def run(self):
+    async def run(self) -> None:
         while True:
             await self._mn_produce_and_handle_event()
 
