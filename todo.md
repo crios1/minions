@@ -9,6 +9,13 @@
 -->
 
 ### Test Suite:
+- todo:
+  - audit the test suite to align with the default-backend + contract-test strategy
+    - for each system component base class, ensure there is a contract test file
+    - check higher-level/domain tests to ensure they use the in-memory system component by default
+    - only keep non-default backends in a test when the backend-specific choice is intentional and clearly justified
+  - document this test suite design doc with this design info
+
 - todo: harden test_gru.py:
   - steps:
     - complete the robust reuseable gru testing routine
@@ -157,11 +164,86 @@
   - ensure no on-going validations; just validation once at class definition time  
 
 - todo: add "crash testing" to test suite to ensure that minions runtime does the runtime crash guarentees
+  - todo: add deterministic "boom user code" testing across every user-code runtime surface
+    - goal:
+      - pass intentionally exploding user code into every user-code entry point and prove the runtime contains the blast radius consistently
+    - coverage:
+      - minion user hooks / steps
+      - pipeline user hooks / emit paths
+      - resource user-defined methods
+      - any other runtime surface that invokes user code directly or indirectly
+    - assertions:
+      - failures are routed through the safe user-code wrapper path
+      - no call site bypasses the wrapper by reaching private implementation methods directly
+      - runtime behavior is deterministic and preserves crash guarantees / error reporting
+    - example bug to guard against:
+      - accidentally calling `self._mn_state_store._save_context(ctx)` instead of the safe wrapper like `self._mn_state_store.save_context(ctx)`
+    - implementation note:
+      - audit every user-code invocation site and add tests that would "go boom" immediately if the runtime forgets to use the guarded path
 
 - todo: now w/ the robust reuseable testing routine (from the harden/repair test_gru.py todo) fill out the test suite to cover all the ways the user will interact with gru... mainly the kinds of files they can pass to it.
  - audit each of the test asset in the test suite and ensure they are useful and being used by gru with a reasonable test. otherwise, add the test(s) or delete the asset
 
 ### Features:
+- todo: add generic framework telemetry for logger and state store (separate from domain telemetry)
+  - goal:
+    - expose minimal runtime-health metrics for framework components without mixing with domain/business metrics
+    - keep metric names backend-agnostic and labels low-cardinality
+  - metrics to add:
+    - logger:
+      - `framework_logger_write_seconds` (histogram)
+      - `framework_logger_payload_bytes` (histogram)
+      - `framework_logger_errors_total` (counter)
+    - state store:
+      - `framework_state_store_persist_seconds` (histogram)
+      - `framework_state_store_payload_bytes` (histogram)
+      - `framework_state_store_delete_seconds` (histogram)
+      - `framework_state_store_errors_total` (counter)
+  - labels/policy:
+    - allowed labels:
+      - `component` (`logger` | `state_store`)
+      - `backend` (e.g. `file`, `prometheus`, `sqlite`, `noop`, `inmemory`)
+      - `operation` (`write` | `persist` | `delete` | `load`)
+      - `error_type` (for `*_errors_total` only)
+    - do not include high-cardinality labels (no workflow ids/minion ids/payload content)
+    - telemetry emission must be best-effort and never block runtime paths
+  - implementation steps:
+    - add constants + label mappings in `metrics_constants.py`
+    - instrument logger write path(s)
+    - instrument state store persist/delete path(s)
+    - keep sqlite-specific deep diagnostics out of this pass (only generic surface)
+  - tests:
+    - add focused tests that metrics are emitted for logger/state_store success paths
+    - add focused tests that error counters increment on failure paths
+    - ensure no unexpected labels are emitted
+  - docs:
+    - update docs to explain domain telemetry vs framework telemetry split
+    - document the new generic framework metric names and label policy
+
+- todo: make state-store durability semantics explicit (durable save vs eventual enqueue)
+  - problem:
+    - current `StateStore.save_context(...)` is awaited by orchestration and therefore treated as durable-on-return
+    - sqlite implementation batches internally, but the framework has no explicit distinction between durable saves and eventual-consistency enqueue semantics
+  - target:
+    - keep current `StateStore` behavior as the durable contract to preserve compatibility/correctness assumptions
+    - introduce an explicit optional batched/eventual interface (ex: `BatchedStateStore`) for fire-and-forget style persistence
+    - make orchestration opt into eventual mode intentionally instead of changing semantics implicitly
+  - implementation:
+    - document `StateStore.save_context` and `delete_context` durability guarantees clearly
+    - add optional batched API surface (ex: `enqueue_save_context`, `enqueue_delete_context`, `flush`)
+    - required sqlite split:
+      - current batched `SQLiteStateStore` becomes `SQLiteBatchedStateStore`
+      - atomic `SQLiteStateStore` is restored from git history as the default durable sqlite backend if the old implementation is good enough
+      - if the historical atomic implementation is not good enough, reimplement atomic `SQLiteStateStore` from the current batched implementation with durable-on-return semantics
+    - keep lifecycle behavior explicit: startup/shutdown should flush pending writes best-effort
+    - preserve fail-open logging policy for persistence failures
+  - tests:
+    - contract tests lock durable behavior for `StateStore` implementations
+    - batched interface tests verify enqueue behavior, flush guarantees, and shutdown drain semantics
+    - orchestration tests verify that default path remains durable unless explicitly configured for batched mode
+  - docs:
+    - explain durable vs eventual persistence tradeoffs and when to choose each
+
 - todo: add memory-pressure guard to manage OOM risk (high-utilization defaults)
   - goal:
     - avoid hard OOM kills while still letting a single-node minions system run “hot” (stable high RAM usage)
@@ -307,6 +389,14 @@
         - optional `alias` if user assigned
         - optional `config_alias` if provided
       - ensure dashboards can be written against stable labels
+    - define type / class persistence as part of this identity model:
+      - this work also decides how persisted Python `type` references are serialized and resolved
+      - `MinionWorkflowContext.context_cls` is the current concrete example
+      - keep runtime/domain objects Python-native; persistence adaptation belongs at the framework boundary
+      - persisted state must not rely solely on current import path stability
+      - decide whether persisted type references store `component_id`, current `component_ref`, or both
+      - support relink / migration after file moves or refactors without making persisted workflows unusable
+      - UX should remain simple while file structure changes are happening, not only after everything is stable again
     - add CLI support (minimal but sufficient):
       - `minions ls` (show component_id, kind, alias(es), current ref)
       - `minions resolve <alias|id|ref>` (print canonical ids + refs)
@@ -320,6 +410,18 @@
   - convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/69446e9e-053c-832c-abfb-ba40b5123693
   - other convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/694725cf-a5c4-8326-bdfc-b95f1b289f14
   - note: consider how cross env (dev,qa,prod) comparison will work: like with grushell snapshot/redeploy, discussed in "other convo"
+
+- todo: optimize SQLiteStateStore `get_contexts_for_minion` to avoid full-store scans
+  - dependency:
+    - do this only after the identity migration above is finalized (`component_id` + `instance_id`)
+  - problem:
+    - current path effectively scans all stored workflow contexts, then filters in memory
+    - this is unnecessary read amplification once stable ids are in place
+  - target:
+    - query by minion identity/workflow key directly from sqlite (no full table scan)
+    - keep current public behavior unchanged
+  - tests:
+    - add/adjust tests to prove behavior matches current semantics while using indexed lookup
 
 - todo: add support for resourced pipelines and resourced resources (currenlty partially implemented)
   - requires implementation, testing, and documentation for each
@@ -568,3 +670,205 @@
     - maintain a small curated target list (or pytest marker like `@pytest.mark.flake`)
     - add scripts/commands for `fast` and `flake` lanes
     - fail-fast in flake lane with iteration index and failing test output
+
+- consider: spacetime db as a state store is faster than sqlite locally? i doubt it but maybe it's true
+
+- consider: implement sharded sqlite state store for workflow context persistence (same could be said for sqlite logger)
+  - goal:
+    - increase persistence throughput by replacing the single SQLite file with `N` deterministically sharded SQLite files
+    - preserve the current state store API and current batching/coalescing behavior
+    - keep SQLite as embedded storage rather than introducing external infra
+  - current fit:
+
+    - current schema is already ideal for sharding because atomicity is naturally bounded by `workflow_id`
+    - current store is basically KV-like persistence over:
+
+      - `workflow_id TEXT PRIMARY KEY`
+      - `context BLOB NOT NULL`
+    - current implementation already batches/coalesces writes, so sharding composes naturally with the existing design
+  - design:
+
+    - split into two layers:
+
+      - `SQLiteStateStoreShard`
+
+        - owns one sqlite database file
+        - owns one connection
+        - owns one `_batch`
+        - owns one `_lock`
+        - owns one `_flush_task`
+        - preserves current shard-local batching and flush behavior
+      - `ShardedSQLiteStateStore`
+
+        - owns `list[SQLiteStateStoreShard]`
+        - routes each workflow operation to exactly one shard by deterministic hashing of `workflow_id`
+    - deterministic shard routing:
+
+      - use stable hash of `workflow_id`
+      - route by:
+
+        - `shard_idx = stable_hash(workflow_id) % shard_count`
+      - do not use Python `hash()` because placement must remain stable across process restarts
+      - use something simple/stable like truncated `blake2b` or `sha1`
+    - shard file layout:
+
+      - store files in a base dir like:
+
+        - `workflows_00.sqlite3`
+        - `workflows_01.sqlite3`
+        - ...
+    - api behavior:
+
+      - `save_context(workflow_id, payload)`:
+
+        - route to one shard
+      - `get_context(workflow_id)`:
+
+        - route to one shard only
+        - do not scan all shards
+      - `delete_context(workflow_id)`:
+
+        - route to one shard only
+      - `get_all_contexts()`:
+
+        - fan out across all shards in parallel
+        - concatenate results
+  - constraints:
+
+    - no placement/index database
+
+      - deterministic routing removes the need for a metadata DB
+    - no cross-shard transactions
+
+      - acceptable because current persistence boundary is already per-workflow
+    - no scatter/gather for point lookups
+
+      - shard lookup must remain O(1)
+    - no serialization format changes
+
+      - keep existing payload encoding as-is
+  - correctness work:
+
+    - fix the existing delete-vs-flush race before or during sharding
+
+      - current risk:
+
+        - a pending flush can re-upsert a workflow after `delete_context()` has already removed it
+      - this is a real correctness issue and becomes more important once multiple shard flushers exist
+    - implementation options:
+
+      - minimal fix:
+
+        - track `_pending_deletes`
+        - ensure pending flushes skip deleted workflow ids
+      - cleaner fix:
+
+        - serialize all shard writes/deletes through a single shard writer queue
+        - batching becomes queue-drain based
+      - preference:
+
+        - minimal fix first unless queue-based rewrite feels clean enough to justify now
+  - batching:
+
+    - preserve current shard-local batching semantics
+    - each shard should continue to:
+
+      - coalesce multiple writes to the same `workflow_id`
+      - flush when `batch_max_n` is reached
+      - flush when `batch_max_ms` elapses
+    - this keeps the current batching win while also unlocking parallel writes across shards
+  - startup and shutdown:
+
+    - startup:
+
+      - initialize all shards in parallel
+      - create schema on each shard
+      - optionally calibrate batch defaults once and apply to all shards
+    - shutdown:
+
+      - flush all shards in parallel
+      - close all shard connections cleanly
+  - shard count:
+
+    - start with small fixed shard counts
+
+      - default: `4`
+      - practical early range: `4-16`
+    - do not over-shard initially
+
+      - each shard adds file handles, WAL activity, caches, connection overhead, and one more flusher
+  - stats and logging:
+
+    - keep shard-local metrics similar to current implementation
+
+      - commit latency
+      - backlog size
+      - rows/sec capacity
+    - optionally add store-level summary logging:
+
+      - per-shard backlog
+      - hottest shard
+      - shard skew ratio
+  - expected throughput increase:
+
+    - realistic estimate:
+
+      - `4` shards: roughly `2x-3.5x` write throughput
+      - `8` shards: roughly `3x-5x` write throughput
+    - best case:
+
+      - if current bottleneck is mostly single-writer lock contention and workflow ids distribute well, gains can approach shard-count scaling early on
+    - weaker case:
+
+      - if bottleneck is mostly serialization cost, oversized blobs, hot-key concentration, or raw disk latency, gains may be closer to `1.3x-2x`
+    - practical read:
+
+      - for this exact schema, sharded SQLite is very likely the highest-leverage next step before considering Postgres
+  - implementation steps:
+
+    - extract current single-file logic into `SQLiteStateStoreShard`
+    - add stable hash helper for shard routing
+    - add `ShardedSQLiteStateStore` wrapper
+    - route `save_context`, `get_context`, and `delete_context` by shard
+    - implement `get_all_contexts()` as parallel fanout across shards
+    - fix delete-vs-flush resurrection behavior
+    - add shard-aware startup and shutdown
+    - add store-level shard stats
+    - add benchmark script comparing:
+
+      - single-file sqlite
+      - sharded sqlite with 4 shards
+      - sharded sqlite with 8 shards
+  - tests:
+
+    - correctness:
+
+      - save/get roundtrip
+      - overwrite same `workflow_id`
+      - delete removes persisted row
+      - repeated save/delete/save ordering
+      - delete during pending flush does not resurrect row
+      - restart preserves data
+      - `get_all_contexts()` returns union of all shards
+    - routing:
+
+      - same `workflow_id` always maps to same shard across restarts
+      - large sample of ids distributes roughly evenly
+    - performance:
+
+      - concurrent saves to many distinct workflow ids
+      - hot-key workload
+      - mixed save/delete workload
+      - larger payload blobs
+  - decision rule:
+
+    - implement this if:
+
+      - persistence is becoming a measurable bottleneck
+      - writes are spread across many workflow ids
+      - you want more throughput without infra burden
+    - defer this if:
+
+      - current batching is already sufficient
+      - persistence is not near the top of the profile
+      - the real bottleneck is serialization rather than sqlite writer contention
