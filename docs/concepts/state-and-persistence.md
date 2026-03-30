@@ -5,13 +5,14 @@ Minions treats workflow context as durable. Before each step executes, Gru saves
 ## Defaults
 
 - **State store**: SQLite-backed store by default.
-- **Disable persistence**: pass `state_store=None` to `{py:class}``minions._internal._domain.gru.Gru.create``.
-- **Custom stores**: implement `{py:class}``minions._internal._framework.state_store.StateStore`` with `save_context`, `delete_context`, and `load_all_contexts`.
+- **Disable persistence**: pass `state_store=None` to {py:meth}`minions.Gru.create`.
+- **Custom stores**: implement {py:class}`minions.interfaces.StateStore` with `save_context`, `delete_context`, and `get_all_contexts`.
 
 ## Workflow lifecycle
 
 - Context and events must be JSON-serializable structured types (dataclasses/TypedDicts, not bare primitives).
 - Context is saved **before** each step runs; failures keep the last saved state for debugging/resume.
+- Built-in persistence-failure policy is **fail-open**: persistence errors are logged and workflow execution continues.
 - Success deletes the context at the end; aborts log and clean up.
 - Gru logs workflow/step transitions and surfaces errors with user file/line when available.
 

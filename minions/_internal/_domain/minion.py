@@ -15,8 +15,6 @@ from typing import (
     get_args, get_origin, get_type_hints
 )
 
-from minions._internal._framework.logger import DEBUG
-
 from .types import T_Event, T_Ctx
 from .minion_workflow_context import MinionWorkflowContext
 from .exceptions import AbortWorkflow
@@ -317,7 +315,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         pre_args: list | None = None,
         post: Callable[..., Any | Awaitable[Any]] | None = None,
         post_args: list | None = None
-    ):
+    ) -> None:
         async def _pre():
             self._mn_validate_user_code(self._mn_load_config, type(self).__module__)
             if self._mn_config_path:
@@ -413,7 +411,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             context_token = self._mn_context_var.set(ctx.context)
             workflow_status: Statuses = "undefined"
             try: # run workflow (step by step)
-                if ctx.step_index == 0:
+                if ctx.next_step_index == 0:
                     await _shielded_gather(*[
                         self._mn_logger._log(
                             INFO,
@@ -442,10 +440,10 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
 
                 workflow = self._mn_workflow
                 
-                for i in range(ctx.step_index, len(workflow)):
+                for i in range(ctx.next_step_index, len(workflow)):
                     if i == 0:
                         ctx.started_at = time.time()
-                    ctx.step_index = i
+                    ctx.next_step_index = i
 
                     step = workflow[i]
                     step_name = step.__name__
@@ -704,7 +702,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         pre_args: list | None = None,
         post: Callable[..., Any | Awaitable[Any]] | None = None,
         post_args: list | None = None
-    ):
+    ) -> None:
         self._mn_shutting_down = True
         async def _post():
             async with self._mn_tasks_lock:
@@ -736,7 +734,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         )
 
         try:
-            await asyncio.shield(self._mn_state_store.save_context(ctx))
+            await asyncio.shield(self._mn_state_store._save_context(ctx))
         except Exception as e:
             await self._mn_logger._log(
                 ERROR,

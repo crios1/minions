@@ -19,6 +19,9 @@ from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from minions import minion_step, Minion
 from minions._internal._domain.exceptions import AbortWorkflow
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
+from minions._internal._framework.minion_workflow_context_codec import (
+    serialize_workflow_context,
+)
 
 from pprint import pprint
 
@@ -41,14 +44,14 @@ async def test_workflow_aborted_increments_aborted_counter():
 
     logger = InMemoryLogger()
     metrics = InMemoryMetrics()
-    state_store = InMemoryStateStore(logger=logger)
+    store = InMemoryStateStore(logger=logger)
 
     # start the minion by calling _mn_handle_event directly with a dummy event
-    m = AbortMinion('iid', 'ck', 'tests.assets.abort_minion', 'cfg', state_store, metrics, logger)
+    m = AbortMinion('iid', 'ck', 'tests.assets.abort_minion', 'cfg', store, metrics, logger)
     await m._mn_handle_event({})
 
     # wait until the state store has recorded deletion (workflow finished)
-    await state_store.wait_for_call('delete_context', count=1, timeout=2)
+    await store.wait_for_call('delete_context', count=1, timeout=2)
 
     snap = metrics.snapshot()
     pprint(snap)
@@ -80,12 +83,12 @@ async def test_workflow_failed_increments_failed_counter():
 
     logger = InMemoryLogger()
     metrics = InMemoryMetrics()
-    state_store = InMemoryStateStore(logger=logger)
+    store = InMemoryStateStore(logger=logger)
 
-    m = FailMinion('iid', 'ck', 'tests.assets.fail_minion', 'cfg', state_store, metrics, logger)
+    m = FailMinion('iid', 'ck', 'tests.assets.fail_minion', 'cfg', store, metrics, logger)
     await m._mn_handle_event({})
 
-    await state_store.wait_for_call('delete_context', count=1, timeout=2)
+    await store.wait_for_call('delete_context', count=1, timeout=2)
 
     snap = metrics.snapshot()
     pprint(snap)
@@ -109,33 +112,33 @@ async def test_minion_startup_replays_only_own_contexts():
 
     logger = InMemoryLogger()
     metrics = InMemoryMetrics()
-    state_store = InMemoryStateStore(logger=logger)
+    store = InMemoryStateStore(logger=logger)
 
-    from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
-
-    state_store._contexts = {
-        "wf-own": MinionWorkflowContext(
+    await store._save_context(
+        MinionWorkflowContext(
             minion_modpath="mock.modpath.minion_replay_own",
             workflow_id="wf-own",
             event={},
             context={},
             context_cls=dict,
-        ),
-        "wf-other": MinionWorkflowContext(
+        )
+    )
+    await store._save_context(
+        MinionWorkflowContext(
             minion_modpath="mock.modpath.minion_replay_other",
             workflow_id="wf-other",
             event={},
             context={},
             context_cls=dict,
-        ),
-    }
+        )
+    )
 
     m = ReplayMinion(
         "iid",
         "ck",
         "mock.modpath.minion_replay_own",
         None,
-        state_store,
+        store,
         metrics,
         logger,
     )
@@ -175,20 +178,20 @@ async def test_runtime_guard_rejects_nested_step_invocation_via_indirect_call():
 
     logger = InMemoryLogger()
     metrics = InMemoryMetrics()
-    state_store = InMemoryStateStore(logger=logger)
+    store = InMemoryStateStore(logger=logger)
 
     m = NestedCallMinion(
         "iid",
         "ck",
         "tests.assets.nested_call_minion",
         None,
-        state_store,
+        store,
         metrics,
         logger,
     )
 
     await m._mn_handle_event({})
-    await state_store.wait_for_call("delete_context", count=1, timeout=2)
+    await store.wait_for_call("delete_context", count=1, timeout=2)
 
     snap = metrics.snapshot()
     counters = snap.get("counter", {})
@@ -226,19 +229,19 @@ async def test_minion_steps_can_access_event_and_context_across_workflow_steps()
 
     logger = InMemoryLogger()
     metrics = InMemoryMetrics()
-    state_store = InMemoryStateStore(logger=logger)
+    store = InMemoryStateStore(logger=logger)
 
     m = AccessMinion(
         "iid",
         "ck",
         "tests.assets.access_minion",
         None,
-        state_store,
+        store,
         metrics,
         logger,
     )
     await m._mn_handle_event({"value": 10})
-    await state_store.wait_for_call("delete_context", count=1, timeout=2)
+    await store.wait_for_call("delete_context", count=1, timeout=2)
 
     assert observed == [
         ("step_1", 10, 11),
@@ -255,7 +258,7 @@ async def test_resumed_workflow_step_can_access_event_and_context_from_state_sto
 
         @minion_step
         async def step_1(self):
-            pytest.fail("step_1 should not execute when replay resumes at step_index=1")
+            pytest.fail("step_1 should not execute when replay resumes at next_step_index=1")
 
         @minion_step
         async def step_2(self):
@@ -271,30 +274,94 @@ async def test_resumed_workflow_step_can_access_event_and_context_from_state_sto
 
     logger = InMemoryLogger()
     metrics = InMemoryMetrics()
-    state_store = InMemoryStateStore(logger=logger)
+    store = InMemoryStateStore(logger=logger)
 
-    state_store._contexts = {
-        "wf-resume": MinionWorkflowContext(
+    await store._save_context(
+        MinionWorkflowContext(
             minion_modpath="tests.assets.resume_access_minion",
             workflow_id="wf-resume",
             event={"value": 7},
             context={"from_step_1": 8},
             context_cls=dict,
-            step_index=1,
+            next_step_index=1,
         )
-    }
+    )
 
     m = ResumeAccessMinion(
         "iid",
         "ck",
         "tests.assets.resume_access_minion",
         None,
-        state_store,
+        store,
         metrics,
         logger,
     )
 
     await m._mn_startup()
-    await state_store.wait_for_call("delete_context", count=1, timeout=2)
+    await store.wait_for_call("delete_context", count=1, timeout=2)
 
     assert observed == [("step_2", 7, 8)]
+
+@pytest.mark.asyncio
+async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_valid_context():
+    observed: list[int] = []
+
+    class ReplayWithInvalidContextMinion(Minion[dict, dict]):
+        name = "replay-with-invalid-context-minion"
+
+        @minion_step
+        async def step_1(self):
+            observed.append(self.event["value"])
+
+    logger = InMemoryLogger()
+    metrics = InMemoryMetrics()
+    store = InMemoryStateStore(logger=logger)
+    minion_modpath = "tests.assets.replay_with_invalid_context_minion"
+
+    valid_payload = serialize_workflow_context(
+        MinionWorkflowContext(
+            minion_modpath=minion_modpath,
+            workflow_id="wf-valid",
+            event={"value": 123},
+            context={},
+            context_cls=dict,
+            next_step_index=0,
+            started_at=None,
+            error_msg=None,
+        )
+    )
+    invalid_payload = serialize_workflow_context(
+        MinionWorkflowContext(
+            minion_modpath=minion_modpath,
+            workflow_id="wf-invalid",
+            event={"value": 456},
+            context={},
+            context_cls=dict,
+            next_step_index=0,
+            started_at=None,
+            error_msg=None,
+        )
+    )
+    invalid_payload["schema_version"] = 999
+
+    store._contexts["wf-valid"] = valid_payload
+    store._contexts["wf-invalid"] = invalid_payload
+
+    m = ReplayWithInvalidContextMinion(
+        "iid",
+        "ck",
+        minion_modpath,
+        None,
+        store,
+        metrics,
+        logger,
+    )
+
+    await m._mn_startup()
+
+    deadline = asyncio.get_running_loop().time() + 2.0
+    while asyncio.get_running_loop().time() < deadline and not observed:
+        await asyncio.sleep(0)
+
+    assert observed == [123]
+    assert logger.has_log("load failed")

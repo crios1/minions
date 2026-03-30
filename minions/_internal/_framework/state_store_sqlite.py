@@ -1,37 +1,17 @@
 import asyncio
 import aiosqlite
-import importlib
 import statistics
 import time
 import traceback
 from collections import deque
-from typing import List, Tuple
+from typing import List, Tuple, Literal
 
 from .logger import Logger, DEBUG, ERROR, WARNING, CRITICAL
 from .state_store import StateStore
-from .._domain.minion_workflow_context import MinionWorkflowContext
+from .state_store_payload_types import StateStorePayload
 from .._utils.serialization import serialize, deserialize
 
-
-def serialize_type(t: type) -> str:
-    return f"{t.__module__}.{t.__qualname__}"
-
-def deserialize_type(s: str) -> type:
-    module, _, cls = s.rpartition(".")
-    return getattr(importlib.import_module(module), cls)
-
-def serialize_context(ctx: MinionWorkflowContext) -> bytes:
-    d = ctx.as_dict()
-    d["context_cls"] = serialize_type(ctx.context_cls)
-    return serialize(d)
-
-def deserialize_context(b: bytes) -> MinionWorkflowContext:
-    # decode to a raw dict first, then reconstruct MinionWorkflowContext
-    d = deserialize(b, dict)
-    t = d.get("context_cls")
-    if isinstance(t, str):
-        d["context_cls"] = deserialize_type(t)
-    return MinionWorkflowContext(**d)
+BatchEntry = tuple[str, str, bytes | None, asyncio.Future[None]]
 
 
 class SQLiteStateStore(StateStore):
@@ -42,9 +22,8 @@ class SQLiteStateStore(StateStore):
     ------------
     - **Single long-lived connection** tuned with WAL + synchronous=NORMAL
     - **BLOB storage** (binary-encoded payloads via `msgspec`)
-    - **Micro-batching** with coalescing:
+    - **Micro-batching**:
         * Buffer up to `batch_max_n` contexts or `batch_max_ms` elapsed time
-        * Coalesce by workflow_id (last-write-wins within batch)
     - **Boot calibration**:
         * Measure median/p95 commit latency
         * Pick sensible defaults for batch size/window based on disk speed
@@ -63,7 +42,7 @@ class SQLiteStateStore(StateStore):
     Warning Signals
     ---------------
     Warnings are not "your code is broken," they're "SQLite can't keep up anymore."
-    They help decide when to tune caps or move to a stronger store (e.g. Postgres).
+    They help decide when to tune caps, use a stronger store, or shard work across minion runtimes.
 
     - **Commit p95 (ms)**:
         Fires if live p95 commit time > ~3x calibrated baseline.
@@ -80,14 +59,11 @@ class SQLiteStateStore(StateStore):
     ----------------
     1. If latency budget allows → increase batch caps (`batch_max_n`, `batch_max_ms`)
     2. Confirm WAL + synchronous=NORMAL, consider adjusting wal_autocheckpoint
-    3. Reduce upstream write frequency (coalesce, avoid writing unchanged state)
-    4. Shard workflows across multiple SQLite DB files
-    5. Migrate to Postgres when sustained load keeps tripping warnings
 
     Summary
     -------
-    - Startup calibration improves performance over naïve per-event commits
-    - Micro-batching provides both performance and observability
+    - Startup calibration improves performance over per-event commits
+    - Micro-batching improves throughput
     - Warnings give clear "you're outgrowing SQLite" signals, scaled to hardware
     """
 
@@ -98,12 +74,20 @@ class SQLiteStateStore(StateStore):
         *,
         batch_max_n: int | None = None,
         batch_max_ms: int | None = None,
+        journal_mode: str = "WAL",
+        synchronous: str = "NORMAL",
+        wal_autocheckpoint: int = 1000,
+        busy_timeout_ms: int = 3000,
+        warn_cooldown_s: float = 30.0,
+        size_warn_pages: int = 32,
+        size_crit_pages: int = 256,
+        size_warn_cooldown_s: float = 3600.0,
     ):
         super().__init__(logger)
         self.db_path = db_path
         self._db: aiosqlite.Connection | None = None
 
-        self._batch: dict[str, bytes] = {}
+        self._batch: list[BatchEntry] = []
         self._lock = asyncio.Lock()
         self._flush_task: asyncio.Task | None = None
         self._deadline: float | None = None
@@ -119,28 +103,33 @@ class SQLiteStateStore(StateStore):
         self._sec_bucket_rows = 0
         self._warn_cfg: dict[str, Tuple[float, float]] = {}
         self._last_warn_ts = 0.0
-        self._warn_cooldown_s = 30
+        self._warn_cooldown_s = warn_cooldown_s
 
         self._page_size = 4096
-        self._size_warn_pages = 32    # ~128KiB @ 4KiB pages
-        self._size_crit_pages = 256   # ~1MiB @ 4KiB pages
-        # self._last_size_warn: dict[tuple[str, str], float] = {}
+        self._size_warn_pages = size_warn_pages
+        self._size_crit_pages = size_crit_pages
         self._last_size_warn: dict[str, float] = {}
-        self._size_warn_cooldown_s = 3600
+        self._size_warn_cooldown_s = size_warn_cooldown_s
 
-    async def startup(self):
+        self._wal_autocheckpoint = wal_autocheckpoint
+        self._busy_timeout_ms = busy_timeout_ms
+        self._journal_mode = journal_mode
+        self._synchronous = synchronous
+
+    async def startup(self) -> None:
 
         #  setup db
 
         self._db = await aiosqlite.connect(self.db_path)
-        await self._db.execute("PRAGMA journal_mode=WAL")
-        await self._db.execute("PRAGMA synchronous=NORMAL")
-        await self._db.execute("PRAGMA wal_autocheckpoint=1000")
-        await self._db.execute("PRAGMA busy_timeout=3000")
+        await self._db.execute(f"PRAGMA journal_mode={self._journal_mode}")
+        await self._db.execute(f"PRAGMA synchronous={self._synchronous}")
+        await self._db.execute(f"PRAGMA wal_autocheckpoint={self._wal_autocheckpoint}")
+        await self._db.execute(f"PRAGMA busy_timeout={self._busy_timeout_ms}")
+        # startup assumes latest schema; add migrations here if schema evolves (e.g. PRAGMA user_version).
         await self._db.execute("""
             CREATE TABLE IF NOT EXISTS workflows(
                 workflow_id TEXT PRIMARY KEY,
-                context_json BLOB NOT NULL
+                context BLOB NOT NULL
             )
         """)
         await self._db.commit()
@@ -156,7 +145,7 @@ class SQLiteStateStore(StateStore):
                 calib_id = "__state_store_calib__"
                 # ensure the row exists (won't grow table further)
                 await self._db.execute( # type: ignore
-                    """INSERT INTO workflows(workflow_id, context_json)
+                    """INSERT INTO workflows(workflow_id, context)
                     VALUES(?, ?)
                     ON CONFLICT(workflow_id) DO NOTHING""",
                     (calib_id, payload),
@@ -166,9 +155,9 @@ class SQLiteStateStore(StateStore):
                     t = time.perf_counter()
                     await self._db.execute("BEGIN IMMEDIATE") # type: ignore
                     await self._db.execute( # type: ignore
-                        """INSERT INTO workflows(workflow_id, context_json)
+                        """INSERT INTO workflows(workflow_id, context)
                         VALUES(?, ?)
-                        ON CONFLICT(workflow_id) DO UPDATE SET context_json=excluded.context_json""",
+                        ON CONFLICT(workflow_id) DO UPDATE SET context=excluded.context""",
                         (calib_id, payload),
                     )
                     await self._db.commit() # type: ignore
@@ -233,7 +222,7 @@ class SQLiteStateStore(StateStore):
         if row and row[0]:
             self._page_size = int(row[0])
 
-    async def shutdown(self):
+    async def shutdown(self) -> None:
         await self._flush()
         if self._flush_task and not self._flush_task.done():
             try:
@@ -243,13 +232,26 @@ class SQLiteStateStore(StateStore):
         await self._db.close() # type: ignore
 
     async def _flush(self):
+        items: list[BatchEntry] = []
         async with self._lock:
             if not self._batch:
                 return
-            items = list(self._batch.items())
+            items = list(self._batch)
             self._batch.clear()
             self._deadline = None
-        await self._upsert_now(items)
+        await self._commit_and_settle(items)
+
+    async def _commit_and_settle(self, items: list[BatchEntry]) -> None:
+        try:
+            await self._commit_batch_now(items)
+        except Exception as e:
+            for *_, waiter in items:
+                if not waiter.done():
+                    waiter.set_exception(e)
+            raise
+        for *_, waiter in items:
+            if not waiter.done():
+                waiter.set_result(None)
 
     async def _flush_soon(self):
         delay = 0 if self._deadline is None else max(0.0, self._deadline - time.monotonic())
@@ -257,15 +259,31 @@ class SQLiteStateStore(StateStore):
             await asyncio.sleep(delay)
         await self._flush()
 
-    async def _upsert_now(self, items: list[tuple[str, bytes]]):
+    async def _commit_batch_now(self, items: list[BatchEntry]):
         t0 = time.perf_counter()
         await self._db.execute("BEGIN IMMEDIATE")  # type: ignore
-        await self._db.executemany(  # type: ignore
-            """INSERT INTO workflows(workflow_id, context_json)
-            VALUES(?, ?)
-            ON CONFLICT(workflow_id) DO UPDATE SET context_json=excluded.context_json""",
-            items,
-        )
+        upserts = [
+            (workflow_id, payload)
+            for workflow_id, op, payload, _waiter in items
+            if op == "upsert" and payload is not None
+        ]
+        deletes = [
+            (workflow_id,)
+            for workflow_id, op, _payload, _waiter in items
+            if op == "delete"
+        ]
+        if upserts:
+            await self._db.executemany(  # type: ignore
+                """INSERT INTO workflows(workflow_id, context)
+                VALUES(?, ?)
+                ON CONFLICT(workflow_id) DO UPDATE SET context=excluded.context""",
+                upserts,
+            )
+        if deletes:
+            await self._db.executemany(  # type: ignore
+                "DELETE FROM workflows WHERE workflow_id = ?",
+                deletes,
+            )
         await self._db.commit()  # type: ignore
         dt_ms = (time.perf_counter() - t0) * 1000.0
         self._commit_ms_hist.append(dt_ms)
@@ -304,40 +322,50 @@ class SQLiteStateStore(StateStore):
         )
         asyncio.create_task(self._mn_logger._log(ERROR, msg))
 
-    async def save_context(self, ctx: MinionWorkflowContext):
-        try:
-            payload = serialize_context(ctx)
+    def _maybe_warn_large_payload(
+        self,
+        workflow_id: str,
+        payload: StateStorePayload,
+        serialized_payload: bytes,
+    ) -> None:
+        size = len(serialized_payload)
+        pages = (size + self._page_size - 1) // self._page_size
+        last = self._last_size_warn.get(workflow_id)
+        now = time.monotonic()
+        if pages >= self._size_warn_pages and (
+            last is None or (now - last) > self._size_warn_cooldown_s
+        ):
+            lvl = CRITICAL if pages >= self._size_crit_pages else WARNING
+            warn_kib = (self._size_warn_pages * self._page_size) // 1024
+            crit_kib = (self._size_crit_pages * self._page_size) // 1024
+            asyncio.create_task(self._mn_logger._log(
+                lvl,
+                f"{type(self).__name__}: Large MinionWorkflowContext Detected",
+                size_bytes=size,
+                approx_pages=pages,
+                workflow_id=workflow_id,
+                minion_modpath=payload.get("minion_modpath"),
+                suggestion=(
+                    "Consider externalizing large blobs and storing refs; keep state below "
+                    f"configured warning threshold (~{warn_kib}KiB, critical ~{crit_kib}KiB)."
+                )
+            ))
+            self._last_size_warn[workflow_id] = now
 
-            size = len(payload)
-            pages = (size + self._page_size - 1) // self._page_size
-            last = self._last_size_warn.get(ctx.workflow_id, 0.0)
-            now = time.monotonic()
-            if pages >= self._size_warn_pages and (now - last) > self._size_warn_cooldown_s:
-                lvl = CRITICAL if pages >= self._size_crit_pages else WARNING
-                asyncio.create_task(self._mn_logger._log(
-                    lvl,
-                    f"{type(self).__name__}: Large MinionWorkflowContext Detected",
-                    size_bytes=size,
-                    approx_pages=pages,
-                    workflow_id=ctx.workflow_id,
-                    minion_modpath=ctx.minion_modpath,
-                    suggestion="Consider externalizing large blobs and storing refs; keep state <~128KiB."
-                ))
-                self._last_size_warn[ctx.workflow_id] = now
-        except Exception as e:
-            await self._mn_logger._log(
-                ERROR, f"{type(self).__name__}.save_context serialize failed",
-                error_type=type(e).__name__, error_message=str(e),
-                traceback="".join(traceback.format_exception(type(e), e, e.__traceback__)),
-                context_id=getattr(ctx, "workflow_id", None),
-            )
-            return
-
-        to_flush = None
+    async def _enqueue_batch_entry(
+        self,
+        workflow_id: str,
+        op: Literal["upsert", "delete"],
+        payload: bytes | None,
+    ) -> asyncio.Future[None]:
+        fut = asyncio.get_running_loop().create_future()
+        to_flush = False
+        flush_items: list[BatchEntry] | None = None
         async with self._lock:
-            self._batch[ctx.workflow_id] = payload
+            self._batch.append((workflow_id, op, payload, fut))
             if len(self._batch) >= self._batch_max_n: # type: ignore
-                to_flush = list(self._batch.items())
+                to_flush = True
+                flush_items = list(self._batch)
                 self._batch.clear()
                 self._deadline = None
             elif not self._flush_task or self._flush_task.done():
@@ -349,26 +377,44 @@ class SQLiteStateStore(StateStore):
                 self._maybe_warn_overload(
                     f"backlog>{warn_n} (cur={len(self._batch)})", critical=len(self._batch) > crit_n
                 )
-        
         if to_flush:
-            await self._upsert_now(to_flush)
+            await self._commit_and_settle(flush_items or [])
+        return fut
+
+    async def save_context(
+        self,
+        workflow_id: str,
+        payload: StateStorePayload,
+    ):
+        try:
+            serialized_payload = serialize(dict(payload))
+            self._maybe_warn_large_payload(workflow_id, payload, serialized_payload)
+        except Exception as e:
+            await self._mn_logger._log(
+                ERROR, f"{type(self).__name__}.save_context_payload serialize failed",
+                error_type=type(e).__name__, error_message=str(e),
+                traceback="".join(traceback.format_exception(type(e), e, e.__traceback__)),
+                workflow_id=workflow_id,
+            )
+            # Pre-alpha persistence policy is fail-open: log and continue runtime execution.
+            return
+        fut = await self._enqueue_batch_entry(workflow_id, "upsert", serialized_payload)
+        await fut
 
     async def delete_context(self, workflow_id: str):
-        async with self._lock:
-            self._batch.pop(workflow_id, None)
-        await self._db.execute("DELETE FROM workflows WHERE workflow_id = ?", (workflow_id,))  # type: ignore
-        await self._db.commit() # type: ignore
+        fut = await self._enqueue_batch_entry(workflow_id, "delete", None)
+        await fut
 
-    async def get_all_contexts(self) -> List[MinionWorkflowContext]:
+    async def get_all_contexts(self) -> List[StateStorePayload]:
         await self._flush()
-        async with self._db.execute("SELECT context_json FROM workflows") as c: # type: ignore
+        async with self._db.execute("SELECT context FROM workflows") as c: # type: ignore
             rows = await c.fetchall()
         if not rows:
             return []
-        out: List[MinionWorkflowContext] = []
+        out: List[StateStorePayload] = []
         for (blob,) in rows:
             try:
-                out.append(deserialize_context(blob))
+                out.append(deserialize(blob, dict))
             except Exception as e:
                 await self._mn_logger._log(
                     ERROR, f"{type(self).__name__}.get_all_contexts deserialize failed",
