@@ -4,7 +4,6 @@ import asyncio
 import gc
 import importlib
 import psutil
-import traceback
 import uuid
 
 from collections import defaultdict, deque
@@ -42,6 +41,7 @@ from .._framework.state_store_noop import NoOpStateStore
 from .._framework.state_store_sqlite import SQLiteStateStore
 
 from .._utils.safe_cancel_task import safe_cancel_task
+from .._utils.format_exception_traceback import format_exception_traceback
 from .._utils.get_class import get_class
 from .._utils.safe_create_task import safe_create_task
 
@@ -577,7 +577,7 @@ class Gru:
             msg,
             error_type=type(trace).__name__,
             error_message=str(trace),
-            traceback="".join(traceback.format_exception(type(trace), trace, trace.__traceback__)),
+            traceback=format_exception_traceback(trace),
             **context
         )
 
@@ -1107,7 +1107,7 @@ class Gru:
                         "Resource monitoring failed (continuing without it)",
                         error_type=type(e).__name__,
                         error_message=str(e),
-                        traceback="".join(traceback.format_exception(type(e), e, e.__traceback__))
+                        traceback=format_exception_traceback(e)
                     )
                     warned_monitoring_failed = True
 

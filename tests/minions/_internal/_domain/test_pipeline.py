@@ -1,5 +1,17 @@
 import pytest
+import msgspec
 from minions import Pipeline
+
+
+class MyStructEvent(msgspec.Struct):
+    ts: int
+
+
+class TestPipelineSubclassingValid:
+    def test_valid_msgspec_struct_event_type(self):
+        class SomePipeline(Pipeline[MyStructEvent]):
+            async def produce_event(self):
+                return MyStructEvent(1)
 
 
 class TestPipelineSubclassingInvalid:

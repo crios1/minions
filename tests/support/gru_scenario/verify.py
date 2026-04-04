@@ -138,21 +138,27 @@ class ScenarioVerifier:
             len(m._mn_workflow_spec) * expectations.expected_workflows_by_class.get(m, 0)  # type: ignore
             for m in spies.minions.values()
         )
+        total_save_operations = workflows_started + workflow_steps
+        checkpoint_reads = len(self._result.checkpoints)
+        total_decode_operations = minion_starts + checkpoint_reads
 
         ss = {
             "__init__": 1,
             "startup": 1,
-            "get_contexts_for_minion": minion_starts,
-            "_get_contexts_for_minion": minion_starts,
-            "save_context": workflows_started + workflow_steps,
-            "_save_context": workflow_steps,
+            "get_contexts_for_orchestration": minion_starts,
+            "_mn_get_contexts_for_orchestration": minion_starts,
+            "_mn_get_decoded_contexts_for_orchestration": minion_starts,
+            "_mn_decode_stored_contexts": total_decode_operations,
+            "save_context": total_save_operations,
+            "_mn_save_context": total_save_operations,
+            "_mn_serialize_and_save_context": total_save_operations,
             "delete_context": resolved_workflows,
-            "_delete_context": resolved_workflows,
+            "_mn_delete_context": resolved_workflows,
         }
-        checkpoint_reads = len(self._result.checkpoints)
         if checkpoint_reads > 0:
             ss["get_all_contexts"] = checkpoint_reads
-            ss["_get_all_contexts"] = checkpoint_reads
+            ss["_mn_get_all_contexts"] = checkpoint_reads
+            ss["_mn_get_all_decoded_contexts"] = checkpoint_reads
         if self._result.seen_shutdown:
             ss["shutdown"] = 1
         call_counts[type(self._state_store)] = ss

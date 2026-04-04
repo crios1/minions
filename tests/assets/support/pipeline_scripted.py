@@ -1,4 +1,5 @@
 import asyncio
+import sys
 
 from minions._internal._domain.types import T_Event
 from .pipeline_spied import SpiedPipeline
@@ -18,4 +19,4 @@ class ScriptedSpiedPipeline(SpiedPipeline[T_Event], defer_pipeline_setup=True):
             await self._mn_produce_and_handle_event()
 
         while True:
-            await asyncio.sleep(3600)
+            await asyncio.sleep(sys.maxsize)

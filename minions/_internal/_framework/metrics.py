@@ -102,30 +102,30 @@ class Metrics(AsyncComponent):
 
     async def _inc(self, metric_name: str, amount: float = 1, labels: Labels | None = None):
         """Increment a counter by the given amount (positive or negative)."""
-        return await self._mn_safe_run_and_log(
+        return await self._mn_safe_run_and_log_failure(
             method=self._inc_unsafe,
             method_args=[metric_name, amount, labels],
         )
 
     async def _set(self, metric_name: str, value: float, labels: Labels | None = None):
         """Set a gauge to a specific value."""
-        return await self._mn_safe_run_and_log(
+        return await self._mn_safe_run_and_log_failure(
             method=self._set_unsafe,
             method_args=[metric_name, value, labels],
         )
 
     async def _observe(self, metric_name: str, value: float, labels: Labels | None = None):
         """Observe a value (for histograms or summaries)."""
-        return await self._mn_safe_run_and_log(
+        return await self._mn_safe_run_and_log_failure(
             method=self._observe_unsafe,
             method_args=[metric_name, value, labels],
         )
 
     async def _snapshot(self) -> SnapshotResult:
         counters, gagues, histograms = await asyncio.gather(
-            self._mn_safe_run_and_log(self.snapshot_counters),
-            self._mn_safe_run_and_log(self.snapshot_gauges),
-            self._mn_safe_run_and_log(self.snapshot_histograms)
+            self._mn_safe_run_and_log_failure(self.snapshot_counters),
+            self._mn_safe_run_and_log_failure(self.snapshot_gauges),
+            self._mn_safe_run_and_log_failure(self.snapshot_histograms)
         )
         return {
             'counter': counters if counters else {},

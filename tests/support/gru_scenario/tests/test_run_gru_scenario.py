@@ -767,8 +767,9 @@ async def test_run_gru_scenario_simple_start_wait_shutdown(gru, tests_dir, logge
 
 
 @pytest.mark.asyncio
-async def test_dsl_exploration(gru, tests_dir, logger, metrics, state_store):
-    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+async def test_dsl_exploration(gru, tests_dir, logger, metrics, state_store, reload_wait_for_subs_pipeline):
+    pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
+    reload_wait_for_subs_pipeline(expected_subs=2)
 
     directives = [
         Concurrent(

@@ -1,13 +1,13 @@
 import asyncio
 import inspect
-import traceback
 
 from collections.abc import Coroutine
 from typing import Any, Awaitable, Callable
 
 from .async_component import AsyncComponent
-from .logger import Logger, DEBUG, ERROR
+from .logger import Logger, ERROR
 
+from .._utils.format_exception_traceback import format_exception_traceback
 from .._utils.safe_cancel_task import safe_cancel_task
 from .._utils.safe_create_task import safe_create_task
 
@@ -17,14 +17,14 @@ class AsyncService(AsyncComponent):
         super().__init__(logger)
         self._mn_started = asyncio.Event()
         self._mn_start_error: BaseException | None = None
-        self._mn_aux_tasks: set[asyncio.Task] = set()
-        self._mn_tasks_lock = asyncio.Lock()
+        self._mn_service_tasks: set[asyncio.Task] = set()  # canonical task registry for this service; subclasses may keep narrower domain-specific task views when they need isolated lifecycle control
+        self._mn_tasks_gate = asyncio.Lock()  # serializes access to domain-level tasks owned by subclasses; serializes reads and shutdown cleanup of service-level tasks while creates and deletes happen sync on-loop
         self._mn_shutdown_grace_seconds = 1.0
 
-    async def _mn_on_aux_task_failure(self, exception: BaseException, task_name: str | None, tb: str) -> None:
+    async def _mn_on_service_task_failure(self, exception: BaseException, task_name: str | None, tb: str) -> None:
         await self._mn_logger._log(
             ERROR,
-            f"{type(self).__name__} auxiliary task failed",
+            f"{type(self).__name__} service task failed",
             task_name=task_name,
             error_type=type(exception).__name__,
             error_message=str(exception),
@@ -83,9 +83,7 @@ class AsyncService(AsyncComponent):
                     f"{type(self).__name__} shutdown failed during startup error recovery",
                     error_type=type(shutdown_err).__name__,
                     error_message=str(shutdown_err),
-                    traceback="".join(traceback.format_exception(
-                        type(shutdown_err), shutdown_err, shutdown_err.__traceback__
-                    )),
+                    traceback=format_exception_traceback(shutdown_err),
                 )
             raise e
 
@@ -109,8 +107,8 @@ class AsyncService(AsyncComponent):
             # 1) cancel tasks currently tracked
             # 2) catch tasks scheduled on the next loop tick during shutdown
             for _ in range(2):
-                async with self._mn_tasks_lock:
-                    tasks = list(self._mn_aux_tasks)
+                async with self._mn_tasks_gate:
+                    tasks = list(self._mn_service_tasks)
                 if not tasks:
                     await asyncio.sleep(0)
                     continue
@@ -128,8 +126,8 @@ class AsyncService(AsyncComponent):
                     return_exceptions=True,
                 )
 
-            async with self._mn_tasks_lock:
-                self._mn_aux_tasks.clear()
+            async with self._mn_tasks_gate:
+                self._mn_service_tasks.clear()
 
         return await super()._mn_shutdown(
             log_kwargs=log_kwargs,
@@ -144,8 +142,8 @@ class AsyncService(AsyncComponent):
             coro,
             self._mn_logger,
             name,
-            on_failure=self._mn_on_aux_task_failure,
+            on_failure=self._mn_on_service_task_failure,
         )
-        self._mn_aux_tasks.add(task)
-        task.add_done_callback(lambda t: self._mn_aux_tasks.discard(t))
+        self._mn_service_tasks.add(task)
+        task.add_done_callback(lambda t: self._mn_service_tasks.discard(t))
         return task

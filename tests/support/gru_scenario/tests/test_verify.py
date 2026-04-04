@@ -112,14 +112,18 @@ def test_build_expected_call_counts_state_store_formula_for_mixed_success_and_fa
     expected = verifier._build_expected_call_counts()
     state_store_counts = expected.call_counts[type(verifier._state_store)]
 
-    # one successful start, two workflows, two steps per workflow
-    assert state_store_counts["get_contexts_for_minion"] == 1
-    assert state_store_counts["_get_contexts_for_minion"] == 1
+    # one successful start -> two workflows, with one initial save and two
+    # per-step saves per workflow
+    assert state_store_counts["get_contexts_for_orchestration"] == 1
+    assert state_store_counts["_mn_get_contexts_for_orchestration"] == 1
+    assert state_store_counts["_mn_get_decoded_contexts_for_orchestration"] == 1
+    assert state_store_counts["_mn_decode_stored_contexts"] == 1
     assert "get_all_contexts" not in state_store_counts
     assert state_store_counts["save_context"] == 6
-    assert state_store_counts["_save_context"] == 4
+    assert state_store_counts["_mn_save_context"] == 6
+    assert state_store_counts["_mn_serialize_and_save_context"] == 6
     assert state_store_counts["delete_context"] == 2
-    assert state_store_counts["_delete_context"] == 2
+    assert state_store_counts["_mn_delete_context"] == 2
     assert state_store_counts["shutdown"] == 1
 
 
@@ -156,7 +160,7 @@ def test_build_expected_call_counts_scales_minion_init_with_successful_starts():
 @pytest.mark.asyncio
 async def test_build_expected_call_counts_does_not_require_get_all_for_overridden_context_lookup():
     class IndexedStateStore(InMemoryStateStore):
-        async def get_contexts_for_minion(self, minion_modpath: str):
+        async def get_contexts_for_orchestration(self, orchestration_id: str):
             return []
 
     directives = [
@@ -185,8 +189,10 @@ async def test_build_expected_call_counts_does_not_require_get_all_for_overridde
     expected = verifier._build_expected_call_counts()
     state_store_counts = expected.call_counts[type(verifier._state_store)]
 
-    assert state_store_counts["get_contexts_for_minion"] == 1
-    assert state_store_counts["_get_contexts_for_minion"] == 1
+    assert state_store_counts["get_contexts_for_orchestration"] == 1
+    assert state_store_counts["_mn_get_contexts_for_orchestration"] == 1
+    assert state_store_counts["_mn_get_decoded_contexts_for_orchestration"] == 1
+    assert state_store_counts["_mn_decode_stored_contexts"] == 1
     assert "get_all_contexts" not in state_store_counts
 
 

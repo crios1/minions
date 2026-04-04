@@ -67,7 +67,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
             # TODO: need to centralize this error/errormsg (maybe have a is_type_serializable_raises()?)
             raise TypeError(
                 f"{cls.__name__}: event type is not JSON-serializable. "
-                "Only JSON-safe types are supported (str, int, float, bool, None, list, tuple, dict[str, V], dataclass, TypedDict)."
+                "Only JSON-safe types are supported (str, int, float, bool, None, list, tuple, dict[str, V], dataclass, msgspec.Struct, TypedDict)."
             )
 
     def __init__(

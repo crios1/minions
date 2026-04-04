@@ -7,6 +7,8 @@ from collections.abc import Mapping
 from dataclasses import fields, is_dataclass
 from typing import Any, get_args, get_origin, get_type_hints
 
+import msgspec
+
 
 def _is_typed_dict_type(tp: Any) -> bool:
     return (
@@ -24,6 +26,13 @@ def _is_mapping_type(tp: Any) -> bool:
 
 def _is_dataclass_type(tp: Any) -> bool:
     return isinstance(tp, type) and is_dataclass(tp)
+
+
+def _is_msgspec_struct_type(tp: Any) -> bool:
+    try:
+        return isinstance(tp, type) and issubclass(tp, msgspec.Struct)
+    except TypeError:  # pragma: no cover
+        return False
 
 
 def _normalize_origin_args(tp: Any) -> tuple[Any, tuple[Any, ...]]:
@@ -99,6 +108,11 @@ def _is_serializable_field_type(tp: Any) -> bool:
             stack.extend(hints[f.name] for f in fields(t))
             continue
 
+        if _is_msgspec_struct_type(t):
+            hints = get_type_hints(t, include_extras=True)
+            stack.extend(hints[f.name] for f in msgspec.structs.fields(t))
+            continue
+
         if _is_typed_dict_type(t):
             hints = get_type_hints(t, include_extras=True)
             stack.extend(hints.values())
@@ -171,6 +185,10 @@ def is_type_serializable(tp: Any) -> bool:
     if _is_dataclass_type(tp):
         hints = get_type_hints(tp, include_extras=True)
         return all(_is_serializable_field_type(hints[f.name]) for f in fields(tp))
+
+    if _is_msgspec_struct_type(tp):
+        hints = get_type_hints(tp, include_extras=True)
+        return all(_is_serializable_field_type(hints[f.name]) for f in msgspec.structs.fields(tp))
 
     if _is_typed_dict_type(tp):
         hints = get_type_hints(tp, include_extras=True)

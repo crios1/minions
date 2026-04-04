@@ -142,9 +142,23 @@ async def test_runner_wait_workflows_subset_handles_mixed_success_and_failure(gr
 async def test_wait_minion_tasks_times_out_instead_of_blocking_indefinitely(gru, tests_dir):
     class _DummyMinion:
         def __init__(self):
-            self._mn_tasks_lock = asyncio.Lock()
-            self._mn_tasks: set[asyncio.Task] = set()
-            self._mn_aux_tasks: set[asyncio.Task] = set()
+            self._mn_tasks_gate = asyncio.Lock()
+            self._mn_service_tasks: set[asyncio.Task] = set()
+            self._mn_workflow_tasks: set[asyncio.Task] = set()
+
+        async def _mn_wait_until_all_tasks_idle(self, timeout: float = 2.0) -> None:
+            deadline = asyncio.get_running_loop().time() + timeout
+            while True:
+                async with self._mn_tasks_gate:
+                    tasks = tuple(self._mn_workflow_tasks | self._mn_service_tasks)
+                if not tasks:
+                    return
+                remaining = deadline - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    raise TimeoutError("dummy minion tasks did not become idle")
+                done, pending = await asyncio.wait(tasks, timeout=remaining)
+                if pending and not done:
+                    raise TimeoutError("dummy minion tasks did not become idle")
 
     plan = ScenarioPlan([], pipeline_event_counts={})
     waiter = ScenarioWaiter(
@@ -157,7 +171,7 @@ async def test_wait_minion_tasks_times_out_instead_of_blocking_indefinitely(gru,
 
     dummy = _DummyMinion()
     task = asyncio.create_task(asyncio.sleep(60), name="never-finishes")
-    dummy._mn_tasks.add(task)
+    dummy._mn_workflow_tasks.add(task)
 
     try:
         with pytest.raises(pytest.fail.Exception, match="WaitWorkflowCompletions timed out"):
@@ -166,6 +180,37 @@ async def test_wait_minion_tasks_times_out_instead_of_blocking_indefinitely(gru,
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
+
+
+@pytest.mark.asyncio
+async def test_wait_minion_tasks_waits_for_minions_concurrently(gru):
+    class _DummyMinion:
+        def __init__(self, started_event: asyncio.Event, peer_started_event: asyncio.Event):
+            self._mn_tasks_gate = asyncio.Lock()
+            self._mn_service_tasks: set[asyncio.Task] = set()
+            self._mn_workflow_tasks: set[asyncio.Task] = set()
+            self._started_event = started_event
+            self._peer_started_event = peer_started_event
+
+        async def _mn_wait_until_all_tasks_idle(self, timeout: float = 2.0) -> None:
+            self._started_event.set()
+            await asyncio.wait_for(self._peer_started_event.wait(), timeout=timeout)
+
+    plan = ScenarioPlan([], pipeline_event_counts={})
+    waiter = ScenarioWaiter(
+        plan,
+        ScenarioRunner(gru, plan, per_verification_timeout=0.05)._insp,
+        timeout=0.05,
+        spies=SpyRegistry(),
+        result=ScenarioRunResult(),
+    )
+
+    first_started = asyncio.Event()
+    second_started = asyncio.Event()
+    first = _DummyMinion(first_started, second_started)
+    second = _DummyMinion(second_started, first_started)
+
+    await waiter._wait_minion_tasks({first, second})  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio

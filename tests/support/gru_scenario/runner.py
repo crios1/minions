@@ -426,7 +426,7 @@ class ScenarioRunner:
 
     async def _snapshot_persisted_contexts_by_modpath(self) -> dict[str, int] | None:
         state_store = getattr(self._gru, "_state_store", None)
-        snapshot_fn = getattr(state_store, "_get_all_contexts", None)
+        snapshot_fn = getattr(state_store, "_mn_get_all_decoded_contexts", None)
         if not callable(snapshot_fn):
             return None
         try:
@@ -560,42 +560,30 @@ class ScenarioWaiter:
         if not minions:
             return
 
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + self._timeout
+        minions_tup = tuple(minions)
+        results = await asyncio.gather(
+            *(
+                m._mn_wait_until_all_tasks_idle(timeout=self._timeout)
+                for m in minions_tup
+            ),
+            return_exceptions=True,
+        )
 
-        while True:
-            # todo: consider making Minion._mn_* methods that centralize testing utilitizes that depend on Minion's implementation
-            waits: list[asyncio.Future] = []
-            pending_tasks: list[asyncio.Task] = []
-            for m in minions:
-                async with m._mn_tasks_lock:
-                    tasks = list(m._mn_tasks | m._mn_aux_tasks)
-                if tasks:
-                    pending_tasks.extend(tasks)
-                    waits.append(asyncio.gather(*tasks, return_exceptions=True))
-
-            if not waits:
-                return
-
-            remaining = deadline - loop.time()
-            if remaining <= 0:
+        failure_messages: list[str] = []
+        for m, result in zip(minions_tup, results, strict=True):
+            if isinstance(result, TimeoutError):
+                async with m._mn_tasks_gate:
+                    pending_tasks = list(m._mn_workflow_tasks | m._mn_service_tasks)
                 names = [
                     task.get_name() if hasattr(task, "get_name") else "task"
                     for task in pending_tasks
                 ]
-                pytest.fail(
+                failure_messages.append(
                     "WaitWorkflowCompletions timed out while waiting for minion tasks to complete. "
                     f"Pending tasks={len(pending_tasks)} names={names}"
                 )
+            elif isinstance(result, BaseException):
+                raise result
 
-            try:
-                await asyncio.wait_for(asyncio.gather(*waits), timeout=remaining)
-            except asyncio.TimeoutError:
-                names = [
-                    task.get_name() if hasattr(task, "get_name") else "task"
-                    for task in pending_tasks
-                ]
-                pytest.fail(
-                    "WaitWorkflowCompletions timed out while waiting for minion tasks to complete. "
-                    f"Pending tasks={len(pending_tasks)} names={names}"
-                )
+        if failure_messages:
+            pytest.fail("\n".join(failure_messages))

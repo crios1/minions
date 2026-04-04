@@ -1,6 +1,7 @@
 import asyncio
 import pytest
 import re
+import urllib.error
 import urllib.request
 
 from prometheus_client import CollectorRegistry
@@ -16,6 +17,22 @@ from minions._internal._framework.metrics_constants import (
 def read_metrics_from_http(port: int) -> str:
     with urllib.request.urlopen(f"http://localhost:{port}/metrics") as response:
         return response.read().decode()
+
+
+async def poll_read_metrics_from_http(
+    port: int,
+    *,
+    timeout: float = 0.2,
+    poll_interval: float = 0.01,
+) -> str:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while True:
+        try:
+            return read_metrics_from_http(port)
+        except urllib.error.URLError:
+            if asyncio.get_running_loop().time() >= deadline:
+                raise
+            await asyncio.sleep(poll_interval)
 
 def extract_metric_value(text: str, name: str, labels: dict[str, str]) -> float:
     """
@@ -52,9 +69,8 @@ async def test_counter_exposed_on_http():
 
     counter = metrics.create_metric(MINION_WORKFLOW_STARTED_TOTAL, ["minion"], "counter")
     counter.labels(minion="abc123").inc()
-    await asyncio.sleep(0.1)  # give the HTTP server a moment
 
-    page = read_metrics_from_http(port)
+    page = await poll_read_metrics_from_http(port)
     value = extract_metric_value(page, MINION_WORKFLOW_STARTED_TOTAL, {"minion": "abc123"})
     assert value == 1.0
 
@@ -67,9 +83,8 @@ async def test_gauge_exposed_on_http():
 
     gauge = metrics.create_metric(SYSTEM_MEMORY_USED_PERCENT, [], "gauge")
     gauge.set(42.5)
-    await asyncio.sleep(0.1)
 
-    page = read_metrics_from_http(port)
+    page = await poll_read_metrics_from_http(port)
     value = extract_metric_value(page, SYSTEM_MEMORY_USED_PERCENT, {})
     assert value == 42.5
 
@@ -82,9 +97,8 @@ async def test_histogram_exposed_on_http():
 
     histogram = metrics.create_metric(MINION_WORKFLOW_STEP_DURATION_SECONDS, ["minion", "minion_workflow_step"], "histogram")
     histogram.labels(minion="minion123", minion_workflow_step="step_xyz").observe(0.75)
-    await asyncio.sleep(0.1)
 
-    page = read_metrics_from_http(port)
+    page = await poll_read_metrics_from_http(port)
     labels = {"minion": "minion123", "minion_workflow_step": "step_xyz"}
 
     sum_val = extract_metric_value(page, MINION_WORKFLOW_STEP_DURATION_SECONDS + "_sum", labels)
@@ -117,12 +131,10 @@ async def test_http_server_start_failure_logs_error():
     first = PrometheusMetrics(logger=logger, port=port, registry=registry)
     await first.startup()
 
-    await asyncio.sleep(0.1) # let logging task run
     assert not logger.has_log("Failed to start metrics HTTP server")
 
     # Second instantiation should fail and trigger safe_create_task logging path
     second = PrometheusMetrics(logger=logger, port=port, registry=registry)
     await second.startup()
 
-    await asyncio.sleep(0.1) # let logging task run
     assert logger.has_log("Failed to start metrics HTTP server")

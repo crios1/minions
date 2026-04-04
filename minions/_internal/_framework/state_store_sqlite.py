@@ -2,16 +2,15 @@ import asyncio
 import aiosqlite
 import statistics
 import time
-import traceback
 from collections import deque
-from typing import List, Tuple, Literal
+from typing import Literal, Tuple
 
 from .logger import Logger, DEBUG, ERROR, WARNING, CRITICAL
-from .state_store import StateStore
-from .state_store_payload_types import StateStorePayload
-from .._utils.serialization import serialize, deserialize
+from .state_store import StateStore, StoredWorkflowContext
+from .._utils.format_exception_traceback import format_exception_traceback
+from .._utils.safe_create_task import safe_create_task
 
-BatchEntry = tuple[str, str, bytes | None, asyncio.Future[None]]
+BatchEntry = tuple[str, Literal["upsert", "delete"], str | None, bytes | None, asyncio.Future[None]]
 
 
 class SQLiteStateStore(StateStore):
@@ -89,6 +88,7 @@ class SQLiteStateStore(StateStore):
 
         self._batch: list[BatchEntry] = []
         self._lock = asyncio.Lock()
+        self._commit_lock = asyncio.Lock()
         self._flush_task: asyncio.Task | None = None
         self._deadline: float | None = None
 
@@ -129,10 +129,19 @@ class SQLiteStateStore(StateStore):
         await self._db.execute("""
             CREATE TABLE IF NOT EXISTS workflows(
                 workflow_id TEXT PRIMARY KEY,
+                orchestration_id TEXT NOT NULL,
                 context BLOB NOT NULL
             )
         """)
+        await self._db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_workflows_orchestration_id
+            ON workflows(orchestration_id)
+        """)
         await self._db.commit()
+        async with self._db.execute("PRAGMA page_size") as c:
+            row = await c.fetchone()
+        if row and row[0]:
+            self._page_size = int(row[0])
 
 
         # calibrate writer
@@ -143,40 +152,49 @@ class SQLiteStateStore(StateStore):
             async def run_probe(payload: bytes) -> list[float]:
                 samples = []
                 calib_id = "__state_store_calib__"
+                calib_orchestration_id = "__state_store_calib__"
                 # ensure the row exists (won't grow table further)
                 await self._db.execute( # type: ignore
-                    """INSERT INTO workflows(workflow_id, context)
-                    VALUES(?, ?)
+                    """INSERT INTO workflows(workflow_id, orchestration_id, context)
+                    VALUES(?, ?, ?)
                     ON CONFLICT(workflow_id) DO NOTHING""",
-                    (calib_id, payload),
+                    (calib_id, calib_orchestration_id, payload),
                 )
                 await self._db.commit() # type: ignore
                 for _ in range(8):
                     t = time.perf_counter()
                     await self._db.execute("BEGIN IMMEDIATE") # type: ignore
                     await self._db.execute( # type: ignore
-                        """INSERT INTO workflows(workflow_id, context)
-                        VALUES(?, ?)
-                        ON CONFLICT(workflow_id) DO UPDATE SET context=excluded.context""",
-                        (calib_id, payload),
+                        """INSERT INTO workflows(workflow_id, orchestration_id, context)
+                        VALUES(?, ?, ?)
+                        ON CONFLICT(workflow_id) DO UPDATE SET
+                            orchestration_id=excluded.orchestration_id,
+                            context=excluded.context""",
+                        (calib_id, calib_orchestration_id, payload),
                     )
                     await self._db.commit() # type: ignore
                     samples.append((time.perf_counter() - t) * 1000.0)
                 return samples
 
             smalls = await run_probe(b"x" * 256)   # ~pure fsync baseline
-            mediums = await run_probe(b"x" * 8192) # ~2 WAL pages (4 KiB pages assumed)
+            mediums = await run_probe(b"x" * (self._page_size * 2)) # ~2 WAL pages
 
             samples = smalls + mediums
             p50 = statistics.median(samples)
             p95 = statistics.quantiles(samples, n=20, method="inclusive")[-1]
-        except Exception:
+        except Exception as e:
             p50, p95 = 6.0, 10.0  # SSD-ish fallback
             await self._mn_logger._log(
                 ERROR,
                 f"{type(self).__name__} calibration failed; using defaults",
-                traceback="".join(traceback.format_exc()),
+                traceback=format_exception_traceback(e),
             )
+        else:
+            await self._db.execute(
+                "DELETE FROM workflows WHERE workflow_id = ?",
+                ("__state_store_calib__",),
+            )
+            await self._db.commit()
 
         if (self._batch_max_n is None) or (self._batch_max_ms is None):
             if p50 <= 2.0:
@@ -217,18 +235,11 @@ class SQLiteStateStore(StateStore):
             warn_cfg=self._warn_cfg
         )
 
-        async with self._db.execute("PRAGMA page_size") as c:  # type: ignore
-            row = await c.fetchone()
-        if row and row[0]:
-            self._page_size = int(row[0])
-
     async def shutdown(self) -> None:
         await self._flush()
         if self._flush_task and not self._flush_task.done():
-            try:
-                self._flush_task.cancel()
-            except Exception:
-                pass
+            await asyncio.gather(self._flush_task, return_exceptions=True)
+        self._flush_task = None
         await self._db.close() # type: ignore
 
     async def _flush(self):
@@ -242,16 +253,17 @@ class SQLiteStateStore(StateStore):
         await self._commit_and_settle(items)
 
     async def _commit_and_settle(self, items: list[BatchEntry]) -> None:
-        try:
-            await self._commit_batch_now(items)
-        except Exception as e:
+        async with self._commit_lock:
+            try:
+                await self._commit_batch_now(items)
+            except Exception as e:
+                for *_, waiter in items:
+                    if not waiter.done():
+                        waiter.set_exception(e)
+                raise
             for *_, waiter in items:
                 if not waiter.done():
-                    waiter.set_exception(e)
-            raise
-        for *_, waiter in items:
-            if not waiter.done():
-                waiter.set_result(None)
+                    waiter.set_result(None)
 
     async def _flush_soon(self):
         delay = 0 if self._deadline is None else max(0.0, self._deadline - time.monotonic())
@@ -263,20 +275,22 @@ class SQLiteStateStore(StateStore):
         t0 = time.perf_counter()
         await self._db.execute("BEGIN IMMEDIATE")  # type: ignore
         upserts = [
-            (workflow_id, payload)
-            for workflow_id, op, payload, _waiter in items
+            (workflow_id, orchestration_id, payload)
+            for workflow_id, op, orchestration_id, payload, _waiter in items
             if op == "upsert" and payload is not None
         ]
         deletes = [
             (workflow_id,)
-            for workflow_id, op, _payload, _waiter in items
+            for workflow_id, op, _orchestration_id, _payload, _waiter in items
             if op == "delete"
         ]
         if upserts:
             await self._db.executemany(  # type: ignore
-                """INSERT INTO workflows(workflow_id, context)
-                VALUES(?, ?)
-                ON CONFLICT(workflow_id) DO UPDATE SET context=excluded.context""",
+                """INSERT INTO workflows(workflow_id, orchestration_id, context)
+                VALUES(?, ?, ?)
+                ON CONFLICT(workflow_id) DO UPDATE SET
+                    orchestration_id=excluded.orchestration_id,
+                    context=excluded.context""",
                 upserts,
             )
         if deletes:
@@ -320,15 +334,15 @@ class SQLiteStateStore(StateStore):
             "Consider: increase batch caps; confirm WAL + synchronous=NORMAL; "
             "shard by workflow_id across multiple SQLite DBs; or move to Postgres if sustained."
         )
-        asyncio.create_task(self._mn_logger._log(ERROR, msg))
+        safe_create_task(self._mn_logger._log(ERROR, msg))
 
     def _maybe_warn_large_payload(
         self,
         workflow_id: str,
-        payload: StateStorePayload,
-        serialized_payload: bytes,
+        orchestration_id: str | None,
+        context_blob: bytes,
     ) -> None:
-        size = len(serialized_payload)
+        size = len(context_blob)
         pages = (size + self._page_size - 1) // self._page_size
         last = self._last_size_warn.get(workflow_id)
         now = time.monotonic()
@@ -338,31 +352,34 @@ class SQLiteStateStore(StateStore):
             lvl = CRITICAL if pages >= self._size_crit_pages else WARNING
             warn_kib = (self._size_warn_pages * self._page_size) // 1024
             crit_kib = (self._size_crit_pages * self._page_size) // 1024
-            asyncio.create_task(self._mn_logger._log(
-                lvl,
-                f"{type(self).__name__}: Large MinionWorkflowContext Detected",
-                size_bytes=size,
-                approx_pages=pages,
-                workflow_id=workflow_id,
-                minion_modpath=payload.get("minion_modpath"),
-                suggestion=(
-                    "Consider externalizing large blobs and storing refs; keep state below "
-                    f"configured warning threshold (~{warn_kib}KiB, critical ~{crit_kib}KiB)."
+            safe_create_task(
+                self._mn_logger._log(
+                    lvl,
+                    f"{type(self).__name__}: Large MinionWorkflowContext Detected",
+                    size_bytes=size,
+                    approx_pages=pages,
+                    workflow_id=workflow_id,
+                    orchestration_id=orchestration_id,
+                    suggestion=(
+                        "Consider externalizing large blobs and storing refs; keep state below "
+                        f"configured warning threshold (~{warn_kib}KiB, critical ~{crit_kib}KiB)."
+                    )
                 )
-            ))
+            )
             self._last_size_warn[workflow_id] = now
 
     async def _enqueue_batch_entry(
         self,
         workflow_id: str,
         op: Literal["upsert", "delete"],
+        orchestration_id: str | None,
         payload: bytes | None,
     ) -> asyncio.Future[None]:
         fut = asyncio.get_running_loop().create_future()
         to_flush = False
         flush_items: list[BatchEntry] | None = None
         async with self._lock:
-            self._batch.append((workflow_id, op, payload, fut))
+            self._batch.append((workflow_id, op, orchestration_id, payload, fut))
             if len(self._batch) >= self._batch_max_n: # type: ignore
                 to_flush = True
                 flush_items = list(self._batch)
@@ -370,7 +387,11 @@ class SQLiteStateStore(StateStore):
                 self._deadline = None
             elif not self._flush_task or self._flush_task.done():
                 self._deadline = time.monotonic() + (self._batch_max_ms / 1000.0)  # type: ignore
-                self._flush_task = asyncio.create_task(self._flush_soon())
+                self._flush_task = safe_create_task(
+                    self._flush_soon(),
+                    self._mn_logger,
+                    name=f"{type(self).__name__}._flush_soon",
+                )
 
             warn_n, crit_n = self._warn_cfg.get("backlog_n", (float("inf"), float("inf")))
             if len(self._batch) > warn_n:
@@ -384,42 +405,60 @@ class SQLiteStateStore(StateStore):
     async def save_context(
         self,
         workflow_id: str,
-        payload: StateStorePayload,
+        orchestration_id: str,
+        context: bytes,
     ):
-        try:
-            serialized_payload = serialize(dict(payload))
-            self._maybe_warn_large_payload(workflow_id, payload, serialized_payload)
-        except Exception as e:
-            await self._mn_logger._log(
-                ERROR, f"{type(self).__name__}.save_context_payload serialize failed",
-                error_type=type(e).__name__, error_message=str(e),
-                traceback="".join(traceback.format_exception(type(e), e, e.__traceback__)),
-                workflow_id=workflow_id,
-            )
-            # Pre-alpha persistence policy is fail-open: log and continue runtime execution.
-            return
-        fut = await self._enqueue_batch_entry(workflow_id, "upsert", serialized_payload)
+        self._maybe_warn_large_payload(
+            workflow_id,
+            orchestration_id,
+            context,
+        )
+        fut = await self._enqueue_batch_entry(
+            workflow_id,
+            "upsert",
+            orchestration_id,
+            context,
+        )
         await fut
 
     async def delete_context(self, workflow_id: str):
-        fut = await self._enqueue_batch_entry(workflow_id, "delete", None)
+        fut = await self._enqueue_batch_entry(workflow_id, "delete", None, None)
         await fut
 
-    async def get_all_contexts(self) -> List[StateStorePayload]:
+    async def get_contexts_for_orchestration(
+        self,
+        orchestration_id: str,
+    ) -> list[StoredWorkflowContext]:
         await self._flush()
-        async with self._db.execute("SELECT context FROM workflows") as c: # type: ignore
+        async with self._db.execute(
+            """
+            SELECT workflow_id, orchestration_id, context
+            FROM workflows
+            WHERE orchestration_id = ?
+            """,
+            (orchestration_id,),
+        ) as c: # type: ignore
             rows = await c.fetchall()
-        if not rows:
-            return []
-        out: List[StateStorePayload] = []
-        for (blob,) in rows:
-            try:
-                out.append(deserialize(blob, dict))
-            except Exception as e:
-                await self._mn_logger._log(
-                    ERROR, f"{type(self).__name__}.get_all_contexts deserialize failed",
-                    error_type=type(e).__name__,
-                    error_message=str(e),
-                    traceback="".join(traceback.format_exception(type(e), e, e.__traceback__))
-                )
-        return out
+        return [
+            StoredWorkflowContext(
+                workflow_id=workflow_id,
+                orchestration_id=row_orchestration_id,
+                context=bytes(context_blob),
+            )
+            for workflow_id, row_orchestration_id, context_blob in rows
+        ]
+
+    async def get_all_contexts(self) -> list[StoredWorkflowContext]:
+        await self._flush()
+        async with self._db.execute(
+            "SELECT workflow_id, orchestration_id, context FROM workflows"
+        ) as c: # type: ignore
+            rows = await c.fetchall()
+        return [
+            StoredWorkflowContext(
+                workflow_id=workflow_id,
+                orchestration_id=orchestration_id,
+                context=bytes(context_blob),
+            )
+            for workflow_id, orchestration_id, context_blob in rows
+        ]

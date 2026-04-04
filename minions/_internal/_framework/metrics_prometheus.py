@@ -1,4 +1,3 @@
-import traceback
 import threading
 from prometheus_client import (
     CollectorRegistry, REGISTRY,
@@ -12,6 +11,7 @@ from .metrics import (
 )
 from .logger import Logger, ERROR
 from .metrics_interface import LabelledMetric
+from .._utils.format_exception_traceback import format_exception_traceback
 
 class PrometheusMetrics(Metrics):
     """
@@ -45,7 +45,7 @@ class PrometheusMetrics(Metrics):
                 "[Prometheus] Failed to start metrics HTTP server",
                 error_type=type(e).__name__,
                 error_message=str(e),
-                traceback="".join(traceback.format_exception(type(e), e, e.__traceback__)),
+                traceback=format_exception_traceback(e),
             )
 
     def create_metric(self, metric_name: str, label_names: list[str], kind: Kind) -> LabelledMetric:

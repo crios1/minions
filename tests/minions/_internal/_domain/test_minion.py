@@ -1,6 +1,7 @@
 import pytest
 from dataclasses import dataclass
 from typing import TypeVar
+import msgspec
 from minions import Minion, Resource, minion_step
 
 from minions._internal._framework.logger_noop import NoOpLogger
@@ -23,11 +24,22 @@ class MyEvent:
 class MyContext:
     ts: int
 
+
+class MyStructEvent(msgspec.Struct):
+    ts: int
+
+
+class MyStructContext(msgspec.Struct):
+    ts: int
+
+
 class TestMinionSubclassingValid:
     def test_valid_event_and_context_types(self):
         class MyMinion1(Minion[dict, dict]):
             ...
         class MyMinion2(Minion[MyEvent, MyContext]):
+            ...
+        class MyMinion3(Minion[MyStructEvent, MyStructContext]):
             ...
 
     def test_distinct_resource_dependencies(self):

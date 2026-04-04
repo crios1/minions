@@ -2,20 +2,26 @@ import asyncio
 import os
 import time
 from collections.abc import AsyncGenerator
+
 import pytest
 import pytest_asyncio
 
-from tests.assets.support.logger_inmemory import InMemoryLogger
+from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.minion_workflow_context_codec import (
-    serialize_workflow_context,
+    deserialize_workflow_context_blob,
+    persist_workflow_context,
 )
 from minions._internal._framework.state_store_sqlite import SQLiteStateStore
-from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
+from minions._internal._utils.serialization import serialize
+from tests.assets.support.logger_inmemory import InMemoryLogger
+
 
 pytestmark = pytest.mark.asyncio
 
+
 def mk_ctx(i=0, size=32, modpath="app.minion"):
     return MinionWorkflowContext(
+        minion_composite_key=f"{modpath}|cfg-{i}|app.pipeline",
         minion_modpath=modpath,
         workflow_id=f"wf-{i}",
         event={"i": i},
@@ -25,6 +31,10 @@ def mk_ctx(i=0, size=32, modpath="app.minion"):
         started_at=time.time(),
         error_msg=None,
     )
+
+
+def _blob_for(ctx: MinionWorkflowContext) -> bytes:
+    return serialize(persist_workflow_context(ctx))
 
 
 @pytest_asyncio.fixture
@@ -40,13 +50,18 @@ async def store_and_logger(
     finally:
         await s.shutdown()
 
-async def test_startup_creates_table_and_calibrates(store_and_logger):
+
+async def test_startup_creates_table_index_and_calibrates(store_and_logger):
     s, logger = store_and_logger
     assert s._db is not None
     assert s._batch_max_n is not None and s._batch_max_ms is not None
-    assert s._page_size >= 1024  # sanity: page size discovered
-    # sanity: calibration log emitted with structured fields
+    assert s._page_size >= 1024
     assert any("p50_commit_ms" in log.kwargs for log in logger.logs)
+
+    async with s._db.execute("PRAGMA index_list(workflows)") as c:
+        rows = await c.fetchall()
+    assert any(row[1] == "idx_workflows_orchestration_id" for row in rows)
+
 
 async def test_startup_applies_configured_wal_autocheckpoint(tmp_path):
     logger = InMemoryLogger()
@@ -67,6 +82,7 @@ async def test_startup_applies_configured_wal_autocheckpoint(tmp_path):
     finally:
         await s.shutdown()
 
+
 async def test_startup_applies_configured_busy_timeout(tmp_path):
     logger = InMemoryLogger()
     db_path = os.path.join(tmp_path, "state.db")
@@ -85,6 +101,7 @@ async def test_startup_applies_configured_busy_timeout(tmp_path):
         assert int(row[0]) == configured_ms
     finally:
         await s.shutdown()
+
 
 async def test_startup_applies_configured_journal_mode(tmp_path):
     logger = InMemoryLogger()
@@ -105,11 +122,10 @@ async def test_startup_applies_configured_journal_mode(tmp_path):
     finally:
         await s.shutdown()
 
+
 async def test_startup_applies_configured_synchronous(tmp_path):
     logger = InMemoryLogger()
     db_path = os.path.join(tmp_path, "state.db")
-    # SQLite reports PRAGMA synchronous as an integer value.
-    # OFF=0, NORMAL=1, FULL=2, EXTRA=3
     s = SQLiteStateStore(
         db_path=db_path,
         logger=logger,
@@ -125,59 +141,132 @@ async def test_startup_applies_configured_synchronous(tmp_path):
     finally:
         await s.shutdown()
 
+
 async def test_save_context_persists_before_returning(store_and_logger):
     s, _ = store_and_logger
-    c1 = mk_ctx(i=1, size=16)
-    await s.save_context(c1.workflow_id, serialize_workflow_context(c1))
-    ctxs = await s.get_all_contexts()
+    ctx = mk_ctx(i=1, size=16)
+    await s.save_context(ctx.workflow_id, ctx.minion_composite_key, _blob_for(ctx))
+    rows = await s.get_all_contexts()
 
-    assert any(c["workflow_id"] == c1.workflow_id for c in ctxs)
+    assert any(row.workflow_id == ctx.workflow_id for row in rows)
 
 
-async def test_save_context_serialize_failure_is_fail_open_and_logged(store_and_logger, monkeypatch):
+async def test_runtime_blob_path_remains_readable_via_framework_hydration(store_and_logger):
+    s, _ = store_and_logger
+    ctx = mk_ctx(i=77, size=16)
+
+    await s._mn_serialize_and_save_context(ctx)
+    rows = await s.get_all_contexts()
+
+    row = next(r for r in rows if r.workflow_id == ctx.workflow_id)
+    assert row.orchestration_id == ctx.minion_composite_key
+    assert deserialize_workflow_context_blob(row.context) == ctx
+
+
+async def test_runtime_save_context_serialize_failure_is_fail_open_and_logged(
+    store_and_logger,
+    monkeypatch,
+):
     s, logger = store_and_logger
 
-    def _boom(_payload):
+    def _boom(_ctx):
         raise ValueError("serialize boom")
 
     monkeypatch.setattr(
-        "minions._internal._framework.state_store_sqlite.serialize",
+        "minions._internal._framework.state_store.serialize_persisted_workflow_context",
         _boom,
     )
 
     ctx = mk_ctx(i=55, size=16)
-    await s.save_context(ctx.workflow_id, serialize_workflow_context(ctx))
-    ctxs = await s.get_all_contexts()
+    await s._mn_serialize_and_save_context(ctx)
+    rows = await s.get_all_contexts()
 
-    assert all(c["workflow_id"] != ctx.workflow_id for c in ctxs)
-    assert await logger.wait_for_log("save_context_payload serialize failed")
+    assert all(row.workflow_id != ctx.workflow_id for row in rows)
+    assert await logger.wait_for_log("StateStore failed to serialize workflow context")
 
 
 async def test_save_context_batches_but_waits_for_batch_commit(store_and_logger):
     s, _ = store_and_logger
     s._batch_max_n = 100
-    s._batch_max_ms = 50
+    s._batch_max_ms = 10_000
 
     c1 = mk_ctx(i=1, size=16)
     c2 = mk_ctx(i=2, size=24)
-    
-    t1 = asyncio.create_task(s.save_context(c1.workflow_id, serialize_workflow_context(c1)))
-    await asyncio.sleep(0)
-    assert len(s._batch) == 1
-    assert not t1.done()
 
-    t2 = asyncio.create_task(s.save_context(c2.workflow_id, serialize_workflow_context(c2)))
-    await asyncio.sleep(0)
-    assert len(s._batch) == 2
+    t1 = asyncio.create_task(s.save_context(c1.workflow_id, c1.minion_composite_key, _blob_for(c1)))
+    t2 = asyncio.create_task(s.save_context(c2.workflow_id, c2.minion_composite_key, _blob_for(c2)))
+
+    deadline = asyncio.get_running_loop().time() + 1.0
+    expected_ids = {c1.workflow_id, c2.workflow_id}
+    while True:
+        batched_ids = {workflow_id for workflow_id, *_rest in s._batch}
+        if batched_ids == expected_ids:
+            break
+        if asyncio.get_running_loop().time() >= deadline:
+            raise AssertionError(f"timed out waiting for batched ids {expected_ids!r}; saw {batched_ids!r}")
+        await asyncio.sleep(0.001)
+
     assert not t1.done()
     assert not t2.done()
 
+    await s._flush()
     await asyncio.gather(t1, t2)
     assert len(s._batch) == 0
-    ctxs = await s.get_all_contexts()
+    rows = await s.get_all_contexts()
 
-    ids = {c["workflow_id"] for c in ctxs}
+    ids = {row.workflow_id for row in rows}
     assert ids == {c1.workflow_id, c2.workflow_id}
+
+
+async def test_flush_paths_do_not_overlap_transactions(store_and_logger, monkeypatch):
+    s, _ = store_and_logger
+    s._batch_max_n = 100
+    s._batch_max_ms = 1
+
+    first_commit_entered = asyncio.Event()
+    allow_first_commit = asyncio.Event()
+    active_commits = 0
+    max_active_commits = 0
+
+    original_commit_batch_now = s._commit_batch_now
+
+    async def wrapped_commit_batch_now(items):
+        nonlocal active_commits, max_active_commits
+        active_commits += 1
+        max_active_commits = max(max_active_commits, active_commits)
+        try:
+            if not first_commit_entered.is_set():
+                first_commit_entered.set()
+                await allow_first_commit.wait()
+            return await original_commit_batch_now(items)
+        finally:
+            active_commits -= 1
+
+    monkeypatch.setattr(s, "_commit_batch_now", wrapped_commit_batch_now)
+
+    ctx1 = mk_ctx(i=1, size=16)
+    ctx2 = mk_ctx(i=2, size=24)
+
+    save1 = asyncio.create_task(s.save_context(ctx1.workflow_id, ctx1.minion_composite_key, _blob_for(ctx1)))
+    await asyncio.wait_for(first_commit_entered.wait(), timeout=1.0)
+
+    save2 = asyncio.create_task(s.save_context(ctx2.workflow_id, ctx2.minion_composite_key, _blob_for(ctx2)))
+    await asyncio.sleep(0)
+    read_all = asyncio.create_task(s.get_all_contexts())
+    await asyncio.sleep(0)
+
+    assert not save1.done()
+    assert not save2.done()
+    assert not read_all.done()
+    assert max_active_commits == 1
+
+    allow_first_commit.set()
+    rows = await asyncio.wait_for(read_all, timeout=2.0)
+    await asyncio.wait_for(asyncio.gather(save1, save2), timeout=2.0)
+
+    ids = {row.workflow_id for row in rows}
+    assert ids == {ctx1.workflow_id, ctx2.workflow_id}
+    assert max_active_commits == 1
 
 
 async def test_flush_on_batch_cap(store_and_logger):
@@ -187,28 +276,35 @@ async def test_flush_on_batch_cap(store_and_logger):
     tasks = []
     for i in range(3):
         ctx = mk_ctx(i=i)
-        tasks.append(asyncio.create_task(s.save_context(ctx.workflow_id, serialize_workflow_context(ctx))))
+        tasks.append(
+            asyncio.create_task(
+                s.save_context(ctx.workflow_id, ctx.minion_composite_key, _blob_for(ctx))
+            )
+        )
     await asyncio.gather(*tasks)
 
     assert len(s._batch) == 0
-    ctxs = await s.get_all_contexts()
-    assert len(ctxs) >= 3
+    rows = await s.get_all_contexts()
+    assert len(rows) >= 3
+
 
 async def test_large_state_warning(store_and_logger):
     s, logger = store_and_logger
-    s._size_warn_pages = 1  # make easy to trigger
+    s._size_warn_pages = 1
     s._page_size = 4096
-    big = mk_ctx(i=10, size=8192)  # > 1 page after serialization overhead
-    await s.save_context(big.workflow_id, serialize_workflow_context(big))
+    big = mk_ctx(i=10, size=8192)
+    await s.save_context(big.workflow_id, big.minion_composite_key, _blob_for(big))
     assert await logger.wait_for_log("Large MinionWorkflowContext"), "expected large-state warning"
+
 
 async def test_commit_metrics_populated(store_and_logger):
     s, _ = store_and_logger
     for i in range(5):
         ctx = mk_ctx(i=i)
-        await s.save_context(ctx.workflow_id, serialize_workflow_context(ctx))
+        await s.save_context(ctx.workflow_id, ctx.minion_composite_key, _blob_for(ctx))
 
     assert s._commit_ms_hist, "expected commit timings recorded"
+
 
 async def test_backlog_warning(store_and_logger):
     s, logger = store_and_logger
@@ -218,7 +314,11 @@ async def test_backlog_warning(store_and_logger):
     tasks = []
     for i in range(1, 4):
         ctx = mk_ctx(i=i)
-        tasks.append(asyncio.create_task(s.save_context(ctx.workflow_id, serialize_workflow_context(ctx))))
+        tasks.append(
+            asyncio.create_task(
+                s.save_context(ctx.workflow_id, ctx.minion_composite_key, _blob_for(ctx))
+            )
+        )
     assert await logger.wait_for_log("backlog>"), "expected backlog warning"
     await s._flush()
     await asyncio.gather(*tasks)
@@ -228,28 +328,29 @@ async def test_shutdown_flushes_pending_batch(store_and_logger):
     s, _ = store_and_logger
     s._batch_max_ms = 10_000
     ctx = mk_ctx(i=42)
-    save_task = asyncio.create_task(s.save_context(ctx.workflow_id, serialize_workflow_context(ctx)))
+    save_task = asyncio.create_task(
+        s.save_context(ctx.workflow_id, ctx.minion_composite_key, _blob_for(ctx))
+    )
     await asyncio.sleep(0)
     assert s._batch
     assert not save_task.done()
     await s.shutdown()
     await save_task
-    # re-open to read
+
     logger2 = InMemoryLogger()
     s2 = SQLiteStateStore(db_path=s.db_path, logger=logger2)
     await s2.startup()
-    ctxs = await s2.get_all_contexts()
+    rows = await s2.get_all_contexts()
     await s2.shutdown()
-    assert any(c["workflow_id"] == "wf-42" for c in ctxs)
+    assert any(row.workflow_id == "wf-42" for row in rows)
+
 
 async def test_commit_p95_warning(store_and_logger):
     s, logger = store_and_logger
-    s._warn_cfg["commit_p95_ms"] = (5.0, 9999.0)  # trip warn easily
-    # Keep throughput warnings effectively disabled so this test isolates commit p95.
+    s._warn_cfg["commit_p95_ms"] = (5.0, 9999.0)
     s._warn_cfg["rows_per_sec"] = (float("inf"), float("inf"))
 
-    # Seed enough commit samples for p95 and force the threshold crossing.
-    s._commit_ms_hist.extend([10.0] * 22)  # >=20 so p95 is meaningful
+    s._commit_ms_hist.extend([10.0] * 22)
 
     s._check_perf_signals()
     assert await logger.wait_for_log("commit_p95=", timeout=1.0), "expected commit_p95 warning to fire"

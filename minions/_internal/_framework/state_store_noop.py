@@ -1,7 +1,7 @@
 from .state_store import StateStore
+from .state_store import StoredWorkflowContext
 from .logger_noop import NoOpLogger
 from .logger import Logger
-from .state_store_payload_types import StateStorePayload
 
 class NoOpStateStore(StateStore):
     def __init__(self, logger: Logger | None = None):
@@ -10,12 +10,19 @@ class NoOpStateStore(StateStore):
     async def save_context(
         self,
         workflow_id: str,
-        payload: StateStorePayload,
+        orchestration_id: str,
+        context: bytes,
     ) -> None:
         return None
 
     async def delete_context(self, workflow_id: str) -> None:
         return None
-    
-    async def get_all_contexts(self) -> list[StateStorePayload]:
+
+    async def get_contexts_for_orchestration(
+        self,
+        orchestration_id: str,
+    ) -> list[StoredWorkflowContext]:
+        return []
+
+    async def get_all_contexts(self) -> list[StoredWorkflowContext]:
         return []

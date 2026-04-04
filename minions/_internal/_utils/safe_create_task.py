@@ -1,10 +1,10 @@
 import asyncio
 import inspect
-import traceback
 from collections.abc import Awaitable, Callable
 from collections.abc import Coroutine
 
 from .._framework.logger import Logger, ERROR
+from .format_exception_traceback import format_exception_traceback
 
 def safe_create_task(
     coro: Coroutine,
@@ -45,9 +45,7 @@ def safe_create_task(
             if inspect.isawaitable(maybe_awaitable):
                 await maybe_awaitable
         except Exception as notify_error:
-            notify_tb = "".join(
-                traceback.format_exception(type(notify_error), notify_error, notify_error.__traceback__)
-            )
+            notify_tb = format_exception_traceback(notify_error)
             await _safe_log(
                 f"[safe_create_task on_failure failed]{f' ({name})' if name else ''}: {notify_error}",
                 notify_tb,
@@ -60,13 +58,13 @@ def safe_create_task(
             raise
         except SystemExit as e:
             # Footgun: exit()/sys.exit()
-            tb = "".join(traceback.format_exception(type(e), e, e.__traceback__))
+            tb = format_exception_traceback(e)
             await _safe_log(f"[SystemExit in Task]{f' ({name})' if name else ''}: {e}", tb)
             await _safe_notify(e, tb)
             # Swallow to keep the process alive.
         except BaseException as e:
             msg = f"[Exception in asyncio.Task]{f' ({name})' if name else ''}: {e}"
-            tb = "".join(traceback.format_exception(type(e), e, e.__traceback__))
+            tb = format_exception_traceback(e)
             await _safe_log(msg, tb)
             await _safe_notify(e, tb)
 

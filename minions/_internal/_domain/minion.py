@@ -35,6 +35,7 @@ from .._framework.metrics_constants import (
     LABEL_ERROR_TYPE
 )
 from .._framework.state_store import StateStore
+from .._utils.format_exception_traceback import format_exception_traceback
 from .._utils.get_class import get_class
 from .._utils.serialization import is_type_serializable
 from .._utils.get_original_bases import get_original_bases
@@ -102,7 +103,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         if not is_type_serializable(cls._mn_event_cls):
             raise TypeError(
                 f"{cls.__name__}: event type is not JSON-serializable. "
-                "Only JSON-safe types are supported (str, int, float, bool, None, list, tuple, dict[str, V], dataclass, TypedDict)."
+                "Only JSON-safe types are supported (str, int, float, bool, None, list, tuple, dict[str, V], dataclass, msgspec.Struct, TypedDict)."
             )
         
         if cls._mn_event_cls in (str, int, float, bool, type(None)):
@@ -111,7 +112,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         if not is_type_serializable(cls._mn_workflow_ctx_cls):
             raise TypeError(
                 f"{cls.__name__}: workflow context is not JSON-serializable. "
-                "Only JSON-safe types are supported (str, int, float, bool, None, list, tuple, dict[str, V], dataclass, TypedDict)."
+                "Only JSON-safe types are supported (str, int, float, bool, None, list, tuple, dict[str, V], dataclass, msgspec.Struct, TypedDict)."
             )
 
         if cls._mn_workflow_ctx_cls in (str, int, float, bool, type(None)):
@@ -237,7 +238,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         self._mn_config_lock = asyncio.Lock()
         self._mn_state_store = state_store
         self._mn_metrics = metrics
-        self._mn_tasks: set[asyncio.Task] = set()
+        self._mn_workflow_tasks: set[asyncio.Task] = set()
         self._mn_shutting_down = False
 
         cls = type(self)
@@ -322,8 +323,10 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 self._mn_config = await self._mn_load_config(self._mn_config_path)
         
         async def _post():
-            contexts = await self._mn_state_store._get_contexts_for_minion(
-                self._mn_minion_modpath
+            contexts = await self._mn_state_store._mn_get_decoded_contexts_for_orchestration(
+                self._mn_minion_composite_key,
+                event_cls=type(self)._mn_event_cls,
+                context_cls=type(self)._mn_workflow_ctx_cls,
             )
             if contexts:
                 await asyncio.gather( 
@@ -472,7 +475,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     ])
 
                     try: # run step / store context
-                        await asyncio.shield(self._mn_state_store._save_context(ctx))
+                        await asyncio.shield(
+                            self._mn_state_store._mn_serialize_and_save_context(ctx)
+                        )
                         await step()
                     except AbortWorkflow: # log / measure step aborted
                         step_status: Statuses = "aborted"
@@ -520,7 +525,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             })
                         else:
                             log_kwargs.update({
-                                "traceback": "".join(traceback.format_exception(type(e), e, e.__traceback__)),
+                                "traceback": format_exception_traceback(e),
                             })
                         await _shielded_gather(
                             self._mn_logger._log(
@@ -608,7 +613,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         minion_modpath=self._mn_minion_modpath,
                         error_type=type(e).__name__,
                         error_message=str(e),
-                        traceback="".join(traceback.format_exception(type(e), e, e.__traceback__))
+                        traceback=format_exception_traceback(e)
                     ),
                     self._mn_metrics._inc(
                         metric_name=MINION_WORKFLOW_FAILED_TOTAL,
@@ -655,15 +660,15 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     # Persist unresolved/cancelled workflows for replay on next startup.
                     await _shielded_gather(*[
                         metric_obs,
-                        self._mn_state_store._delete_context(ctx.workflow_id),
+                        self._mn_state_store._mn_delete_context(ctx.workflow_id),
                     ])
                 else:
                     await metric_obs
                 task = asyncio.current_task()
                 if task is not None:
-                    async with self._mn_tasks_lock:
-                        self._mn_tasks.discard(task)
-                        inflight = len(self._mn_tasks)
+                    async with self._mn_tasks_gate:
+                        self._mn_workflow_tasks.discard(task)
+                        inflight = len(self._mn_workflow_tasks)
                     if not self._mn_shutting_down:
                         await self._mn_metrics._set(
                             metric_name=MINION_WORKFLOW_INFLIGHT_GAUGE,
@@ -691,8 +696,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             return None
 
         task = self.safe_create_task(run())
-        async with self._mn_tasks_lock:
-            self._mn_tasks.add(task)
+        async with self._mn_tasks_gate:
+            self._mn_workflow_tasks.add(task)
 
     async def _mn_shutdown(
         self,
@@ -705,8 +710,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     ) -> None:
         self._mn_shutting_down = True
         async def _post():
-            async with self._mn_tasks_lock:
-                tasks = list(self._mn_tasks)
+            async with self._mn_tasks_gate:
+                tasks = list(self._mn_workflow_tasks)
             if tasks:
                 done, pending = await asyncio.wait(
                     tasks,
@@ -715,17 +720,22 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 for task in pending:
                     task.cancel()
                 await asyncio.gather(*pending, return_exceptions=True)
-            async with self._mn_tasks_lock:
-                self._mn_tasks.clear()
+            async with self._mn_tasks_gate:
+                self._mn_workflow_tasks.clear()
         return await super()._mn_shutdown(
             log_kwargs={"minion_instance_id": self._mn_minion_instance_id},
             post=_post
         )
 
     async def _mn_handle_event(self, t_event: T_Event):
+        # Live events must wait for startup replay to finish; otherwise an event
+        # can be persisted before startup completes and then replayed immediately.
+        await self._mn_wait_until_started()
+
         workflow_id = uuid.uuid4().hex
 
         ctx: MinionWorkflowContext[T_Event, T_Ctx] = MinionWorkflowContext(
+            minion_composite_key=self._mn_minion_composite_key,
             minion_modpath=self._mn_minion_modpath,
             workflow_id=workflow_id,
             event=t_event,
@@ -734,7 +744,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         )
 
         try:
-            await asyncio.shield(self._mn_state_store._save_context(ctx))
+            await asyncio.shield(
+                self._mn_state_store._mn_serialize_and_save_context(ctx)
+            )
         except Exception as e:
             await self._mn_logger._log(
                 ERROR,
@@ -745,7 +757,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 context_type=T_Ctx,
                 error_type=type(e).__name__,
                 error_message=str(e),
-                traceback="".join(traceback.format_exception(type(e), e, e.__traceback__)),
+                traceback=format_exception_traceback(e),
                 minion_name=self._mn_name,
                 minion_instance_id=self._mn_minion_instance_id,
                 minion_composite_key=self._mn_minion_composite_key,
@@ -755,8 +767,50 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
 
         await self._mn_run_workflow(ctx)
 
+        async with self._mn_tasks_gate:
+            inflight = len(self._mn_workflow_tasks)
         await self._mn_metrics._set(
             metric_name=MINION_WORKFLOW_INFLIGHT_GAUGE,
-            value=len(self._mn_tasks),
+            value=inflight,
             labels={LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id},
+        )
+
+    async def _mn_wait_until_tasks_idle(
+        self,
+        timeout: float,
+        *,
+        include_aux_tasks: bool = False,
+        timeout_msg: str,
+    ) -> None:
+        deadline = asyncio.get_running_loop().time() + timeout
+
+        while True:
+            async with self._mn_tasks_gate:
+                tasks = tuple(
+                    self._mn_workflow_tasks | self._mn_service_tasks
+                    if include_aux_tasks else
+                    self._mn_workflow_tasks
+                )
+            if not tasks:
+                return
+
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                raise TimeoutError(timeout_msg)
+
+            done, pending = await asyncio.wait(tasks, timeout=remaining)
+            if pending and not done:
+                raise TimeoutError(timeout_msg)
+
+    async def _mn_wait_until_workflows_idle(self, timeout: float = 2.0) -> None:
+        await self._mn_wait_until_tasks_idle(
+            timeout,
+            timeout_msg=f"{type(self).__name__} workflows did not become idle within {timeout:.2f}s",
+        )
+
+    async def _mn_wait_until_all_tasks_idle(self, timeout: float = 2.0) -> None:
+        await self._mn_wait_until_tasks_idle(
+            timeout,
+            include_aux_tasks=True,
+            timeout_msg=f"{type(self).__name__} tasks did not become idle within {timeout:.2f}s",
         )

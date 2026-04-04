@@ -4,6 +4,7 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple, TypedDict, Union
 
+import msgspec
 import pytest
 
 from minions._internal._utils.serialization import (
@@ -23,6 +24,11 @@ class MyDC:
 class MyTD(TypedDict):
     a: int
     b: str
+
+
+class MyStruct(msgspec.Struct):
+    x: int
+    y: str = "ok"
 
 
 @dataclass
@@ -64,6 +70,7 @@ def test_is_type_serializable():
     assert is_type_serializable(dict)
     assert is_type_serializable(MyTD)
     assert is_type_serializable(MyDC)
+    assert is_type_serializable(MyStruct)
     assert is_type_serializable(list)
     assert is_type_serializable(int)
 
