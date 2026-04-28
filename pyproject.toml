@@ -40,6 +40,9 @@ Homepage = "https://github.com/crios1/minions"
 Source = "https://github.com/crios1/minions"
 Issues = "https://github.com/crios1/minions/issues"
 
+[project.scripts]
+minions = "minions.__main__:main"
+
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
