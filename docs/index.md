@@ -12,6 +12,7 @@ reference/api/minions_core
 reference/api/minions_cli
 guides/patterns-and-anti-patterns
 guides/testing-minions
+guides/operating-with-metrics
 guides/updating-minions
 guides/deployment-strategies
 guides/migrating-to-microservices
@@ -182,7 +183,8 @@ But you only:
 
 ## Next steps
 
-- Start with {doc}`getting-started` for a concrete “hello minion” walkthrough  
-- Read {doc}`/concepts/overview` to understand the Minions mental model  
-- Jump to {doc}`how-to/run-your-first-minion` for a hands-on checklist  
+- Start with {doc}`getting-started` for a concrete “hello minion” walkthrough
+- Read {doc}`/concepts/overview` to understand the Minions mental model
+- Jump to {doc}`how-to/run-your-first-minion` for a hands-on checklist
+- Use {doc}`/guides/operating-with-metrics` when you need to interpret persistence and runtime telemetry in production
 - Explore {doc}`reference/api/minions_core` as the API surface evolves

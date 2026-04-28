@@ -51,3 +51,4 @@ See {doc}`integrating-with-cli` for command details and caveats.
 - Metrics are exposed via the configured `Metrics` backend (Prometheus by default on port 8081).
 - Logs default to file-based; inject your own logger to ship elsewhere.
 - Check the state store (`minions.db` for SQLite) to inspect persisted workflow contexts.
+- See {doc}`/guides/operating-with-metrics` for how to interpret persistence and workflow telemetry once the runtime is live.

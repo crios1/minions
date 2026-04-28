@@ -31,6 +31,7 @@ Rules from the runtime:
 - Steps must be instance methods decorated with `{py:func}``@minion_step``. They run in source order.
 - Use `self.event` to access the current pipeline event; the event is contextvar-bound per workflow.
 - Raise `{py:class}``minions._internal._domain.exceptions.AbortWorkflow`` to stop a workflow gracefully without treating it as a failure.
+- Do not raise `asyncio.CancelledError` to intentionally stop a workflow. The runtime treats cancellation as an interruption, keeps the persisted workflow context, and may replay the workflow later. Use `AbortWorkflow` when the workflow should stop as an intentional terminal outcome.
 
 ### Reserved attribute space
 
