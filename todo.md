@@ -2,13 +2,51 @@
   Complete these todos from top to bottom.
   Highest Level Todo:
   - Consolidate (and spec out) my todos to establish a priority between them.
-    First, I will take the todos throughout the codebase and consolidate them in this file. (there are some todos in my brower tabs as chat gpt convos too)
-    Then, I will complete the test suite refactor so following todos can be implemented end to end w/ running tests.
-    Next, I'll complete partially completed endeavors like GruShell to tidy the codebase. (document grushell design and test)
-    Finally, I'll complete the todos in this file end to end w/ running tests.
+    First, consolidate codebase TODOs and relevant notes from design conversations into this file.
+    Then, complete the test-suite refactor so future work can be implemented end to end with running tests.
+    Next, complete partially finished efforts like GruShell to tidy the codebase and document/test their designs.
+    Finally, work through this file end to end with running tests.
 -->
 
 ### Test Suite:
+- todo: add an explicit user-guarantee/versioning dimension to the test-suite strategy
+  - problem:
+    - `tests/README.md` explains confidence layers for runtime/component correctness, but it does not yet clearly separate tests that protect user-facing API and behavior guarantees
+  - examples:
+    - supported persisted event/context shapes such as `dict`, dataclass, and `msgspec.Struct`
+    - backwards-compatible CLI/API behavior
+    - guarantees that should only change across intentional major-version boundaries
+  - why it matters:
+    - separating implementation correctness from public guarantee tests makes breaking-change decisions more deliberate
+
+- todo: review the latest StateStore blob-contract refactor
+  - review order:
+    - `minions/_internal/_framework/state_store.py`: review the new contract surface
+      - `StoredWorkflowContext`
+      - blob-based `save_context(...)`
+      - required `get_contexts_for_orchestration(...)`
+      - framework-owned `_save_context(...)` and decode helpers
+    - `minions/_internal/_framework/minion_workflow_context_codec.py`: review the runtime serialization boundary
+      - `serialize_persisted_workflow_context(...)`
+      - `deserialize_workflow_context_blob(...)`
+      - persisted-blob schema-version validation
+    - `minions/_internal/_framework/state_store_sqlite.py`: review the main backend rewrite
+      - `workflows(workflow_id, orchestration_id, context)` schema
+      - orchestration index
+      - blob batching
+      - orchestration-scoped reads
+    - `minions/_internal/_domain/minion.py`: review startup replay integration
+      - `_get_contexts_for_orchestration(...)` replaces the old minion-scoped helper path
+    - `minions/_internal/_framework/state_store_noop.py`: review the noop contract adaptation
+    - `tests/assets/support/state_store_inmemory.py`: review the test-store move to the stored-row/blob model
+    - `tests/minions/_internal/_framework/test_state_store_contract.py`: review the end-to-end contract expectations
+    - `tests/minions/_internal/_framework/state_store_sqlite/`: review SQLite-specific backend expectations
+    - `tests/minions/_internal/_domain/test_minion_states.py`: review the replay test update for the new persisted payload shape
+    - `tests/support/gru_scenario/verify.py`: review the verifier rename from minion-context lookup to orchestration-context lookup
+    - `tests/support/gru_scenario/tests/test_verify.py`: review the matching verifier test updates
+    - `benchmarks/minion_workflow_context_persistence.py`: review the canonical blob-path benchmark coverage
+    - `WORKFLOW_CONTEXT_PERF_PLAN.md`: review the running log and benchmark results for the refactor
+
 - todo:
   - audit the test suite to align with the default-backend + contract-test strategy
     - for each system component base class, ensure there is a contract test file
@@ -18,10 +56,10 @@
 
 - todo: harden test_gru.py:
   - steps:
-    - complete the robust reuseable gru testing routine
-    - rewrite gru tests to use the routine
-    - integrate gru tests from other files:
-      - test_minion_states.py is basically a gru test where checking for counters should be handled by the reuseable testing routine
+    - complete the robust reusable Gru testing routine
+    - rewrite Gru tests to use the routine
+    - integrate Gru tests from other files:
+      - test_minion_states.py is basically a Gru test where checking for counters should be handled by the reusable testing routine
 
 - todo: add stop modes to gru.stop_minion and map to GruShell redeploy strategies
   - default mode: pause (current behavior)
@@ -41,8 +79,14 @@
   - tests:
     - add orchestration helper directives for mode="drain"/"cutover"
     - add runtime tests for in-flight workflow behavior per mode
+  - open questions:
+    - Should `continue-on-failure` track outstanding failed checkpoints instead of only retrying when the workflow reaches the next checkpoint?
+    - Should `WorkflowPersistenceFailurePolicy` remain Gru-level, become Minion-level, or support both global defaults and per-minion overrides?
+    - The desired guarantee is that `Gru.stop_minion(...)` should not lose workflow state in any stop mode unless the process is force-interrupted.
+  - why it matters:
+    - failed checkpoint state affects the exact semantics of `drain` and `cutover`, especially when a workflow has progressed beyond its last durable checkpoint.
 
-- todo: write robust tests that i support persisting state for dict, dataclass, and msgspec.Struct as event and context types (implement and say you support those types in the docs)
+- todo: add robust tests for persisted event/context support across dict, dataclass, and msgspec.Struct shapes
   - ```python
     class MyEvent(msgspec.Struct):
       greeting: str = "hello world"
@@ -52,12 +96,12 @@
       my_attribute: str | None = None
     ```
 
-- todo: ensure immediate user facing domain objects (minion, pipeline, resource) and non-immediate user facing domain objects (like statestore, logger, metrics)...
+- todo: ensure immediate user-facing domain objects (minion, pipeline, resource) and non-immediate user-facing domain objects (like StateStore, logger, metrics)...
   - 1: validate composition at class definition time and raise user friendly exception msg (good onboarding DX)
     - ex: tests/minions/_internal/_domain/test_minion.py
-  - 2: validate usage at orchestration time (like in test_gru.py or one it's subdirs if it got reorganized)
+  - 2: validate usage at orchestration time (like in test_gru.py or one of its subdirectories if it got reorganized)
     - ex: tests/minions/_internal/_domain/test_gru.py::TestValidUsage.test_gru_accepts_none_logger_metrics_state_store
-  - note: for non-immediate user facing domain objects, validating composition at class definition time may not always be possible, so it's fine to only validate at orchestration time if that's the case ... will have to further spec out, i have to test the abstractions and actual implementations of these objects robustly
+  - note: for non-immediate user-facing domain objects, validating composition at class definition time may not always be possible, so it's fine to only validate at orchestration time if that's the case
 
 - todo: clean up domain object attrspace usage
   - todo: move private domain object attrs to minions attrspace (`_mn_`)
@@ -89,24 +133,24 @@
       - run the test suite, failing on first fail, prefix the attrs until whole test suite passes
 
   - todo: write tests that prove user can not write to minions attrspace (`_mn_`)
-    - make tests for each user facing domain object that try to add `_mn_` prefix attr in each space the user has the opportunity to do so:
+    - make tests for each user-facing domain object that try to add `_mn_` prefix attrs in each space the user has the opportunity to do so:
       - lifecycle hooks
       - pipeline emit event
       - minion steps
       - resource user defined methods
-    - ensure that gru refuses to start those orchestrations
+    - ensure that Gru refuses to start those orchestrations
 
-  - todo: ensure attrspace and user submitted code (across minions, pipelines, resources) is validated at class definition time
+  - todo: ensure attrspace and user-submitted code (across minions, pipelines, resources) is validated at class definition time
     - reason:
-      - doing so provides fast feedback to users new to the runtime as they go thru the dev/playground mode of onboarding
-      - they won't need to inspect StartMinionResult to know they violated a compositional rule or constraint, an exception will be raise at class definition time instead
-      - this behavior is safe because in production minions systems, the user will be using str style minion starts so there is no risk of messing up thier prod launch cuz they won't by passing classes to gru
+      - doing so provides fast feedback to users new to the runtime as they go through the dev/playground mode of onboarding
+      - they won't need to inspect StartMinionResult to know they violated a compositional rule or constraint; an exception will be raised at class definition time instead
+      - this behavior is safe because production Minions systems should generally use string-based minion starts, so class-definition validation is mostly a development-time feedback path
     - implementation:
-      - basically just call ... in each the `__init_subclass__` of Minion, Pipeline, Resource
-      - and then in the test suite i'll defer the `__init_subclass__` like i do to make SpiedMinion (might already be done for all domain objects in test suite)
+      - call the validation hook from each `__init_subclass__` implementation for Minion, Pipeline, and Resource
+      - in the test suite, defer `__init_subclass__` the same way SpiedMinion does (this may already be done for all domain objects)
 
-  - todo: in test suite, import all domain objects (minion, pipeline, resource, statestore, logger, etc.) and assert that they don't have private attrs
-    - it's a check that says the user's private attr space is clean / we don't accidently ship classes where we use the private attrspace
+  - todo: in test suite, import all domain objects (minion, pipeline, resource, StateStore, logger, etc.) and assert that they don't have private attrs
+    - it's a check that says the user's private attr space is clean / we don't accidentally ship classes where we use the private attrspace
     - don't ship the check at in the final code, just do the check in the test suite because it gives us assurance
 
 - todo: add per-entity lifecycle locking to gru for concurrent-safe starts/stops.
@@ -119,7 +163,48 @@
   - note: use the (_minion_locks, _pipeline_locks, _resource_locks) gru attrs
   - convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/6910f9e9-d76c-8327-92b3-ea4b729b6288
 
-- todo: add Minion `max_inflight_workflows` class arg (per minion configuration)
+- todo: add Minion `max_inflight_workflows` class attr for bounded lossy workflow admission control
+  - goal:
+    - protect the process from a noisy minion/orchestration creating unbounded workflow tasks
+    - keep the default runtime greedy and backwards-compatible
+    - avoid introducing queueing/event-backlog semantics in this pass
+  - api:
+    - unlimited/default minions do not need to declare anything:
+      - `max_inflight_workflows: int | None = None`
+      - `overflow_policy: Literal["reject"] | None = None`
+    - bounded minions must declare both attrs explicitly:
+      - `max_inflight_workflows = 100`
+      - `overflow_policy = "reject"`
+  - validation:
+    - `max_inflight_workflows is None` means unlimited/current behavior
+    - if `max_inflight_workflows` is set, it must be a positive int
+    - if `max_inflight_workflows` is set, `overflow_policy` is required
+    - if `overflow_policy` is set while `max_inflight_workflows is None`, raise a user-friendly class/usage error
+    - for now, the only valid overflow policy is `"reject"`
+  - behavior:
+    - pipelines keep producing and fanning out normally
+    - each minion enforces its own admission limit independently
+    - if the minion is at/above `max_inflight_workflows`, reject the event for that minion
+    - do not create a workflow context for rejected events
+    - do not persist rejected events
+    - do not queue rejected events
+    - do not treat rejection as a workflow failure, because no workflow started
+    - do not backpressure the pipeline or affect other minions subscribed to the same pipeline
+  - observability:
+    - add a rejected-event/workflow-admission metric, e.g. `minion_workflow_rejected_total`
+    - include minion/orchestration labels consistent with existing minion workflow metrics
+    - emit structured logs for rejected events with the configured cap and current inflight count
+  - docs:
+    - document this as bounded lossy admission control / overload protection
+    - explicitly say it is not fairness, event delivery, backpressure, or durable queueing
+    - explain that resource semaphores still protect dependencies, while this cap protects the runtime from task growth
+  - tests:
+    - unlimited minion preserves current greedy behavior
+    - bounded minion accepts events below the threshold
+    - bounded minion rejects events at threshold without creating/persisting workflow context
+    - rejection increments the metric and logs useful structured context
+    - rejection does not affect another minion subscribed to the same pipeline
+    - invalid class attrs raise clear errors
   - codex://threads/019ca819-0afe-7591-b59f-53d06718a48b
 
 - todo: add bounded startup concurrency to Gru (`max_concurrent_minion_starts`)
@@ -156,14 +241,14 @@
       - small local systems: `4-8`
       - slow NAS / shared hosts: start lower and tune up
 
-- todo: write tests for gru.start_minion to lock in that it works with class and str based starts
+- todo: write tests for gru.start_minion to lock in that it works with class and string-based starts
 
 - todo: add early (best-effort) serialization validation for user-provided event and workflow context types at Pipeline / Minion definition time
   - statically check that user type annotations are supported by gru's serialization, and raise when an annotation is not
   - this is an early feedback mechanism, full serializability can only be guaranteed at runtime
   - ensure no on-going validations; just validation once at class definition time  
 
-- todo: add "crash testing" to test suite to ensure that minions runtime does the runtime crash guarentees
+- todo: add "crash testing" to test suite to ensure the Minions runtime preserves its crash guarantees
   - todo: add deterministic "boom user code" testing across every user-code runtime surface
     - goal:
       - pass intentionally exploding user code into every user-code entry point and prove the runtime contains the blast radius consistently
@@ -181,10 +266,83 @@
     - implementation note:
       - audit every user-code invocation site and add tests that would "go boom" immediately if the runtime forgets to use the guarded path
 
-- todo: now w/ the robust reuseable testing routine (from the harden/repair test_gru.py todo) fill out the test suite to cover all the ways the user will interact with gru... mainly the kinds of files they can pass to it.
- - audit each of the test asset in the test suite and ensure they are useful and being used by gru with a reasonable test. otherwise, add the test(s) or delete the asset
+- todo: once the reusable Gru testing routine is ready, fill out coverage for the ways users interact with Gru, especially the file shapes they can pass to it
+ - audit each test asset in the suite and ensure it is useful and covered by a reasonable Gru test; otherwise, add the test or delete the asset
 
 ### Features:
+- todo: settle official terminology for orchestration identity vs minion composite key
+  - problem:
+    - the codebase currently uses `minion_composite_key` and `orchestration_id` in closely related or interchangeable ways
+    - persistence rows store `orchestration_id`, while telemetry and runtime labels expose `minion_composite_key`
+    - this creates ambiguity for API docs, metric interpretation, and future migration work
+  - goal:
+    - choose one official concept name for the stable minion/config/pipeline orchestration identity
+    - define whether `minion_composite_key` remains an internal construction detail, becomes the official term, or is renamed to `orchestration_id`
+    - update code, docs, logs, metrics labels, and test helpers consistently once the term is chosen
+  - why it matters:
+    - unclear identity terminology can become a compatibility problem for users who build alerts, dashboards, stored state tools, or operational docs around these names
+
+- todo: decide whether resource method metrics should use method names or stable method identities
+  - problem:
+    - `resource_method` currently uses method names, so renaming a method creates a new Prometheus series even when the logical operation did not change
+  - options:
+    - keep method names because they are readable and match source code
+    - add an explicit stable method identity through a decorator or metadata field
+    - keep both readable and stable labels only if the cardinality/compatibility tradeoff is acceptable
+  - why it matters:
+    - stable metric identities make long-lived dashboards and alerts less fragile during refactors
+
+- todo: review `StoredWorkflowContext` naming and representation
+  - problem:
+    - the name embeds "state", but the object represents a stored workflow context row/blob that may be used across different lifecycle states
+    - it is currently a dataclass; it is worth deciding whether a `msgspec.Struct` provides meaningful performance or serialization benefits here
+  - options:
+    - keep `StoredWorkflowContext` as-is because it is clear enough and simple
+    - rename it to emphasize persisted row/blob semantics
+    - convert to `msgspec.Struct` only if profiling or serialization boundaries justify it
+  - why it matters:
+    - this type is part of the custom StateStore contract, so naming and representation should be deliberate before the contract settles
+
+- todo: simplify persisted workflow context decode path once payload typing guarantees are finalized
+  - problem:
+    - `deserialize_workflow_context_blob(...)` still supports untyped/fallback decode paths, but persisted payloads may reasonably be expected to have both event and context classes available
+  - decision:
+    - confirm whether all runtime persistence reads should always provide `event_cls` and `context_cls`
+    - if yes, simplify the fallback logic and make missing type information an explicit compatibility path or error
+  - why it matters:
+    - narrowing the decode contract would make persistence behavior easier to reason about and reduce legacy codec branching
+
+- todo: tighten test in-memory metric kind typing
+  - problem:
+    - `_InMemoryMetric.kind` is currently a plain string even though only `counter`, `gauge`, and `histogram` are valid
+  - options:
+    - add a `Literal["counter", "gauge", "histogram"]` alias
+    - use a small enum if that improves test helper readability
+  - why it matters:
+    - stronger typing in the test metric backend makes metric contract tests easier to maintain and harder to misuse
+
+- todo: spec out opt-in freshness / staleness handling for time-sensitive events
+  - problem:
+    - startup gating now correctly delays live event handling until a minion is ready, but some domains may need to reject events that become stale before handling begins
+  - open question:
+    - Is this a runtime policy, or should users handle freshness inside workflow steps where domain-specific staleness rules are clearer?
+  - goal:
+    - keep the default runtime behavior as durable "handle when ready"
+    - support opt-in freshness policies for users whose events carry deadlines / max-age requirements
+  - design constraints:
+    - do not silently drop delayed events by default
+    - freshness must be explicit and user-controlled, not inferred from runtime timing
+    - the runtime should not guess what "too late" means for arbitrary event types
+  - design options to evaluate:
+    - minion-level policy like `max_event_age_seconds`
+    - event-carried deadline / created-at timestamp checked at handle time
+    - user hook for stale-event handling (`drop` / `abort` / custom callback)
+  - tests:
+    - add coverage that default behavior still handles delayed events
+    - add coverage for opt-in stale-event rejection once semantics are chosen
+  - docs:
+    - document delivery-vs-freshness tradeoffs clearly so users do not assume immediate-on-create handling guarantees
+
 - todo: add generic framework telemetry for logger and state store (separate from domain telemetry)
   - goal:
     - expose minimal runtime-health metrics for framework components without mixing with domain/business metrics
@@ -220,29 +378,89 @@
     - update docs to explain domain telemetry vs framework telemetry split
     - document the new generic framework metric names and label policy
 
-- todo: make state-store durability semantics explicit (durable save vs eventual enqueue)
-  - problem:
-    - current `StateStore.save_context(...)` is awaited by orchestration and therefore treated as durable-on-return
-    - sqlite implementation batches internally, but the framework has no explicit distinction between durable saves and eventual-consistency enqueue semantics
-  - target:
-    - keep current `StateStore` behavior as the durable contract to preserve compatibility/correctness assumptions
-    - introduce an explicit optional batched/eventual interface (ex: `BatchedStateStore`) for fire-and-forget style persistence
-    - make orchestration opt into eventual mode intentionally instead of changing semantics implicitly
-  - implementation:
-    - document `StateStore.save_context` and `delete_context` durability guarantees clearly
-    - add optional batched API surface (ex: `enqueue_save_context`, `enqueue_delete_context`, `flush`)
-    - required sqlite split:
-      - current batched `SQLiteStateStore` becomes `SQLiteBatchedStateStore`
-      - atomic `SQLiteStateStore` is restored from git history as the default durable sqlite backend if the old implementation is good enough
-      - if the historical atomic implementation is not good enough, reimplement atomic `SQLiteStateStore` from the current batched implementation with durable-on-return semantics
-    - keep lifecycle behavior explicit: startup/shutdown should flush pending writes best-effort
-    - preserve fail-open logging policy for persistence failures
+- todo: add first-class StateStore backend/system metrics (`state_store_*`)
+  - goal:
+    - expose StateStore health and performance as backend/system telemetry, separate from workflow durability/guarantee telemetry
+    - use `minion_workflow_persistence_*` metrics for workflow checkpoint impact and `state_store_*` metrics for backend cause/health
+    - keep labels low-cardinality and backend-oriented
+  - metrics to add:
+    - `state_store_operations_total`
+    - `state_store_operation_failures_total`
+    - `state_store_operation_duration_seconds`
+    - `state_store_payload_bytes`
+    - `state_store_queue_depth`
+    - `state_store_batch_flush_duration_seconds`
+    - `state_store_commit_duration_seconds`
+  - labels/policy:
+    - allowed labels:
+      - `backend` (ex: `sqlite`, `noop`, `inmemory`)
+      - `operation` (ex: `save` | `delete` | `load` | `flush` | `commit`)
+      - `error_type` (for failure counters only)
+    - do not include workflow ids, minion ids, orchestration ids, checkpoint names, or payload contents
+    - metrics emission must be best-effort and must not block persistence paths
+  - implementation steps:
+    - add metric constants and label names in `metrics_constants.py`
+    - instrument generic StateStore wrapper paths for operations, failures, duration, and payload size
+    - instrument SQLite-specific queue depth, batch flush duration, and commit duration
+    - keep workflow-level persistence telemetry in `minion_workflow_persistence_*`, not `state_store_*`
   - tests:
-    - contract tests lock durable behavior for `StateStore` implementations
-    - batched interface tests verify enqueue behavior, flush guarantees, and shutdown drain semantics
-    - orchestration tests verify that default path remains durable unless explicitly configured for batched mode
+    - verify generic save/delete/load operation counters and durations are emitted
+    - verify failure counters include `error_type`
+    - verify SQLite queue/batch/commit metrics are emitted without workflow-level labels
+    - ensure metric emission failures do not affect StateStore behavior
+  - docs:
+    - document the split between workflow persistence impact metrics and StateStore backend/system metrics
+    - document recommended operator usage:
+      - alert on `minion_workflow_persistence_*` for workflow durability impact
+      - inspect `state_store_*` for backend health and root cause
+
+- todo: keep StateStore durability semantics explicit as batching evolves
+  - problem:
+    - `StateStore.save_context(...)` and `delete_context(...)` are runtime durability boundaries and should remain durable-on-return
+    - SQLite can batch internally, but batching must not blur the distinction between durable commits and eventual enqueue semantics
+  - target:
+    - keep `StateStore` as the durable contract
+    - if an eventual/fire-and-forget persistence mode is ever added, make it a separate explicit API rather than a hidden behavior change
+    - ensure docs and contract tests keep this distinction visible
+  - tests:
+    - contract tests should continue to lock durable behavior for every `StateStore` implementation
+    - if an eventual interface is added later, add separate tests for enqueue behavior, flush guarantees, and shutdown drain semantics
   - docs:
     - explain durable vs eventual persistence tradeoffs and when to choose each
+
+- todo: refine configurable workflow persistence failure policy after first implementation
+  - problem:
+    - the first pass added explicit persistence failure policies, retry behavior, logs, and metrics
+    - remaining design work is about API placement, stop-mode interaction, and operational clarity
+  - follow-ups:
+    - decide whether policies should be configured globally on Gru, per Minion, or both
+    - clarify how `continue-on-failure` should report unresolved failed checkpoints when stop/redeploy modes are added
+    - keep policy interaction with durable vs eventual StateStore semantics explicit
+  - linked follow-up:
+    - pair this with explicit workflow step skip results so idempotent step guards are visible in logs and runtime receipts
+  - tests:
+    - add stop-mode-specific tests once `drain`/`cutover` exists
+    - add tests for any future per-minion policy override behavior
+  - docs:
+    - keep documenting the policy tradeoff between availability and durable progress guarantees
+
+- todo: add explicit workflow step skipped result for idempotent early returns
+  - problem:
+    - workflow steps must be idempotent, so authors often need early-return guards when a step has already run or no work is required
+    - returning nothing makes an intentional skip hard to distinguish from a silent no-op in logs and runtime inspection
+  - target:
+    - introduce `MinionWorkflowStepSkipped(reason: str)` as an explicit step result
+    - allow workflow steps to return `MinionWorkflowStepSkipped("...")` when an idempotency guard skips the step
+    - record the skip reason in logs and any workflow receipts/step outcome surfaces
+    - keep skip semantics distinct from failure, abort, and successful side-effectful completion
+  - linked follow-up:
+    - use this as the observable companion to workflow persistence failure retries, since replayed steps may intentionally skip already-completed work
+  - tests:
+    - verify a skipped step advances workflow progress according to normal step sequencing
+    - verify the skip reason appears in logs/receipts
+    - verify skipped steps remain compatible with retry/resume behavior
+  - docs:
+    - update idempotent workflow step guidance with an early-return example that returns `MinionWorkflowStepSkipped("already processed")`
 
 - todo: add memory-pressure guard to manage OOM risk (high-utilization defaults)
   - goal:
@@ -338,7 +556,7 @@
 - todo: decouple orchestration addressing from stable runtime identity (component_id + instance_id)
   - context:
     - current identity spine is “project-root relative path/modpath”
-    - this breaks resumeability + prometheus continuity on directory refactors
+    - this breaks resumability + Prometheus continuity on directory refactors
     - long-term guarantee requires stable ids not derived from paths
   - goals:
     - preserve current DX: `start_minion()` accepts classes or string refs
@@ -410,8 +628,18 @@
   - convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/69446e9e-053c-832c-abfb-ba40b5123693
   - other convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/694725cf-a5c4-8326-bdfc-b95f1b289f14
   - note: consider how cross env (dev,qa,prod) comparison will work: like with grushell snapshot/redeploy, discussed in "other convo"
+  - note: `minion_composite_key` currently appears to overlap with the runtime meaning of `orchestration_id`; this should be resolved by the terminology todo above
 
-- todo: optimize SQLiteStateStore `get_contexts_for_minion` to avoid full-store scans
+- todo: optimize SQLiteStateStore orchestration-scoped context reads
+  - shape:
+    - current schema shape:
+      CREATE TABLE workflows(
+          workflow_id TEXT PRIMARY KEY,
+          orchestration_id TEXT NOT NULL,
+          context BLOB NOT NULL
+      )
+      CREATE INDEX idx_workflows_orchestration_id
+      ON workflows(orchestration_id);
   - dependency:
     - do this only after the identity migration above is finalized (`component_id` + `instance_id`)
   - problem:
@@ -423,9 +651,9 @@
   - tests:
     - add/adjust tests to prove behavior matches current semantics while using indexed lookup
 
-- todo: add support for resourced pipelines and resourced resources (currenlty partially implemented)
+- todo: add support for resourced pipelines and resourced resources (currently partially implemented)
   - requires implementation, testing, and documentation for each
-  - before testing, i'll probably have to refactor the structure of test assets
+  - before testing, the test asset structure will probably need a small refactor
   - todo: test that resourced domain objects can have multiple resource dependencies
     - current test assets only test 1 dependency per asset
   - justification:
@@ -440,16 +668,21 @@
       #   to TradingMinion too
       # )
       ```
-      so in other words, you compose your system at a high level using "raw" resources, "higher level" resources, pipelines, and minions. (todo: i'll flesh this out in the docs as something like a "composing / designing your minion system") ... also maybe talk about commiting your observeability to a repo.
+      so in other words, you compose your system at a high level using "raw" resources, "higher level" resources, pipelines, and minions.
+    - docs follow-up:
+      - write a "composing/designing your Minions system" guide
+      - consider guidance around committing observability definitions to the repo
 
 - todo: implement "minions gru serve" and "minions gru attach"
-  - basically a redesign of the controller of the runtime, GruShell will remain as perhaps a demo thing or something maybe but the official and best way to use gru and the shell is in a serve-attach model as seperate
+  - basically a redesign of the runtime controller
+  - GruShell can remain as a demo or embedded helper, while the official operational flow may become a separate serve/attach model
   - convo: https://chatgpt.com/c/69406c80-f478-8327-85b2-e3fb54d89796
   - should consider creating a golang cli for a cli option of 'minions gru attach'
 
 - todo: complete GruShell (~90% implemented, needs documentation / user onboarding flow)
-  - users will embed GruShell into thier deployment scripts / use the cookbook to make the script
-  - but maybe it makes sense to let the user experiment with the shell by calling "python -m minions shell"? i need to consider the user onboarding flow further.
+  - users may embed GruShell into deployment scripts or use a cookbook script
+  - open question:
+    - should `python -m minions shell` be the primary onboarding path, or should it be framed as an experimental/development helper?
 
 - todo: implement and lock in two-stage Ctrl-C shutdown semantics for GruShell (for Gru too if not implemented)
   - scope:
@@ -477,10 +710,10 @@
           "uvloop>=0.22,<0.23",
         ]
         ```
-    - gru supports uvloop; user sets the asyncio event loop policy before running gru with `asyncio.run(...)`
+    - Gru supports uvloop; user sets the asyncio event loop policy before running Gru with `asyncio.run(...)`
   - implications:
-    - my test suite needs to run each test twice (once w/ uvloop and again w/ asyncio loop)
-      - i can configure pytest to behave as follows:
+    - the test suite may need to run each relevant test twice (once with uvloop and once with the default asyncio loop)
+      - pytest could be configured as follows:
         - test both backends: "pytest tests/minions/_internal/_domain"
         - test only asyncio:  "pytest tests/minions/_internal/_domain --loop-policy asyncio"
         - test only uvloop:   "pytest tests/minions/_internal/_domain --loop-policy uvloop"
@@ -614,47 +847,54 @@
   - fail release checklist if regressions exceed threshold
 
 ### Docs:
-- todo: autogenerate api tree for minions module using like sphinx autodoc, autosummary, intersphinx
+- todo: autogenerate API tree for the minions module using Sphinx autodoc/autosummary/intersphinx
 
 - todo: update my docs and readme with positioning surfaced in this thread (https://chatgpt.com/c/693b751c-bb18-8329-b2d5-b6ece864000b)
   - ctrl+f to read from the following text to end of thread:
     - "Short answer: the angle I suggested is stronger than this one as a primary positioning, but most of what you wrote here is still very good. The difference is where and how it’s used."
   - note: thread also contains additional todos and plans
 
-- todo: my landing page doc and readme are almost the same, i should consider centralizing them to some extent or better to maintain them seperately?
+- todo: the landing page doc and README are almost the same; decide whether to centralize them or keep them separate
   - diff: https://chatgpt.com/codex/tasks/task_e_694a7a586ea883299cf280a9bf7fc64a
-  - don't centralize cuz the optimal way to structure things may only make sense when deploying the docs site
+  - current lean: do not centralize yet, because the optimal structure may only be clear when deploying the docs site
 
 - todo: add version switcher to docs
 
 - todo: add example of auto-generating and auto-running paper trading strategies with an LLM
   - goal:
-    - demonstrate how to secuerly automate business logic within a minions system using an a LLM (in this case: trading strategy ideation and validation)
+    - demonstrate how to securely automate business logic within a Minions system using an LLM (in this case: trading strategy ideation and validation)
   - design:
-    - the llm generates StrategySpecs not python code directly
-    - StrategySpec events are emited by a pipeline (`StrategySpecPipeline(Pipeline[StrategySpec])`)
-    - StrategySpec events are recieved, run, and managed by a minion `StrategySpecRunnerMinion(Minion[StrategySpec, Ctx])`
+    - the LLM generates StrategySpecs, not Python code directly
+    - StrategySpec events are emitted by a pipeline (`StrategySpecPipeline(Pipeline[StrategySpec])`)
+    - StrategySpec events are received, run, and managed by a minion `StrategySpecRunnerMinion(Minion[StrategySpec, Ctx])`
   - note:
-    - ideally sample minion system examples should be runable / have tests to assert behaviour 
-  - note (discuss with gpt): consider that emiting StrategySpec events can take a non-trivial amount of time. currenlty, emitting pipeline events has no resumeability because it happens in a single step (Pipeline.emit_event). it might be worth adding resumeablity support for pipeline events. it would basically be implemented in the same way that minions have resumeability (like @pipeline_step and last @pipeline_step must return event type instance). i don't love it because the current emit_event api is simple but maybe it's something to add support for because it seems like the only way to get resumeability for generating events. it's really something to think about.
+    - ideally sample Minions system examples should be runnable and have tests to assert behavior
+  - open question:
+    - emitting StrategySpec events may take non-trivial time; should pipelines support resumability for event generation?
+    - current pipeline event emission happens in a single `Pipeline.emit_event` step, so long-running event generation has no persisted resume point
+    - one possible design is `@pipeline_step`, where the last pipeline step returns the event instance
+    - tradeoff: the current emit API is simple, so resumable pipeline steps should only be added if the use case justifies the extra model
   - convo: https://chatgpt.com/c/694e3d91-2ae0-8328-b434-72d8a30af9e2
 
 ### Misc:
-- todo: comb the codebase for any remaining todo comments, they shold all be resolved by now, if not consolidate/complete them
+- todo: comb the codebase for any remaining TODO comments; resolve them or consolidate them into this file
 
 - todo: manually audit runtime logs and ensure they read as events w/ details in kwargs (also that event msgs are lowercase)
   - ex: "async component started" , {'component': SQLiteStateStore}
-  - note: would be great to enfore that quality when running gru scenarios, can be done by asserting from a set of log-msg-log-kwargs pairs, than as logs or thier kwargs are changed, test suite will catch them and will suggest to dev that changing logs msg and kwargs is a big deal - which it is since it could be a breaking change for monitoring and such
+  - note: it would be useful to enforce that quality when running Gru scenarios by asserting from a set of log message / log kwargs pairs
+  - note: changing log messages or kwargs can be a breaking change for monitoring, so tests should make intentional log changes visible
+  - note: decide on a broader logging-test strategy for the suite, not just isolated log unit tests
+    - decide when to use narrow unit assertions on a single emitted log vs broader scenario/contract tests that lock in log messages, levels, kwargs, ordering, and rate-limiting behavior across runtime flows
 
 - todo: setup github repo so feature requests are surfaced thru "discussions" instead of "issues"
   - https://chatgpt.com/c/693f6fff-6bac-8333-9844-b1aade31a4d5
 
-- todo: read the following docs for inspo on how to structure mine
+- todo: read the following docs for inspiration on how to structure this project's docs
   - https://fastapi.tiangolo.com/
   - https://microsoft.github.io/autogen/stable/
   - https://python-prompt-toolkit.readthedocs.io/en/master/index.html
 
-- todo: after building all features for v0.1.0 release, read thru the docs start to finish to see if anything needs adding/updating
+- todo: after building all features for v0.1.0 release, read through the docs start to finish to see if anything needs adding/updating
 
 - todo: dogfood the runtime and refine it based on findings
 
@@ -670,8 +910,8 @@
     - maintain a small curated target list (or pytest marker like `@pytest.mark.flake`)
     - add scripts/commands for `fast` and `flake` lanes
     - fail-fast in flake lane with iteration index and failing test output
-
-- consider: spacetime db as a state store is faster than sqlite locally? i doubt it but maybe it's true
+  - note:
+    - evaluate whether the test suite can run safely in parallel; this could provide a large performance gain if shared resources and timing-sensitive tests are structured correctly
 
 - consider: implement sharded sqlite state store for workflow context persistence (same could be said for sqlite logger)
   - goal:
