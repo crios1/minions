@@ -1,8 +1,10 @@
+import asyncio
 import pytest
 from dataclasses import dataclass
 from typing import TypeVar
 import msgspec
 from minions import Minion, Resource, minion_step
+from minions._internal._domain.exceptions import UnsupportedUserCode
 
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_noop import NoOpMetrics
@@ -165,3 +167,25 @@ class TestMinionSubclassingInvalid:
             "MyMinion.step_1 cannot call workflow step 'step_2'; "
             "minion steps must be orchestrated only by the runtime workflow engine."
         )
+
+    def test_reject_direct_raise_asyncio_cancelled_error_in_step(self):
+        with pytest.raises(UnsupportedUserCode) as excinfo:
+            class MyMinion(Minion[MyEvent, MyContext]):
+                @minion_step
+                async def step_1(self):
+                    raise asyncio.CancelledError()
+
+        assert "Unsupported use of `raise asyncio.CancelledError`" in str(excinfo.value)
+        assert "raise AbortWorkflow instead" in str(excinfo.value)
+
+    def test_reject_direct_raise_cancelled_error_name_in_step(self):
+        from asyncio import CancelledError
+
+        with pytest.raises(UnsupportedUserCode) as excinfo:
+            class MyMinion(Minion[MyEvent, MyContext]):
+                @minion_step
+                async def step_1(self):
+                    raise CancelledError()
+
+        assert "Unsupported use of `raise CancelledError`" in str(excinfo.value)
+        assert "raise AbortWorkflow instead" in str(excinfo.value)

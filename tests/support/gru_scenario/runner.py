@@ -56,6 +56,7 @@ class StartReceipt:
     resolved_name: str | None
     minion_cls: type[SpiedMinion] | None
     success: bool
+    composite_key: str | None = None
 
 
 @dataclass
@@ -207,7 +208,12 @@ class ScenarioRunner:
             m_cls = type(minion_inst)
             minion_cls = m_cls if issubclass(m_cls, SpiedMinion) else None
             receipt = StartReceipt(
-                **{**receipt.__dict__, "resolved_name": resolved_name, "minion_cls": minion_cls}
+                **{
+                    **receipt.__dict__,
+                    "resolved_name": resolved_name,
+                    "minion_cls": minion_cls,
+                    "composite_key": getattr(minion_inst, "_mn_minion_composite_key", None),
+                }
             )
             if isinstance(minion_inst, SpiedMinion):
                 result.started_minions.add(minion_inst)

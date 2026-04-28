@@ -80,6 +80,16 @@ class AsyncLifecycle(ABC):
             ("builtins", "quit"), ("builtins", "SystemExit")
         }
 
+        def _expr_name(expr: ast.expr | None) -> str | None:
+            if isinstance(expr, ast.Name):
+                return expr.id
+            if isinstance(expr, ast.Attribute):
+                owner = _expr_name(expr.value)
+                if owner is None:
+                    return expr.attr
+                return f"{owner}.{expr.attr}"
+            return None
+
         for node in ast.walk(tree):
 
             if isinstance(node, ast.Call):
@@ -142,6 +152,18 @@ class AsyncLifecycle(ABC):
                         f"Unsupported use of `raise SystemExit(...)` in `{func.__name__}` ({modpath}). "
                         "If you want to abort an in-flight workflow, raise an AbortWorkflow exception. "
                         "If you want to stop a minion, run stop_minion."
+                    )
+                raised_name = _expr_name(exc.func if isinstance(exc, ast.Call) else exc)
+                if raised_name in {
+                    "CancelledError",
+                    "asyncio.CancelledError",
+                    "aio.CancelledError",
+                    "asyncio.exceptions.CancelledError",
+                }:
+                    raise UnsupportedUserCode(
+                        f"Unsupported use of `raise {raised_name}` in `{func.__name__}` ({modpath}). "
+                        "The runtime treats asyncio cancellation as workflow interruption and may replay the workflow. "
+                        "If you want to intentionally stop an in-flight workflow, raise AbortWorkflow instead."
                     )
 
             if not isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):

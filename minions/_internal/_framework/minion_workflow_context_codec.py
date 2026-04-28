@@ -18,6 +18,8 @@ CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION = 2
 _WORKFLOW_CONTEXT_FIELD_NAMES = {field.name for field in fields(MinionWorkflowContext)}
 _CODEC_METADATA_KEYS = {"schema_version"}
 
+# Naming rule: keep codec-only helpers neutral, but keep explicit `Minion...`
+# names for structs that mirror the runtime/domain envelope shape.
 WorkflowContextData: TypeAlias = dict[
     str,
     SerializableValue | type
@@ -278,8 +280,6 @@ def deserialize_workflow_context_blob(
     event_cls: Any | None = None,
     context_cls: type | None = None,
 ) -> MinionWorkflowContext:
-    # todo: i think it could be reasonably expect that every payload
-    # has a event_cls and context_cls, so we should consider simplifing the logic below
     if event_cls is not None and context_cls is not None:
         try:
             return decode_persisted_workflow_context_typed(

@@ -2,6 +2,7 @@ import asyncio
 import ast
 import contextvars
 import inspect
+import random
 import sys
 import textwrap
 import time
@@ -11,7 +12,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import (
     Any, Awaitable, Callable, ClassVar,
-    Generic, Literal, Type,
+    Generic, Literal, Type, cast,
     get_args, get_origin, get_type_hints
 )
 
@@ -26,21 +27,46 @@ from .._framework.metrics_constants import (
     MINION_WORKFLOW_STARTED_TOTAL, MINION_WORKFLOW_INFLIGHT_GAUGE,
     MINION_WORKFLOW_ABORTED_TOTAL, MINION_WORKFLOW_FAILED_TOTAL,
     MINION_WORKFLOW_SUCCEEDED_TOTAL,
-    MINION_WORKFLOW_DURATION_SECONDS, 
+    MINION_WORKFLOW_DURATION_SECONDS,
+    MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL,
+    MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL,
+    MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL,
+    MINION_WORKFLOW_PERSISTENCE_DURATION_SECONDS,
+    MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
     MINION_WORKFLOW_STEP_STARTED_TOTAL, MINION_WORKFLOW_STEP_INFLIGHT_GAUGE,
     MINION_WORKFLOW_STEP_ABORTED_TOTAL, MINION_WORKFLOW_STEP_FAILED_TOTAL,
     MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
     MINION_WORKFLOW_STEP_DURATION_SECONDS,
-    LABEL_MINION_INSTANCE_ID, LABEL_MINION_WORKFLOW_STEP,
-    LABEL_ERROR_TYPE
+    LABEL_MINION_COMPOSITE_KEY, LABEL_MINION_WORKFLOW_STEP,
+    LABEL_ERROR_TYPE,
+    LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE,
+    LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE,
+    LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION,
+    LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY,
+    LABEL_MINION_WORKFLOW_PERSISTENCE_RETRYABLE,
+    LABEL_STATE_STORE,
+    LABEL_STATUS,
 )
-from .._framework.state_store import StateStore
+from .._framework.state_store import PersistenceOperationResult, StateStore
 from .._utils.format_exception_traceback import format_exception_traceback
 from .._utils.get_class import get_class
 from .._utils.serialization import is_type_serializable
 from .._utils.get_original_bases import get_original_bases
 
-Statuses = Literal["undefined", "aborted", "failed", "succeeded"]
+ExecutionStatus = Literal["undefined", "interrupted", "aborted", "failed", "succeeded"]
+WorkflowPersistenceFailurePolicy = Literal[
+    "continue-on-failure",
+    "idle-until-persisted",
+]
+_ALLOWED_WORKFLOW_PERSISTENCE_FAILURE_POLICIES: tuple[WorkflowPersistenceFailurePolicy, ...] = (
+    "continue-on-failure",
+    "idle-until-persisted",
+)
+
+
+class WorkflowPersistenceNonRetryableError(RuntimeError):
+    pass
+
 
 class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     _mn_user_facing = True
@@ -221,7 +247,14 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         config_path: str | None,
         state_store: StateStore,
         metrics: Metrics,
-        logger: Logger
+        logger: Logger,
+        workflow_persistence_failure_policy: WorkflowPersistenceFailurePolicy = "continue-on-failure",
+        workflow_persistence_retry_delay_seconds: float = 1.0,
+        workflow_persistence_retry_max_delay_seconds: float = 60.0,
+        workflow_persistence_retry_backoff_multiplier: float = 2.0,
+        workflow_persistence_retry_jitter_ratio: float = 0.1,
+        workflow_persistence_retry_warning_interval_seconds: float = 30.0,
+        workflow_persistence_retry_error_after_seconds: float | None = 60.0,
     ):
         super().__init__(logger)
 
@@ -238,6 +271,40 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         self._mn_config_lock = asyncio.Lock()
         self._mn_state_store = state_store
         self._mn_metrics = metrics
+        self._mn_workflow_persistence_blocked_counts: dict[tuple[tuple[str, str], ...], int] = {}
+        self._mn_workflow_persistence_blocked_counts_lock = asyncio.Lock()
+        self._mn_workflow_persistence_failure_policy = self._mn_validate_workflow_persistence_failure_policy(
+            workflow_persistence_failure_policy,
+        )
+        self._mn_workflow_persistence_retry_delay_seconds = self._mn_validate_positive_seconds(
+            "workflow_persistence_retry_delay_seconds",
+            workflow_persistence_retry_delay_seconds,
+        )
+        self._mn_workflow_persistence_retry_max_delay_seconds = self._mn_validate_positive_seconds(
+            "workflow_persistence_retry_max_delay_seconds",
+            workflow_persistence_retry_max_delay_seconds,
+        )
+        if self._mn_workflow_persistence_retry_max_delay_seconds < self._mn_workflow_persistence_retry_delay_seconds:
+            raise ValueError(
+                "workflow_persistence_retry_max_delay_seconds must be greater than or equal to "
+                "workflow_persistence_retry_delay_seconds"
+            )
+        self._mn_workflow_persistence_retry_backoff_multiplier = self._mn_validate_backoff_multiplier(
+            "workflow_persistence_retry_backoff_multiplier",
+            workflow_persistence_retry_backoff_multiplier,
+        )
+        self._mn_workflow_persistence_retry_jitter_ratio = self._mn_validate_jitter_ratio(
+            "workflow_persistence_retry_jitter_ratio",
+            workflow_persistence_retry_jitter_ratio,
+        )
+        self._mn_workflow_persistence_retry_warning_interval_seconds = self._mn_validate_positive_seconds(
+            "workflow_persistence_retry_warning_interval_seconds",
+            workflow_persistence_retry_warning_interval_seconds,
+        )
+        self._mn_workflow_persistence_retry_error_after_seconds = self._mn_validate_optional_nonnegative_seconds(
+            "workflow_persistence_retry_error_after_seconds",
+            workflow_persistence_retry_error_after_seconds,
+        )
         self._mn_workflow_tasks: set[asyncio.Task] = set()
         self._mn_shutting_down = False
 
@@ -258,6 +325,50 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         self._mn_workflow: tuple[Callable[..., Any], ...] = tuple(
             getattr(self, name) for name in cls._mn_workflow_spec
         )
+
+    @staticmethod
+    def _mn_validate_workflow_persistence_failure_policy(
+        policy: str,
+    ) -> WorkflowPersistenceFailurePolicy:
+        if policy not in _ALLOWED_WORKFLOW_PERSISTENCE_FAILURE_POLICIES:
+            policies = " or ".join(f"'{value}'" for value in _ALLOWED_WORKFLOW_PERSISTENCE_FAILURE_POLICIES)
+            raise ValueError(
+                f"workflow_persistence_failure_policy must be {policies}"
+            )
+        return cast(WorkflowPersistenceFailurePolicy, policy)
+
+    @staticmethod
+    def _mn_validate_positive_seconds(name: str, value: float) -> float:
+        if isinstance(value, bool) or not isinstance(value, int | float) or value <= 0:
+            raise ValueError(f"{name} must be a positive number of seconds")
+        return float(value)
+
+    @staticmethod
+    def _mn_validate_optional_nonnegative_seconds(name: str, value: float | None) -> float | None:
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int | float) or value < 0:
+            raise ValueError(f"{name} must be None or a non-negative number of seconds")
+        return float(value)
+
+    @staticmethod
+    def _mn_validate_backoff_multiplier(name: str, value: float) -> float:
+        if isinstance(value, bool) or not isinstance(value, int | float) or value < 1:
+            raise ValueError(f"{name} must be a number greater than or equal to 1")
+        return float(value)
+
+    @staticmethod
+    def _mn_validate_jitter_ratio(name: str, value: float) -> float:
+        if isinstance(value, bool) or not isinstance(value, int | float) or value < 0 or value > 1:
+            raise ValueError(f"{name} must be a number between 0 and 1")
+        return float(value)
+
+    def _mn_apply_workflow_persistence_retry_jitter(self, delay_seconds: float) -> float:
+        jitter_ratio = self._mn_workflow_persistence_retry_jitter_ratio
+        if jitter_ratio == 0:
+            return delay_seconds
+        jitter_seconds = delay_seconds * jitter_ratio
+        return max(0.0, delay_seconds + random.uniform(-jitter_seconds, jitter_seconds))
 
     @property
     def event(self) -> T_Event:
@@ -404,15 +515,347 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         except Exception as e:
             raise ValueError(f"Failed to parse config file '{path}': {e}")
 
+    async def _mn_run_workflow_persistence_checkpoint(
+        self,
+        ctx: MinionWorkflowContext[T_Event, T_Ctx],
+        *,
+        checkpoint: str,
+        operation: Literal["save", "delete"] = "save",
+        block_on_retryable_failure: bool | None = None,
+    ) -> bool:
+        if block_on_retryable_failure is None:
+            block_on_retryable_failure = (
+                operation == "delete"
+                or self._mn_workflow_persistence_failure_policy == "idle-until-persisted"
+            )
+        attempts = 0
+        first_failure_at: float | None = None
+        last_warning_at: float | None = None
+        last_logged_level: int | None = None
+        retry_delay_seconds = self._mn_workflow_persistence_retry_delay_seconds
+        blocked_labels: dict[str, str] | None = None
+        try:
+            while True:
+                attempts += 1
+                attempt_started_at = time.perf_counter()
+                if operation == "save":
+                    result = await asyncio.shield(
+                        self._mn_state_store._mn_serialize_and_save_context(ctx)
+                    )
+                else:
+                    result = await asyncio.shield(
+                        self._mn_state_store._mn_delete_context(ctx.workflow_id)
+                    )
+                attempt_duration_seconds = time.perf_counter() - attempt_started_at
+                await self._mn_record_workflow_persistence_attempt_metrics(
+                    checkpoint=checkpoint,
+                    operation=operation,
+                    result=result,
+                    duration_seconds=attempt_duration_seconds,
+                )
+                if result.persisted:
+                    if blocked_labels is not None:
+                        await self._mn_decrement_workflow_persistence_blocked_count(blocked_labels)
+                        blocked_labels = None
+                    if attempts > 1:
+                        await self._mn_logger._log(
+                            INFO,
+                            "Workflow persistence resumed"
+                            if operation == "save" else
+                            "Workflow checkpoint delete resumed",
+                            workflow_id=ctx.workflow_id,
+                            checkpoint=checkpoint,
+                            persistence_operation=operation,
+                            persistence_failure_policy=self._mn_workflow_persistence_failure_policy,
+                            persistence_retry_attempts=attempts,
+                            persistence_retry_elapsed_seconds=(
+                                0.0 if first_failure_at is None else time.monotonic() - first_failure_at
+                            ),
+                            persistence_retryable=True,
+                            minion_name=self._mn_name,
+                            minion_instance_id=self._mn_minion_instance_id,
+                            minion_composite_key=self._mn_minion_composite_key,
+                            minion_modpath=self._mn_minion_modpath,
+                        )
+                    return True
+
+                now = time.monotonic()
+                if first_failure_at is None:
+                    first_failure_at = now
+                elapsed_seconds = now - first_failure_at
+
+                if not result.retryable:
+                    await self._mn_log_workflow_persistence_failure(
+                        "Workflow persistence failed with non-retryable error",
+                        ctx=ctx,
+                        checkpoint=checkpoint,
+                        operation=operation,
+                        result=result,
+                        attempts=attempts,
+                        elapsed_seconds=elapsed_seconds,
+                        retry_delay_seconds=None,
+                        level=ERROR,
+                    )
+                    raise WorkflowPersistenceNonRetryableError(
+                        f"Workflow persistence failed during {result.failure_stage or 'unknown'} at {checkpoint}"
+                    ) from result.error
+
+                if not block_on_retryable_failure:
+                    await self._mn_log_workflow_persistence_failure(
+                        "Workflow continuing after persistence failure",
+                        ctx=ctx,
+                        checkpoint=checkpoint,
+                        operation=operation,
+                        result=result,
+                        attempts=attempts,
+                        elapsed_seconds=elapsed_seconds,
+                        retry_delay_seconds=None,
+                        level=WARNING,
+                    )
+                    return False
+
+                if blocked_labels is None:
+                    blocked_labels = self._mn_workflow_persistence_blocked_metric_labels(
+                        checkpoint=checkpoint,
+                        operation=operation,
+                        result=result,
+                    )
+                    await self._mn_increment_workflow_persistence_blocked_count(blocked_labels)
+
+                error_after_seconds = self._mn_workflow_persistence_retry_error_after_seconds
+                level = (
+                    ERROR
+                    if error_after_seconds is not None and elapsed_seconds >= error_after_seconds
+                    else WARNING
+                )
+                should_log = (
+                    attempts == 1
+                    or last_warning_at is None
+                    or now - last_warning_at >= self._mn_workflow_persistence_retry_warning_interval_seconds
+                    or (level == ERROR and last_logged_level != ERROR)
+                )
+                if should_log:
+                    sleep_delay_seconds = self._mn_apply_workflow_persistence_retry_jitter(retry_delay_seconds)
+                    await self._mn_log_workflow_persistence_failure(
+                        "Workflow idled waiting for persistence"
+                        if operation == "save" else
+                        "Workflow idled waiting for checkpoint delete",
+                        ctx=ctx,
+                        checkpoint=checkpoint,
+                        operation=operation,
+                        result=result,
+                        attempts=attempts,
+                        elapsed_seconds=elapsed_seconds,
+                        retry_delay_seconds=sleep_delay_seconds,
+                        level=level,
+                    )
+                    last_warning_at = now
+                    last_logged_level = level
+                else:
+                    sleep_delay_seconds = self._mn_apply_workflow_persistence_retry_jitter(retry_delay_seconds)
+
+                await asyncio.sleep(sleep_delay_seconds)
+                retry_delay_seconds = min(
+                    self._mn_workflow_persistence_retry_max_delay_seconds,
+                    retry_delay_seconds * self._mn_workflow_persistence_retry_backoff_multiplier,
+                )
+        finally:
+            if blocked_labels is not None:
+                await self._mn_decrement_workflow_persistence_blocked_count(blocked_labels)
+
+    async def _mn_log_workflow_persistence_failure(
+        self,
+        message: str,
+        *,
+        ctx: MinionWorkflowContext[T_Event, T_Ctx],
+        checkpoint: str,
+        operation: Literal["save", "delete"],
+        result: PersistenceOperationResult,
+        attempts: int,
+        elapsed_seconds: float,
+        retry_delay_seconds: float | None,
+        level: int,
+    ) -> None:
+        error = result.error
+        suggestion_by_stage = {
+            "serialize": "Ensure workflow event and context values are supported by the Minions persistence codec.",
+            "save": "Ensure the configured StateStore is available and can persist workflow context blobs.",
+            "delete": "Ensure the configured StateStore is available so completed workflow contexts can be removed.",
+        }
+        log_kwargs = {
+            "workflow_id": ctx.workflow_id,
+            "checkpoint": checkpoint,
+            "persistence_operation": operation,
+            "persistence_failure_policy": self._mn_workflow_persistence_failure_policy,
+            "persistence_retry_attempts": attempts,
+            "persistence_retry_delay_seconds": retry_delay_seconds,
+            "persistence_retry_elapsed_seconds": elapsed_seconds,
+            "persistence_failure_stage": result.failure_stage,
+            "persistence_retryable": result.retryable,
+            "suggestion": suggestion_by_stage.get(
+                result.failure_stage,
+                "Inspect the persistence failure details and runtime configuration.",
+            ),
+            "state_store": type(self._mn_state_store).__name__,
+            "event_type": type(ctx.event).__name__,
+            "context_type": getattr(ctx.context_cls, "__name__", type(ctx.context).__name__),
+            "minion_name": self._mn_name,
+            "minion_instance_id": self._mn_minion_instance_id,
+            "minion_composite_key": self._mn_minion_composite_key,
+            "minion_modpath": self._mn_minion_modpath,
+        }
+        if error is not None:
+            log_kwargs.update(
+                error_type=type(error).__name__,
+                error_message=str(error),
+                traceback=format_exception_traceback(error),
+            )
+        await self._mn_logger._log(level, message, **log_kwargs)
+
+    def _mn_workflow_persistence_base_metric_labels(
+        self,
+        *,
+        checkpoint: str,
+        operation: Literal["save", "delete"],
+    ) -> dict[str, str]:
+        checkpoint_type, _ = self._mn_workflow_persistence_checkpoint_metric_parts(checkpoint)
+        return {
+            LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
+            LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: checkpoint_type,
+            LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: operation,
+            LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: self._mn_workflow_persistence_failure_policy,
+            LABEL_STATE_STORE: type(self._mn_state_store).__name__,
+        }
+
+    def _mn_workflow_persistence_failure_metric_labels(
+        self,
+        *,
+        checkpoint: str,
+        operation: Literal["save", "delete"],
+        result: PersistenceOperationResult,
+    ) -> dict[str, str]:
+        return {
+            **self._mn_workflow_persistence_base_metric_labels(checkpoint=checkpoint, operation=operation),
+            LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: result.failure_stage or "none",
+            LABEL_MINION_WORKFLOW_PERSISTENCE_RETRYABLE: str(result.retryable).lower(),
+        }
+
+    def _mn_workflow_persistence_blocked_metric_labels(
+        self,
+        *,
+        checkpoint: str,
+        operation: Literal["save", "delete"],
+        result: PersistenceOperationResult,
+    ) -> dict[str, str]:
+        checkpoint_type, _ = self._mn_workflow_persistence_checkpoint_metric_parts(checkpoint)
+        return {
+            LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
+            LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: checkpoint_type,
+            LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: operation,
+            LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: result.failure_stage or "none",
+            LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: self._mn_workflow_persistence_failure_policy,
+            LABEL_STATE_STORE: type(self._mn_state_store).__name__,
+        }
+
+    @staticmethod
+    def _mn_workflow_persistence_checkpoint_metric_parts(checkpoint: str) -> tuple[str, str]:
+        if checkpoint == "workflow_start":
+            return "workflow_start", ""
+        if checkpoint.startswith("before_step:"):
+            return "before_step", checkpoint.removeprefix("before_step:")
+        return checkpoint, ""
+
+    @staticmethod
+    def _mn_metric_label_key(labels: dict[str, str]) -> tuple[tuple[str, str], ...]:
+        return tuple(sorted(labels.items()))
+
+    async def _mn_increment_workflow_persistence_blocked_count(
+        self,
+        labels: dict[str, str],
+    ) -> None:
+        key = self._mn_metric_label_key(labels)
+        async with self._mn_workflow_persistence_blocked_counts_lock:
+            value = self._mn_workflow_persistence_blocked_counts.get(key, 0) + 1
+            self._mn_workflow_persistence_blocked_counts[key] = value
+        await self._mn_metrics._set(
+            metric_name=MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
+            value=value,
+            labels=labels,
+        )
+
+    async def _mn_decrement_workflow_persistence_blocked_count(
+        self,
+        labels: dict[str, str],
+    ) -> None:
+        key = self._mn_metric_label_key(labels)
+        async with self._mn_workflow_persistence_blocked_counts_lock:
+            value = max(0, self._mn_workflow_persistence_blocked_counts.get(key, 0) - 1)
+            if value:
+                self._mn_workflow_persistence_blocked_counts[key] = value
+            else:
+                self._mn_workflow_persistence_blocked_counts.pop(key, None)
+        await self._mn_metrics._set(
+            metric_name=MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
+            value=value,
+            labels=labels,
+        )
+
+    async def _mn_record_workflow_persistence_attempt_metrics(
+        self,
+        *,
+        checkpoint: str,
+        operation: Literal["save", "delete"],
+        result: PersistenceOperationResult,
+        duration_seconds: float,
+    ) -> None:
+        base_labels = self._mn_workflow_persistence_base_metric_labels(
+            checkpoint=checkpoint,
+            operation=operation,
+        )
+        result_metric_name = (
+            MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL
+            if result.persisted else
+            MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL
+        )
+        result_labels = (
+            base_labels
+            if result.persisted else
+            self._mn_workflow_persistence_failure_metric_labels(
+                checkpoint=checkpoint,
+                operation=operation,
+                result=result,
+            )
+        )
+        await asyncio.gather(
+            self._mn_metrics._inc(
+                metric_name=MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL,
+                labels=base_labels,
+            ),
+            self._mn_metrics._observe(
+                metric_name=MINION_WORKFLOW_PERSISTENCE_DURATION_SECONDS,
+                value=duration_seconds,
+                labels=base_labels,
+            ),
+            self._mn_metrics._inc(
+                metric_name=result_metric_name,
+                labels=result_labels,
+            ),
+        )
+
     async def _mn_run_workflow(self, ctx: MinionWorkflowContext[T_Event, T_Ctx]):
         if self._mn_shutting_down:
             return
         async def _shielded_gather(*aws):
             return await asyncio.shield(asyncio.gather(*aws))
+
         async def run():
             event_token = self._mn_event_var.set(ctx.event)
             context_token = self._mn_context_var.set(ctx.context)
-            workflow_status: Statuses = "undefined"
+            workflow_status: ExecutionStatus = "undefined"
+            delete_persisted_context_on_exit = True
+            terminal_workflow_log_level: int | None = None
+            terminal_workflow_log_message: str | None = None
+            terminal_workflow_error: Exception | None = None
             try: # run workflow (step by step)
                 if ctx.next_step_index == 0:
                     await _shielded_gather(*[
@@ -427,7 +870,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         ),
                         self._mn_metrics._inc(
                             metric_name=MINION_WORKFLOW_STARTED_TOTAL,
-                            labels={LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id},
+                            labels={LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key},
                         )
                     ])
                 else:
@@ -451,7 +894,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     step = workflow[i]
                     step_name = step.__name__
                     step_start = ctx.started_at if i == 0 else time.time()
-                    step_status: Statuses = "undefined"
+                    step_status: ExecutionStatus = "undefined"
 
                     await _shielded_gather(*[
                         self._mn_logger._log(
@@ -468,19 +911,23 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         self._mn_metrics._inc(
                             metric_name=MINION_WORKFLOW_STEP_STARTED_TOTAL,
                             labels={
-                                LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id,
+                                LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
                                 LABEL_MINION_WORKFLOW_STEP: step_name,
                             },
                         )
                     ])
 
                     try: # run step / store context
-                        await asyncio.shield(
-                            self._mn_state_store._mn_serialize_and_save_context(ctx)
+                        await self._mn_run_workflow_persistence_checkpoint(
+                            ctx,
+                            checkpoint=f"before_step:{step_name}",
                         )
                         await step()
+                    except asyncio.CancelledError:
+                        step_status: ExecutionStatus = "interrupted"
+                        raise
                     except AbortWorkflow: # log / measure step aborted
-                        step_status: Statuses = "aborted"
+                        step_status: ExecutionStatus = "aborted"
                         await _shielded_gather(*[
                             self._mn_logger._log(
                                 INFO,
@@ -496,14 +943,14 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             self._mn_metrics._inc(
                                 metric_name=MINION_WORKFLOW_STEP_ABORTED_TOTAL,
                                 labels={
-                                    LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id,
+                                    LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
                                     LABEL_MINION_WORKFLOW_STEP: step_name,
                                 },
                             )
                         ])
                         raise
                     except Exception as e: # log / measure step failure
-                        step_status: Statuses = "failed"
+                        step_status: ExecutionStatus = "failed"
                         log_kwargs = {
                             "workflow_id": ctx.workflow_id,
                             "step_name": step_name,
@@ -536,7 +983,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             self._mn_metrics._inc(
                                 metric_name=MINION_WORKFLOW_STEP_FAILED_TOTAL,
                                 labels={
-                                    LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id,
+                                    LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
                                     LABEL_MINION_WORKFLOW_STEP: step_name,
                                     LABEL_ERROR_TYPE: type(e).__name__,
                                 },
@@ -544,7 +991,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         )
                         raise
                     else: # log / measure step success & update
-                        step_status: Statuses = "succeeded"
+                        step_status: ExecutionStatus = "succeeded"
                         await _shielded_gather(*[
                             self._mn_logger._log(
                                 DEBUG,
@@ -560,7 +1007,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             self._mn_metrics._inc(
                                 metric_name=MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
                                 labels={
-                                    LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id,
+                                    LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
                                     LABEL_MINION_WORKFLOW_STEP: step_name,
                                 },
                             )
@@ -578,69 +1025,103 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             metric_name=MINION_WORKFLOW_STEP_DURATION_SECONDS,
                             value=duration,
                             labels={
-                                LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id,
+                                LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
                                 LABEL_MINION_WORKFLOW_STEP: step_name,
-                                "status": step_status,
+                                LABEL_STATUS: step_status,
                             },
                         )
+            except asyncio.CancelledError:
+                workflow_status: ExecutionStatus = "interrupted"
+                raise
             except AbortWorkflow: # log / measure workflow aborted
-                workflow_status: Statuses = "aborted"
-                await _shielded_gather(*[
-                    self._mn_logger._log(
-                        INFO,
-                        "Workflow aborted",
-                        workflow_id=ctx.workflow_id,
-                        minion_name=self._mn_name,
-                        minion_instance_id=self._mn_minion_instance_id,
-                        minion_composite_key=self._mn_minion_composite_key,
-                        minion_modpath=self._mn_minion_modpath
-                    ),
-                    self._mn_metrics._inc(
-                        metric_name=MINION_WORKFLOW_ABORTED_TOTAL,
-                        labels={LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id},
-                    )
-                ])
+                workflow_status: ExecutionStatus = "aborted"
+                terminal_workflow_log_level = INFO
+                terminal_workflow_log_message = "Workflow aborted"
             except Exception as e: # log / measure workflow failure
-                workflow_status: Statuses = "failed"
-                await _shielded_gather(*[
-                    self._mn_logger._log(
-                        ERROR,
-                        "Workflow failed",
-                        workflow_id=ctx.workflow_id,
-                        minion_name=self._mn_name,
-                        minion_instance_id=self._mn_minion_instance_id,
-                        minion_composite_key=self._mn_minion_composite_key,
-                        minion_modpath=self._mn_minion_modpath,
-                        error_type=type(e).__name__,
-                        error_message=str(e),
-                        traceback=format_exception_traceback(e)
-                    ),
-                    self._mn_metrics._inc(
-                        metric_name=MINION_WORKFLOW_FAILED_TOTAL,
-                        labels={
-                            LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id,
-                            LABEL_ERROR_TYPE: type(e).__name__,
-                        },
-                    )
-                ])
+                workflow_status: ExecutionStatus = "failed"
+                if isinstance(e, WorkflowPersistenceNonRetryableError):
+                    delete_persisted_context_on_exit = False
+                terminal_workflow_log_level = ERROR
+                terminal_workflow_log_message = "Workflow failed"
+                terminal_workflow_error = e
             else: # log / measure workflow success
-                workflow_status: Statuses = "succeeded"
-                await _shielded_gather(*[
-                    self._mn_logger._log(
-                        INFO,
-                        "Workflow succeeded",
-                        workflow_id=ctx.workflow_id,
-                        minion_name=self._mn_name,
-                        minion_instance_id=self._mn_minion_instance_id,
-                        minion_composite_key=self._mn_minion_composite_key,
-                        minion_modpath=self._mn_minion_modpath
-                    ),
-                    self._mn_metrics._inc(
-                        metric_name=MINION_WORKFLOW_SUCCEEDED_TOTAL,
-                        labels={LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id},
-                    )
-                ])
+                workflow_status: ExecutionStatus = "succeeded"
+                terminal_workflow_log_level = INFO
+                terminal_workflow_log_message = "Workflow succeeded"
             finally: # measure workflow duration, update inflight gauge, remove context from statestore
+                if workflow_status in ("succeeded", "failed", "aborted") and delete_persisted_context_on_exit:
+                    try:
+                        await self._mn_run_workflow_persistence_checkpoint(
+                            ctx,
+                            checkpoint="workflow_resolve",
+                            operation="delete",
+                            block_on_retryable_failure=True,
+                        )
+                    except asyncio.CancelledError:
+                        workflow_status = "interrupted"
+                        terminal_workflow_log_level = None
+                        terminal_workflow_log_message = None
+                        terminal_workflow_error = None
+                        raise
+
+                if workflow_status == "aborted" and terminal_workflow_log_message is not None:
+                    await _shielded_gather(*[
+                        self._mn_logger._log(
+                            terminal_workflow_log_level or INFO,
+                            terminal_workflow_log_message,
+                            workflow_id=ctx.workflow_id,
+                            minion_name=self._mn_name,
+                            minion_instance_id=self._mn_minion_instance_id,
+                            minion_composite_key=self._mn_minion_composite_key,
+                            minion_modpath=self._mn_minion_modpath
+                        ),
+                        self._mn_metrics._inc(
+                            metric_name=MINION_WORKFLOW_ABORTED_TOTAL,
+                            labels={LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key},
+                        )
+                    ])
+                elif workflow_status == "failed" and terminal_workflow_log_message is not None:
+                    failure_error = terminal_workflow_error
+                    if failure_error is None:
+                        failure_error = RuntimeError("workflow failed")
+                    await _shielded_gather(*[
+                        self._mn_logger._log(
+                            terminal_workflow_log_level or ERROR,
+                            terminal_workflow_log_message,
+                            workflow_id=ctx.workflow_id,
+                            minion_name=self._mn_name,
+                            minion_instance_id=self._mn_minion_instance_id,
+                            minion_composite_key=self._mn_minion_composite_key,
+                            minion_modpath=self._mn_minion_modpath,
+                            error_type=type(failure_error).__name__,
+                            error_message=str(failure_error),
+                            traceback=format_exception_traceback(failure_error)
+                        ),
+                        self._mn_metrics._inc(
+                            metric_name=MINION_WORKFLOW_FAILED_TOTAL,
+                            labels={
+                                LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
+                                LABEL_ERROR_TYPE: type(failure_error).__name__,
+                            },
+                        )
+                    ])
+                elif workflow_status == "succeeded" and terminal_workflow_log_message is not None:
+                    await _shielded_gather(*[
+                        self._mn_logger._log(
+                            terminal_workflow_log_level or INFO,
+                            terminal_workflow_log_message,
+                            workflow_id=ctx.workflow_id,
+                            minion_name=self._mn_name,
+                            minion_instance_id=self._mn_minion_instance_id,
+                            minion_composite_key=self._mn_minion_composite_key,
+                            minion_modpath=self._mn_minion_modpath
+                        ),
+                        self._mn_metrics._inc(
+                            metric_name=MINION_WORKFLOW_SUCCEEDED_TOTAL,
+                            labels={LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key},
+                        )
+                    ])
+
                 started_at = ctx.started_at
                 if started_at is not None:
                     duration = time.time() - started_at
@@ -652,18 +1133,11 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     metric_name=MINION_WORKFLOW_DURATION_SECONDS,
                     value=duration,
                     labels={
-                        LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id,
-                        "status": workflow_status,
+                        LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
+                        LABEL_STATUS: workflow_status,
                     },
                 )
-                if workflow_status in ("succeeded", "failed", "aborted"):
-                    # Persist unresolved/cancelled workflows for replay on next startup.
-                    await _shielded_gather(*[
-                        metric_obs,
-                        self._mn_state_store._mn_delete_context(ctx.workflow_id),
-                    ])
-                else:
-                    await metric_obs
+                await metric_obs
                 task = asyncio.current_task()
                 if task is not None:
                     async with self._mn_tasks_gate:
@@ -673,7 +1147,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         await self._mn_metrics._set(
                             metric_name=MINION_WORKFLOW_INFLIGHT_GAUGE,
                             value=inflight,
-                            labels={LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id},
+                            labels={LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key},
                         )
                 self._mn_event_var.reset(event_token)
                 self._mn_context_var.reset(context_token)
@@ -743,28 +1217,10 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             context_cls=type(self)._mn_workflow_ctx_cls
         )
 
-        try:
-            await asyncio.shield(
-                self._mn_state_store._mn_serialize_and_save_context(ctx)
-            )
-        except Exception as e:
-            await self._mn_logger._log(
-                ERROR,
-                "StateStore failed to save minion workflow context",
-                suggestion="Ensure that your event and context types are supported by your state store.",
-                state_store=self._mn_state_store.__name__,
-                event_type=T_Event,
-                context_type=T_Ctx,
-                error_type=type(e).__name__,
-                error_message=str(e),
-                traceback=format_exception_traceback(e),
-                minion_name=self._mn_name,
-                minion_instance_id=self._mn_minion_instance_id,
-                minion_composite_key=self._mn_minion_composite_key,
-                minion_modpath=self._mn_minion_modpath
-            )
-            return
-
+        await self._mn_run_workflow_persistence_checkpoint(
+            ctx,
+            checkpoint="workflow_start",
+        )
         await self._mn_run_workflow(ctx)
 
         async with self._mn_tasks_gate:
@@ -772,7 +1228,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         await self._mn_metrics._set(
             metric_name=MINION_WORKFLOW_INFLIGHT_GAUGE,
             value=inflight,
-            labels={LABEL_MINION_INSTANCE_ID: self._mn_minion_instance_id},
+            labels={LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key},
         )
 
     async def _mn_wait_until_tasks_idle(

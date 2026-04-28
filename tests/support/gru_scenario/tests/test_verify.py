@@ -1,5 +1,6 @@
 import pytest
 
+from minions._internal._framework.metrics_constants import LABEL_MINION_COMPOSITE_KEY
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
@@ -50,6 +51,19 @@ def test_verifier_require_spies_invariant_message_is_actionable():
         match=r"internal invariant violated: result\.spies is None.*ScenarioRunner\.run\(\)",
     ):
         verifier._require_spies()
+
+
+def test_assert_metrics_label_contract_reports_recorded_mismatches():
+    verifier = _mk_verifier(
+        ScenarioPlan([], pipeline_event_counts={}),
+        ScenarioRunResult(spies=SpyRegistry(), receipts=[]),
+    )
+    metric = verifier._metrics.create_metric("unknown_metric_total", [], "counter")
+    metric.labels().inc()
+
+    with pytest.raises(pytest.fail.Exception, match="Metrics label contract mismatch"):
+        verifier._assert_metrics_label_contract()
+    verifier._metrics.clear_metric_label_emissions()
 
 
 def test_compute_minion_expectations_accumulates_starts_from_successful_receipts():
@@ -1274,13 +1288,13 @@ def test_assert_runtime_expectations_resolutions_at_latest_checkpoint():
                 seen_shutdown=False,
                 metrics_counters={
                     "minion_workflow_succeeded_total": [
-                        {"labels": {"minion_instance_id": "instance-1"}, "value": 1}
+                        {"labels": {LABEL_MINION_COMPOSITE_KEY: "instance-1"}, "value": 1}
                     ],
                     "minion_workflow_failed_total": [
-                        {"labels": {"minion_instance_id": "instance-1"}, "value": 0}
+                        {"labels": {LABEL_MINION_COMPOSITE_KEY: "instance-1"}, "value": 0}
                     ],
                     "minion_workflow_aborted_total": [
-                        {"labels": {"minion_instance_id": "instance-1"}, "value": 0}
+                        {"labels": {LABEL_MINION_COMPOSITE_KEY: "instance-1"}, "value": 0}
                     ],
                 },
             ),

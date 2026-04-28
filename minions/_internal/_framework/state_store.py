@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from .async_component import AsyncComponent
 from .logger import ERROR
@@ -11,13 +11,6 @@ from .minion_workflow_context_codec import (
 from .._domain.minion_workflow_context import MinionWorkflowContext
 from .._utils.format_exception_traceback import format_exception_traceback
 
-# todo: does it make a difference to use a msgspec here? or when is msgspec actually more efficient?
-# todo: might rename this class
-# gives a bit of a smell cuz "state"
-# is embedded in the name
-# and i suspect that this class
-# may be being used during different
-# states of the context
 @dataclass(frozen=True)
 class StoredWorkflowContext:
     workflow_id: str
@@ -25,7 +18,27 @@ class StoredWorkflowContext:
     context: bytes
 
 
+@dataclass(frozen=True)
+class PersistenceOperationResult:
+    persisted: bool
+    failure_stage: Literal["serialize", "save", "delete"] | None = None
+    error: Exception | None = None
+    retryable: bool = False
+
+
 class StateStore(AsyncComponent):
+    """Base class for durable workflow context storage.
+
+    Custom stores must persist serialized context bytes by workflow ID, keep
+    the orchestration ID with each saved context, support lookup by
+    orchestration, support listing all saved contexts for startup recovery, and
+    delete contexts when workflows finish. `save_context` and `delete_context`
+    must return only after the requested change is durably reflected by the
+    store, not merely after it has been accepted into an in-memory queue.
+    Override `startup` and `shutdown` only when the store needs async setup or
+    cleanup.
+    """
+
     _mn_user_facing = True
 
     # User Code
@@ -37,15 +50,11 @@ class StateStore(AsyncComponent):
         orchestration_id: str,
         context: bytes,
     ) -> None:
-        """Store a serialized workflow context.
-
-        Current runtime policy is fail-open: implementations should log persistence
-        failures and allow workflow execution to continue.
-        """
+        """Save a serialized workflow context and return after it is persisted."""
 
     @abstractmethod
     async def delete_context(self, workflow_id: str) -> None:
-        """Delete a stored workflow context."""
+        """Delete a stored workflow context and return after the delete is persisted."""
 
     @abstractmethod
     async def get_contexts_for_orchestration(
@@ -65,22 +74,46 @@ class StateStore(AsyncComponent):
         workflow_id: str,
         orchestration_id: str,
         context: bytes,
-    ) -> None:
-        await self._mn_safe_run_and_log_failure(
-            method=self.save_context,
-            method_args=[workflow_id, orchestration_id, context],
-            log_kwargs={
-                "workflow_id": workflow_id,
-                "orchestration_id": orchestration_id,
-            },
-        )
+    ) -> PersistenceOperationResult:
+        try:
+            await self.save_context(workflow_id, orchestration_id, context)
+        except Exception as e:
+            await self._mn_logger._log(
+                ERROR,
+                f"{type(self).__name__}.save_context failed",
+                error_type=type(e).__name__,
+                error_message=str(e),
+                traceback=format_exception_traceback(e),
+                workflow_id=workflow_id,
+                orchestration_id=orchestration_id,
+            )
+            return PersistenceOperationResult(
+                persisted=False,
+                failure_stage="save",
+                error=e,
+                retryable=True,
+            )
+        return PersistenceOperationResult(persisted=True)
 
-    async def _mn_delete_context(self, workflow_id: str) -> None:
-        await self._mn_safe_run_and_log_failure(
-            method=self.delete_context,
-            method_args=[workflow_id],
-            log_kwargs={"workflow_id": workflow_id},
-        )
+    async def _mn_delete_context(self, workflow_id: str) -> PersistenceOperationResult:
+        try:
+            await self.delete_context(workflow_id)
+        except Exception as e:
+            await self._mn_logger._log(
+                ERROR,
+                f"{type(self).__name__}.delete_context failed",
+                error_type=type(e).__name__,
+                error_message=str(e),
+                traceback=format_exception_traceback(e),
+                workflow_id=workflow_id,
+            )
+            return PersistenceOperationResult(
+                persisted=False,
+                failure_stage="delete",
+                error=e,
+                retryable=True,
+            )
+        return PersistenceOperationResult(persisted=True)
 
     async def _mn_get_contexts_for_orchestration(
         self,
@@ -104,7 +137,7 @@ class StateStore(AsyncComponent):
     async def _mn_serialize_and_save_context(
         self,
         ctx: MinionWorkflowContext,
-    ) -> None:
+    ) -> PersistenceOperationResult:
         workflow_id = ctx.workflow_id
         orchestration_id = ctx.minion_composite_key
 
@@ -121,8 +154,13 @@ class StateStore(AsyncComponent):
                 orchestration_id=orchestration_id,
                 state_store=type(self).__name__,
             )
-            return
-        await self._mn_save_context(
+            return PersistenceOperationResult(
+                persisted=False,
+                failure_stage="serialize",
+                error=e,
+                retryable=False,
+            )
+        return await self._mn_save_context(
             workflow_id,
             orchestration_id,
             serialized_context,

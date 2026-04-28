@@ -1,5 +1,6 @@
 import pytest
 
+from minions._internal._domain.gru import Gru
 from minions._internal._framework.logger_console import ConsoleLogger
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_noop import NoOpMetrics
@@ -41,6 +42,52 @@ class TestValidUsage:
             metrics=NoOpMetrics()
         ):
             pass
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "policy",
+        ["continue-on-failure", "idle-until-persisted"],
+    )
+    async def test_gru_accepts_workflow_persistence_failure_policy(self, gru_factory, policy):
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=NoOpLogger(),
+            metrics=NoOpMetrics(),
+            workflow_persistence_failure_policy=policy,
+        ):
+            pass
+
+    @pytest.mark.asyncio
+    async def test_gru_accepts_workflow_persistence_retry_settings(self, gru_factory):
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=NoOpLogger(),
+            metrics=NoOpMetrics(),
+            workflow_persistence_retry_delay_seconds=0.25,
+            workflow_persistence_retry_max_delay_seconds=2.0,
+            workflow_persistence_retry_backoff_multiplier=1.5,
+            workflow_persistence_retry_jitter_ratio=0.2,
+            workflow_persistence_retry_warning_interval_seconds=5.0,
+            workflow_persistence_retry_error_after_seconds=None,
+        ):
+            pass
+
+    def test_inline_config_identity_is_stable_hashed_and_content_sensitive(self):
+        cfg_a = Gru._make_inline_config_identity({"secret": "alpha", "threshold": 3})
+        cfg_a_reordered = Gru._make_inline_config_identity({"threshold": 3, "secret": "alpha"})
+        cfg_b = Gru._make_inline_config_identity({"secret": "bravo", "threshold": 3})
+
+        assert cfg_a == cfg_a_reordered
+        assert cfg_a != cfg_b
+        assert cfg_a.startswith("<inline:")
+        assert "alpha" not in cfg_a
+
+        key = Gru._make_minion_composite_key(
+            "tests.assets.Minion",
+            cfg_a,
+            "tests.assets.Pipeline",
+        )
+        assert key == f"tests.assets.Minion|{cfg_a}|tests.assets.Pipeline"
 
     # Verification ownership: tracked in DSL backlog `tests/support/gru_scenario/VERIFICATION_TODOS.md` (V-001).
 

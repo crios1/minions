@@ -1,11 +1,11 @@
 import threading
-from typing import Any, Dict, Tuple, TypeVar, cast
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, Tuple, TypeVar, cast
 
 from minions._internal._framework.metrics import (
     CounterSample,
     GaugeSample,
     HistogramSample,
-    Metrics,
     SnapshotCounters,
     SnapshotGauges,
     SnapshotHistograms,
@@ -17,8 +17,54 @@ from minions._internal._framework.metrics_constants import METRIC_LABEL_NAMES
 
 from .metrics_spied import SpiedMetrics
 
+
 LabelKey = Tuple[Tuple[str, str], ...]  # sorted (name, value) pairs for hashing
+
+
 SampleT = TypeVar("SampleT", CounterSample, GaugeSample, HistogramSample)
+
+
+@dataclass(frozen=True)
+class MetricLabelEmission:
+    metric_name: str
+    labels: frozenset[str]
+
+
+@dataclass(frozen=True)
+class MetricLabelContractViolation:
+    metric_name: str
+    expected: frozenset[str]
+    actual: frozenset[str]
+    unknown_metric: bool = False
+
+    @property
+    def missing(self) -> frozenset[str]:
+        return self.expected - self.actual
+
+    @property
+    def extra(self) -> frozenset[str]:
+        return self.actual - self.expected
+
+
+def validate_metric_label_contract(
+    metric_name: str,
+    labels: frozenset[str],
+) -> MetricLabelContractViolation | None:
+    if metric_name not in METRIC_LABEL_NAMES:
+        return MetricLabelContractViolation(
+            metric_name=metric_name,
+            expected=frozenset(),
+            actual=labels,
+            unknown_metric=True,
+        )
+    expected = frozenset(METRIC_LABEL_NAMES.get(metric_name, []))
+    if expected == labels:
+        return None
+    return MetricLabelContractViolation(
+        metric_name=metric_name,
+        expected=expected,
+        actual=labels,
+    )
 
 
 def _normalize_labels(metric_name: str, labels: Dict[str, Any]) -> LabelKey:
@@ -86,14 +132,27 @@ class _InMemoryMetric(LabelledMetric):
     Registry entry for a single metric (name+kind).
     `.labels(**kwargs)` returns a bound child that also conforms to LabelledMetric.
     """
-    def __init__(self, name: str, label_names: list[str], kind: str):
+    def __init__(
+        self,
+        name: str,
+        label_names: list[str],
+        kind: str,
+        record_metric_labels: Callable[[MetricLabelEmission], None],
+    ):
         self.name = name
         self.label_names = label_names
         self.kind = kind  # "counter" | "gauge" | "histogram"
+        self._record_metric_labels = record_metric_labels
         self._values: Dict[LabelKey, Any] = {}
         self._lock = threading.Lock()
 
     def labels(self, **kwargs: str) -> LabelledMetric:
+        self._record_metric_labels(
+            MetricLabelEmission(
+                metric_name=self.name,
+                labels=frozenset(kwargs),
+            )
+        )
         label_key = _normalize_labels(self.name, kwargs)
         # Ensure slot exists for counters/gauges; histograms lazy-init on observe()
         if self.kind in ("counter", "gauge"):
@@ -124,15 +183,60 @@ class InMemoryMetrics(SpiedMetrics):
     In-memory metrics backend.
     Thread-safe, test-friendly; stores per-label values and provides snapshot helpers.
     """
-
     def __init__(self, logger: NoOpLogger | None = None):
         super().__init__(logger or NoOpLogger())
         self._snapshot_lock = threading.Lock()
+        self._metric_label_emissions: list[MetricLabelEmission] = []
+        self._metric_label_emissions_lock = threading.Lock()
 
     def create_metric(self, metric_name: str, label_names: list[str], kind: str) -> LabelledMetric:
-        return _InMemoryMetric(metric_name, label_names, kind)
+        return _InMemoryMetric(
+            metric_name,
+            label_names,
+            kind,
+            self._record_metric_labels,
+        )
 
     # ----------------- Test helpers (read-only) -----------------
+
+    def _record_metric_labels(
+        self,
+        emission: MetricLabelEmission,
+    ) -> None:
+        with self._metric_label_emissions_lock:
+            self._metric_label_emissions.append(emission)
+
+    def metric_label_emissions(self) -> list[MetricLabelEmission]:
+        with self._metric_label_emissions_lock:
+            return list(self._metric_label_emissions)
+
+    def clear_metric_label_emissions(self) -> None:
+        with self._metric_label_emissions_lock:
+            self._metric_label_emissions.clear()
+
+    def assert_recorded_labels_match_contract(self) -> None:
+        violations = [
+            violation
+            for emission in self.metric_label_emissions()
+            if (
+                violation := validate_metric_label_contract(
+                    emission.metric_name,
+                    emission.labels,
+                )
+            ) is not None
+        ]
+        if not violations:
+            return
+        details = "\n".join(
+            (
+                f"{v.metric_name}: expected={sorted(v.expected)!r} "
+                f"actual={sorted(v.actual)!r} "
+                f"missing={sorted(v.missing)!r} extra={sorted(v.extra)!r} "
+                f"unknown_metric={v.unknown_metric!r}"
+            )
+            for v in violations
+        )
+        raise AssertionError(f"metric label contract violations:\n{details}")
 
     @staticmethod
     def find_sample(

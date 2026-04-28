@@ -74,7 +74,9 @@ def logger():
 def metrics():
     InMemoryMetrics.enable_spy()
     InMemoryMetrics.reset_spy()
-    return InMemoryMetrics()
+    metrics = InMemoryMetrics()
+    yield metrics
+    metrics.assert_recorded_labels_match_contract()
 
 @pytest.fixture
 def state_store(logger):

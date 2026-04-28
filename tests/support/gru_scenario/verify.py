@@ -9,7 +9,7 @@ from minions._internal._framework.metrics_constants import (
     MINION_WORKFLOW_ABORTED_TOTAL,
     MINION_WORKFLOW_FAILED_TOTAL,
     MINION_WORKFLOW_SUCCEEDED_TOTAL,
-    LABEL_MINION_INSTANCE_ID,
+    LABEL_MINION_COMPOSITE_KEY,
 )
 
 from tests.assets.support.mixin_spy import SpyMixin
@@ -90,6 +90,7 @@ class ScenarioVerifier:
 
     async def verify(self) -> None:
         expected = self._build_expected_call_counts()
+        self._assert_metrics_label_contract()
         self._assert_runtime_expectations()
         self._assert_pipeline_events()
         self._assert_checkpoint_window_workflow_step_progression()
@@ -103,6 +104,15 @@ class ScenarioVerifier:
         finally:
             for unpin in unpin_fns:
                 unpin()
+
+    def _assert_metrics_label_contract(self) -> None:
+        assert_fn = getattr(self._metrics, "assert_recorded_labels_match_contract", None)
+        if not callable(assert_fn):
+            return
+        try:
+            assert_fn()
+        except AssertionError as e:
+            pytest.fail(f"Metrics label contract mismatch: {e}")
 
     def _build_expected_call_counts(self) -> ExpectedCallCounts:
         spies = self._require_spies()
@@ -456,13 +466,14 @@ class ScenarioVerifier:
 
             receipts = self._result.receipts[:target_checkpoint.receipt_count]
             modpaths_by_name: defaultdict[str, set[str]] = defaultdict(set)
-            instance_ids_by_name: defaultdict[str, set[str]] = defaultdict(set)
+            metric_keys_by_name: defaultdict[str, set[str]] = defaultdict(set)
             for r in receipts:
                 if not r.success or not r.resolved_name:
                     continue
                 modpaths_by_name[r.resolved_name].add(r.minion_modpath)
-                if r.instance_id:
-                    instance_ids_by_name[r.resolved_name].add(r.instance_id)
+                metric_key = r.composite_key or r.instance_id
+                if metric_key:
+                    metric_keys_by_name[r.resolved_name].add(metric_key)
 
             if persistence:
                 persisted = target_checkpoint.persisted_contexts_by_modpath
@@ -498,26 +509,26 @@ class ScenarioVerifier:
                     )
 
                 for minion_name, expected_status_counts in resolutions.items():
-                    if minion_name not in instance_ids_by_name:
+                    if minion_name not in metric_keys_by_name:
                         pytest.fail(
                             f"ExpectRuntime.resolutions references unknown minion name: {minion_name!r}."
                         )
-                    instance_ids = instance_ids_by_name[minion_name]
+                    metric_keys = metric_keys_by_name[minion_name]
                     counts = {
                         "succeeded": sum(
                             int(s["value"])
                             for s in counters.get(MINION_WORKFLOW_SUCCEEDED_TOTAL, [])
-                            if s["labels"].get(LABEL_MINION_INSTANCE_ID) in instance_ids
+                            if s["labels"].get(LABEL_MINION_COMPOSITE_KEY) in metric_keys
                         ),
                         "failed": sum(
                             int(s["value"])
                             for s in counters.get(MINION_WORKFLOW_FAILED_TOTAL, [])
-                            if s["labels"].get(LABEL_MINION_INSTANCE_ID) in instance_ids
+                            if s["labels"].get(LABEL_MINION_COMPOSITE_KEY) in metric_keys
                         ),
                         "aborted": sum(
                             int(s["value"])
                             for s in counters.get(MINION_WORKFLOW_ABORTED_TOTAL, [])
-                            if s["labels"].get(LABEL_MINION_INSTANCE_ID) in instance_ids
+                            if s["labels"].get(LABEL_MINION_COMPOSITE_KEY) in metric_keys
                         ),
                     }
 

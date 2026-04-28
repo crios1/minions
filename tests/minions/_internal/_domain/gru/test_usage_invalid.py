@@ -73,6 +73,55 @@ class TestInvalidUsage:
             )
 
     @pytest.mark.asyncio
+    async def test_gru_raises_on_invalid_workflow_persistence_failure_policy(self):
+        with pytest.raises(
+            ValueError,
+            match="workflow_persistence_failure_policy must be 'continue-on-failure' or 'idle-until-persisted'",
+        ):
+            await Gru.create(
+                logger=NoOpLogger(),
+                metrics=NoOpMetrics(),
+                state_store=NoOpStateStore(),
+                workflow_persistence_failure_policy="invalid",
+            )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("kwarg", "value", "match"),
+        [
+            ("workflow_persistence_retry_delay_seconds", 0, "must be a positive number of seconds"),
+            ("workflow_persistence_retry_max_delay_seconds", 0, "must be a positive number of seconds"),
+            ("workflow_persistence_retry_backoff_multiplier", 0.5, "must be a number greater than or equal to 1"),
+            ("workflow_persistence_retry_jitter_ratio", -0.1, "must be a number between 0 and 1"),
+            ("workflow_persistence_retry_jitter_ratio", 1.1, "must be a number between 0 and 1"),
+            ("workflow_persistence_retry_warning_interval_seconds", -1, "must be a positive number of seconds"),
+            ("workflow_persistence_retry_error_after_seconds", -1, "must be None or a non-negative number of seconds"),
+        ],
+    )
+    async def test_gru_raises_on_invalid_workflow_persistence_retry_settings(self, kwarg, value, match):
+        with pytest.raises(ValueError, match=match):
+            await Gru.create(
+                logger=NoOpLogger(),
+                metrics=NoOpMetrics(),
+                state_store=NoOpStateStore(),
+                **{kwarg: value},
+            )
+
+    @pytest.mark.asyncio
+    async def test_gru_raises_when_workflow_persistence_retry_max_delay_is_below_initial_delay(self):
+        with pytest.raises(
+            ValueError,
+            match="workflow_persistence_retry_max_delay_seconds must be greater than or equal to workflow_persistence_retry_delay_seconds",
+        ):
+            await Gru.create(
+                logger=NoOpLogger(),
+                metrics=NoOpMetrics(),
+                state_store=NoOpStateStore(),
+                workflow_persistence_retry_delay_seconds=2.0,
+                workflow_persistence_retry_max_delay_seconds=1.0,
+            )
+
+    @pytest.mark.asyncio
     async def test_gru_returns_error_when_starting_running_minion(self, gru_factory, tests_dir):
         # TODO:
         # - start 2 minions with the same name (would need to start different minion but give the same name)

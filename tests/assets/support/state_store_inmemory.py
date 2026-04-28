@@ -1,5 +1,4 @@
 import asyncio
-import copy
 
 from minions._internal._framework.logger import Logger
 from minions._internal._framework.state_store import StoredWorkflowContext
@@ -38,11 +37,11 @@ class InMemoryStateStore(SpiedStateStore):
     ) -> list[StoredWorkflowContext]:
         async with self._lock:
             return [
-                copy.deepcopy(ctx)
+                ctx
                 for ctx in self._contexts.values()
                 if ctx.orchestration_id == orchestration_id
             ]
 
     async def get_all_contexts(self) -> list[StoredWorkflowContext]:
         async with self._lock:
-            return [copy.deepcopy(ctx) for ctx in self._contexts.values()]
+            return list(self._contexts.values())

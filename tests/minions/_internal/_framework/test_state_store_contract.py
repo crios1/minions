@@ -49,7 +49,32 @@ def _blob_for(ctx: MinionWorkflowContext) -> bytes:
     return serialize(persist_workflow_context(ctx))
 
 
-@pytest_asyncio.fixture(params=["inmemory", "sqlite"])
+def mk_ctx(
+    workflow_id: str = "wf-0",
+    *,
+    minion_modpath: str = "app.minion",
+    config: str = "cfg",
+    pipeline: str = "app.pipeline",
+    event: object | None = None,
+    context: object | None = None,
+    context_cls: type = dict,
+    next_step_index: int = 0,
+    error_msg: str | None = None,
+) -> MinionWorkflowContext:
+    return MinionWorkflowContext(
+        minion_composite_key=_ck(minion_modpath, config=config, pipeline=pipeline),
+        minion_modpath=minion_modpath,
+        workflow_id=workflow_id,
+        event={} if event is None else event,
+        context={} if context is None else context,
+        context_cls=context_cls,
+        next_step_index=next_step_index,
+        started_at=time.time(),
+        error_msg=error_msg,
+    )
+
+
+@pytest_asyncio.fixture(params=["inmemory", "sqlite"], ids=["inmemory", "sqlite"])
 async def store_and_logger(
     request: pytest.FixtureRequest, tmp_path: str
 ) -> AsyncGenerator[tuple[StateStore, InMemoryLogger], None]:
@@ -58,31 +83,41 @@ async def store_and_logger(
     if request.param == "sqlite":
         db_path = os.path.join(tmp_path, "state.db")
         store = SQLiteStateStore(db_path=db_path, logger=logger)
-        await store.startup()
+        await logger._mn_startup()
+        await store._mn_startup()
         try:
             yield store, logger
         finally:
-            await store.shutdown()
+            await store._mn_shutdown()
+            await logger._mn_shutdown()
         return
 
     store = InMemoryStateStore(logger=logger)
     yield store, logger
 
 
-async def test_state_store_contract_roundtrips_runtime_context(
+# Basic Contract
+
+
+async def test_state_store_starts_empty(
     store_and_logger: tuple[StateStore, InMemoryLogger],
 ):
     store, _ = store_and_logger
-    expected = MinionWorkflowContext(
-        minion_composite_key=_ck("app.minion"),
-        minion_modpath="app.minion",
+
+    ctxs = await store._mn_get_all_decoded_contexts()
+
+    assert ctxs == []
+
+
+async def test_state_store_roundtrips_runtime_context(
+    store_and_logger: tuple[StateStore, InMemoryLogger],
+):
+    store, _ = store_and_logger
+    expected = mk_ctx(
         workflow_id="wf-roundtrip",
         event={"i": 1},
         context={"k": "v"},
-        context_cls=dict,
         next_step_index=3,
-        started_at=time.time(),
-        error_msg=None,
     )
 
     await store._mn_serialize_and_save_context(expected)
@@ -100,41 +135,23 @@ async def test_state_store_contract_roundtrips_runtime_context(
     assert actual.error_msg == expected.error_msg
 
 
-async def test_state_store_contract_starts_empty(
-    store_and_logger: tuple[StateStore, InMemoryLogger],
-):
-    store, _ = store_and_logger
-
-    ctxs = await store._mn_get_all_decoded_contexts()
-
-    assert ctxs == []
-
-
-async def test_state_store_contract_overwrites_existing_workflow_context(
+async def test_state_store_overwrites_existing_workflow_context(
     store_and_logger: tuple[StateStore, InMemoryLogger],
 ):
     store, _ = store_and_logger
     workflow_id = "wf-overwrite"
-    original = MinionWorkflowContext(
-        minion_composite_key=_ck("app.minion"),
-        minion_modpath="app.minion",
+    original = mk_ctx(
         workflow_id=workflow_id,
         event={"i": 1},
         context={"k": "original"},
-        context_cls=dict,
         next_step_index=1,
-        started_at=time.time(),
-        error_msg=None,
     )
-    updated = MinionWorkflowContext(
-        minion_composite_key=_ck("app.minion.updated"),
+    updated = mk_ctx(
         minion_modpath="app.minion.updated",
         workflow_id=workflow_id,
         event={"i": 2},
         context={"k": "updated"},
-        context_cls=dict,
         next_step_index=4,
-        started_at=time.time(),
         error_msg="updated-error",
     )
 
@@ -154,21 +171,16 @@ async def test_state_store_contract_overwrites_existing_workflow_context(
     assert actual.error_msg == updated.error_msg
 
 
-async def test_state_store_contract_deletes_existing_workflow_context(
+async def test_state_store_deletes_existing_workflow_context(
     store_and_logger: tuple[StateStore, InMemoryLogger],
 ):
     store, _ = store_and_logger
     workflow_id = "wf-delete"
-    context = MinionWorkflowContext(
-        minion_composite_key=_ck("app.minion"),
-        minion_modpath="app.minion",
+    context = mk_ctx(
         workflow_id=workflow_id,
         event={"i": 1},
         context={"k": "v"},
-        context_cls=dict,
         next_step_index=2,
-        started_at=time.time(),
-        error_msg=None,
     )
 
     await store._mn_serialize_and_save_context(context)
@@ -178,7 +190,7 @@ async def test_state_store_contract_deletes_existing_workflow_context(
     assert all(ctx.workflow_id != workflow_id for ctx in ctxs)
 
 
-async def test_state_store_contract_delete_missing_workflow_context_is_noop(
+async def test_state_store_delete_missing_workflow_context_is_noop(
     store_and_logger: tuple[StateStore, InMemoryLogger],
 ):
     store, _ = store_and_logger
@@ -189,52 +201,17 @@ async def test_state_store_contract_delete_missing_workflow_context_is_noop(
     assert ctxs == []
 
 
-async def test_state_store_contract_save_context_snapshots_blob_at_call_time(
+# Raw Blob Contract
+
+
+async def test_state_store_get_all_contexts_returns_blob_records(
     store_and_logger: tuple[StateStore, InMemoryLogger],
 ):
     store, _ = store_and_logger
-
-    event = {"i": 1}
-    context = {"nested": {"value": "original"}}
-    runtime_ctx = MinionWorkflowContext(
-        minion_composite_key=_ck("app.minion"),
-        minion_modpath="app.minion",
-        workflow_id="wf-snapshot",
-        event=event,
-        context=context,
-        context_cls=dict,
-        next_step_index=2,
-        started_at=time.time(),
-        error_msg=None,
-    )
-    blob = _blob_for(runtime_ctx)
-
-    await store.save_context("wf-snapshot", runtime_ctx.minion_composite_key, blob)
-    event["i"] = 999
-    context["nested"]["value"] = "mutated"
-    ctxs = await store._mn_get_all_decoded_contexts()
-
-    assert len(ctxs) == 1
-    actual = ctxs[0]
-    assert actual.workflow_id == "wf-snapshot"
-    assert actual.event == {"i": 1}
-    assert actual.context == {"nested": {"value": "original"}}
-
-
-async def test_state_store_contract_get_all_contexts_returns_blob_records(
-    store_and_logger: tuple[StateStore, InMemoryLogger],
-):
-    store, _ = store_and_logger
-    expected = MinionWorkflowContext(
-        minion_composite_key=_ck("app.minion"),
-        minion_modpath="app.minion",
+    expected = mk_ctx(
         workflow_id="wf-record",
         event={"i": 1},
         context={"nested": {"value": "original"}},
-        context_cls=dict,
-        next_step_index=0,
-        started_at=time.time(),
-        error_msg=None,
     )
 
     await store._mn_serialize_and_save_context(expected)
@@ -247,43 +224,36 @@ async def test_state_store_contract_get_all_contexts_returns_blob_records(
     assert deserialize_workflow_context_blob(ctx.context) == expected
 
 
-async def test_state_store_contract_get_contexts_for_orchestration_filters_by_identity(
+# Orchestration Filtering
+
+
+async def test_state_store_get_contexts_for_orchestration_filters_by_identity(
     store_and_logger: tuple[StateStore, InMemoryLogger],
 ):
     store, _ = store_and_logger
     target_modpath = "app.minion.shared"
-    target_a = MinionWorkflowContext(
-        minion_composite_key=_ck(target_modpath, config="cfg-a"),
+    target_a = mk_ctx(
         minion_modpath=target_modpath,
+        config="cfg-a",
         workflow_id="wf-target-a",
         event={"i": 1},
         context={"k": "a"},
-        context_cls=dict,
-        next_step_index=0,
-        started_at=time.time(),
-        error_msg=None,
     )
-    target_b = MinionWorkflowContext(
-        minion_composite_key=_ck(target_modpath, config="cfg-b"),
+    target_b = mk_ctx(
         minion_modpath=target_modpath,
+        config="cfg-b",
         workflow_id="wf-target-b",
         event={"i": 2},
         context={"k": "b"},
-        context_cls=dict,
         next_step_index=1,
-        started_at=time.time(),
-        error_msg=None,
     )
-    other = MinionWorkflowContext(
-        minion_composite_key=_ck(target_modpath, config="cfg-c"),
+    other = mk_ctx(
         minion_modpath=target_modpath,
+        config="cfg-c",
         workflow_id="wf-other",
         event={"i": 3},
         context={"k": "c"},
-        context_cls=dict,
         next_step_index=2,
-        started_at=time.time(),
-        error_msg=None,
     )
 
     await store._mn_serialize_and_save_context(target_a)
@@ -300,6 +270,9 @@ async def test_state_store_contract_get_contexts_for_orchestration_filters_by_id
     assert missing == []
 
 
+# Typed Decode Contract
+
+
 @pytest.mark.parametrize(
     ("event", "context", "event_cls", "context_cls"),
     [
@@ -307,7 +280,7 @@ async def test_state_store_contract_get_contexts_for_orchestration_filters_by_id
         (EventStruct(10), ContextStruct(20), EventStruct, ContextStruct),
     ],
 )
-async def test_state_store_contract_get_contexts_for_orchestration_restores_typed_models(
+async def test_state_store_get_contexts_for_orchestration_restores_typed_models(
     store_and_logger: tuple[StateStore, InMemoryLogger],
     event,
     context,
@@ -315,16 +288,13 @@ async def test_state_store_contract_get_contexts_for_orchestration_restores_type
     context_cls,
 ):
     store, _ = store_and_logger
-    expected = MinionWorkflowContext(
-        minion_composite_key=_ck("app.minion.typed"),
+    expected = mk_ctx(
         minion_modpath="app.minion.typed",
         workflow_id="wf-typed",
         event=event,
         context=context,
         context_cls=context_cls,
         next_step_index=2,
-        started_at=time.time(),
-        error_msg=None,
     )
 
     await store._mn_serialize_and_save_context(expected)
@@ -341,21 +311,19 @@ async def test_state_store_contract_get_contexts_for_orchestration_restores_type
     assert actual == expected
 
 
-async def test_state_store_contract_skips_legacy_unversioned_blob(
+# Decode Failure Handling
+
+
+async def test_state_store_skips_legacy_unversioned_blob(
     store_and_logger: tuple[StateStore, InMemoryLogger],
 ):
     store, logger = store_and_logger
     legacy_payload = serialize_workflow_context(
-        MinionWorkflowContext(
-            minion_composite_key=_ck("app.minion"),
-            minion_modpath="app.minion",
+        mk_ctx(
             workflow_id="wf-legacy-v1",
             event={"i": 99},
             context={"p": "legacy"},
-            context_cls=dict,
             next_step_index=1,
-            started_at=time.time(),
-            error_msg=None,
         )
     )
     legacy_payload["step_index"] = legacy_payload.pop("next_step_index")
@@ -372,21 +340,15 @@ async def test_state_store_contract_skips_legacy_unversioned_blob(
     assert logger.has_log("StateStore failed to decode stored workflow context")
 
 
-async def test_state_store_contract_skips_unknown_schema_blob(
+async def test_state_store_skips_unknown_schema_blob(
     store_and_logger: tuple[StateStore, InMemoryLogger],
 ):
     store, logger = store_and_logger
     unknown_payload = serialize_workflow_context(
-        MinionWorkflowContext(
-            minion_composite_key=_ck("app.minion"),
-            minion_modpath="app.minion",
+        mk_ctx(
             workflow_id="wf-unknown",
             event={"i": 100},
             context={"p": "unknown"},
-            context_cls=dict,
-            next_step_index=0,
-            started_at=time.time(),
-            error_msg=None,
         )
     )
     unknown_payload["schema_version"] = 999

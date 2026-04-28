@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import gc
+import hashlib
 import importlib
+import json
 import psutil
 import uuid
 
@@ -11,7 +13,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Iterable, Mapping, Any, get_type_hints, overload
 
-from .minion import Minion
+from .minion import Minion, WorkflowPersistenceFailurePolicy
 from .pipeline import Pipeline
 from .resource import Resource
 from .types import T_Event, T_Ctx
@@ -68,6 +70,13 @@ class Gru:
         logger: Logger | None | _UnsetType = _UNSET,
         metrics: Metrics | None | _UnsetType = _UNSET,
         metrics_port: int = 8081,
+        workflow_persistence_failure_policy: WorkflowPersistenceFailurePolicy = "continue-on-failure",
+        workflow_persistence_retry_delay_seconds: float = 1.0,
+        workflow_persistence_retry_max_delay_seconds: float = 60.0,
+        workflow_persistence_retry_backoff_multiplier: float = 2.0,
+        workflow_persistence_retry_jitter_ratio: float = 0.1,
+        workflow_persistence_retry_warning_interval_seconds: float = 30.0,
+        workflow_persistence_retry_error_after_seconds: float | None = 60.0,
     ):
         """
         Args:
@@ -78,6 +87,21 @@ class Gru:
             metrics: Optional Metrics backend. If omitted, PrometheusMetrics is used on the given port.
                     Pass None to disable metrics collection.
             metrics_port: The port to expose Prometheus metrics on (only used if default metrics backend is enabled).
+            workflow_persistence_failure_policy: Behavior to use when a workflow checkpoint
+                    cannot be persisted. `"continue-on-failure"` keeps the workflow running
+                    and retries at the next checkpoint. `"idle-until-persisted"` pauses
+                    workflow advancement until persistence succeeds.
+            workflow_persistence_retry_delay_seconds: Delay between retry attempts when
+                    `workflow_persistence_failure_policy="idle-until-persisted"`.
+            workflow_persistence_retry_max_delay_seconds: Maximum delay between retry attempts.
+            workflow_persistence_retry_backoff_multiplier: Multiplier applied to retry delay
+                    after each retryable persistence failure.
+            workflow_persistence_retry_jitter_ratio: Fractional jitter applied to retry
+                    delays to avoid synchronized retries.
+            workflow_persistence_retry_warning_interval_seconds: Minimum interval for
+                    repeated idle persistence warnings.
+            workflow_persistence_retry_error_after_seconds: Elapsed idle retry time after
+                    which repeated warnings escalate to error logs. Pass None to disable.
 
         Note:
             This constructor uses a unique internal sentinel (`_UNSET`) to distinguish between omitted arguments and those explicitly set to None.
@@ -94,6 +118,38 @@ class Gru:
 
         self._is_started = False
         self._is_shutdown = False
+        self._workflow_persistence_failure_policy = Minion._mn_validate_workflow_persistence_failure_policy(
+            workflow_persistence_failure_policy,
+        )
+        self._workflow_persistence_retry_delay_seconds = Minion._mn_validate_positive_seconds(
+            "workflow_persistence_retry_delay_seconds",
+            workflow_persistence_retry_delay_seconds,
+        )
+        self._workflow_persistence_retry_max_delay_seconds = Minion._mn_validate_positive_seconds(
+            "workflow_persistence_retry_max_delay_seconds",
+            workflow_persistence_retry_max_delay_seconds,
+        )
+        if self._workflow_persistence_retry_max_delay_seconds < self._workflow_persistence_retry_delay_seconds:
+            raise ValueError(
+                "workflow_persistence_retry_max_delay_seconds must be greater than or equal to "
+                "workflow_persistence_retry_delay_seconds"
+            )
+        self._workflow_persistence_retry_backoff_multiplier = Minion._mn_validate_backoff_multiplier(
+            "workflow_persistence_retry_backoff_multiplier",
+            workflow_persistence_retry_backoff_multiplier,
+        )
+        self._workflow_persistence_retry_jitter_ratio = Minion._mn_validate_jitter_ratio(
+            "workflow_persistence_retry_jitter_ratio",
+            workflow_persistence_retry_jitter_ratio,
+        )
+        self._workflow_persistence_retry_warning_interval_seconds = Minion._mn_validate_positive_seconds(
+            "workflow_persistence_retry_warning_interval_seconds",
+            workflow_persistence_retry_warning_interval_seconds,
+        )
+        self._workflow_persistence_retry_error_after_seconds = Minion._mn_validate_optional_nonnegative_seconds(
+            "workflow_persistence_retry_error_after_seconds",
+            workflow_persistence_retry_error_after_seconds,
+        )
 
         if logger is _UNSET:
             self._logger = FileLogger()
@@ -170,6 +226,13 @@ class Gru:
         logger: Logger | None | _UnsetType = _UNSET,
         metrics: Metrics | None | _UnsetType = _UNSET,
         metrics_port: int = 8081,
+        workflow_persistence_failure_policy: WorkflowPersistenceFailurePolicy = "continue-on-failure",
+        workflow_persistence_retry_delay_seconds: float = 1.0,
+        workflow_persistence_retry_max_delay_seconds: float = 60.0,
+        workflow_persistence_retry_backoff_multiplier: float = 2.0,
+        workflow_persistence_retry_jitter_ratio: float = 0.1,
+        workflow_persistence_retry_warning_interval_seconds: float = 30.0,
+        workflow_persistence_retry_error_after_seconds: float | None = 60.0,
     ) -> "Gru":
         cls._allow_direct_init = True
         try:
@@ -179,6 +242,13 @@ class Gru:
                 logger=logger,
                 metrics=metrics,
                 metrics_port=metrics_port,
+                workflow_persistence_failure_policy=workflow_persistence_failure_policy,
+                workflow_persistence_retry_delay_seconds=workflow_persistence_retry_delay_seconds,
+                workflow_persistence_retry_max_delay_seconds=workflow_persistence_retry_max_delay_seconds,
+                workflow_persistence_retry_backoff_multiplier=workflow_persistence_retry_backoff_multiplier,
+                workflow_persistence_retry_jitter_ratio=workflow_persistence_retry_jitter_ratio,
+                workflow_persistence_retry_warning_interval_seconds=workflow_persistence_retry_warning_interval_seconds,
+                workflow_persistence_retry_error_after_seconds=workflow_persistence_retry_error_after_seconds,
             )
         finally:
             cls._allow_direct_init = False
@@ -234,16 +304,29 @@ class Gru:
     def _make_minion_instance_id(self) -> str:
         return uuid.uuid4().hex
 
-    def _make_minion_composite_key(self, minion_modpath: str, minion_config_path: str | None, pipeline_modpath: str) -> str:
+    @staticmethod
+    def _make_inline_config_identity(minion_config: Mapping[str, Any]) -> str:
+        payload = json.dumps(
+            minion_config,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=repr,
+        )
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+        return f"<inline:{digest}>"
+
+    @staticmethod
+    def _make_minion_composite_key(minion_modpath: str, minion_config_path: str | None, pipeline_modpath: str) -> str:
         "conceptually composite_key is project-root-relative identity (with absolute fallbacks)"
-        if minion_config_path == "<inline>":
-            cfg = "<inline>"
-        elif minion_config_path:
+        if minion_config_path:
             p = Path(minion_config_path)
-            try:
-                cfg = p.resolve().relative_to(Path.cwd().resolve()).as_posix()
-            except ValueError:
-                cfg = p.resolve().as_posix()
+            if minion_config_path.startswith("<inline:"):
+                cfg = minion_config_path
+            else:
+                try:
+                    cfg = p.resolve().relative_to(Path.cwd().resolve()).as_posix()
+                except ValueError:
+                    cfg = p.resolve().as_posix()
         else:
             cfg = ""
         return f"{minion_modpath}|{cfg}|{pipeline_modpath}"
@@ -292,7 +375,14 @@ class Gru:
             config_path=minion_config_path,
             state_store=self._state_store,
             metrics=self._metrics,
-            logger=self._logger
+            logger=self._logger,
+            workflow_persistence_failure_policy=self._workflow_persistence_failure_policy,
+            workflow_persistence_retry_delay_seconds=self._workflow_persistence_retry_delay_seconds,
+            workflow_persistence_retry_max_delay_seconds=self._workflow_persistence_retry_max_delay_seconds,
+            workflow_persistence_retry_backoff_multiplier=self._workflow_persistence_retry_backoff_multiplier,
+            workflow_persistence_retry_jitter_ratio=self._workflow_persistence_retry_jitter_ratio,
+            workflow_persistence_retry_warning_interval_seconds=self._workflow_persistence_retry_warning_interval_seconds,
+            workflow_persistence_retry_error_after_seconds=self._workflow_persistence_retry_error_after_seconds,
         )
 
     async def _start_minion(self, minion: Minion):
@@ -673,7 +763,11 @@ class Gru:
                 )
             minion_modpath = minion.__module__
             pipeline_modpath = pipeline.__module__
-            minion_config_path = "<inline>" if minion_config else None
+            minion_config_path = (
+                self._make_inline_config_identity(minion_config)
+                if minion_config
+                else None
+            )
 
         else:
             return StartMinionResult(
