@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import typing
+import types
 from collections.abc import Mapping
 from dataclasses import fields, is_dataclass
 from typing import Any, get_args, get_origin, get_type_hints
@@ -71,7 +72,7 @@ def _is_serializable_field_type(tp: Any) -> bool:
 
         origin, args = _normalize_origin_args(t)
 
-        if origin is typing.Union:
+        if origin is typing.Union or origin is types.UnionType:
             stack.extend(args)
             continue
 

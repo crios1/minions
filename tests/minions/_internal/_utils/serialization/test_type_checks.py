@@ -57,8 +57,13 @@ class _OKTD(TypedDict):
 
 
 @dataclass
-class _HasOptional:
+class _DCWithOptional:
     x: Optional[int]
+
+
+@dataclass
+class _DCWithPEP604Optional:
+    x: int | None
 
 
 class _TDWithOptional(TypedDict, total=False):
@@ -124,7 +129,10 @@ def test_is_type_serializable_recurses_dataclass_and_typed_dict_fields():
 
 
 def test_optional_and_union_supported_by_type_policy():
-    assert is_type_serializable(_HasOptional) is True
+    assert is_type_serializable(_DCWithOptional) is True
+    assert is_type_serializable(_DCWithPEP604Optional) is True
+    assert is_type_serializable(int | str) is True
+    assert is_type_serializable(int | set[int]) is False
     assert is_type_serializable(_TDWithOptional) is True
 
 

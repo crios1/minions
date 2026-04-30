@@ -243,11 +243,6 @@
 
 - todo: write tests for gru.start_minion to lock in that it works with class and string-based starts
 
-- todo: add early (best-effort) serialization validation for user-provided event and workflow context types at Pipeline / Minion definition time
-  - statically check that user type annotations are supported by gru's serialization, and raise when an annotation is not
-  - this is an early feedback mechanism, full serializability can only be guaranteed at runtime
-  - ensure no on-going validations; just validation once at class definition time  
-
 - todo: add "crash testing" to test suite to ensure the Minions runtime preserves its crash guarantees
   - todo: add deterministic "boom user code" testing across every user-code runtime surface
     - goal:
