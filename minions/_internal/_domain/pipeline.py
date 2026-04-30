@@ -13,7 +13,7 @@ from .._framework.metrics_constants import (
     PIPELINE_ERROR_TOTAL, PIPELINE_EVENT_PRODUCED_TOTAL,
     PIPELINE_EVENT_FANOUT_TOTAL
 )
-from .._utils.serialization import is_type_serializable
+from .._utils.serialization import require_type_serializable
 from .._utils.get_original_bases import get_original_bases
 
 class Pipeline(AsyncService, Generic[T_Event]):
@@ -63,12 +63,11 @@ class Pipeline(AsyncService, Generic[T_Event]):
 
         cls._mn_event_cls = args[0]
 
-        if not is_type_serializable(cls._mn_event_cls):
-            # TODO: need to centralize this error/errormsg (maybe have a is_type_serializable_raises()?)
-            raise TypeError(
-                f"{cls.__name__}: event type is not JSON-serializable. "
-                "Only JSON-safe types are supported (str, int, float, bool, None, list, tuple, dict[str, V], dataclass, msgspec.Struct, TypedDict)."
-            )
+        require_type_serializable(
+            cls._mn_event_cls,
+            owner=cls.__name__,
+            type_label="event type",
+        )
 
     def __init__(
         self,

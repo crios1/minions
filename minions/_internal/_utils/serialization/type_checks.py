@@ -9,6 +9,8 @@ from typing import Any, get_args, get_origin, get_type_hints
 
 import msgspec
 
+from .constants import SUPPORTED_TYPES_MSG
+
 
 def _is_typed_dict_type(tp: Any) -> bool:
     return (
@@ -207,3 +209,14 @@ def is_type_serializable(tp: Any) -> bool:
         return True
 
     return False
+
+
+def require_type_serializable(tp: Any, *, owner: str, type_label: str) -> None:
+    """Raise TypeError when `tp` is not accepted by `is_type_serializable`."""
+    if is_type_serializable(tp):
+        return
+
+    raise TypeError(
+        f"{owner}: {type_label} is not serializable. "
+        f"{SUPPORTED_TYPES_MSG}"
+    )

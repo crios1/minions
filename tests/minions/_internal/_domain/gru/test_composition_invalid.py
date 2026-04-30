@@ -94,7 +94,7 @@ class TestInvalidComposition:
 
                 assert not result.success
                 assert result.reason
-                assert "workflow context is not JSON-serializable" in result.reason
+                assert "workflow context is not serializable" in result.reason
 
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_minion_event_not_serializable(self, gru_factory, tests_dir):
@@ -115,7 +115,7 @@ class TestInvalidComposition:
 
                 assert not result.success
                 assert result.reason
-                assert "event type is not JSON-serializable" in result.reason
+                assert "event type is not serializable" in result.reason
 
     class TestPipelineFile:
         @pytest.mark.asyncio
@@ -203,7 +203,7 @@ class TestInvalidComposition:
 
                 assert not result.success
                 assert result.reason
-                assert "event type is not JSON-serializable" in result.reason
+                assert "event type is not serializable" in result.reason
 
     # Resource doesn't have tests like in TestMinion and TestPipeline
     # because Resources dependencies are declared as type hints
@@ -286,7 +286,7 @@ class TestInvalidCompositionUsingNewAssets:
 
                 assert not result.success
                 assert result.reason
-                assert "workflow context is not JSON-serializable" in result.reason
+                assert "workflow context is not serializable" in result.reason
 
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_minion_event_not_serializable(
@@ -305,7 +305,7 @@ class TestInvalidCompositionUsingNewAssets:
 
                 assert not result.success
                 assert result.reason
-                assert "event type is not JSON-serializable" in result.reason
+                assert "event type is not serializable" in result.reason
 
     class TestPipelineFile:
         @pytest.mark.asyncio
@@ -374,4 +374,4 @@ class TestInvalidCompositionUsingNewAssets:
 
                 assert not result.success
                 assert result.reason
-                assert "event type is not JSON-serializable" in result.reason
+                assert "event type is not serializable" in result.reason

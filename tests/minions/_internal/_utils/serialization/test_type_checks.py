@@ -10,6 +10,7 @@ import pytest
 from minions._internal._utils.serialization import (
     deserialize,
     is_type_serializable,
+    require_type_serializable,
     serialize,
 )
 from minions._internal._utils.serialization import type_checks as s
@@ -73,6 +74,21 @@ def test_is_type_serializable():
     assert is_type_serializable(MyStruct)
     assert is_type_serializable(list)
     assert is_type_serializable(int)
+
+
+def test_require_type_serializable_raises_centralized_error_message():
+    with pytest.raises(
+        TypeError,
+        match=(
+            r"MyOwner: event type is not serializable\. "
+            r"Supported types:"
+        ),
+    ):
+        require_type_serializable(set[int], owner="MyOwner", type_label="event type")
+
+
+def test_require_type_serializable_accepts_serializable_type():
+    require_type_serializable(MyDC, owner="MyOwner", type_label="event type")
 
 
 def test_is_type_serializable_enforces_dict_key_and_value_recursion():

@@ -50,7 +50,7 @@ from .._framework.metrics_constants import (
 from .._framework.state_store import PersistenceOperationResult, StateStore
 from .._utils.format_exception_traceback import format_exception_traceback
 from .._utils.get_class import get_class
-from .._utils.serialization import is_type_serializable
+from .._utils.serialization import require_type_serializable
 from .._utils.get_original_bases import get_original_bases
 
 ExecutionStatus = Literal["undefined", "interrupted", "aborted", "failed", "succeeded"]
@@ -126,20 +126,20 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         cls._mn_event_cls = args[0]
         cls._mn_workflow_ctx_cls = args[1]
 
-        if not is_type_serializable(cls._mn_event_cls):
-            raise TypeError(
-                f"{cls.__name__}: event type is not JSON-serializable. "
-                "Only JSON-safe types are supported (str, int, float, bool, None, list, tuple, dict[str, V], dataclass, msgspec.Struct, TypedDict)."
-            )
+        require_type_serializable(
+            cls._mn_event_cls,
+            owner=cls.__name__,
+            type_label="event type",
+        )
         
         if cls._mn_event_cls in (str, int, float, bool, type(None)):
             raise TypeError(f"{cls.__name__}: event type must be a structured type, not a primitive")
 
-        if not is_type_serializable(cls._mn_workflow_ctx_cls):
-            raise TypeError(
-                f"{cls.__name__}: workflow context is not JSON-serializable. "
-                "Only JSON-safe types are supported (str, int, float, bool, None, list, tuple, dict[str, V], dataclass, msgspec.Struct, TypedDict)."
-            )
+        require_type_serializable(
+            cls._mn_workflow_ctx_cls,
+            owner=cls.__name__,
+            type_label="workflow context",
+        )
 
         if cls._mn_workflow_ctx_cls in (str, int, float, bool, type(None)):
             raise TypeError(f"{cls.__name__}: workflow context type must be a structured type, not a primitive")

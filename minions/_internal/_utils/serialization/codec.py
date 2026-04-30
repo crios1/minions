@@ -7,15 +7,11 @@ from typing import Any, TypeVar, overload
 
 import msgspec
 
+from .constants import SUPPORTED_TYPES_MSG
+
 T = TypeVar("T")
 
 _ENCODER = msgspec.msgpack.Encoder()
-
-SUPPORTED_TYPES_MSG = (
-    "Supported types: "
-    "(str, int, float, bool, None, bytes, "
-    "list, tuple, dict[str, V], dataclass/msgspec.Struct/TypedDict)."
-)
 
 
 def serialize(obj: Any, *, exp_msg_prefix: str = "") -> bytes:
