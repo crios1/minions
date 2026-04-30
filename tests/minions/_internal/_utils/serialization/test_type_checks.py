@@ -9,8 +9,10 @@ import msgspec
 import pytest
 
 from minions._internal._utils.serialization import (
+    SERIALIZABLE_PRIMITIVE_TYPES,
     deserialize,
     is_type_serializable,
+    require_type_not_primitive,
     require_type_serializable,
     serialize,
 )
@@ -90,6 +92,21 @@ def test_require_type_serializable_raises_centralized_error_message():
 
 def test_require_type_serializable_accepts_serializable_type():
     require_type_serializable(MyDC, owner="MyOwner", type_label="event type")
+
+
+@pytest.mark.parametrize("primitive_type", SERIALIZABLE_PRIMITIVE_TYPES)
+def test_require_type_not_primitive_raises_centralized_error_message(primitive_type):
+    with pytest.raises(
+        TypeError,
+        match=(
+            r"MyOwner: event type must be a structured type, not a primitive"
+        ),
+    ):
+        require_type_not_primitive(primitive_type, owner="MyOwner", type_label="event type")
+
+
+def test_require_type_not_primitive_accepts_structured_type():
+    require_type_not_primitive(MyDC, owner="MyOwner", type_label="event type")
 
 
 def test_is_type_serializable_enforces_dict_key_and_value_recursion():

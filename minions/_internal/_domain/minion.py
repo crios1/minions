@@ -50,7 +50,7 @@ from .._framework.metrics_constants import (
 from .._framework.state_store import PersistenceOperationResult, StateStore
 from .._utils.format_exception_traceback import format_exception_traceback
 from .._utils.get_class import get_class
-from .._utils.serialization import require_type_serializable
+from .._utils.serialization import require_type_not_primitive, require_type_serializable
 from .._utils.get_original_bases import get_original_bases
 
 ExecutionStatus = Literal["undefined", "interrupted", "aborted", "failed", "succeeded"]
@@ -132,8 +132,11 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             type_label="event type",
         )
         
-        if cls._mn_event_cls in (str, int, float, bool, type(None)):
-            raise TypeError(f"{cls.__name__}: event type must be a structured type, not a primitive")
+        require_type_not_primitive(
+            cls._mn_event_cls,
+            owner=cls.__name__,
+            type_label="event type",
+        )
 
         require_type_serializable(
             cls._mn_workflow_ctx_cls,
@@ -141,8 +144,11 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             type_label="workflow context",
         )
 
-        if cls._mn_workflow_ctx_cls in (str, int, float, bool, type(None)):
-            raise TypeError(f"{cls.__name__}: workflow context type must be a structured type, not a primitive")
+        require_type_not_primitive(
+            cls._mn_workflow_ctx_cls,
+            owner=cls.__name__,
+            type_label="workflow context type",
+        )
 
         res_map: dict[str, list[str]] = {}
         for attr, hint in get_type_hints(cls).items():

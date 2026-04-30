@@ -13,7 +13,7 @@ from .._framework.metrics_constants import (
     PIPELINE_ERROR_TOTAL, PIPELINE_EVENT_PRODUCED_TOTAL,
     PIPELINE_EVENT_FANOUT_TOTAL
 )
-from .._utils.serialization import require_type_serializable
+from .._utils.serialization import require_type_not_primitive, require_type_serializable
 from .._utils.get_original_bases import get_original_bases
 
 class Pipeline(AsyncService, Generic[T_Event]):
@@ -64,6 +64,12 @@ class Pipeline(AsyncService, Generic[T_Event]):
         cls._mn_event_cls = args[0]
 
         require_type_serializable(
+            cls._mn_event_cls,
+            owner=cls.__name__,
+            type_label="event type",
+        )
+
+        require_type_not_primitive(
             cls._mn_event_cls,
             owner=cls.__name__,
             type_label="event type",

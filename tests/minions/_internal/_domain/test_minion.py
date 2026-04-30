@@ -9,6 +9,7 @@ from minions._internal._domain.exceptions import UnsupportedUserCode
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_noop import NoOpStateStore
+from minions._internal._utils.serialization import SERIALIZABLE_PRIMITIVE_TYPES
 
 from tests.assets.support.mixin import Mixin
 
@@ -88,15 +89,17 @@ class TestMinionSubclassingInvalid:
             "Example: class MyMinion(Minion[MyPipelineEvent, MyWorkflowCtx])"
         )
 
-    def test_invalid_event_type(self):
+    @pytest.mark.parametrize("event_type", SERIALIZABLE_PRIMITIVE_TYPES)
+    def test_reject_primitive_event_type(self, event_type):
         with pytest.raises(TypeError) as excinfo:
-            class MyMinion(Minion[int, MyContext]):
+            class MyMinion(Minion[event_type, MyContext]):
                 ...
         assert str(excinfo.value) == "MyMinion: event type must be a structured type, not a primitive"
 
-    def test_invalid_context_type(self):
+    @pytest.mark.parametrize("context_type", SERIALIZABLE_PRIMITIVE_TYPES)
+    def test_reject_primitive_context_type(self, context_type):
         with pytest.raises(TypeError) as excinfo:
-            class MyMinion(Minion[MyEvent, int]):
+            class MyMinion(Minion[MyEvent, context_type]):
                 ...
         assert str(excinfo.value) == "MyMinion: workflow context type must be a structured type, not a primitive"
 

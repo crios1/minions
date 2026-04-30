@@ -7,6 +7,7 @@ from minions._internal._framework.metrics_constants import (
     LABEL_PIPELINE,
     PIPELINE_ERROR_TOTAL,
 )
+from minions._internal._utils.serialization import SERIALIZABLE_PRIMITIVE_TYPES
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 
 
@@ -31,6 +32,16 @@ class TestPipelineSubclassingInvalid:
             "SomePipeline must declare an event type "
             "(e.g. class MyPipeline(Pipeline[MyEvent]): ...)."
         )
+
+    @pytest.mark.parametrize("event_type", SERIALIZABLE_PRIMITIVE_TYPES)
+    def test_reject_primitive_event_type(self, event_type):
+        with pytest.raises(
+            TypeError,
+            match="SomePipeline: event type must be a structured type, not a primitive",
+        ):
+            class SomePipeline(Pipeline[event_type]):
+                async def produce_event(self):  # pragma: no cover
+                    ...
 
 
 @pytest.mark.asyncio
