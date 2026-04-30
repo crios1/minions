@@ -6,6 +6,7 @@ from minions._internal._framework.metrics import (
     CounterSample,
     GaugeSample,
     HistogramSample,
+    Kind,
     SnapshotCounters,
     SnapshotGauges,
     SnapshotHistograms,
@@ -136,12 +137,12 @@ class _InMemoryMetric(LabelledMetric):
         self,
         name: str,
         label_names: list[str],
-        kind: str,
+        kind: Kind,
         record_metric_labels: Callable[[MetricLabelEmission], None],
     ):
         self.name = name
         self.label_names = label_names
-        self.kind = kind  # "counter" | "gauge" | "histogram"
+        self.kind = kind
         self._record_metric_labels = record_metric_labels
         self._values: Dict[LabelKey, Any] = {}
         self._lock = threading.Lock()
@@ -189,7 +190,7 @@ class InMemoryMetrics(SpiedMetrics):
         self._metric_label_emissions: list[MetricLabelEmission] = []
         self._metric_label_emissions_lock = threading.Lock()
 
-    def create_metric(self, metric_name: str, label_names: list[str], kind: str) -> LabelledMetric:
+    def create_metric(self, metric_name: str, label_names: list[str], kind: Kind) -> LabelledMetric:
         return _InMemoryMetric(
             metric_name,
             label_names,

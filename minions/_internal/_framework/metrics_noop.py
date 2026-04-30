@@ -1,4 +1,4 @@
-from .metrics import Metrics, SnapshotCounters, SnapshotGauges, SnapshotHistograms
+from .metrics import Kind, Metrics, SnapshotCounters, SnapshotGauges, SnapshotHistograms
 from .metrics_interface import LabelledMetric
 from .logger_noop import NoOpLogger
 
@@ -19,7 +19,7 @@ class NoOpMetrics(Metrics):
         super().__init__(NoOpLogger()) 
         self._noop_metric = _NoOpMetric()
 
-    def create_metric(self, metric_name: str, label_names: list[str], kind: str) -> LabelledMetric:
+    def create_metric(self, metric_name: str, label_names: list[str], kind: Kind) -> LabelledMetric:
         return self._noop_metric
 
     def snapshot_counters(self) -> SnapshotCounters:

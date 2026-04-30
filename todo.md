@@ -312,15 +312,6 @@
   - why it matters:
     - narrowing the decode contract would make persistence behavior easier to reason about and reduce legacy codec branching
 
-- todo: tighten test in-memory metric kind typing
-  - problem:
-    - `_InMemoryMetric.kind` is currently a plain string even though only `counter`, `gauge`, and `histogram` are valid
-  - options:
-    - add a `Literal["counter", "gauge", "histogram"]` alias
-    - use a small enum if that improves test helper readability
-  - why it matters:
-    - stronger typing in the test metric backend makes metric contract tests easier to maintain and harder to misuse
-
 - todo: spec out opt-in freshness / staleness handling for time-sensitive events
   - problem:
     - startup gating now correctly delays live event handling until a minion is ready, but some domains may need to reject events that become stale before handling begins
