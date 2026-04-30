@@ -44,19 +44,15 @@ def _normalize_origin_args(tp: Any) -> tuple[Any, tuple[Any, ...]]:
     return origin, args
 
 def _mapping_value_type_if_str_key(origin: Any, args: tuple[Any, ...]) -> tuple[bool, Any]:
-    """Return `(ok, value_type)` for dict-like annotations using `str` keys."""
-    if origin is dict:
-        if not args:
-            return True, None
-        if len(args) != 2:
-            return True, None
-        k, v = args
-        if k is not str:
-            return False, None
-        return True, v
-
-    # Non-dict mapping subclasses: best-effort accept without a value type
-    return True, None
+    """Return `(ok, value_type)` for mapping annotations using `str` keys."""
+    if not args:
+        return origin is dict, None
+    if len(args) != 2:
+        return origin is not dict, None
+    k, v = args
+    if k is not str:
+        return False, None
+    return True, v
 
 def _is_serializable_leaf_type(tp: Any) -> bool:
     return tp in (str, int, float, bool, type(None), bytes)

@@ -211,8 +211,10 @@ def test_tuple_empty_and_param_variants():
 def test_mapping_and_dict_key_checks():
     from typing import Mapping as TypingMapping, Dict as TypingDict
 
+    assert s.is_type_serializable(TypingMapping) is False
     assert s.is_type_serializable(TypingMapping[str, int]) is True
-    assert s.is_type_serializable(TypingMapping[int, int]) is True
+    assert s.is_type_serializable(TypingMapping[int, int]) is False
+    assert s.is_type_serializable(TypingMapping[str, set[int]]) is False
 
     assert s._is_serializable_field_type(dict) is True
     assert s._is_serializable_field_type(TypingDict[str, int]) is True
@@ -418,11 +420,19 @@ def test_direct_dict_branches_with_builtin_generics():
 
 
 def test_mapping_helper_and_edge_cases_direct():
+    from typing import Mapping as TypingMapping
+
     assert s._mapping_value_type_if_str_key(dict, ()) == (True, None)
-    assert s._mapping_value_type_if_str_key(dict, (int,)) == (True, None)
+    assert s._mapping_value_type_if_str_key(TypingMapping, ()) == (False, None)
+    assert s._mapping_value_type_if_str_key(dict, (int,)) == (False, None)
+    assert s._mapping_value_type_if_str_key(TypingMapping, (int,)) == (True, None)
     assert s._mapping_value_type_if_str_key(dict, (int, int)) == (False, None)
+    assert s._mapping_value_type_if_str_key(TypingMapping, (int, int)) == (False, None)
 
     ok, v = s._mapping_value_type_if_str_key(dict, (str, int))
+    assert ok is True and v is int
+
+    ok, v = s._mapping_value_type_if_str_key(TypingMapping, (str, int))
     assert ok is True and v is int
 
 

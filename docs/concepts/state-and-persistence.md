@@ -11,6 +11,7 @@ Minions treats workflow context as durable. Before each step executes, Gru saves
 ## Workflow lifecycle
 
 - Context and events must be JSON-serializable structured types (dataclasses/TypedDicts, not bare primitives).
+- Map-like event/context data must use string keys when annotated explicitly (`dict[str, V]` or `Mapping[str, V]`). Bare `dict` remains accepted as an ad hoc/prototyping schema, but production workflow state should use explicit serializable value types.
 - Context is saved **before** each step runs; failures keep the last saved state for debugging/resume.
 - Success deletes the context at the end; aborts log and clean up.
 - Runtime cancellation is treated as an interruption, not an intentional abort. Interrupted workflows keep their persisted context so they can be replayed later; raise `AbortWorkflow` from a step when the workflow should stop as an intentional terminal outcome.
