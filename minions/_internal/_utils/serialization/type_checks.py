@@ -150,65 +150,7 @@ def is_type_serializable(tp: Any) -> bool:
     classes or validate dataclass default-factory return values. Runtime
     defaults may still be non-serializable even when annotations look valid.
     """
-    origin = get_origin(tp)
-    if origin is typing.Union:
-        return all(is_type_serializable(a) for a in get_args(tp))
-
-    if _is_serializable_leaf_type(tp):
-        return True
-
-    if tp is bytes:
-        return True
-
-    origin = get_origin(tp) or tp
-
-    if origin is list or tp is list:
-        args = get_args(tp)
-        if not args:
-            return True
-        return _is_serializable_field_type(tp)
-
-    if origin is tuple or tp is tuple:
-        args = get_args(tp)
-        if not args:
-            return True
-        return _is_serializable_field_type(tp)
-
-    if origin is dict or tp is dict:
-        args = get_args(tp)
-        if not args:
-            return True
-        # NOTE: malformed dict arg shapes currently propagate unpack errors.
-        k, v = args
-        if k is not str:
-            return False
-        return _is_serializable_field_type(v)
-
-    if _is_dataclass_type(tp):
-        hints = get_type_hints(tp, include_extras=True)
-        return all(_is_serializable_field_type(hints[f.name]) for f in fields(tp))
-
-    if _is_msgspec_struct_type(tp):
-        hints = get_type_hints(tp, include_extras=True)
-        return all(_is_serializable_field_type(hints[f.name]) for f in msgspec.structs.fields(tp))
-
-    if _is_typed_dict_type(tp):
-        hints = get_type_hints(tp, include_extras=True)
-        return all(_is_serializable_field_type(t) for t in hints.values())
-
-    if _is_mapping_type(tp):
-        origin = get_origin(tp)
-        if origin is dict:
-            args = get_args(tp)
-            if len(args) != 2:
-                return True
-            k, v = args
-            if k is not str:
-                return False
-            return _is_serializable_field_type(v)
-        return True
-
-    return False
+    return _is_serializable_field_type(tp)
 
 
 def require_type_serializable(tp: Any, *, owner: str, type_label: str) -> None:

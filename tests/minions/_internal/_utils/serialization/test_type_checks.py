@@ -247,6 +247,7 @@ def test_mapping_dict_args_len_not_two_and_exception_branch(monkeypatch):
     monkeypatch.setattr(s, "get_origin", lambda tp: dict if tp is Sentinel2 else s.get_origin(tp))
     monkeypatch.setattr(s, "get_args", lambda tp: (int, int, int) if tp is Sentinel2 else s.get_args(tp))
     assert s._is_serializable_field_type(Sentinel2) is False
+    assert s.is_type_serializable(Sentinel2) is False
 
 
 def test_is_type_serializable_mapping_len_not_two_returns_true(monkeypatch):
@@ -380,14 +381,18 @@ def test_mapping_origin_dict_len2_k_str_appends_and_continues(monkeypatch):
     assert s._is_serializable_field_type(SentinelI) is True
 
 
-def test_is_type_serializable_bytes_hits_bytes_branch(monkeypatch):
-    real_leaf = s._is_serializable_leaf_type
+def test_is_type_serializable_delegates_to_field_type_checker(monkeypatch):
+    calls = []
 
-    monkeypatch.setattr(s, "_is_serializable_leaf_type", lambda tp: False if tp is bytes else real_leaf(tp))
-    try:
-        assert s.is_type_serializable(bytes) is True
-    finally:
-        monkeypatch.setattr(s, "_is_serializable_leaf_type", real_leaf)
+    def fake_field_type_checker(tp):
+        calls.append(tp)
+        return tp is int
+
+    monkeypatch.setattr(s, "_is_serializable_field_type", fake_field_type_checker)
+
+    assert s.is_type_serializable(int) is True
+    assert s.is_type_serializable(str) is False
+    assert calls == [int, str]
 
 
 def test_is_type_serializable_mapping_dict_len_not_two_true_and_k_not_str(monkeypatch):
