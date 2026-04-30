@@ -196,7 +196,7 @@ class TestValidUsage:
         SimpleResourcedMinion1.reset_spy()
 
         # TODO: i'm testing resource sharing between minions spawned from same minion class but different configs
-        # i should also test the case where i spawn from seperate minion classes/files
+        # i should also test the case where i spawn from separate minion classes/files
         cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
         cfg2 = str(tests_dir / "assets" / "config/minions/b.toml")
         cfg3 = str(tests_dir / "assets" / "config/minions/c.toml")
@@ -204,7 +204,7 @@ class TestValidUsage:
         # TODO: consider refactoring gru to have the kwargs be classes instead of instances
         # it might be cleaner and then the user wont have to manually wire things like this
         # and cuz then gru can handle instantiation and startup
-        # but what if the use want to bring-thier-own and wants to instantiate with parameters?
+        # but what if the user wants to bring their own and instantiate with parameters?
         # ask copilot
         # !! will have to do the update across this whole test file !!
 

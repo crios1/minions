@@ -215,7 +215,7 @@ class AsyncLifecycle(ABC):
         self,
         *,
         name: str,
-        lifecyle_method: Callable[[], Awaitable[T]],
+        lifecycle_method: Callable[[], Awaitable[T]],
         log_kwargs: dict | None = None,
         pre: Callable[..., T | Awaitable[T]] | None = None,
         pre_args: list | None = None,
@@ -228,7 +228,7 @@ class AsyncLifecycle(ABC):
                 result = pre(*pre_args) if pre else None
                 if inspect.isawaitable(result):
                     await result
-            await lifecyle_method()
+            await lifecycle_method()
             if post:
                 post_args = post_args or []
                 result = post(*post_args)
@@ -262,7 +262,7 @@ class AsyncLifecycle(ABC):
         
         await self._mn_run_lifecycle_phase(
             name="startup",
-            lifecyle_method=self.startup,
+            lifecycle_method=self.startup,
             log_kwargs=log_kwargs,
             pre=_pre,
             post=post,
@@ -280,7 +280,7 @@ class AsyncLifecycle(ABC):
     ) -> None:
         await self._mn_run_lifecycle_phase(
             name="shutdown",
-            lifecyle_method=self.shutdown,
+            lifecycle_method=self.shutdown,
             log_kwargs=log_kwargs,
             pre=pre,
             pre_args=pre_args,

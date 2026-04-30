@@ -55,7 +55,7 @@ class AsyncService(AsyncComponent):
         
         await self._mn_run_lifecycle_phase(
             name="run",
-            lifecyle_method=self.run,
+            lifecycle_method=self.run,
             log_kwargs=log_kwargs,
             pre=_pre,
             post=post,

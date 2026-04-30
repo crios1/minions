@@ -39,7 +39,7 @@ You can’t encode “idempotent” in an abstract base class without lying or f
 <!-- so each step is guarding to check that data wasn't collected already -->
 <!-- but then in your execution step you need to check staleness of the data to make sure that your edge is still valid / not stale -->
 <!-- at least in the case of trading bots, because you system could have been down for a while -->
-<!-- and you want to resume all workflows and have them take the best actions considering thier situations -->
+<!-- and you want to resume all workflows and have them take the best actions considering their situations -->
 <!-- and checking for data staleness to ensure you still have edge is important -->
 <!-- if you don't have edge, then you just cleanly abort the workflow with reason of like "edge expired" or something -->
 

@@ -14,7 +14,7 @@ class InvalidResource(SpiedResource):
     async def run(self):
         return
 
-    # TODO: should probably have seperate invalid resource assets for each of these invalid cases
+    # TODO: should probably have separate invalid resource assets for each of these invalid cases
 
     #should raise
     @SpiedResource.untracked
