@@ -334,42 +334,38 @@
   - docs:
     - document delivery-vs-freshness tradeoffs clearly so users do not assume immediate-on-create handling guarantees
 
-- todo: add generic framework telemetry for logger and state store (separate from domain telemetry)
+- todo: add first-class logger system telemetry (`logger_*`)
   - goal:
-    - expose minimal runtime-health metrics for framework components without mixing with domain/business metrics
+    - expose logger health and performance as system telemetry, separate from domain/business metrics
+    - treat logger as a pluggable infrastructure component like StateStore, while starting with a smaller generic metric surface
     - keep metric names backend-agnostic and labels low-cardinality
   - metrics to add:
-    - logger:
-      - `framework_logger_write_seconds` (histogram)
-      - `framework_logger_payload_bytes` (histogram)
-      - `framework_logger_errors_total` (counter)
-    - state store:
-      - `framework_state_store_persist_seconds` (histogram)
-      - `framework_state_store_payload_bytes` (histogram)
-      - `framework_state_store_delete_seconds` (histogram)
-      - `framework_state_store_errors_total` (counter)
+    - `logger_writes_total` (counter)
+    - `logger_write_failures_total` (counter)
+    - `logger_write_duration_seconds` (histogram)
+    - `logger_payload_bytes` (histogram)
   - labels/policy:
     - allowed labels:
-      - `component` (`logger` | `state_store`)
-      - `backend` (e.g. `file`, `prometheus`, `sqlite`, `noop`, `inmemory`)
-      - `operation` (`write` | `persist` | `delete` | `load`)
-      - `error_type` (for `*_errors_total` only)
+      - `backend` (e.g. `file`, `prometheus`, `noop`)
+      - `operation` (`write`)
+      - `error_type` (for `logger_write_failures_total` only)
     - do not include high-cardinality labels (no workflow ids/minion ids/payload content)
     - telemetry emission must be best-effort and never block runtime paths
+    - avoid a `framework_` prefix because user-provided loggers are still first-class infrastructure inside a Minions system
   - implementation steps:
     - add constants + label mappings in `metrics_constants.py`
     - instrument logger write path(s)
-    - instrument state store persist/delete path(s)
-    - keep sqlite-specific deep diagnostics out of this pass (only generic surface)
+    - defer deeper backend-specific metrics such as queue depth, flush duration, and dropped records until logger implementations need them
   - tests:
-    - add focused tests that metrics are emitted for logger/state_store success paths
-    - add focused tests that error counters increment on failure paths
+    - add focused tests that metrics are emitted for logger success paths
+    - add focused tests that logger error counters increment on failure paths
     - ensure no unexpected labels are emitted
   - docs:
-    - update docs to explain domain telemetry vs framework telemetry split
-    - document the new generic framework metric names and label policy
+    - update docs to explain domain telemetry vs system/infrastructure telemetry split
+    - document the new generic logger metric names and label policy
+    - note that dashboard authors can ignore exposed metrics visually, but scraped metrics still cost storage unless scrape config or relabeling drops them
 
-- todo: add first-class StateStore backend/system metrics (`state_store_*`)
+- todo: add first-class StateStore backend/system telemetry (`state_store_*`)
   - goal:
     - expose StateStore health and performance as backend/system telemetry, separate from workflow durability/guarantee telemetry
     - use `minion_workflow_persistence_*` metrics for workflow checkpoint impact and `state_store_*` metrics for backend cause/health
@@ -394,6 +390,7 @@
     - instrument generic StateStore wrapper paths for operations, failures, duration, and payload size
     - instrument SQLite-specific queue depth, batch flush duration, and commit duration
     - keep workflow-level persistence telemetry in `minion_workflow_persistence_*`, not `state_store_*`
+    - do not add parallel `framework_state_store_*` metrics; this todo owns the generic StateStore telemetry surface
   - tests:
     - verify generic save/delete/load operation counters and durations are emitted
     - verify failure counters include `error_type`
@@ -405,19 +402,31 @@
       - alert on `minion_workflow_persistence_*` for workflow durability impact
       - inspect `state_store_*` for backend health and root cause
 
-- todo: keep StateStore durability semantics explicit as batching evolves
-  - problem:
-    - `StateStore.save_context(...)` and `delete_context(...)` are runtime durability boundaries and should remain durable-on-return
-    - SQLite can batch internally, but batching must not blur the distinction between durable commits and eventual enqueue semantics
-  - target:
-    - keep `StateStore` as the durable contract
-    - if an eventual/fire-and-forget persistence mode is ever added, make it a separate explicit API rather than a hidden behavior change
-    - ensure docs and contract tests keep this distinction visible
+- todo: add family-level metrics exposure controls
+  - goal:
+    - let operators disable or exclude whole metric families when they do not want Prometheus to ingest that runtime surface
+    - keep the default behavior observability-first so users get the full low-cardinality runtime picture without extra setup
+  - families to consider:
+    - `logger_*`
+    - `state_store_*`
+    - `minion_workflow_persistence_*`
+    - other future framework/system families
+  - design constraints:
+    - prefer family-level include/exclude controls over per-metric toggles to avoid excessive configuration surface
+    - disabling a family should prevent exposing those series at the metrics endpoint, not merely hide them from dashboards
+    - defaults should expose all stable low-cardinality metric families
+    - telemetry emission must remain best-effort and must not block runtime paths
+  - implementation steps:
+    - decide where metrics exposure config belongs (global runtime config, Prometheus exporter config, or both)
+    - add allow/deny family filtering before metrics are exported
+    - document how exporter-side filtering differs from Prometheus scrape/relabel filtering
   - tests:
-    - contract tests should continue to lock durable behavior for every `StateStore` implementation
-    - if an eventual interface is added later, add separate tests for enqueue behavior, flush guarantees, and shutdown drain semantics
+    - verify excluded families are not exposed on the Prometheus endpoint
+    - verify included families continue to emit with their normal label policy
+    - verify unknown family names are rejected or ignored consistently
   - docs:
-    - explain durable vs eventual persistence tradeoffs and when to choose each
+    - recommend exposing all stable low-cardinality runtime metrics by default
+    - explain that family-level controls are mostly for operators with storage, policy, or relevance constraints
 
 - todo: refine configurable workflow persistence failure policy after first implementation
   - problem:
