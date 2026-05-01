@@ -9,6 +9,8 @@ import pytest_asyncio
 
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.minion_workflow_context_codec import (
+    CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION,
+    PersistedMinionWorkflowContext,
     deserialize_workflow_context_blob,
     persist_workflow_context,
     serialize_workflow_context,
@@ -221,6 +223,13 @@ async def test_state_store_get_all_contexts_returns_blob_records(
     ctx = ctxs[0]
     assert ctx.workflow_id == expected.workflow_id
     assert ctx.orchestration_id == expected.minion_composite_key
+    persisted = msgspec.msgpack.decode(
+        ctx.context,
+        type=PersistedMinionWorkflowContext,
+    )
+    assert persisted.workflow_id == expected.workflow_id
+    assert persisted.context_cls == "builtins.dict"
+    assert persisted.schema_version == CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION
     assert deserialize_workflow_context_blob(ctx.context) == expected
 
 
@@ -344,19 +353,28 @@ async def test_state_store_skips_unknown_schema_blob(
     store_and_logger: tuple[StateStore, InMemoryLogger],
 ):
     store, logger = store_and_logger
-    unknown_payload = serialize_workflow_context(
-        mk_ctx(
-            workflow_id="wf-unknown",
-            event={"i": 100},
-            context={"p": "unknown"},
-        )
+    unknown_ctx = mk_ctx(
+        workflow_id="wf-unknown",
+        event={"i": 100},
+        context={"p": "unknown"},
     )
-    unknown_payload["schema_version"] = 999
+    unknown_payload = PersistedMinionWorkflowContext(
+        minion_composite_key=unknown_ctx.minion_composite_key,
+        minion_modpath=unknown_ctx.minion_modpath,
+        workflow_id=unknown_ctx.workflow_id,
+        event=unknown_ctx.event,
+        context=unknown_ctx.context,
+        context_cls="builtins.dict",
+        next_step_index=unknown_ctx.next_step_index,
+        error_msg=unknown_ctx.error_msg,
+        started_at=unknown_ctx.started_at,
+        schema_version=999,
+    )
 
     await store.save_context(
         "wf-unknown",
         _ck("app.minion"),
-        serialize(dict(unknown_payload)),
+        serialize(unknown_payload),
     )
     ctxs = await store._mn_get_all_decoded_contexts()
 

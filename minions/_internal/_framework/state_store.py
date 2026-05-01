@@ -13,6 +13,8 @@ from .._utils.format_exception_traceback import format_exception_traceback
 
 @dataclass(frozen=True)
 class StoredWorkflowContext:
+    """Raw persisted workflow-context blob plus lookup metadata."""
+
     workflow_id: str
     orchestration_id: str
     context: bytes
@@ -195,6 +197,7 @@ class StateStore(AsyncComponent):
                     workflow_id=stored_context.workflow_id,
                     orchestration_id=stored_context.orchestration_id,
                     state_store=type(self).__name__,
+                    state_store_operation=log_action,
                     **(log_kwargs or {}),
                 )
         return contexts

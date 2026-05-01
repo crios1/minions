@@ -7,9 +7,12 @@ from minions._internal._domain.minion_workflow_context import MinionWorkflowCont
 from minions._internal._framework.minion_workflow_context_codec import (
     _normalize_workflow_context_data,
     CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION,
+    PersistedMinionWorkflowContext,
     WorkflowContextSchemaError,
     decode_persisted_workflow_context_typed,
+    deserialize_workflow_context_blob,
     deserialize_workflow_context,
+    serialize_persisted_workflow_context,
     serialize_workflow_context,
 )
 from minions._internal._framework.state_store_payload_types import StateStorePayload
@@ -41,7 +44,7 @@ class ContextStruct(msgspec.Struct):
         (EventStruct(1), ContextStruct(2), EventStruct, ContextStruct),
     ],
 )
-def test_blob_roundtrip_restores_typed_event_and_context(
+def test_adapter_payload_roundtrip_restores_typed_event_and_context(
     event,
     context,
     event_cls,
@@ -57,8 +60,8 @@ def test_blob_roundtrip_restores_typed_event_and_context(
         next_step_index=1,
     )
 
-    blob = serialize(dict(serialize_workflow_context(ctx)))
-    payload = deserialize(blob, dict)
+    encoded_adapter_payload = serialize(dict(serialize_workflow_context(ctx)))
+    payload = deserialize(encoded_adapter_payload, dict)
     loaded_ctx = deserialize_workflow_context(payload, event_cls=event_cls)
 
     assert isinstance(loaded_ctx.event, event_cls)
@@ -73,7 +76,7 @@ def test_blob_roundtrip_restores_typed_event_and_context(
         (EventStruct(1), ContextStruct(2), EventStruct, ContextStruct),
     ],
 )
-def test_direct_typed_decoder_accepts_current_dict_shaped_blob(
+def test_direct_typed_decoder_accepts_persisted_workflow_context(
     event,
     context,
     event_cls,
@@ -89,7 +92,7 @@ def test_direct_typed_decoder_accepts_current_dict_shaped_blob(
         next_step_index=1,
     )
 
-    blob = serialize(dict(serialize_workflow_context(ctx)))
+    blob = serialize_persisted_workflow_context(ctx)
     loaded_ctx = decode_persisted_workflow_context_typed(
         blob,
         event_cls=event_cls,
@@ -101,7 +104,7 @@ def test_direct_typed_decoder_accepts_current_dict_shaped_blob(
     assert loaded_ctx == ctx
 
 
-def test_serialize_workflow_context_writes_store_shape():
+def test_serialize_workflow_context_writes_adapter_shape():
     ctx = MinionWorkflowContext(
         minion_composite_key="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
         minion_modpath="tests.assets.minions.sample",
@@ -120,7 +123,28 @@ def test_serialize_workflow_context_writes_store_shape():
     assert payload["schema_version"] == CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION
 
 
-def test_storage_adapter_roundtrips_msgspec_struct_payloads():
+def test_serialize_persisted_workflow_context_writes_blob_contract():
+    ctx = MinionWorkflowContext(
+        minion_composite_key="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
+        minion_modpath="tests.assets.minions.sample",
+        workflow_id="wf-blob-contract",
+        event={"v": 1},
+        context={"c": 1},
+        context_cls=dict,
+        next_step_index=2,
+    )
+
+    blob = serialize_persisted_workflow_context(ctx)
+    persisted = deserialize(blob, PersistedMinionWorkflowContext)
+    loaded_ctx = deserialize_workflow_context_blob(blob)
+
+    assert persisted.workflow_id == ctx.workflow_id
+    assert persisted.context_cls == "builtins.dict"
+    assert persisted.schema_version == CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION
+    assert loaded_ctx == ctx
+
+
+def test_adapter_payload_roundtrips_msgspec_struct_payloads():
     ctx = MinionWorkflowContext(
         minion_composite_key="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
         minion_modpath="tests.assets.minions.sample",
@@ -131,10 +155,10 @@ def test_storage_adapter_roundtrips_msgspec_struct_payloads():
         next_step_index=3,
     )
 
-    stored_payload = serialize_workflow_context(ctx)
-    loaded_ctx = deserialize_workflow_context(stored_payload)
+    adapter_payload = serialize_workflow_context(ctx)
+    loaded_ctx = deserialize_workflow_context(adapter_payload)
 
-    assert stored_payload["context_cls"] == f"{ContextStruct.__module__}.{ContextStruct.__qualname__}"
+    assert adapter_payload["context_cls"] == f"{ContextStruct.__module__}.{ContextStruct.__qualname__}"
     assert loaded_ctx == ctx
 
 
@@ -176,7 +200,7 @@ def test_normalize_workflow_context_data_rejects_future_schema_version():
         _normalize_workflow_context_data(payload)
 
 
-def test_storage_adapter_roundtrips_context_cls_and_schema_version():
+def test_adapter_payload_roundtrips_context_cls_and_schema_version():
     ctx = MinionWorkflowContext(
         minion_composite_key="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
         minion_modpath="tests.assets.minions.sample",
@@ -186,11 +210,11 @@ def test_storage_adapter_roundtrips_context_cls_and_schema_version():
         context_cls=dict,
         next_step_index=0,
     )
-    stored_payload = serialize_workflow_context(ctx)
-    loaded_ctx = deserialize_workflow_context(stored_payload)
+    adapter_payload = serialize_workflow_context(ctx)
+    loaded_ctx = deserialize_workflow_context(adapter_payload)
 
-    assert stored_payload["context_cls"] == "builtins.dict"
-    assert stored_payload["schema_version"] == CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION
+    assert adapter_payload["context_cls"] == "builtins.dict"
+    assert adapter_payload["schema_version"] == CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION
     assert loaded_ctx == ctx
 
 

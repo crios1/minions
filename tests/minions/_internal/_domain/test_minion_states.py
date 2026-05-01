@@ -36,8 +36,10 @@ from minions import minion_step, Minion
 from minions._internal._domain.exceptions import AbortWorkflow
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.minion_workflow_context_codec import (
+    PersistedMinionWorkflowContext,
     deserialize_workflow_context_blob,
     serialize_workflow_context,
+    serialize_persisted_workflow_context,
 )
 from minions._internal._framework.state_store import StoredWorkflowContext
 from minions._internal._utils.serialization import serialize
@@ -999,43 +1001,50 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
     store = InMemoryStateStore(logger=logger)
     minion_modpath = "tests.assets.replay_with_invalid_context_minion"
 
-    valid_payload = serialize_workflow_context(
-        MinionWorkflowContext(
-            minion_composite_key=f"{minion_modpath}|cfg|tests.assets.pipelines.invalid",
-            minion_modpath=minion_modpath,
-            workflow_id="wf-valid",
-            event={"value": 123},
-            context={},
-            context_cls=dict,
-            next_step_index=0,
-            started_at=None,
-            error_msg=None,
-        )
+    valid_context = MinionWorkflowContext(
+        minion_composite_key=f"{minion_modpath}|cfg|tests.assets.pipelines.invalid",
+        minion_modpath=minion_modpath,
+        workflow_id="wf-valid",
+        event={"value": 123},
+        context={},
+        context_cls=dict,
+        next_step_index=0,
+        started_at=None,
+        error_msg=None,
     )
-    invalid_payload = serialize_workflow_context(
-        MinionWorkflowContext(
-            minion_composite_key=f"{minion_modpath}|cfg|tests.assets.pipelines.invalid",
-            minion_modpath=minion_modpath,
-            workflow_id="wf-invalid",
-            event={"value": 456},
-            context={},
-            context_cls=dict,
-            next_step_index=0,
-            started_at=None,
-            error_msg=None,
-        )
+    invalid_context = MinionWorkflowContext(
+        minion_composite_key=f"{minion_modpath}|cfg|tests.assets.pipelines.invalid",
+        minion_modpath=minion_modpath,
+        workflow_id="wf-invalid",
+        event={"value": 456},
+        context={},
+        context_cls=dict,
+        next_step_index=0,
+        started_at=None,
+        error_msg=None,
     )
-    invalid_payload["schema_version"] = 999
+    invalid_payload = PersistedMinionWorkflowContext(
+        minion_composite_key=invalid_context.minion_composite_key,
+        minion_modpath=invalid_context.minion_modpath,
+        workflow_id=invalid_context.workflow_id,
+        event=invalid_context.event,
+        context=invalid_context.context,
+        context_cls="builtins.dict",
+        next_step_index=invalid_context.next_step_index,
+        error_msg=invalid_context.error_msg,
+        started_at=invalid_context.started_at,
+        schema_version=999,
+    )
 
     store._contexts["wf-valid"] = StoredWorkflowContext(
         workflow_id="wf-valid",
         orchestration_id=f"{minion_modpath}|cfg|tests.assets.pipelines.invalid",
-        context=serialize(dict(valid_payload)),
+        context=serialize_persisted_workflow_context(valid_context),
     )
     store._contexts["wf-invalid"] = StoredWorkflowContext(
         workflow_id="wf-invalid",
         orchestration_id=f"{minion_modpath}|cfg|tests.assets.pipelines.invalid",
-        context=serialize(dict(invalid_payload)),
+        context=serialize(invalid_payload),
     )
 
     m = ReplayWithInvalidContextMinion(

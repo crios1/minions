@@ -1,4 +1,12 @@
-"""Workflow-context normalization and state-store round-trip helpers."""
+"""Workflow-context normalization and StateStore blob helpers.
+
+This module has two related but distinct shapes:
+
+* `serialize_workflow_context` / `deserialize_workflow_context` operate on the
+  normalized dict adapter shape used by codec tests and schema normalization.
+* `serialize_persisted_workflow_context` / `deserialize_workflow_context_blob`
+  operate on the canonical bytes stored by `StateStore` implementations.
+"""
 
 import importlib
 from dataclasses import fields
@@ -27,6 +35,8 @@ WorkflowContextData: TypeAlias = dict[
 
 
 class PersistedMinionWorkflowContext(msgspec.Struct, forbid_unknown_fields=True):
+    """Versioned StateStore payload for one runtime MinionWorkflowContext."""
+
     minion_composite_key: str
     minion_modpath: str
     workflow_id: str
@@ -45,7 +55,7 @@ class WorkflowContextSchemaError(ValueError):
 def _normalize_workflow_context_data(
     data: WorkflowContextData,
 ) -> WorkflowContextData:
-    """normalizes to latest schema version"""
+    """Validate and normalize the dict adapter shape to the current schema."""
 
     version = data.get("schema_version")
 
@@ -104,6 +114,13 @@ def _restore_typed_value(
 
 
 def serialize_workflow_context(ctx: MinionWorkflowContext) -> StateStorePayload:
+    """Return the normalized dict adapter shape for a runtime context.
+
+    This is not the StateStore blob contract. Runtime persistence should use
+    `serialize_persisted_workflow_context`, which wraps this logical data in a
+    versioned msgspec payload and encodes it to bytes.
+    """
+
     data = _normalize_workflow_context_data(
         {
             **ctx.as_dict(),
@@ -127,6 +144,8 @@ def serialize_workflow_context(ctx: MinionWorkflowContext) -> StateStorePayload:
 def persist_workflow_context(
     ctx: MinionWorkflowContext,
 ) -> PersistedMinionWorkflowContext:
+    """Build the versioned StateStore payload object for a runtime context."""
+
     return PersistedMinionWorkflowContext(
         minion_composite_key=ctx.minion_composite_key,
         minion_modpath=ctx.minion_modpath,
@@ -144,6 +163,8 @@ def persist_workflow_context(
 def serialize_persisted_workflow_context(
     ctx: MinionWorkflowContext,
 ) -> bytes:
+    """Encode the canonical StateStore blob for a runtime context."""
+
     return serialize(persist_workflow_context(ctx))
 
 
@@ -186,6 +207,8 @@ def hydrate_persisted_workflow_context(
     *,
     event_cls: Any | None = None,
 ) -> MinionWorkflowContext:
+    """Validate and hydrate a versioned StateStore payload into runtime shape."""
+
     if persisted.schema_version != CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION:
         raise WorkflowContextSchemaError(
             "Unsupported persisted workflow context schema_version="
@@ -238,6 +261,8 @@ def decode_persisted_workflow_context_typed(
     event_cls: Any,
     context_cls: type,
 ) -> MinionWorkflowContext:
+    """Decode a StateStore blob with typed event/context validation."""
+
     try:
         persisted = _typed_persisted_workflow_context_decoder(
             event_cls,
@@ -280,25 +305,22 @@ def deserialize_workflow_context_blob(
     event_cls: Any | None = None,
     context_cls: type | None = None,
 ) -> MinionWorkflowContext:
+    """Decode the canonical StateStore blob into runtime context shape."""
+
     if event_cls is not None and context_cls is not None:
-        try:
-            return decode_persisted_workflow_context_typed(
-                payload,
-                event_cls=event_cls,
-                context_cls=context_cls,
-            )
-        except WorkflowContextSchemaError:
-            pass
+        return decode_persisted_workflow_context_typed(
+            payload,
+            event_cls=event_cls,
+            context_cls=context_cls,
+        )
 
     try:
         persisted = deserialize(payload, PersistedMinionWorkflowContext)
-    except ValueError:
-        ctx = deserialize_workflow_context(
-            deserialize(payload, dict),
-            event_cls=event_cls,
-        )
-    else:
-        ctx = hydrate_persisted_workflow_context(persisted, event_cls=event_cls)
+    except ValueError as e:
+        raise WorkflowContextSchemaError(
+            f"Invalid persisted workflow context payload: {e}"
+        ) from e
+    ctx = hydrate_persisted_workflow_context(persisted, event_cls=event_cls)
 
     if context_cls is not None and ctx.context_cls is not context_cls:
         raise WorkflowContextSchemaError(
@@ -313,6 +335,8 @@ def deserialize_workflow_context(
     *,
     event_cls: Any | None = None,
 ) -> MinionWorkflowContext:
+    """Hydrate the normalized dict adapter shape into runtime context shape."""
+
     data: WorkflowContextData = dict(payload)
     context_cls = payload.get("context_cls")
     if isinstance(context_cls, str):
@@ -346,10 +370,4 @@ def deserialize_workflow_context(
             "Unexpected workflow context fields after normalization: "
             f"{sorted(unknown_keys)!r}."
         )
-    # After filtering to declared MinionWorkflowContext fields and rejecting
-    # unknown leftovers, the remaining kwargs are constructor-safe even though
-    # the type checker can't infer that from the dict comprehension alone.
-    return restore_workflow_context_types(
-        MinionWorkflowContext(**cast(dict[str, Any], kwargs)),
-        event_cls=event_cls,
-    )
+    return MinionWorkflowContext(**cast(dict[str, Any], kwargs))
