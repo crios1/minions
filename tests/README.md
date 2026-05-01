@@ -2,6 +2,16 @@
 
 This suite is intentionally layered. Each layer has a different purpose and confidence target.
 
+## User Guarantee Dimension (cross-cutting)
+- Purpose: protect behavior users can reasonably depend on across releases.
+- These tests may live in the layer that best matches the behavior under test, but they should be named or grouped so breaking them is treated as a compatibility decision, not only an implementation failure.
+- Canonical guarantee areas:
+  - public imports and API call shapes
+  - CLI behavior and exit semantics
+  - persisted event/context payload support
+  - restart/resume behavior that users rely on operationally
+- A user guarantee should only change intentionally, with release notes and migration guidance appropriate to the stability level of the project.
+
 ## 1) Runtime Contract Layer (DSL, deterministic, in-memory/spied)
 - Purpose: prove orchestration semantics are correct.
 - This is the strongest correctness proof for lifecycle, fanout, and verification guarantees.
@@ -40,6 +50,7 @@ This suite is intentionally layered. Each layer has a different purpose and conf
 
 ## Scope Policy
 
+- User-facing guarantees are tracked as a cross-cutting dimension, so a guarantee test can belong to any layer while still carrying compatibility weight.
 - Core orchestration confidence comes from Layer 1 (DSL deterministic tests with in-memory/spied components).
 - Backend correctness comes from Layer 2 (implementation unit tests).
 - Backend orchestration fit is Layer 3 (small smoke coverage).

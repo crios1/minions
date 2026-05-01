@@ -7,6 +7,10 @@ import pytest
 
 from minions._internal._domain.gru import Gru
 from minions._internal._domain.minion import Minion
+from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
+from minions._internal._framework.minion_workflow_context_codec import (
+    deserialize_workflow_context_blob,
+)
 
 from tests.assets.support.mixin_spy import SpyMixin
 from tests.assets.support.minion_spied import SpiedMinion
@@ -86,6 +90,7 @@ class ScenarioCheckpoint:
     spy_call_counts_by_instance: dict[str, dict[int, dict[str, int]]] | None = None
     workflow_step_started_ids_by_class: dict[str, dict[str, tuple[str, ...]]] | None = None
     persisted_contexts_by_modpath: dict[str, int] | None = None
+    persisted_context_snapshots_by_modpath: dict[str, tuple[MinionWorkflowContext, ...]] | None = None
     metrics_counters: dict[str, list[dict]] | None = None
 
 
@@ -330,6 +335,7 @@ class ScenarioRunner:
         wrapped_directive_type: str | None = None,
     ) -> None:
         result = self._require_result()
+        persisted_context_snapshots = await self._snapshot_persisted_context_snapshots_by_modpath()
         checkpoint = ScenarioCheckpoint(
             order=len(result.checkpoints),
             kind=kind,
@@ -344,7 +350,10 @@ class ScenarioRunner:
             spy_call_counts=self._snapshot_spy_call_counts(),
             spy_call_counts_by_instance=self._snapshot_spy_call_counts_by_instance(),
             workflow_step_started_ids_by_class=self._snapshot_workflow_step_started_ids_by_class(),
-            persisted_contexts_by_modpath=await self._snapshot_persisted_contexts_by_modpath(),
+            persisted_contexts_by_modpath=self._count_persisted_context_snapshots(
+                persisted_context_snapshots,
+            ),
+            persisted_context_snapshots_by_modpath=persisted_context_snapshots,
             metrics_counters=self._snapshot_metrics_counters(),
         )
         result.checkpoints.append(checkpoint)
@@ -430,24 +439,55 @@ class ScenarioRunner:
             for class_key, by_step in by_class_step.items()
         }
 
-    async def _snapshot_persisted_contexts_by_modpath(self) -> dict[str, int] | None:
+    async def _snapshot_persisted_context_snapshots_by_modpath(
+        self,
+    ) -> dict[str, tuple[MinionWorkflowContext, ...]] | None:
         state_store = getattr(self._gru, "_state_store", None)
-        snapshot_fn = getattr(state_store, "_mn_get_all_decoded_contexts", None)
+        snapshot_fn = getattr(state_store, "_mn_get_all_contexts", None)
         if not callable(snapshot_fn):
             return None
         try:
-            contexts = await snapshot_fn()
+            stored_contexts = await snapshot_fn()
         except Exception:
             return None
 
+        receipts_by_composite_key = {
+            r.composite_key: r
+            for r in self._require_result().receipts
+            if r.success and r.composite_key and r.minion_cls is not None
+        }
+        contexts_by_modpath: defaultdict[str, list[MinionWorkflowContext]] = defaultdict(list)
+        try:
+            for stored_context in stored_contexts:
+                receipt = receipts_by_composite_key.get(stored_context.orchestration_id)
+                kwargs = {}
+                if receipt is not None and receipt.minion_cls is not None:
+                    kwargs = {
+                        "event_cls": receipt.minion_cls._mn_event_cls,
+                        "context_cls": receipt.minion_cls._mn_workflow_ctx_cls,
+                    }
+                ctx = deserialize_workflow_context_blob(
+                    stored_context.context,
+                    **kwargs,
+                )
+                contexts_by_modpath[ctx.minion_modpath].append(ctx)
+        except Exception:
+            return None
+
+        return {
+            modpath: tuple(sorted(contexts, key=lambda ctx: ctx.workflow_id))
+            for modpath, contexts in contexts_by_modpath.items()
+        }
+
+    def _count_persisted_context_snapshots(
+        self,
+        snapshots: dict[str, tuple[MinionWorkflowContext, ...]] | None,
+    ) -> dict[str, int] | None:
+        if snapshots is None:
+            return None
         counts: defaultdict[str, int] = defaultdict(int)
-        for ctx in contexts:
-            modpath = getattr(ctx, "minion_modpath", None)
-            if modpath is None and isinstance(ctx, dict):
-                maybe_modpath = ctx.get("minion_modpath")
-                modpath = maybe_modpath if isinstance(maybe_modpath, str) else None
-            if isinstance(modpath, str):
-                counts[modpath] += 1
+        for modpath, contexts in snapshots.items():
+            counts[modpath] += len(contexts)
         return dict(counts)
 
     def _snapshot_metrics_counters(self) -> dict[str, list[dict]] | None:

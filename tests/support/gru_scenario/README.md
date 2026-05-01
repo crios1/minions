@@ -101,7 +101,7 @@ await run_gru_scenario(
 | `Concurrent` | No (container only) | No (container only) | No (container only) |
 | `WaitWorkflowCompletions` | No | Yes (waits by all started or named subset) | No direct counts; ensures async work is drained before assertions |
 | `AfterWorkflowStarts` | No | Yes (waits for start targets before running wrapped directive) | Indirect only (wrapped directive effects) |
-| `ExpectRuntime` | No | No | Yes (checkpoint-scoped runtime expectations such as persisted-context counts) |
+| `ExpectRuntime` | No | No | Yes (checkpoint-scoped runtime expectations and internal persisted-context integrity checks) |
 | `GruShutdown` | No | No | Yes (`seen_shutdown` gates shutdown-related expectations) |
 
 ## Waiting for Workflows
@@ -132,6 +132,7 @@ ExpectRuntime(
     ),
 )
 ```
+- When persisted context snapshots are available, the verifier also validates persisted context integrity internally: matching started minion/orchestration, declared event/context types, `context_cls`, and `next_step_index` bounds.
 - Initial resolutions section:
 ```python
 ExpectRuntime(
@@ -150,6 +151,7 @@ ExpectRuntime(
 )
 ```
 - Persistence counts are resolved by scenario-local minion names observed from successful starts.
+- Persisted context content/type checks are evaluated against decoded StateStore snapshots, using the scenario-local minion type to decode event/context payloads when available.
 - Resolution counts are evaluated from checkpoint metrics snapshots for scenario-local minion instances.
 - Workflow-step progression counts are evaluated from checkpoint workflow step-start workflow IDs.
 - `ExpectRuntime.workflow_steps_mode="exact"` is checkpoint-total exactness (strict equality for declared counts at target checkpoint), not window-tolerance mode.

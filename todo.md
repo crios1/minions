@@ -9,16 +9,6 @@
 -->
 
 ### Test Suite:
-- todo: add an explicit user-guarantee/versioning dimension to the test-suite strategy
-  - problem:
-    - `tests/README.md` explains confidence layers for runtime/component correctness, but it does not yet clearly separate tests that protect user-facing API and behavior guarantees
-  - examples:
-    - supported persisted event/context shapes such as `dict`, dataclass, and `msgspec.Struct`
-    - backwards-compatible CLI/API behavior
-    - guarantees that should only change across intentional major-version boundaries
-  - why it matters:
-    - separating implementation correctness from public guarantee tests makes breaking-change decisions more deliberate
-
 - todo: review the latest StateStore blob-contract refactor
   - review order:
     - `minions/_internal/_framework/state_store.py`: review the new contract surface
@@ -54,6 +44,25 @@
     - only keep non-default backends in a test when the backend-specific choice is intentional and clearly justified
   - document this test suite design doc with this design info
 
+- todo: add first-class resume support and resume testing to the Gru scenario DSL
+  - current coverage:
+    - the DSL verifier can now validate persisted context snapshot integrity internally
+    - verifier call-count expectations now account for replayed persisted workflow steps after restart
+    - user-guarantee scenarios cover dict, dataclass, and msgspec.Struct persistence through stop, restart, and resume
+  - gap:
+    - scenarios still use coarse orchestration primitives like `AfterWorkflowStarts(..., MinionStop(...))` to create a persisted checkpoint
+    - there is no explicit DSL directive for stopping/resuming at a specific workflow checkpoint or step boundary
+  - possible DSL shape:
+    - `AfterWorkflowStepStarts(expected={minion_name: {"step_1": 1}}, directive=MinionStop(...))`
+    - `ExpectRuntime(..., expect=RuntimeExpectSpec(replayed_workflow_steps={...}))` only if the existing automatic replay counting is not enough
+    - optional checkpoint selectors for asserting before/after restart behavior without relying on checkpoint indexes
+  - tests:
+    - prove restart resumes from `next_step_index` without replaying already-completed steps
+    - prove replayed step counts and save/delete counts are deterministic across checkpoint windows
+    - cover pause/drain/cutover stop-mode semantics once those modes exist
+  - why it matters:
+    - Gru's operational guarantee includes not losing in-flight workflow state across restart, and the DSL should be able to express that guarantee directly rather than only validating uninterrupted happy-path workflows.
+
 - todo: harden test_gru.py:
   - steps:
     - complete the robust reusable Gru testing routine
@@ -85,16 +94,6 @@
     - The desired guarantee is that `Gru.stop_minion(...)` should not lose workflow state in any stop mode unless the process is force-interrupted.
   - why it matters:
     - failed checkpoint state affects the exact semantics of `drain` and `cutover`, especially when a workflow has progressed beyond its last durable checkpoint.
-
-- todo: add robust tests for persisted event/context support across dict, dataclass, and msgspec.Struct shapes
-  - ```python
-    class MyEvent(msgspec.Struct):
-      greeting: str = "hello world"
-    ```
-  - ```python
-    class MyContext(msgspec.Struct):
-      my_attribute: str | None = None
-    ```
 
 - todo: ensure immediate user-facing domain objects (minion, pipeline, resource) and non-immediate user-facing domain objects (like StateStore, logger, metrics)...
   - 1: validate composition at class definition time and raise user friendly exception msg (good onboarding DX)

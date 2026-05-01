@@ -92,6 +92,7 @@ class ScenarioVerifier:
         expected = self._build_expected_call_counts()
         self._assert_metrics_label_contract()
         self._assert_runtime_expectations()
+        self._assert_persisted_context_integrity()
         self._assert_pipeline_events()
         self._assert_checkpoint_window_workflow_step_progression()
 
@@ -129,12 +130,16 @@ class ScenarioVerifier:
 
         for m_cls in spies.minions.values():
             starts = expectations.minion_start_counts.get(m_cls, 0)
+            replayed_step_counts = self._compute_replayed_step_counts(spies).get(m_cls, {})
             base = {
                 "__init__": starts,
                 "startup": starts,
                 "run": starts,
                 **{
-                    name: expectations.expected_workflows_by_class.get(m_cls, 0)
+                    name: (
+                        expectations.expected_workflows_by_class.get(m_cls, 0)
+                        + replayed_step_counts.get(name, 0)
+                    )
                     for name in m_cls._mn_workflow_spec  # type: ignore
                 },
             }
@@ -144,13 +149,14 @@ class ScenarioVerifier:
         workflows_started = sum(expectations.expected_workflows_by_class.values())
         unresolved_workflows = self._count_unresolved_persisted_workflows(spies)
         resolved_workflows = max(workflows_started - unresolved_workflows, 0)
-        workflow_steps = sum(
-            len(m._mn_workflow_spec) * expectations.expected_workflows_by_class.get(m, 0)  # type: ignore
-            for m in spies.minions.values()
-        )
+        replayed_step_counts_by_class = self._compute_replayed_step_counts(spies)
+        workflow_steps = 0
+        for m in spies.minions.values():
+            workflow_steps += len(m._mn_workflow_spec) * expectations.expected_workflows_by_class.get(m, 0)  # type: ignore
+            workflow_steps += sum(replayed_step_counts_by_class.get(m, {}).values())
         total_save_operations = workflows_started + workflow_steps
         checkpoint_reads = len(self._result.checkpoints)
-        total_decode_operations = minion_starts + checkpoint_reads
+        total_decode_operations = minion_starts
 
         ss = {
             "__init__": 1,
@@ -168,12 +174,45 @@ class ScenarioVerifier:
         if checkpoint_reads > 0:
             ss["get_all_contexts"] = checkpoint_reads
             ss["_mn_get_all_contexts"] = checkpoint_reads
-            ss["_mn_get_all_decoded_contexts"] = checkpoint_reads
         if self._result.seen_shutdown:
             ss["shutdown"] = 1
         call_counts[type(self._state_store)] = ss
 
         return ExpectedCallCounts(call_counts=call_counts, allow_unlisted=allow_unlisted)
+
+    def _compute_replayed_step_counts(
+        self,
+        spies: SpyRegistry,
+    ) -> dict[type[SpyMixin], dict[str, int]]:
+        replayed: defaultdict[type[SpyMixin], defaultdict[str, int]] = defaultdict(lambda: defaultdict(int))
+        seen: set[tuple[str, str]] = set()
+        for checkpoint in self._result.checkpoints:
+            snapshots = checkpoint.persisted_context_snapshots_by_modpath
+            if not snapshots:
+                continue
+            later_successful_modpaths = {
+                r.minion_modpath
+                for r in self._result.receipts[checkpoint.receipt_count:]
+                if r.success
+            }
+            for modpath, contexts in snapshots.items():
+                if modpath not in later_successful_modpaths:
+                    continue
+                m_cls = spies.minions.get(modpath)
+                if m_cls is None:
+                    continue
+                workflow = tuple(m_cls._mn_workflow_spec or ())
+                for ctx in contexts:
+                    for step_name in workflow[ctx.next_step_index:]:
+                        key = (ctx.workflow_id, step_name)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        replayed[m_cls][step_name] += 1
+        return {
+            m_cls: dict(counts)
+            for m_cls, counts in replayed.items()
+        }
 
     def _count_unresolved_persisted_workflows(self, spies: SpyRegistry) -> int:
         latest_with_persistence = next(
@@ -185,6 +224,66 @@ class ScenarioVerifier:
         persisted = latest_with_persistence.persisted_contexts_by_modpath
         tracked_modpaths = set(spies.minions.keys())
         return sum(count for modpath, count in persisted.items() if modpath in tracked_modpaths)
+
+    def _assert_persisted_context_integrity(self) -> None:
+        spies = self._require_spies()
+        receipt_by_composite_key = {
+            r.composite_key: r
+            for r in self._result.receipts
+            if r.success and r.composite_key
+        }
+
+        for checkpoint in self._result.checkpoints:
+            snapshots = checkpoint.persisted_context_snapshots_by_modpath
+            if snapshots is None:
+                continue
+            for modpath, contexts in snapshots.items():
+                m_cls = spies.minions.get(modpath)
+                if m_cls is None:
+                    pytest.fail(
+                        "Persisted context snapshot references unknown minion modpath "
+                        f"{modpath!r} at checkpoint {checkpoint.order}."
+                    )
+                workflow_len = len(m_cls._mn_workflow_spec or ())
+                for ctx in contexts:
+                    receipt = receipt_by_composite_key.get(ctx.minion_composite_key)
+                    if receipt is None:
+                        pytest.fail(
+                            "Persisted context has no matching successful start receipt: "
+                            f"workflow_id={ctx.workflow_id!r}, "
+                            f"minion_composite_key={ctx.minion_composite_key!r}, "
+                            f"checkpoint={checkpoint.order}."
+                        )
+                    if ctx.minion_modpath != receipt.minion_modpath:
+                        pytest.fail(
+                            "Persisted context minion_modpath mismatch: "
+                            f"workflow_id={ctx.workflow_id!r}, "
+                            f"expected {receipt.minion_modpath!r}, got {ctx.minion_modpath!r}."
+                        )
+                    if not isinstance(ctx.event, m_cls._mn_event_cls):
+                        pytest.fail(
+                            "Persisted context event type mismatch: "
+                            f"workflow_id={ctx.workflow_id!r}, "
+                            f"expected {m_cls._mn_event_cls.__name__}, got {type(ctx.event).__name__}."
+                        )
+                    if not isinstance(ctx.context, m_cls._mn_workflow_ctx_cls):
+                        pytest.fail(
+                            "Persisted context context type mismatch: "
+                            f"workflow_id={ctx.workflow_id!r}, "
+                            f"expected {m_cls._mn_workflow_ctx_cls.__name__}, got {type(ctx.context).__name__}."
+                        )
+                    if ctx.context_cls is not m_cls._mn_workflow_ctx_cls:
+                        pytest.fail(
+                            "Persisted context context_cls mismatch: "
+                            f"workflow_id={ctx.workflow_id!r}, "
+                            f"expected {m_cls._mn_workflow_ctx_cls!r}, got {ctx.context_cls!r}."
+                        )
+                    if ctx.next_step_index < 0 or ctx.next_step_index >= workflow_len:
+                        pytest.fail(
+                            "Persisted context next_step_index out of bounds: "
+                            f"workflow_id={ctx.workflow_id!r}, "
+                            f"next_step_index={ctx.next_step_index}, workflow_len={workflow_len}."
+                        )
 
     def _assert_state_store_read_call_bounds(self) -> None:
         spies = self._require_spies()

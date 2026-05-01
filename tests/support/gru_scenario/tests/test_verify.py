@@ -1,6 +1,8 @@
 import pytest
 
+from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.metrics_constants import LABEL_MINION_COMPOSITE_KEY
+from tests.assets.events.counter import CounterEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
@@ -1243,6 +1245,63 @@ def test_assert_runtime_expectations_persistence_at_latest_checkpoint():
     )
     verifier = _mk_verifier(plan, result)
     verifier._assert_runtime_expectations()
+
+
+def test_assert_persisted_context_integrity_accepts_matching_snapshot():
+    directives = [
+        MinionStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+        ),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            StartReceipt(
+                0,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "id-ok",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+                composite_key="ck",
+            ),
+        ],
+        checkpoints=[
+            ScenarioCheckpoint(
+                order=0,
+                kind="expect_runtime",
+                directive_type="ExpectRuntime",
+                receipt_count=1,
+                successful_receipt_count=1,
+                seen_shutdown=False,
+                persisted_context_snapshots_by_modpath={
+                    "tests.assets.minions.two_steps.counter.basic": (
+                        MinionWorkflowContext(
+                            minion_composite_key="ck",
+                            minion_modpath="tests.assets.minions.two_steps.counter.basic",
+                            workflow_id="workflow-1",
+                            event=CounterEvent(seq=1),
+                            context={"seen": False},
+                            context_cls=dict,
+                            next_step_index=0,
+                        ),
+                    )
+                },
+            ),
+        ],
+    )
+    verifier = _mk_verifier(plan, result)
+    verifier._assert_persisted_context_integrity()
 
 
 def test_assert_runtime_expectations_resolutions_at_latest_checkpoint():

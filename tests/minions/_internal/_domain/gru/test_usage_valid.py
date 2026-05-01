@@ -9,8 +9,9 @@ from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.support.gru_scenario import (
-    Directive,
+    AfterWorkflowStarts,
     Concurrent,
+    Directive,
     ExpectRuntime,
     GruShutdown,
     MinionStart,
@@ -295,6 +296,74 @@ class TestValidUsage:
     # TODO: I need tests for gru's default usages to ensure i stay version 1.x.x compliant
 
 class TestValidUsageDSL:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("minion_modpath", "pipeline_modpath", "minion_name"),
+        [
+            (
+                "tests.assets.minions.user_guarantees.persisted_dict",
+                "tests.assets.pipelines.user_guarantees.persisted_dict",
+                "dict-persistence-guarantee-minion",
+            ),
+            (
+                "tests.assets.minions.user_guarantees.persisted_dataclass",
+                "tests.assets.pipelines.user_guarantees.persisted_dataclass",
+                "dataclass-persistence-guarantee-minion",
+            ),
+            (
+                "tests.assets.minions.user_guarantees.persisted_msgspec",
+                "tests.assets.pipelines.user_guarantees.persisted_msgspec",
+                "struct-persistence-guarantee-minion",
+            ),
+        ],
+    )
+    async def test_user_guarantee_persisted_event_and_context_shapes_resume(
+        self,
+        gru,
+        logger,
+        metrics,
+        state_store,
+        minion_modpath,
+        pipeline_modpath,
+        minion_name,
+    ):
+        directives = [
+            MinionStart(minion=minion_modpath, pipeline=pipeline_modpath),
+            AfterWorkflowStarts(
+                expected={minion_name: 1},
+                directive=MinionStop(name_or_instance_id=minion_name, expect_success=True),
+            ),
+            ExpectRuntime(
+                expect=RuntimeExpectSpec(
+                    persistence={minion_name: 1},
+                    workflow_steps={minion_name: {"step_1": 1}},
+                    workflow_steps_mode="exact",
+                ),
+            ),
+            MinionStart(minion=minion_modpath, pipeline=pipeline_modpath),
+            WaitWorkflowCompletions(),
+            ExpectRuntime(
+                expect=RuntimeExpectSpec(
+                    resolutions={
+                        minion_name: {"succeeded": 2, "failed": 0, "aborted": 0},
+                    },
+                    workflow_steps={minion_name: {"step_1": 2}},
+                    workflow_steps_mode="exact",
+                ),
+            ),
+            MinionStop(name_or_instance_id=minion_name, expect_success=True),
+            GruShutdown(expect_success=True),
+        ]
+
+        await run_gru_scenario(
+            gru,
+            logger,
+            metrics,
+            state_store,
+            directives,
+            pipeline_event_counts={pipeline_modpath: 1},
+        )
+
     @pytest.mark.asyncio
     async def test_gru_start_stop_minion(
         self, gru, logger, metrics, state_store, tests_dir
