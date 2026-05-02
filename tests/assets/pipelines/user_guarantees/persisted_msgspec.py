@@ -14,8 +14,7 @@ class StructPersistenceGuaranteePipeline(SpiedPipeline[StructEvent]):
         if self._emitted:
             await asyncio.sleep(sys.maxsize)
 
-        while not self._mn_subs:
-            await asyncio.sleep(0.01)
+        await self.wait_for_subscribers()
 
         self._emitted = True
         return StructEvent(kind="struct-event", payload_value=10)

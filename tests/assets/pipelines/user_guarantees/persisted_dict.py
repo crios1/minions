@@ -13,8 +13,7 @@ class DictPersistenceGuaranteePipeline(SpiedPipeline[dict]):
         if self._emitted:
             await asyncio.sleep(sys.maxsize)
 
-        while not self._mn_subs:
-            await asyncio.sleep(0.01)
+        await self.wait_for_subscribers()
 
         self._emitted = True
         return {"kind": "dict-event", "payload": {"value": 10}}

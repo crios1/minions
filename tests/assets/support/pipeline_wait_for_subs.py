@@ -20,11 +20,7 @@ class WaitForSubsPipeline(SpiedPipeline[SimpleEvent]):
         if type(self)._emitted:
             await asyncio.sleep(sys.maxsize)
 
-        while True:
-            async with self._mn_subs_lock:
-                if len(self._mn_subs) >= type(self).expected_subs:
-                    break
-            await asyncio.sleep(0.01)
+        await self.wait_for_subscribers(type(self).expected_subs)
 
         type(self)._emitted = True
         return SimpleEvent(timestamp=time.time())

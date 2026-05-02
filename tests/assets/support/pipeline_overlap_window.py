@@ -1,4 +1,3 @@
-import asyncio
 import time
 
 from .pipeline_scripted import ScriptedSpiedPipeline
@@ -30,11 +29,7 @@ class OverlapWindowPipeline(ScriptedSpiedPipeline[SimpleEvent]):
             if self._next_seq == 0
             else type(self).second_emit_expected_subs
         )
-        while True:
-            async with self._mn_subs_lock:
-                if len(self._mn_subs) >= expected_subs:
-                    break
-            await asyncio.sleep(0.01)
+        await self.wait_for_subscribers(expected_subs)
 
         self._next_seq += 1
         return SimpleEvent(timestamp=time.time())
