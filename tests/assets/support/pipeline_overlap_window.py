@@ -1,10 +1,10 @@
 import time
 
-from .pipeline_scripted import ScriptedSpiedPipeline
+from .pipeline_fixed_event_count import FixedEventCountSpiedPipeline
 from ..events.simple import SimpleEvent
 
 
-class OverlapWindowPipeline(ScriptedSpiedPipeline[SimpleEvent]):
+class OverlapWindowPipeline(FixedEventCountSpiedPipeline[SimpleEvent]):
     first_emit_expected_subs = 1
     second_emit_expected_subs = 2
     total_events = 2

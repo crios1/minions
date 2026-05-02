@@ -1,11 +1,8 @@
-import asyncio
-import sys
-
-from tests.assets.support.pipeline_spied import SpiedPipeline
+from tests.assets.support.pipeline_fixed_event_count import FixedEventCountSpiedPipeline
 from tests.assets.events.counter import CounterEvent
 
 
-class Emit1PipelineC(SpiedPipeline[CounterEvent]):
+class Emit1PipelineC(FixedEventCountSpiedPipeline[CounterEvent]):
     expected_subs = 1
     total_events = 1
 
@@ -14,8 +11,6 @@ class Emit1PipelineC(SpiedPipeline[CounterEvent]):
         self._next_seq = 0
 
     async def produce_event(self) -> CounterEvent:
-        if self._next_seq >= type(self).total_events:
-            await asyncio.sleep(sys.maxsize)
         await self.wait_for_subscribers(type(self).expected_subs)
         seq = self._next_seq
         self._next_seq += 1

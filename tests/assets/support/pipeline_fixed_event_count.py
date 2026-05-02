@@ -5,8 +5,8 @@ from minions._internal._domain.types import T_Event
 from .pipeline_spied import SpiedPipeline
 
 
-class ScriptedSpiedPipeline(SpiedPipeline[T_Event], defer_pipeline_setup=True):
-    """Test-only bounded runner for deterministic pipeline fixtures.
+class FixedEventCountSpiedPipeline(SpiedPipeline[T_Event], defer_pipeline_setup=True):
+    """Test-only runner for deterministic fixed-count pipeline fixtures.
 
     Subclasses implement `produce_event` and can set `total_events`.
     The base `run` loop emits exactly `total_events` events, then blocks.

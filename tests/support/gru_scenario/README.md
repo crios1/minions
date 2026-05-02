@@ -52,10 +52,10 @@ This package provides a light, test-focused DSL for scripting Gru scenarios and 
 - Shared/fanout verification requires an explicit subscription barrier before event emission.
 - Until the barrier is owned by DSL internals, tests should use synchronization-capable test pipelines (gated assets) for deterministic fanout checks.
 - Pipeline assets used for deterministic fanout checks are test synchronization assets by design; this does not redefine production runtime semantics.
-- For strict overlap-window assertions, prefer scripted deterministic fixtures:
-  - base: `tests.assets.support.pipeline_scripted.ScriptedSpiedPipeline`,
+- For strict overlap-window assertions, prefer fixed-count deterministic fixtures:
+  - base: `tests.assets.support.pipeline_fixed_event_count.FixedEventCountSpiedPipeline`,
   - overlap fixture: `tests.assets.support.pipeline_overlap_window`.
-- Reason: base `Pipeline.run` loops indefinitely and may produce an additional `produce_event` call beyond target counts; scripted fixtures bound event emission so strict window mismatches fail for the intended reason.
+- Reason: base `Pipeline.run` loops indefinitely and may produce an additional `produce_event` call beyond target counts; fixed-count fixtures bound event emission so strict window mismatches fail for the intended reason.
 
 ## Quick Start
 ```python
