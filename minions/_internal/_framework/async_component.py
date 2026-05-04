@@ -18,9 +18,88 @@ class AsyncComponent(AsyncLifecycle):
         if owner is self or owner is type(self):
             return
         raise TypeError(
-            "_mn_safe_run_and_log_failure requires a method bound to this component instance "
+            "run-and-log helpers require a method bound to this component instance "
             "or its class; pass self.method or type(self).method."
         )
+
+    async def _mn_call_bound_method(
+        self,
+        method: Callable[..., T | Awaitable[T]],
+        method_args: list | None = None,
+        method_kwargs: dict | None = None,
+    ) -> T:
+        method_args = method_args or []
+        method_kwargs = method_kwargs or {}
+        result = method(*method_args, **method_kwargs)
+        if inspect.isawaitable(result):
+            return await result
+        return result
+
+    async def _mn_log_method_failure(
+        self,
+        method: Callable[..., object],
+        error: Exception,
+        log_msg: str | None = None,
+        log_kwargs: dict | None = None,
+    ) -> None:
+        log_kwargs = log_kwargs or {}
+        rel_modpath = get_relative_module_path(type(self))
+        method_name = getattr(method, "__name__", None) or type(method).__name__
+        msg = log_msg or f"{type(self).__name__}.{method_name} failed ({rel_modpath})"
+        effective_log_kwargs = {
+            **log_kwargs,
+            "rel_modpath": rel_modpath,
+        }
+        await self._mn_logger._log(
+            ERROR,
+            msg,
+            error_type=type(error).__name__,
+            error_message=str(error),
+            traceback=format_exception_traceback(error),
+            **effective_log_kwargs,
+        )
+
+    @overload
+    async def _mn_run_and_log_failure(
+        self,
+        method: Callable[P, Awaitable[T]],
+        method_args: list | None = ...,
+        method_kwargs: dict | None = ...,
+        log_msg: str | None = ...,
+        log_kwargs: dict | None = ...
+    ) -> T:
+        ...
+
+    @overload
+    async def _mn_run_and_log_failure(
+        self,
+        method: Callable[P, T],
+        method_args: list | None = ...,
+        method_kwargs: dict | None = ...,
+        log_msg: str | None = ...,
+        log_kwargs: dict | None = ...
+    ) -> T:
+        ...
+
+    async def _mn_run_and_log_failure(
+        self,
+        method: Callable[..., T | Awaitable[T]],
+        method_args: list | None = None,
+        method_kwargs: dict | None = None,
+        log_msg: str | None = None,
+        log_kwargs: dict | None = None,
+    ) -> T:
+        """Run a bound instance/class method, log failures, and re-raise them."""
+        self._mn_require_bound_method(method)
+        try:
+            return await self._mn_call_bound_method(
+                method,
+                method_args=method_args,
+                method_kwargs=method_kwargs,
+            )
+        except Exception as e:
+            await self._mn_log_method_failure(method, e, log_msg, log_kwargs)
+            raise
 
     @overload
     async def _mn_safe_run_and_log_failure(
@@ -58,27 +137,11 @@ class AsyncComponent(AsyncLifecycle):
         failure log with additional context.
         """
         self._mn_require_bound_method(method)
-        method_args = method_args or []
-        method_kwargs = method_kwargs or {}
-        log_kwargs = log_kwargs or {}
         try:
-            result = method(*method_args, **method_kwargs)
-            if inspect.isawaitable(result):
-                return await result
-            return result
-        except Exception as e:
-            rel_modpath = get_relative_module_path(type(self))
-            method_name = getattr(method, "__name__", None) or type(method).__name__
-            msg = log_msg or f"{type(self).__name__}.{method_name} failed ({rel_modpath})"
-            effective_log_kwargs = {
-                **log_kwargs,
-                "rel_modpath": rel_modpath,
-            }
-            await self._mn_logger._log(
-                ERROR,
-                msg,
-                error_type=type(e).__name__,
-                error_message=str(e),
-                traceback=format_exception_traceback(e),
-                **effective_log_kwargs,
+            return await self._mn_call_bound_method(
+                method,
+                method_args=method_args,
+                method_kwargs=method_kwargs,
             )
+        except Exception as e:
+            await self._mn_log_method_failure(method, e, log_msg, log_kwargs)
