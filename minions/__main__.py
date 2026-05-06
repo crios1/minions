@@ -19,7 +19,7 @@ def main(argv: list[str] | None = None) -> int:
 
     shell_p = sub.add_parser(
         "shell",
-        help="Start an exploratory GruShell (not for production deployments).",
+        help="Start deprecated GruShell local helper (not for production deployments).",
     )
     shell_p.add_argument(
         "--no-banner",

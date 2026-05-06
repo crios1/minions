@@ -106,7 +106,7 @@ async def main():
 
     shell = GruShell(gru)
     try:
-        await asyncio.to_thread(shell.cmdloop)  # interactive control plane
+        await asyncio.to_thread(shell.cmdloop)  # deprecated local helper
     finally:
         await gru.shutdown()
 
@@ -114,7 +114,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Start the app and try `start`, `stop`, `status`, and `shutdown` in the shell. See {doc}`how-to/integrating-with-cli` for command details.
+Start the app and try `start`, `stop`, `status`, and `shutdown` in the shell. `GruShell` is a deprecated transitional helper; the planned long-term runtime control model is `minions gru serve` plus `minions gru attach`. See {doc}`how-to/integrating-with-cli` for current command details.
 
 ## Next steps
 

@@ -15,7 +15,11 @@ __all__ = ["GruShell", "main"]
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="python -m minions shell",
-        description="Start an exploratory GruShell for onboarding and experimentation.",
+        description=(
+            "Start deprecated GruShell for local experimentation. "
+            "This helper will be replaced by the planned `minions gru serve` / "
+            "`minions gru attach` control model."
+        ),
     )
     p.add_argument(
         "--no-banner",
@@ -32,8 +36,9 @@ async def _run_shell(*, show_banner: bool) -> None:
     try:
         if show_banner:
             print(
-                "Starting GruShell (exploratory).\n"
-                "For production deployments, embed `GruShell` in your own deployment script.\n"
+                "Starting GruShell (deprecated local helper).\n"
+                "GruShell is retained for experimentation and as serve/attach design material.\n"
+                "For production control, use the planned `minions gru serve` / `minions gru attach` model once available.\n"
                 "Type `help` to list commands."
             )
 

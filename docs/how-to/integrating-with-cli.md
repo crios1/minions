@@ -1,6 +1,8 @@
 # Integrating with the CLI
 
-`GruShell` is an experimental control plane for a running Gru instance. It is built on `cmd.Cmd`, so it runs in the foreground and submits orchestration actions to the event loop.
+`GruShell` is a deprecated in-process control helper for a running Gru instance. It is built on `cmd.Cmd`, runs in the foreground, and submits orchestration actions to the event loop.
+
+The planned replacement is a split `minions gru serve` / `minions gru attach` model: `serve` owns the long-lived runtime, while `attach` connects to it without stopping the runtime when the attach session exits. Treat `GruShell` as a temporary local/demo path and as source material for that control model, not as the production operator interface.
 
 ## Wiring it up
 
@@ -29,6 +31,6 @@ The shell shares the Gru event loop; commands submit coroutines with `asyncio.ru
 
 ## Caveats
 
-- The shell API is evolving; method names may change as the CLI is refined.
+- The shell API is deprecated and may be removed once `minions gru serve` / `minions gru attach` exists.
 - Commands are non-blocking by default; use `status --await` to wait for orchestration to finish.
-- Run inside `tmux`/`screen` or a supervisor when embedding into a long-lived process.
+- Exiting this in-process shell tears down the local runtime; use a supervisor only for temporary experiments until the serve/attach model replaces it.

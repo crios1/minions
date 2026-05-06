@@ -4,7 +4,7 @@
   - Consolidate (and spec out) my todos to establish a priority between them.
     First, consolidate codebase TODOs and relevant notes from design conversations into this file.
     Then, complete the test-suite refactor so future work can be implemented end to end with running tests.
-    Next, complete partially finished efforts like GruShell to tidy the codebase and document/test their designs.
+    Next, deprecate/retire partially finished efforts like GruShell as their replacement designs are clarified.
     Finally, work through this file end to end with running tests.
 -->
 
@@ -762,19 +762,22 @@
       - consider guidance around committing observability definitions to the repo
 
 - todo: implement "minions gru serve" and "minions gru attach"
-  - basically a redesign of the runtime controller
-  - GruShell can remain as a demo or embedded helper, while the official operational flow may become a separate serve/attach model
+  - this replaces GruShell as the canonical runtime controller / operator UX
+  - `minions gru serve` owns the long-lived Gru runtime lifecycle
+  - `minions gru attach` connects to an already-running Gru runtime without stopping it when the attach session exits
+  - GruShell is deprecated as a production/control-plane direction; treat it as legacy design material and a temporary local demo/helper until serve/attach covers onboarding
+  - migrate useful GruShell command semantics (`status`, `stop`, `redeploy`, `snapshot`, `deps`, etc.) into the serve/attach command model instead of expanding `cmd.Cmd` behavior
   - convo: https://chatgpt.com/c/69406c80-f478-8327-85b2-e3fb54d89796
   - should consider creating a golang cli for a cli option of 'minions gru attach'
 
-- todo: complete GruShell (~90% implemented, needs documentation / user onboarding flow)
-  - users may embed GruShell into deployment scripts or use a cookbook script
-  - open question:
-    - should `python -m minions shell` be the primary onboarding path, or should it be framed as an experimental/development helper?
+- todo: keep GruShell stable only as a deprecated transitional helper
+  - do not complete GruShell as a first-class operator interface
+  - fix obvious crashes while it remains exported, but avoid adding new product semantics there
+  - use the existing GruShell code and docs as source material for the serve/attach design
 
-- todo: implement and lock in two-stage Ctrl-C shutdown semantics for GruShell (for Gru too if not implemented)
+- todo: implement and lock in two-stage Ctrl-C shutdown semantics for the runtime controller
   - scope:
-    - implement in GruShell / shell entrypoint (`minions/shell.py`), not in `Gru` core runtime
+    - implement for `minions gru serve` / `minions gru attach`; only backport to GruShell if it remains useful before replacement
   - behavior:
     - first Ctrl-C triggers graceful runtime shutdown and logs "press Ctrl-C again to force stop"
     - additional Ctrl-C during graceful shutdown forces immediate hard stop

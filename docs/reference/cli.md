@@ -1,6 +1,6 @@
 # CLI Reference
 
-Minions ships a small CLI surface for interactive control and local tuning helpers.
+Minions ships a small CLI surface for local tuning helpers and transitional runtime control.
 
 ## Supported entrypoints
 
@@ -12,13 +12,13 @@ Current commands:
 - `python -m minions shell`
 - `python -m minions tune sqlite --recommend-config`
 
-`minions.shell` exposes `GruShell`, an interactive controller for a running Gru. It wraps core orchestration calls (`start_minion`, `stop_minion`, `shutdown`) and prints status snapshots.
+`minions.shell` exposes `GruShell`, a deprecated in-process controller for a running Gru. It is retained as a local demo/helper and as design material for the planned `minions gru serve` / `minions gru attach` control model. Do not treat it as the production operator interface.
 
 ## Entry points
 
 - Import directly: `from minions import GruShell`
 - Module CLI:
-  - `python -m minions shell`
+  - `python -m minions shell` (deprecated transitional helper)
   - `python -m minions tune sqlite --recommend-config`
 - Installed CLI after package install:
   - `minions shell`
@@ -72,4 +72,4 @@ previous durable checkpoint.
 - `shutdown`
   - Cancels running tasks, shuts down metrics/loggers/state store, and exits the shell.
 
-The shell is synchronous; run it in a thread (`asyncio.to_thread(shell.cmdloop)`) so it can submit work to the asyncio loop without blocking it.
+The shell is synchronous and in-process; run it in a thread (`asyncio.to_thread(shell.cmdloop)`) so it can submit work to the asyncio loop without blocking it. Exiting the shell tears down that local runtime, which is why the long-term operator flow is moving to separate `serve` and `attach` commands.

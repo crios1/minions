@@ -35,6 +35,8 @@ async def main():
 asyncio.run(main())
 ```
 
+`GruShell` is a deprecated transitional helper: it starts an interactive control loop in the same process, and exiting it tears down the local runtime. It remains useful for local experimentation until the planned `minions gru serve` / `minions gru attach` flow replaces it.
+
 ## 4) Use GruShell commands
 
 Inside the shell:
