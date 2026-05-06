@@ -454,6 +454,8 @@
   - todo: decide state-store availability semantics for Gru start/stop commands
     - problem:
       - state-store read failures during resume now correctly fail closed instead of returning an empty resume set
+      - workflow checkpoint write behavior is now explicitly operator-configurable via `WorkflowPersistenceFailurePolicy`, but startup/replay behavior still has fixed semantics
+      - the remaining design gap is to decide whether startup component availability, persisted-context replay reads, and degraded recovery behavior should live under a separate recovery policy or under a broader persistence/durability policy surface
       - this is correct as a safety baseline, but the broader command semantics are not fully designed:
         - should `start_minion` fail when persisted resume state cannot be read, or start in a degraded recovery-pending mode?
         - should `stop_minion` always remain live-process control, or block/warn/require force when persistence health makes durable recovery unsafe?
@@ -464,6 +466,7 @@
       - distinguish command application from durability/recovery guarantees in user-facing results
     - start_minion design questions:
       - current conservative behavior: a resume read failure causes start to fail and Gru cleans up partial runtime state
+      - decide whether state-store startup/bootstrap failure should remain unconditionally fatal, or become part of the same operator-facing durability/recovery policy model as persisted replay reads
       - possible future behavior: start the minion in a degraded state with recovery pending, retry persisted-context reads in the background, and allow new workflows according to `WorkflowPersistenceFailurePolicy`
       - if degraded start is supported, add explicit runtime state such as `recovery_pending` / `state_store_unavailable` / `partial_recovery`
       - decide whether new workflow admission should be allowed before persisted recovery completes, and how to avoid duplicate or out-of-order work if recovery later succeeds
@@ -494,6 +497,7 @@
     - docs:
       - explain the distinction between live-process control and durable recovery guarantees
       - document how `WorkflowPersistenceFailurePolicy` relates to command behavior without overloading it to mean recovery-read policy
+      - document the remaining semantic split clearly until it is unified: checkpoint save/delete policy is configurable, while startup bootstrap and replay currently remain stricter/fixed
 
   - todo: add first-class recovery handling for undecodable persisted workflow contexts
     - problem:
