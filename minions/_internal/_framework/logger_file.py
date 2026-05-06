@@ -1,14 +1,27 @@
 import asyncio
+import msgspec
 import sys
 
 from pathlib import Path
 from typing import Any
 
 from .logger import Logger, INFO, LEVEL_NAMES
-from .._utils.serialization import serialize, deserialize
+from .._utils.serialization.constants import SUPPORTED_TYPES_MSG
 
 MIN_LOG_FILE_BYTES = 1024    # 1 KB
 MIN_LOG_STORAGE_BYTES = 1024 # 1 KB
+_JSON_ENCODER = msgspec.json.Encoder()
+
+
+def _serialize_log_json(obj: Any, *, exp_msg_prefix: str = "") -> str:
+    """Encode supported objects as UTF-8 JSON text for log output."""
+    try:
+        return _JSON_ENCODER.encode(obj).decode("utf-8")
+    except (msgspec.EncodeError, TypeError) as e:
+        name = getattr(obj, "__name__", obj.__class__.__name__)
+        raise TypeError(
+            f"{exp_msg_prefix}{name} is not JSON-serializable. {SUPPORTED_TYPES_MSG} ({e})"
+        ) from e
 
 class FileLogger(Logger):
     """
@@ -94,7 +107,7 @@ class FileLogger(Logger):
                 **kwargs,
             }
 
-            log_line = serialize(entry).decode() + "\n"
+            log_line = _serialize_log_json(entry) + "\n"
 
             if self._stdout:
 
@@ -117,7 +130,7 @@ class FileLogger(Logger):
                     kwargs.pop("traceback", None)
 
                 extras = " ".join(
-                    f"{k}={serialize(v).decode() if not isinstance(v, str) else v}" for k, v in kwargs.items()
+                    f"{k}={_serialize_log_json(v) if not isinstance(v, str) else v}" for k, v in kwargs.items()
                 ).strip()
 
                 print(f"{marker} {msg} {extras}", file=sys.stdout)
@@ -133,6 +146,7 @@ class FileLogger(Logger):
         try:
             if (
                 not self._log_dir.exists()
+                or not self._path.exists()
                 or self._max_log_file_bytes is None
                 or self._path.stat().st_size < self._max_log_file_bytes
             ):

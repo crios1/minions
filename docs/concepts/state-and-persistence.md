@@ -10,7 +10,7 @@ Minions treats workflow context as durable. Before each step executes, Gru saves
 
 ## Workflow lifecycle
 
-- Context and events must be JSON-serializable structured types (dataclasses/TypedDicts, not bare primitives).
+- Context and events must be serializer-supported structured types (dataclasses/TypedDicts/`msgspec.Struct`, not bare primitives).
 - Map-like event/context data must use string keys when annotated explicitly (`dict[str, V]` or `Mapping[str, V]`). Bare `dict` remains accepted as an ad hoc/prototyping schema, but production workflow state should use explicit serializable value types.
 - Context is saved **before** each step runs; failures keep the last saved state for debugging/resume.
 - Success deletes the context at the end; aborts log and clean up.
@@ -22,6 +22,10 @@ Minions treats workflow context as durable. Before each step executes, Gru saves
 Every `StateStore` implementation persists opaque serialized workflow context
 blobs. The runtime owns serialization and deserialization; stores do not
 inspect or mutate workflow event/context data.
+
+By default those blobs are internal binary `msgspec` payloads. They are a runtime
+durability format, not a human-readable interchange format or a public storage
+schema for custom stores to inspect.
 
 The important contract for write methods is:
 
