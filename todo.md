@@ -243,6 +243,13 @@
 - todo: write tests for gru.start_minion to lock in that it works with class and string-based starts
 
 - todo: add "crash testing" to test suite to ensure the Minions runtime preserves its crash guarantees
+  - status:
+    - deterministic "boom user code" coverage has been added for the primary in-process user-code surfaces
+    - `Gru.start_minion(...)` failed-start partial registration cleanup has been implemented and tested
+  - remaining follow-ups:
+    - add explicit mid-operation invariant tests for remaining public Gru methods, especially `stop_minion(...)` and `shutdown(...)`
+    - decide and document whether pipeline/resource shutdown-hook failures during cancellation should make `stop_minion(...)` fail or remain log-only
+    - add separate subprocess kill/restart tests for process-death resume guarantees; keep this separate from ordinary in-process exception containment
   - todo: add deterministic "boom user code" testing across every user-code runtime surface
     - goal:
       - pass intentionally exploding user code into every user-code entry point and prove the runtime contains the blast radius consistently
@@ -422,21 +429,104 @@
     - recommend exposing all stable low-cardinality runtime metrics by default
     - explain that family-level controls are mostly for operators with storage, policy, or relevance constraints
 
-- todo: refine configurable workflow persistence failure policy after first implementation
-  - problem:
-    - the first pass added explicit persistence failure policies, retry behavior, logs, and metrics
-    - remaining design work is about API placement, stop-mode interaction, and operational clarity
-  - follow-ups:
-    - decide whether policies should be configured globally on Gru, per Minion, or both
-    - clarify how `continue-on-failure` should report unresolved failed checkpoints when stop/redeploy modes are added
-    - keep policy interaction with durable vs eventual StateStore semantics explicit
-  - linked follow-up:
-    - pair this with explicit workflow step skip results so idempotent step guards are visible in logs and runtime receipts
-  - tests:
-    - add stop-mode-specific tests once `drain`/`cutover` exists
-    - add tests for any future per-minion policy override behavior
-  - docs:
-    - keep documenting the policy tradeoff between availability and durable progress guarantees
+- todo: stabilize workflow persistence and recovery semantics
+  - implementation order:
+    - refine configurable workflow persistence failure policy after first implementation
+    - decide state-store availability semantics for Gru start/stop commands
+    - add first-class recovery handling for undecodable persisted workflow contexts
+
+  - todo: refine configurable workflow persistence failure policy after first implementation
+    - problem:
+      - the first pass added explicit persistence failure policies, retry behavior, logs, and metrics
+      - remaining design work is about API placement, stop-mode interaction, and operational clarity
+    - follow-ups:
+      - decide whether policies should be configured globally on Gru, per Minion, or both
+      - clarify how `continue-on-failure` should report unresolved failed checkpoints when stop/redeploy modes are added
+      - keep policy interaction with durable vs eventual StateStore semantics explicit
+    - linked follow-up:
+      - pair this with explicit workflow step skip results so idempotent step guards are visible in logs and runtime receipts
+    - tests:
+      - add stop-mode-specific tests once `drain`/`cutover` exists
+      - add tests for any future per-minion policy override behavior
+    - docs:
+      - keep documenting the policy tradeoff between availability and durable progress guarantees
+
+  - todo: decide state-store availability semantics for Gru start/stop commands
+    - problem:
+      - state-store read failures during resume now correctly fail closed instead of returning an empty resume set
+      - this is correct as a safety baseline, but the broader command semantics are not fully designed:
+        - should `start_minion` fail when persisted resume state cannot be read, or start in a degraded recovery-pending mode?
+        - should `stop_minion` always remain live-process control, or block/warn/require force when persistence health makes durable recovery unsafe?
+      - `WorkflowPersistenceFailurePolicy` currently describes checkpoint/write behavior for live workflows, not recovery reads or command safety
+    - design principle:
+      - commands can control the live process without the state store, but they must not claim durable recovery safety unless the state store has confirmed it
+      - never collapse "state store unavailable" into "no persisted workflows to resume"
+      - distinguish command application from durability/recovery guarantees in user-facing results
+    - start_minion design questions:
+      - current conservative behavior: a resume read failure causes start to fail and Gru cleans up partial runtime state
+      - possible future behavior: start the minion in a degraded state with recovery pending, retry persisted-context reads in the background, and allow new workflows according to `WorkflowPersistenceFailurePolicy`
+      - if degraded start is supported, add explicit runtime state such as `recovery_pending` / `state_store_unavailable` / `partial_recovery`
+      - decide whether new workflow admission should be allowed before persisted recovery completes, and how to avoid duplicate or out-of-order work if recovery later succeeds
+    - stop_minion design questions:
+      - make stop modes persistence-aware once `pause` / `drain` / `cutover` exist
+      - `drain` can usually proceed with warnings because live in-memory workflows are allowed to finish
+      - `pause` / persisted handoff should require durable checkpoint confidence or report degraded persistence risk
+      - `cutover` / immediate interruption should warn strongly or require `force=True` when state-store health is bad or unpersisted workflows exist
+      - decide how stop results should report unresolved failed checkpoints under `continue-on-failure`
+    - result/API shape:
+      - consider adding structured warning/status fields to start/stop results rather than overloading `reason`
+      - possible fields:
+        - `applied: bool`
+        - `state_store_available: bool`
+        - `recovery_status: Literal["complete", "pending", "not_required", "failed", "partial"]`
+        - `persistence_risk: Literal["none", "degraded", "possible_workflow_loss"]`
+        - `warnings: tuple[str, ...]`
+      - keep string `reason` for failure summaries, but make degraded success machine-readable
+    - observability:
+      - log state-store availability transitions and command-level persistence risk with stable kwargs
+      - add metrics for recovery-pending/degraded starts and stop commands that proceed with persistence risk
+      - make GruShell surface warnings before dangerous operations and require explicit confirmation/force for high-risk cutover paths
+    - tests:
+      - keep the current regression that read failure during `start_minion` fails closed and cleans up runtime state
+      - if degraded start is added, prove start returns applied-with-warning, recovery retries continue, and persisted workflows are not silently abandoned
+      - prove stop `drain` / `pause` / `cutover` report different persistence risks when the state store is unavailable
+      - prove forced cutover is explicit and observable when persistence risk is present
+    - docs:
+      - explain the distinction between live-process control and durable recovery guarantees
+      - document how `WorkflowPersistenceFailurePolicy` relates to command behavior without overloading it to mean recovery-read policy
+
+  - todo: add first-class recovery handling for undecodable persisted workflow contexts
+    - problem:
+      - StateStore read failures during resume must fail closed because an empty result means "no persisted in-flight workflows", while a failed read means "unknown persisted state"
+      - decode failures are more nuanced: one bad persisted workflow context should not necessarily prevent unrelated decodable workflows from resuming
+      - current best-effort decode behavior only logs bad contexts, so an undecodable in-flight workflow can become stranded without a first-class blocked/recovery-failed state for operators to inspect or alert on
+    - desired default:
+      - long-term default should be best-effort recovery once it is implemented as a real operational feature
+      - decodable workflow contexts resume independently
+      - undecodable workflow contexts are marked as blocked/recovery-failed/quarantined instead of being silently skipped
+      - strict/all-or-nothing recovery remains available for users who need orchestration-wide atomic resume semantics
+    - policy shape:
+      - consider a recovery/decode policy separate from `WorkflowPersistenceFailurePolicy`, since persistence failures happen while a live workflow is checkpointing and decode failures happen during recovery
+      - possible policy names:
+        - `WorkflowRecoveryDecodeFailurePolicy = Literal["resume-decodable", "fail-orchestration"]`
+      - do not add public configurability until the blocked/recovery-failed operational surface exists; otherwise `resume-decodable` would mostly mean "log and skip"
+    - observability:
+      - add a durable/operator-visible representation for undecodable workflow contexts
+        - include `workflow_id`, `orchestration_id`, state store backend, error type/message, and first-seen timestamp
+        - avoid logging or storing raw payload contents
+      - add metrics such as `minion_workflow_recovery_decode_failed_total`
+      - ensure Gru/GruShell can list recovery-failed workflows and provide an operator action path to drop, retry, or migrate them
+      - make startup/resume logs clearly distinguish full recovery from partial recovery
+    - tests:
+      - prove read failures still fail closed and do not look like an empty resume set
+      - prove best-effort recovery resumes decodable contexts while recording undecodable contexts as recovery-failed
+      - prove strict recovery fails the affected orchestration when any persisted context for that orchestration cannot decode
+      - prove recovery-failed contexts are visible through logs, metrics, and the chosen runtime/operator inspection surface
+      - prove unrelated orchestrations are not blocked by a recovery failure outside their scope
+    - docs:
+      - explain the difference between state-store read failure, decode failure, and no persisted contexts
+      - document why best-effort recovery is the intended default once recovery-failed workflows are first-class state
+      - document when users should choose strict recovery instead
 
 - todo: add explicit workflow step skipped result for idempotent early returns
   - problem:
@@ -873,12 +963,44 @@
 ### Misc:
 - todo: comb the codebase for any remaining TODO comments; resolve them or consolidate them into this file
 
-- todo: manually audit runtime logs and ensure they read as events w/ details in kwargs (also that event msgs are lowercase)
-  - ex: "async component started" , {'component': SQLiteStateStore}
-  - note: it would be useful to enforce that quality when running Gru scenarios by asserting from a set of log message / log kwargs pairs
-  - note: changing log messages or kwargs can be a breaking change for monitoring, so tests should make intentional log changes visible
-  - note: decide on a broader logging-test strategy for the suite, not just isolated log unit tests
-    - decide when to use narrow unit assertions on a single emitted log vs broader scenario/contract tests that lock in log messages, levels, kwargs, ordering, and rate-limiting behavior across runtime flows
+- todo: define and enforce a runtime logging contract, then manually audit wording for operator/user framing
+  - goal:
+    - runtime logs should read as event statements with structured details in kwargs
+    - operator/user-facing runtime logs should put the operator/user concern first unless the log is specifically a developer/runtime error
+    - common structured kwargs should be present consistently across applicable logs, so monitoring, alerts, dashboards, and support workflows can depend on them
+  - automated contract checks:
+    - collect emitted logs from representative Gru scenario runs instead of relying only on manual review
+    - assert event-message formatting mechanically:
+      - lowercase event-style message strings
+      - no important runtime details embedded only in the message when they should be kwargs
+      - stable message strings where downstream monitoring may depend on them
+    - assert expected log levels for important runtime events
+    - assert common kwargs by log category / runtime surface rather than requiring every log to carry every field
+      - define a small log category / runtime surface taxonomy before locking required kwargs
+        - possible categories: lifecycle, workflow, pipeline, resource, persistence, logger, metrics, admission-control, dev/runtime-error
+        - use the taxonomy to decide which kwargs are required, optional, or irrelevant for each category
+      - possible common fields:
+        - component / component_type / component_id
+        - minion_name / minion_instance_id / orchestration_id
+        - workflow_id / step_name
+        - pipeline_name / pipeline_instance_id
+        - resource_name / resource_instance_id / resource_method
+        - error_type / error_message for failure logs
+      - decide the final field names alongside the orchestration identity terminology cleanup so logs, metrics, docs, and tests do not drift
+    - make intentional log contract changes visible in tests because message strings and kwargs can become monitoring compatibility surfaces
+  - manual audit:
+    - review collected runtime logs for operator/user-first wording:
+      - can an operator tell what happened?
+      - can they identify the affected runtime object?
+      - can they tell whether action is needed?
+      - is the message about the user-visible event first, with developer details reserved for kwargs or dev-error logs?
+    - manually classify logs that are legitimately developer/runtime errors so they are not forced into operator-facing wording
+  - testing strategy:
+    - use narrow unit assertions when a single code path owns a specific log event
+    - use broader Gru scenario / contract tests for runtime flows where message, level, kwargs, ordering, or rate-limiting behavior matter together
+    - avoid snapshotting noisy or incidental logs unless they are part of the intended observability contract
+  - example:
+    - "async component started", {"component_type": "SQLiteStateStore", ...}
 
 - todo: setup github repo so feature requests are surfaced thru "discussions" instead of "issues"
   - https://chatgpt.com/c/693f6fff-6bac-8333-9844-b1aade31a4d5

@@ -12,6 +12,7 @@ from minions._internal._framework.metrics import (
     SnapshotHistograms,
     SnapshotResult,
 )
+from minions._internal._framework.logger import Logger
 from minions._internal._framework.metrics_interface import LabelledMetric
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_constants import METRIC_LABEL_NAMES
@@ -184,7 +185,7 @@ class InMemoryMetrics(SpiedMetrics):
     In-memory metrics backend.
     Thread-safe, test-friendly; stores per-label values and provides snapshot helpers.
     """
-    def __init__(self, logger: NoOpLogger | None = None):
+    def __init__(self, logger: Logger | None = None):
         super().__init__(logger or NoOpLogger())
         self._snapshot_lock = threading.Lock()
         self._metric_label_emissions: list[MetricLabelEmission] = []

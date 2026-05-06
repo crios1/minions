@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import gc
 import hashlib
 import importlib
 import json
@@ -259,8 +258,6 @@ class Gru:
             if _GRU_INSTANCE is inst:
                 _GRU_INSTANCE = None
             raise
-        if hasattr(gc, "freeze"):
-            gc.freeze()
         return inst
 
     async def _startup(self):
@@ -779,6 +776,11 @@ class Gru:
 
         minion_instance_id = self._make_minion_instance_id()
         minion_composite_key = self._make_minion_composite_key(minion_modpath, minion_config_path, pipeline_modpath)
+        minion_inst: Minion | None = None
+        pipeline_inst: Pipeline | None = None
+        pipeline_id: str | None = None
+        preexisting_pipeline_ids = set(self._pipelines)
+        preexisting_resource_ids = set(self._resources)
 
         try:
             # prev sig: 
@@ -943,13 +945,14 @@ class Gru:
             )
         
         except Exception as e:
-            # TODO: will need to clear entries in like self._minions_by_composite_key
-            # to cover the case where there is a memory leak due to an unexpected exception happening
-            # do it for every public method
-            self._minions_by_composite_key.pop(minion_composite_key, None)
-            self._minions_by_id
-            self._minions_by_id
-            self._minion_resource_map
+            await self._cleanup_failed_start_minion(
+                minion=minion_inst,
+                pipeline=pipeline_inst,
+                pipeline_id=pipeline_id,
+                minion_composite_key=minion_composite_key,
+                preexisting_pipeline_ids=preexisting_pipeline_ids,
+                preexisting_resource_ids=preexisting_resource_ids,
+            )
 
             await self._log_exception_with_context(e, "Failed to start minion")
             return StartMinionResult(
@@ -957,6 +960,102 @@ class Gru:
                 reason=str(e)
             )
 
+    async def _cleanup_failed_start_minion(
+        self,
+        *,
+        minion: Minion | None,
+        pipeline: Pipeline | None,
+        pipeline_id: str | None,
+        minion_composite_key: str,
+        preexisting_pipeline_ids: set[str],
+        preexisting_resource_ids: set[str],
+    ) -> None:
+        self._minions_by_composite_key.pop(minion_composite_key, None)
+
+        if minion is not None:
+            instance_id = minion._mn_minion_instance_id
+            self._minion_pipeline_map.pop(instance_id, None)
+            if pipeline is not None:
+                await pipeline._mn_unsubscribe(minion)
+
+            if resource_ids := self._minion_resource_map.pop(instance_id, None):
+                for resource_id in resource_ids:
+                    self._resource_refcounts[resource_id] -= 1
+                await self._cleanup_resources(resource_ids)
+
+            await self._stop_minion_best_effort(minion)
+
+        if pipeline_id is not None and pipeline_id not in preexisting_pipeline_ids:
+            await self._stop_pipeline_best_effort(pipeline_id)
+
+        new_resource_ids = set(self._resources) - preexisting_resource_ids
+        for resource_id in list(new_resource_ids):
+            self._resource_refcounts[resource_id] = 0
+        await self._cleanup_resources(new_resource_ids)
+
+        self._prune_resource_maps()
+
+    async def _stop_minion_best_effort(self, minion: Minion) -> None:
+        try:
+            await self._stop_minion(minion)
+        except Exception as e:
+            await self._logger._log(
+                ERROR,
+                "Failed-start cleanup could not stop minion",
+                minion_name=minion._mn_name,
+                minion_instance_id=minion._mn_minion_instance_id,
+                error_type=type(e).__name__,
+                error_message=str(e),
+                traceback=format_exception_traceback(e),
+            )
+            instance_id = minion._mn_minion_instance_id
+            self._minions_by_id.pop(instance_id, None)
+            if minion._mn_name:
+                remaining = [
+                    item for item in self._minions_by_name.get(minion._mn_name, [])
+                    if item._mn_minion_instance_id != instance_id
+                ]
+                if remaining:
+                    self._minions_by_name[minion._mn_name] = remaining
+                else:
+                    self._minions_by_name.pop(minion._mn_name, None)
+            task = self._minion_tasks.pop(instance_id, None)
+            if task is not None:
+                await safe_cancel_task(task=task, logger=self._logger)
+
+    async def _stop_pipeline_best_effort(self, pipeline_id: str) -> None:
+        if pipeline_id not in self._pipelines and pipeline_id not in self._pipeline_tasks:
+            return
+        try:
+            await self._stop_pipeline(pipeline_id)
+        except Exception as e:
+            await self._logger._log(
+                ERROR,
+                "Failed-start cleanup could not stop pipeline",
+                pipeline_id=pipeline_id,
+                error_type=type(e).__name__,
+                error_message=str(e),
+                traceback=format_exception_traceback(e),
+            )
+            self._pipelines.pop(pipeline_id, None)
+            task = self._pipeline_tasks.pop(pipeline_id, None)
+            if task is not None:
+                await safe_cancel_task(task=task, logger=self._logger)
+            self._pipeline_resource_map.pop(pipeline_id, None)
+
+    def _prune_resource_maps(self) -> None:
+        for mapping in (
+            self._resource_dependencies,
+            self._resource_dependents,
+            self._resource_refcounts,
+        ):
+            for resource_id in list(mapping):
+                if resource_id not in self._resources:
+                    mapping.pop(resource_id, None)
+
+    # TODO: audit failure cleanup for remaining public Gru methods (stop_minion, shutdown).
+    # Failed start_minion partial registration is handled above, but stop_minion and
+    # shutdown still need explicit invariant tests for every mid-operation error.
     async def stop_minion(self, name_or_instance_id: str) -> StopMinionResult:
         self._ensure_started()
 

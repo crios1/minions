@@ -121,18 +121,14 @@ class StateStore(AsyncComponent):
         self,
         orchestration_id: str,
     ) -> list[StoredWorkflowContext]:
-        stored_contexts = await self._mn_safe_run_and_log_failure(
+        return await self._mn_run_and_log_failure(
             method=self.get_contexts_for_orchestration,
             method_args=[orchestration_id],
             log_kwargs={"orchestration_id": orchestration_id},
-        ) or []
-        return stored_contexts
+        )
 
     async def _mn_get_all_contexts(self) -> list[StoredWorkflowContext]:
-        stored_contexts = await self._mn_safe_run_and_log_failure(
-            method=self.get_all_contexts,
-        ) or []
-        return stored_contexts
+        return await self._mn_run_and_log_failure(method=self.get_all_contexts)
 
     # Helpers
 
