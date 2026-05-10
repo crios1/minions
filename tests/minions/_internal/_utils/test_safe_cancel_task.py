@@ -40,7 +40,9 @@ async def test_logs_on_timeout_with_label_using_logger():
     entry = logger.logs[0]
     assert entry.level == ERROR
     assert "Timeout while cancelling task 'worker-1'" in entry.msg
+    assert "error_type" in entry.kwargs
     assert isinstance(entry.kwargs.get('traceback'), str) and entry.kwargs.get('traceback')
+    assert isinstance(entry.kwargs.get('task_stack'), str) and entry.kwargs.get('task_stack')
 
 @pytest.mark.asyncio
 async def test_prints_on_timeout_without_logger_default_label(capsys):
@@ -62,4 +64,3 @@ async def test_prints_on_timeout_without_logger_default_label(capsys):
     err = captured.err
     assert "Timeout while cancelling task" in err
     assert ("<no traceback>" in err) or ("File " in err)
-

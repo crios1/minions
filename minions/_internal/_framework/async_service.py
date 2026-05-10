@@ -7,7 +7,6 @@ from typing import Any, Awaitable, Callable
 from .async_component import AsyncComponent
 from .logger import Logger, ERROR
 
-from .._utils.format_exception_traceback import format_exception_traceback
 from .._utils.safe_cancel_task import safe_cancel_task
 from .._utils.safe_create_task import safe_create_task
 
@@ -21,14 +20,12 @@ class AsyncService(AsyncComponent):
         self._mn_tasks_gate = asyncio.Lock()  # serializes access to domain-level tasks owned by subclasses; serializes reads and shutdown cleanup of service-level tasks while creates and deletes happen sync on-loop
         self._mn_shutdown_grace_seconds = 1.0
 
-    async def _mn_on_service_task_failure(self, exception: BaseException, task_name: str | None, tb: str) -> None:
-        await self._mn_logger._log(
+    async def _mn_on_service_task_failure(self, exception: BaseException, task_name: str | None) -> None:
+        await self._mn_logger._log_exception(
             ERROR,
             f"{type(self).__name__} service task failed",
+            exception,
             task_name=task_name,
-            error_type=type(exception).__name__,
-            error_message=str(exception),
-            traceback=tb,
         )
 
     async def _mn_wait_until_started(self):
@@ -78,12 +75,10 @@ class AsyncService(AsyncComponent):
             try:
                 await self._mn_shutdown()
             except Exception as shutdown_err:
-                await self._mn_logger._log(
+                await self._mn_logger._log_exception(
                     ERROR,
                     f"{type(self).__name__} shutdown failed during startup error recovery",
-                    error_type=type(shutdown_err).__name__,
-                    error_message=str(shutdown_err),
-                    traceback=format_exception_traceback(shutdown_err),
+                    shutdown_err,
                 )
             raise e
 

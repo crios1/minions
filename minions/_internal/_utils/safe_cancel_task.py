@@ -5,6 +5,13 @@ import types
 
 from .._framework.logger import Logger, ERROR
 
+
+def _format_task_stack(task: asyncio.Task) -> str:
+    coro = task.get_coro()
+    frame = getattr(coro, "cr_frame", None) if isinstance(coro, types.CoroutineType) else None
+    return "".join(traceback.format_stack(frame)) if frame else "<no traceback>"
+
+
 async def safe_cancel_task(
     task: asyncio.Task,
     label: str = "task",
@@ -18,19 +25,16 @@ async def safe_cancel_task(
         await asyncio.wait_for(task, timeout=timeout)
     except asyncio.CancelledError:
         pass
-    except asyncio.TimeoutError:
+    except asyncio.TimeoutError as e:
         msg = (
             f"Timeout while cancelling task '{label}'"
             if label != "task" else
             "Timeout while cancelling task"
         )
-
-        coro = task.get_coro()
-        frame = getattr(coro, "cr_frame", None) if isinstance(coro, types.CoroutineType) else None
-        tb = "".join(traceback.format_stack(frame)) if frame else "<no traceback>"
+        task_stack = _format_task_stack(task)
 
         if logger:
-            await logger._log(ERROR, msg, traceback=tb)
+            await logger._log_exception(ERROR, msg, e, task_stack=task_stack)
         else:
             print(msg, file=sys.stderr)
-            print(tb, file=sys.stderr)
+            print(task_stack, file=sys.stderr)

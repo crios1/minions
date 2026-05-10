@@ -10,7 +10,6 @@ from typing import Literal, cast
 
 from .logger import CRITICAL, DEBUG, ERROR, WARNING, Logger
 from .state_store import StateStore, StoredWorkflowContext
-from .._utils.format_exception_traceback import format_exception_traceback
 from .._utils.safe_create_task import safe_create_task
 
 SQL_WORKFLOWS_TABLE_CREATE_IF_NOT_EXISTS = """
@@ -273,12 +272,10 @@ class SQLiteStateStore(StateStore):
                 try:
                     await db.close()
                 except Exception as close_error:
-                    await self._mn_logger._log(
+                    await self._mn_logger._log_exception(
                         ERROR,
                         f"{type(self).__name__} failed to close SQLite connection after startup failure",
-                        error_type=type(close_error).__name__,
-                        error_message=str(close_error),
-                        traceback=format_exception_traceback(close_error),
+                        close_error,
                         startup_error_type=type(startup_error).__name__,
                         startup_error_message=str(startup_error),
                     )
@@ -411,12 +408,10 @@ class SQLiteStateStore(StateStore):
             except Exception as cleanup_error:
                 if probe_error is None:
                     raise RuntimeError(f"{type(self).__name__} startup probe cleanup failed") from cleanup_error
-                await self._mn_logger._log(
+                await self._mn_logger._log_exception(
                     ERROR,
                     f"{type(self).__name__} startup probe cleanup failed after probe error",
-                    error_type=type(cleanup_error).__name__,
-                    error_message=str(cleanup_error),
-                    traceback=format_exception_traceback(cleanup_error),
+                    cleanup_error,
                     startup_probe_error_type=type(probe_error).__name__,
                     startup_probe_error_message=str(probe_error),
                 )
@@ -434,10 +429,10 @@ class SQLiteStateStore(StateStore):
         try:
             page_size = await self._read_page_size()
         except Exception as e:
-            await self._mn_logger._log(
+            await self._mn_logger._log_exception(
                 WARNING,
                 f"{type(self).__name__} startup measurements degraded; could not read PRAGMA page_size",
-                traceback=format_exception_traceback(e),
+                e,
             )
             return fallback
 
@@ -454,10 +449,10 @@ class SQLiteStateStore(StateStore):
         except CommitMeasurementProbeCleanupError:
             raise
         except Exception as e:
-            await self._mn_logger._log(
+            await self._mn_logger._log_exception(
                 ERROR,
                 f"{type(self).__name__} startup measurements failed; using fallback values",
-                traceback=format_exception_traceback(e),
+                e,
             )
             return replace(fallback, page_size=page_size)
 
@@ -531,12 +526,10 @@ class SQLiteStateStore(StateStore):
                 await db.commit()
             except Exception as cleanup_error:
                 if measurement_error is not None:
-                    await self._mn_logger._log(
+                    await self._mn_logger._log_exception(
                         ERROR,
                         f"{type(self).__name__} commit measurement probe cleanup failed after probe error",
-                        error_type=type(cleanup_error).__name__,
-                        error_message=str(cleanup_error),
-                        traceback=format_exception_traceback(cleanup_error),
+                        cleanup_error,
                         measurement_probe_error_type=type(measurement_error).__name__,
                         measurement_probe_error_message=str(measurement_error),
                     )
@@ -820,12 +813,10 @@ class SQLiteStateStore(StateStore):
                 raise
             except BaseException as e:
                 try:
-                    await self._mn_logger._log(
+                    await self._mn_logger._log_exception(
                         ERROR,
                         f"{type(self).__name__} commit queue failed to commit batch",
-                        error_type=type(e).__name__,
-                        error_message=str(e),
-                        traceback=format_exception_traceback(e),
+                        e,
                     )
                 except Exception:
                     pass
@@ -889,12 +880,10 @@ class SQLiteStateStore(StateStore):
                     await db.rollback()
                 except Exception as rollback_error:
                     try:
-                        await self._mn_logger._log(
+                        await self._mn_logger._log_exception(
                             ERROR,
                             f"{type(self).__name__} failed to rollback batch transaction after commit error",
-                            error_type=type(rollback_error).__name__,
-                            error_message=str(rollback_error),
-                            traceback=format_exception_traceback(rollback_error),
+                            rollback_error,
                             commit_error_type=type(commit_error).__name__,
                             commit_error_message=str(commit_error),
                         )

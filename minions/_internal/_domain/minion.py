@@ -48,7 +48,6 @@ from .._framework.metrics_constants import (
     LABEL_STATUS,
 )
 from .._framework.state_store import PersistenceOperationResult, StateStore
-from .._utils.format_exception_traceback import format_exception_traceback
 from .._utils.get_class import get_class
 from .._utils.serialization import require_type_not_primitive, require_type_serializable
 from .._utils.get_original_bases import get_original_bases
@@ -711,12 +710,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             "minion_modpath": self._mn_minion_modpath,
         }
         if error is not None:
-            log_kwargs.update(
-                error_type=type(error).__name__,
-                error_message=str(error),
-                traceback=format_exception_traceback(error),
-            )
-        await self._mn_logger._log(level, message, **log_kwargs)
+            await self._mn_logger._log_exception(level, message, error, **log_kwargs)
+        else:
+            await self._mn_logger._log(level, message, **log_kwargs)
 
     def _mn_workflow_persistence_base_metric_labels(
         self,
@@ -961,8 +957,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             "workflow_id": ctx.workflow_id,
                             "step_name": step_name,
                             "step_index": i,
-                            "error_type": type(e).__name__,
-                            "error_message": str(e),
                             "minion_name": self._mn_name,
                             "minion_instance_id": self._mn_minion_instance_id,
                             "minion_composite_key": self._mn_minion_composite_key,
@@ -976,14 +970,11 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 "lineno": err_loc["lineno"],
                                 "line": err_loc["line"]
                             })
-                        else:
-                            log_kwargs.update({
-                                "traceback": format_exception_traceback(e),
-                            })
                         await _shielded_gather(
-                            self._mn_logger._log(
+                            self._mn_logger._log_exception(
                                 ERROR,
                                 "Workflow Step failed",
+                                e,
                                 **log_kwargs
                             ),
                             self._mn_metrics._inc(
@@ -1091,17 +1082,15 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     if failure_error is None:
                         failure_error = RuntimeError("workflow failed")
                     await _shielded_gather(*[
-                        self._mn_logger._log(
+                        self._mn_logger._log_exception(
                             terminal_workflow_log_level or ERROR,
                             terminal_workflow_log_message,
+                            failure_error,
                             workflow_id=ctx.workflow_id,
                             minion_name=self._mn_name,
                             minion_instance_id=self._mn_minion_instance_id,
                             minion_composite_key=self._mn_minion_composite_key,
                             minion_modpath=self._mn_minion_modpath,
-                            error_type=type(failure_error).__name__,
-                            error_message=str(failure_error),
-                            traceback=format_exception_traceback(failure_error)
                         ),
                         self._mn_metrics._inc(
                             metric_name=MINION_WORKFLOW_FAILED_TOTAL,

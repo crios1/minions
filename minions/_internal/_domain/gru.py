@@ -42,7 +42,6 @@ from .._framework.state_store_noop import NoOpStateStore
 from .._framework.state_store_sqlite import SQLiteStateStore
 
 from .._utils.safe_cancel_task import safe_cancel_task
-from .._utils.format_exception_traceback import format_exception_traceback
 from .._utils.get_class import get_class
 from .._utils.safe_create_task import safe_create_task
 
@@ -655,30 +654,15 @@ class Gru:
 
     # Helper Methods
 
-    async def _log_exception_with_context(self, exc: BaseException, msg: str):
-        trace = getattr(exc, "__cause__", None) or exc
-        context = getattr(exc, "context", {})
-
-        await self._logger._log(
-            ERROR,
-            msg,
-            error_type=type(trace).__name__,
-            error_message=str(trace),
-            traceback=format_exception_traceback(trace),
-            **context
-        )
-
     def _make_task_failure_hook(self, component: str, identifier: str | None = None):
-        async def _hook(exception: BaseException, task_name: str | None, tb: str) -> None:
-            await self._logger._log(
+        async def _hook(exception: BaseException, task_name: str | None) -> None:
+            await self._logger._log_exception(
                 ERROR,
                 "Gru runtime task failure observed",
+                exception,
                 component=component,
                 identifier=identifier,
                 task_name=task_name,
-                error_type=type(exception).__name__,
-                error_message=str(exception),
-                traceback=tb,
             )
         return _hook
 
@@ -954,7 +938,7 @@ class Gru:
                 preexisting_resource_ids=preexisting_resource_ids,
             )
 
-            await self._log_exception_with_context(e, "Failed to start minion")
+            await self._logger._log_exception(ERROR, "Failed to start minion", e)
             return StartMinionResult(
                 success=False,
                 reason=str(e)
@@ -999,14 +983,12 @@ class Gru:
         try:
             await self._stop_minion(minion)
         except Exception as e:
-            await self._logger._log(
+            await self._logger._log_exception(
                 ERROR,
                 "Failed-start cleanup could not stop minion",
+                e,
                 minion_name=minion._mn_name,
                 minion_instance_id=minion._mn_minion_instance_id,
-                error_type=type(e).__name__,
-                error_message=str(e),
-                traceback=format_exception_traceback(e),
             )
             instance_id = minion._mn_minion_instance_id
             self._minions_by_id.pop(instance_id, None)
@@ -1029,13 +1011,11 @@ class Gru:
         try:
             await self._stop_pipeline(pipeline_id)
         except Exception as e:
-            await self._logger._log(
+            await self._logger._log_exception(
                 ERROR,
                 "Failed-start cleanup could not stop pipeline",
+                e,
                 pipeline_id=pipeline_id,
-                error_type=type(e).__name__,
-                error_message=str(e),
-                traceback=format_exception_traceback(e),
             )
             self._pipelines.pop(pipeline_id, None)
             task = self._pipeline_tasks.pop(pipeline_id, None)
@@ -1144,7 +1124,7 @@ class Gru:
             return StopMinionResult(success=True)
 
         except Exception as e: # pragma: no cover
-            await self._log_exception_with_context(e, "Failed to stop minion")
+            await self._logger._log_exception(ERROR, "Failed to stop minion", e)
             return StopMinionResult(
                 success=False,
                 reason=str(e),
@@ -1225,7 +1205,7 @@ class Gru:
                 )
             return ShutdownGruResult(success=True)
         except Exception as e: # pragma: no cover
-            await self._log_exception_with_context(e, "Gru.shutdown failed")
+            await self._logger._log_exception(ERROR, "Gru.shutdown failed", e)
             return ShutdownGruResult(
                 success=False,
                 reason=str(e),
@@ -1295,12 +1275,10 @@ class Gru:
 
             except Exception as e:
                 if not warned_monitoring_failed:
-                    await self._logger._log(
+                    await self._logger._log_exception(
                         CRITICAL,
                         "Resource monitoring failed (continuing without it)",
-                        error_type=type(e).__name__,
-                        error_message=str(e),
-                        traceback=format_exception_traceback(e)
+                        e,
                     )
                     warned_monitoring_failed = True
 

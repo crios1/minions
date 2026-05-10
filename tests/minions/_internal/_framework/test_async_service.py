@@ -47,10 +47,9 @@ async def test_safe_create_task_invokes_service_task_failure_hook():
     await task
 
     service._mn_on_service_task_failure.assert_awaited_once()  # type: ignore[attr-defined]
-    err, task_name, tb = service._mn_on_service_task_failure.await_args.args  # type: ignore[attr-defined]
+    err, task_name = service._mn_on_service_task_failure.await_args.args  # type: ignore[attr-defined]
     assert isinstance(err, ValueError)
     assert task_name == "faulty"
-    assert "ValueError: boom" in tb
 
 
 @pytest.mark.asyncio

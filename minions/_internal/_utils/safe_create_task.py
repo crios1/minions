@@ -1,16 +1,30 @@
 import asyncio
 import inspect
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable
 from collections.abc import Coroutine
+from typing import Protocol
 
 from .._framework.logger import Logger, ERROR
-from .format_exception_traceback import format_exception_traceback
+
+
+class TaskFailureHandler(Protocol):
+    """Handle a swallowed task failure.
+
+    `task_name` is the `safe_create_task(..., name=...)` value, or the
+    coroutine name when one can be inferred.
+    """
+
+    def __call__(
+        self, exception: BaseException, task_name: str | None
+    ) -> Awaitable[None] | None:
+        ...
+
 
 def safe_create_task(
     coro: Coroutine,
     logger: Logger | None = None,
     name: str | None = None,
-    on_failure: Callable[[BaseException, str | None, str], Awaitable[None] | None] | None = None,
+    on_failure: TaskFailureHandler | None = None,
 ) -> asyncio.Task:
     """
     Create an asyncio task with a strict runtime-safety boundary for user code.
@@ -23,32 +37,31 @@ def safe_create_task(
     - Swallows all other user task exceptions (`SystemExit` included) after logging.
     - Emits a structured failure signal through `on_failure` so supervisors can react
       (restart/backoff/alerts) without relying only on logs.
+      The callback receives `(exception, task_name)`.
     - Never allows logger or failure-hook errors to escape this boundary.
     """
     if name is None and hasattr(coro, "__name__"):
         name = coro.__name__
 
-    async def _safe_log(msg: str, tb: str) -> None:
+    async def _safe_log_exception(msg: str, exc: BaseException) -> None:
         if not logger:
             return
         try:
-            await logger._log(ERROR, msg, traceback=tb)
+            await logger._log_exception(ERROR, msg, exc)
         except Exception:
-            # Task safety takes priority; logging failures must never escape.
             pass
 
-    async def _safe_notify(exception: BaseException, tb: str) -> None:
+    async def _safe_call_failure_handler(exception: BaseException) -> None:
         if not on_failure:
             return
         try:
-            maybe_awaitable = on_failure(exception, name, tb)
+            maybe_awaitable = on_failure(exception, name)
             if inspect.isawaitable(maybe_awaitable):
                 await maybe_awaitable
         except Exception as notify_error:
-            notify_tb = format_exception_traceback(notify_error)
-            await _safe_log(
+            await _safe_log_exception(
                 f"[safe_create_task on_failure failed]{f' ({name})' if name else ''}: {notify_error}",
-                notify_tb,
+                notify_error,
             )
 
     async def wrapper():
@@ -57,15 +70,12 @@ def safe_create_task(
         except asyncio.CancelledError:
             raise
         except SystemExit as e:
-            # Footgun: exit()/sys.exit()
-            tb = format_exception_traceback(e)
-            await _safe_log(f"[SystemExit in Task]{f' ({name})' if name else ''}: {e}", tb)
-            await _safe_notify(e, tb)
-            # Swallow to keep the process alive.
+            msg = f"[SystemExit in Task]{f' ({name})' if name else ''}: {e}"
+            await _safe_log_exception(msg, e)
+            await _safe_call_failure_handler(e)
         except BaseException as e:
             msg = f"[Exception in asyncio.Task]{f' ({name})' if name else ''}: {e}"
-            tb = format_exception_traceback(e)
-            await _safe_log(msg, tb)
-            await _safe_notify(e, tb)
+            await _safe_log_exception(msg, e)
+            await _safe_call_failure_handler(e)
 
     return asyncio.create_task(wrapper(), name=name)

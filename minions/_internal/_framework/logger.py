@@ -1,9 +1,11 @@
 import sys
 from abc import abstractmethod
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
 from .async_lifecycle import AsyncLifecycle
+from .._utils.format_exception_traceback import format_exception_traceback
 
 DEBUG = 10
 INFO = 20
@@ -45,6 +47,31 @@ class Logger(AsyncLifecycle):
         except Exception as e:
             print(f"[Logger Error] {type(e).__name__}: {e}", file=sys.stderr)
             print(f"[Logger Fallback] {msg} | {kwargs}", file=sys.stderr)
+
+    async def _log_exception(
+        self,
+        level: int,
+        msg: str,
+        exc: BaseException,
+        **kwargs: Any,
+    ):
+        context = getattr(exc, "context", {}) or {}
+        log_kwargs = dict(context) if isinstance(context, Mapping) else {}
+        log_kwargs.update(kwargs)
+        trace = getattr(exc, "__cause__", None) or exc
+        log_kwargs.update(
+            {
+                "error_type": type(trace).__name__,
+                "error_message": str(trace),
+                "traceback": format_exception_traceback(trace),
+            }
+        )
+
+        await self._log(
+            level,
+            msg,
+            **log_kwargs,
+        )
 
     @abstractmethod
     async def log(self, level: int, msg: str, **kwargs: Any):

@@ -3,7 +3,6 @@ from typing import ParamSpec, TypeVar, Callable, Awaitable, overload
 
 from .async_lifecycle import AsyncLifecycle
 from .logger import Logger, ERROR
-from .._utils.format_exception_traceback import format_exception_traceback
 from .._utils.get_relative_module_path import get_relative_module_path
 
 T = TypeVar("T")
@@ -50,12 +49,10 @@ class AsyncComponent(AsyncLifecycle):
             **log_kwargs,
             "rel_modpath": rel_modpath,
         }
-        await self._mn_logger._log(
+        await self._mn_logger._log_exception(
             ERROR,
             msg,
-            error_type=type(error).__name__,
-            error_message=str(error),
-            traceback=format_exception_traceback(error),
+            error,
             **effective_log_kwargs,
         )
 

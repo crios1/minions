@@ -11,7 +11,6 @@ from .metrics import (
 )
 from .logger import Logger, ERROR
 from .metrics_interface import LabelledMetric
-from .._utils.format_exception_traceback import format_exception_traceback
 
 class PrometheusMetrics(Metrics):
     """
@@ -40,12 +39,10 @@ class PrometheusMetrics(Metrics):
                     start_http_server(port=self._port, addr=self._addr, registry=self._registry)
                     self._started = True
         except Exception as e:
-            await self._mn_logger._log(
+            await self._mn_logger._log_exception(
                 ERROR,
                 "[Prometheus] Failed to start metrics HTTP server",
-                error_type=type(e).__name__,
-                error_message=str(e),
-                traceback=format_exception_traceback(e),
+                e,
             )
 
     def create_metric(self, metric_name: str, label_names: list[str], kind: Kind) -> LabelledMetric:

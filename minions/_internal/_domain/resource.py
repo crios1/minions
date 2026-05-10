@@ -10,7 +10,6 @@ from .._framework.metrics_constants import (
     LABEL_RESOURCE, LABEL_RESOURCE_METHOD, LABEL_ERROR_TYPE,
     RESOURCE_SERVES_TOTAL, RESOURCE_LATENCY_SECONDS, RESOURCE_ERROR_TOTAL
 )
-from .._utils.format_exception_traceback import format_exception_traceback
 
 T = TypeVar("T")
 P = ParamSpec("P")
@@ -113,14 +112,12 @@ class Resource(AsyncService):
                     LABEL_ERROR_TYPE: type(e).__name__,
                 },
             )
-            await self._mn_logger._log(
+            await self._mn_logger._log_exception(
                 WARNING,
                 f"Resource method failed",
+                e,
                 resource=resource,
                 resource_method=resource_method,
-                error_type=type(e).__name__,
-                error_message=str(e),
-                traceback=format_exception_traceback(e),
                 args=args,
                 kwargs=kwargs
             )

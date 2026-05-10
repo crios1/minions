@@ -9,7 +9,6 @@ from .minion_workflow_context_codec import (
     serialize_persisted_workflow_context,
 )
 from .._domain.minion_workflow_context import MinionWorkflowContext
-from .._utils.format_exception_traceback import format_exception_traceback
 
 @dataclass(frozen=True)
 class StoredWorkflowContext:
@@ -80,12 +79,10 @@ class StateStore(AsyncComponent):
         try:
             await self.save_context(workflow_id, orchestration_id, context)
         except Exception as e:
-            await self._mn_logger._log(
+            await self._mn_logger._log_exception(
                 ERROR,
                 f"{type(self).__name__}.save_context failed",
-                error_type=type(e).__name__,
-                error_message=str(e),
-                traceback=format_exception_traceback(e),
+                e,
                 workflow_id=workflow_id,
                 orchestration_id=orchestration_id,
             )
@@ -101,12 +98,10 @@ class StateStore(AsyncComponent):
         try:
             await self.delete_context(workflow_id)
         except Exception as e:
-            await self._mn_logger._log(
+            await self._mn_logger._log_exception(
                 ERROR,
                 f"{type(self).__name__}.delete_context failed",
-                error_type=type(e).__name__,
-                error_message=str(e),
-                traceback=format_exception_traceback(e),
+                e,
                 workflow_id=workflow_id,
             )
             return PersistenceOperationResult(
@@ -142,12 +137,10 @@ class StateStore(AsyncComponent):
         try:
             serialized_context = serialize_persisted_workflow_context(ctx)
         except Exception as e:
-            await self._mn_logger._log(
+            await self._mn_logger._log_exception(
                 ERROR,
                 "StateStore failed to serialize workflow context",
-                error_type=type(e).__name__,
-                error_message=str(e),
-                traceback=format_exception_traceback(e),
+                e,
                 workflow_id=workflow_id,
                 orchestration_id=orchestration_id,
                 state_store=type(self).__name__,
@@ -184,12 +177,10 @@ class StateStore(AsyncComponent):
                     )
                 )
             except Exception as e:
-                await self._mn_logger._log(
+                await self._mn_logger._log_exception(
                     ERROR,
                     "StateStore failed to decode stored workflow context",
-                    error_type=type(e).__name__,
-                    error_message=str(e),
-                    traceback=format_exception_traceback(e),
+                    e,
                     workflow_id=stored_context.workflow_id,
                     orchestration_id=stored_context.orchestration_id,
                     state_store=type(self).__name__,
