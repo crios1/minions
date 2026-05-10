@@ -140,14 +140,14 @@ class Pipeline(AsyncService, Generic[T_Event]):
     async def _mn_produce_and_handle_event(self) -> None:
         try:
             event = await self.produce_event()
-            await self._mn_logger._log(
+            await self._mn_logger._mn_log(
                 DEBUG,
                 "Pipeline produced event",
                 pipeline_id=self._mn_pipeline_id,
                 pipeline_modpath=self._mn_pipeline_modpath,
                 event=repr(event),
             )
-            await self._mn_metrics._inc(
+            await self._mn_metrics._mn_inc(
                 metric_name=PIPELINE_EVENT_PRODUCED_TOTAL,
                 labels={LABEL_PIPELINE: self._mn_pipeline_id},
             )
@@ -156,7 +156,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
                 for minion in subs:
                     # Track event-handling tasks on the minion itself for clean shutdown.
                     minion.safe_create_task(minion._mn_handle_event(event))
-                    await self._mn_metrics._inc(
+                    await self._mn_metrics._mn_inc(
                         metric_name=PIPELINE_EVENT_FANOUT_TOTAL,
                         labels={
                             LABEL_PIPELINE: self._mn_pipeline_id,
@@ -164,7 +164,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
                         },
                     )
                 await asyncio.gather(*[
-                    self._mn_logger._log(
+                    self._mn_logger._mn_log(
                         DEBUG,
                         "Pipeline Fanout: dispatched event to minion",
                         pipeline_id=self._mn_pipeline_id,
@@ -176,7 +176,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
                     for minion in subs
                 ], return_exceptions=True)
         except Exception as e:
-            await self._mn_metrics._inc(
+            await self._mn_metrics._mn_inc(
                 metric_name=PIPELINE_ERROR_TOTAL,
                 labels={
                     LABEL_PIPELINE: self._mn_pipeline_id,

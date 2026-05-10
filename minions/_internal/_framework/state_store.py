@@ -79,7 +79,7 @@ class StateStore(AsyncComponent):
         try:
             await self.save_context(workflow_id, orchestration_id, context)
         except Exception as e:
-            await self._mn_logger._log_exception(
+            await self._mn_logger._mn_log_exception(
                 ERROR,
                 f"{type(self).__name__}.save_context failed",
                 e,
@@ -98,7 +98,7 @@ class StateStore(AsyncComponent):
         try:
             await self.delete_context(workflow_id)
         except Exception as e:
-            await self._mn_logger._log_exception(
+            await self._mn_logger._mn_log_exception(
                 ERROR,
                 f"{type(self).__name__}.delete_context failed",
                 e,
@@ -137,7 +137,7 @@ class StateStore(AsyncComponent):
         try:
             serialized_context = serialize_persisted_workflow_context(ctx)
         except Exception as e:
-            await self._mn_logger._log_exception(
+            await self._mn_logger._mn_log_exception(
                 ERROR,
                 "StateStore failed to serialize workflow context",
                 e,
@@ -177,7 +177,7 @@ class StateStore(AsyncComponent):
                     )
                 )
             except Exception as e:
-                await self._mn_logger._log_exception(
+                await self._mn_logger._mn_log_exception(
                     ERROR,
                     "StateStore failed to decode stored workflow context",
                     e,

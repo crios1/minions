@@ -21,7 +21,7 @@ class AsyncService(AsyncComponent):
         self._mn_shutdown_grace_seconds = 1.0
 
     async def _mn_on_service_task_failure(self, exception: BaseException, task_name: str | None) -> None:
-        await self._mn_logger._log_exception(
+        await self._mn_logger._mn_log_exception(
             ERROR,
             f"{type(self).__name__} service task failed",
             exception,
@@ -75,7 +75,7 @@ class AsyncService(AsyncComponent):
             try:
                 await self._mn_shutdown()
             except Exception as shutdown_err:
-                await self._mn_logger._log_exception(
+                await self._mn_logger._mn_log_exception(
                     ERROR,
                     f"{type(self).__name__} shutdown failed during startup error recovery",
                     shutdown_err,

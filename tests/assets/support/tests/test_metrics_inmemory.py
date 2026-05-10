@@ -14,7 +14,7 @@ class TestInMemoryMetrics:
 
         m = InMemoryMetrics()
         # Get backend metric and exercise via LabelledMetric API
-        counter = m._get_metric_unsafe("counter", "my_counter")
+        counter = m._mn_get_metric_unsafe("counter", "my_counter")
         counter.labels(minion="m1", pipeline="p1").inc(2)
         counter.labels(minion="m1", pipeline="p1").inc()  # +1
 
@@ -32,7 +32,7 @@ class TestInMemoryMetrics:
         monkeypatch.setitem(METRIC_LABEL_NAMES, "cpu_gauge", ["region"])
 
         m = InMemoryMetrics()
-        gauge = m._get_metric_unsafe("gauge", "cpu_gauge")
+        gauge = m._mn_get_metric_unsafe("gauge", "cpu_gauge")
         gauge.labels().set(10.5)          # region defaults to ""
         gauge.labels(region="us-east").set(7.0)
         gauge.labels(region="us-east").set(8.0)  # overwrite
@@ -48,7 +48,7 @@ class TestInMemoryMetrics:
         monkeypatch.setitem(METRIC_LABEL_NAMES, "latency_seconds", ["route"])
 
         m = InMemoryMetrics()
-        h = m._get_metric_unsafe("histogram", "latency_seconds")
+        h = m._mn_get_metric_unsafe("histogram", "latency_seconds")
         h.labels(route="/v1/foo").observe(0.120)
         h.labels(route="/v1/foo").observe(0.080)
         h.labels(route="/v1/foo").observe(0.200)
@@ -67,15 +67,15 @@ class TestInMemoryMetrics:
         monkeypatch.setitem(METRIC_LABEL_NAMES, "payload_bytes", ["endpoint"])
         m = InMemoryMetrics()
 
-        ctr = m._get_metric_unsafe("counter", "events_total")
+        ctr = m._mn_get_metric_unsafe("counter", "events_total")
         with pytest.raises(TypeError):
             ctr.inc(1)
 
-        g = m._get_metric_unsafe("gauge", "temperature_celsius")
+        g = m._mn_get_metric_unsafe("gauge", "temperature_celsius")
         with pytest.raises(TypeError):
             g.set(42)
 
-        h = m._get_metric_unsafe("histogram", "payload_bytes")
+        h = m._mn_get_metric_unsafe("histogram", "payload_bytes")
         with pytest.raises(TypeError):
             h.observe(10)
 
@@ -91,7 +91,7 @@ class TestInMemoryMetrics:
 
         m = InMemoryMetrics()
         # Provide labels in reverse order; snapshot keys should be sorted ('a','b')
-        await m._inc(METRIC_NAME, labels={"b": "2", "a": "1"})
+        await m._mn_inc(METRIC_NAME, labels={"b": "2", "a": "1"})
 
         samples = m.snapshot_counters()[METRIC_NAME]
         assert len(samples) == 1
@@ -107,7 +107,7 @@ class TestInMemoryMetrics:
         monkeypatch.setitem(METRIC_LABEL_NAMES, "jobs_total", ["queue", "status"])
 
         m = InMemoryMetrics()
-        ctr = m._get_metric_unsafe("counter", "jobs_total")
+        ctr = m._mn_get_metric_unsafe("counter", "jobs_total")
         ctr.labels(queue="alpha", status="ok").inc(5)
         ctr.labels(queue="alpha", status="fail").inc(2)
         ctr.labels(queue="beta", status="ok").inc()
@@ -130,19 +130,19 @@ class TestInMemoryMetrics:
         m = InMemoryMetrics()
 
         # Counters
-        await m._inc("jobs_total", amount=2, labels={"queue": "alpha", "status": "ok"})
-        await m._inc("jobs_total", amount=1, labels={"queue": "alpha", "status": "ok"})
-        await m._inc("jobs_total", amount=5, labels={"queue": "beta", "status": "fail"})
+        await m._mn_inc("jobs_total", amount=2, labels={"queue": "alpha", "status": "ok"})
+        await m._mn_inc("jobs_total", amount=1, labels={"queue": "alpha", "status": "ok"})
+        await m._mn_inc("jobs_total", amount=5, labels={"queue": "beta", "status": "fail"})
 
         # Gauges (overwrite behavior)
-        await m._set("cpu_used_percent", 11.0)  # region defaults to ""
-        await m._set("cpu_used_percent", 7.5, labels={"region": "us"})  # set explicit
-        await m._set("cpu_used_percent", 9.0, labels={"region": "us"})  # overwrite
+        await m._mn_set("cpu_used_percent", 11.0)  # region defaults to ""
+        await m._mn_set("cpu_used_percent", 7.5, labels={"region": "us"})  # set explicit
+        await m._mn_set("cpu_used_percent", 9.0, labels={"region": "us"})  # overwrite
 
         # Histograms (aggregate)
-        await m._observe("op_latency_seconds", 0.15, labels={"route": "/v1/foo"})
-        await m._observe("op_latency_seconds", 0.10, labels={"route": "/v1/foo"})
-        await m._observe("op_latency_seconds", 0.25, labels={"route": "/v1/foo"})
+        await m._mn_observe("op_latency_seconds", 0.15, labels={"route": "/v1/foo"})
+        await m._mn_observe("op_latency_seconds", 0.10, labels={"route": "/v1/foo"})
+        await m._mn_observe("op_latency_seconds", 0.25, labels={"route": "/v1/foo"})
 
         # Assert counters
         csnap = m.snapshot_counters()["jobs_total"]
@@ -169,9 +169,9 @@ class TestInMemoryMetrics:
         m = InMemoryMetrics()
 
         # host present, region missing -> defaults to ""
-        await m._set("mem_used_bytes", 123.0, labels={"host": "h1"})
+        await m._mn_set("mem_used_bytes", 123.0, labels={"host": "h1"})
         # both present, order in kwargs shouldn't matter
-        await m._set("mem_used_bytes", 456.0, labels={"region": "us-east", "host": "h1"})
+        await m._mn_set("mem_used_bytes", 456.0, labels={"region": "us-east", "host": "h1"})
 
         gsnap = m.snapshot_gauges()["mem_used_bytes"]
         assert InMemoryMetrics.find_sample(gsnap, {"host": "h1", "region": ""})["value"] == 123.0
@@ -187,7 +187,7 @@ class TestInMemoryMetrics:
 
         async def bump(n):
             for _ in range(n):
-                await m._inc("events_total", amount=1, labels={"minion": "m1"})
+                await m._mn_inc("events_total", amount=1, labels={"minion": "m1"})
 
         # 5 tasks * 200 increments = 1000
         tasks = [asyncio.create_task(bump(200)) for _ in range(5)]

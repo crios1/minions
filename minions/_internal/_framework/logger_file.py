@@ -95,13 +95,20 @@ class FileLogger(Logger):
     def _print_err(self, e: Exception):
         print(f"[FileLogger error] {e.__class__.__name__}: {e}", file=sys.stderr)
 
+    def _write_line(self, line: str):
+        try:
+            with open(self._path, "a", encoding="utf-8") as file:
+                file.write(line)
+        except Exception as e:
+            self._print_err(e)
+
     async def log(self, level: int, msg: str, **kwargs: Any):
         try:
             if level < self._level:
                 return
 
             entry = {
-                "ts": self._iso_8601_ts(),
+                "ts": self._mn_iso_8601_ts(),
                 "level": LEVEL_NAMES.get(level, str(level)),
                 "msg": msg,
                 **kwargs,
@@ -152,7 +159,7 @@ class FileLogger(Logger):
             ):
                 return
 
-            ts = self._iso_8601_ts_fs_safe()
+            ts = self._mn_iso_8601_ts_fs_safe()
             rotated_name = f"{self._log_filename_prefix}_{ts}.log"
             rotated_path = self._log_dir / rotated_name
             
@@ -180,9 +187,3 @@ class FileLogger(Logger):
         except Exception as e:
             self._print_err(e)
 
-    def _write_line(self, line: str):
-        try:
-            with open(self._path, "a", encoding="utf-8") as file:
-                file.write(line)
-        except Exception as e:
-            self._print_err(e)

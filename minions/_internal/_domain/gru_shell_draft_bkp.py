@@ -458,7 +458,7 @@ class GruShell(cmd.Cmd):
     # -------- metrics --------
 
     def do_metrics(self, line: str):
-        coro = self._gru._metrics._snapshot()
+        coro = self._gru._metrics._mn_snapshot()
         try:
             if self._loop.is_running():
                 fut = asyncio.run_coroutine_threadsafe(coro, self._loop)

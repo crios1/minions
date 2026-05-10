@@ -9,7 +9,7 @@ from tests.assets.support.logger_inmemory import InMemoryLogger
 async def test_logger_log_failure_is_contained_by_log_wrapper(capsys):
     logger = BoomLogger()
 
-    await logger._log(INFO, "hello", key="value")
+    await logger._mn_log(INFO, "hello", key="value")
 
     captured = capsys.readouterr()
     assert "[Logger Error] BoomError: intentional boom" in captured.err
@@ -22,7 +22,7 @@ async def test_log_exception_records_standard_exception_fields():
     exc = RuntimeError("outer")
     exc.context = {"workflow_id": "wf-1"}
 
-    await logger._log_exception(ERROR, "operation failed", exc)
+    await logger._mn_log_exception(ERROR, "operation failed", exc)
 
     [log] = logger.logs
     assert log.level == ERROR
@@ -47,7 +47,7 @@ async def test_log_exception_uses_cause_and_call_site_kwargs_override_context():
             "workflow_id": "wf-1",
             "error_type": "MockError",
         }
-        await logger._log_exception(
+        await logger._mn_log_exception(
             ERROR,
             "operation failed",
             exc,

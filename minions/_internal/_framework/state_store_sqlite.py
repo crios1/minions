@@ -272,7 +272,7 @@ class SQLiteStateStore(StateStore):
                 try:
                     await db.close()
                 except Exception as close_error:
-                    await self._mn_logger._log_exception(
+                    await self._mn_logger._mn_log_exception(
                         ERROR,
                         f"{type(self).__name__} failed to close SQLite connection after startup failure",
                         close_error,
@@ -408,7 +408,7 @@ class SQLiteStateStore(StateStore):
             except Exception as cleanup_error:
                 if probe_error is None:
                     raise RuntimeError(f"{type(self).__name__} startup probe cleanup failed") from cleanup_error
-                await self._mn_logger._log_exception(
+                await self._mn_logger._mn_log_exception(
                     ERROR,
                     f"{type(self).__name__} startup probe cleanup failed after probe error",
                     cleanup_error,
@@ -429,7 +429,7 @@ class SQLiteStateStore(StateStore):
         try:
             page_size = await self._read_page_size()
         except Exception as e:
-            await self._mn_logger._log_exception(
+            await self._mn_logger._mn_log_exception(
                 WARNING,
                 f"{type(self).__name__} startup measurements degraded; could not read PRAGMA page_size",
                 e,
@@ -437,7 +437,7 @@ class SQLiteStateStore(StateStore):
             return fallback
 
         if page_size is None or page_size <= 0:
-            await self._mn_logger._log(
+            await self._mn_logger._mn_log(
                 WARNING,
                 f"{type(self).__name__} startup measurements degraded; PRAGMA page_size returned unusable value",
                 page_size=page_size,
@@ -449,7 +449,7 @@ class SQLiteStateStore(StateStore):
         except CommitMeasurementProbeCleanupError:
             raise
         except Exception as e:
-            await self._mn_logger._log_exception(
+            await self._mn_logger._mn_log_exception(
                 ERROR,
                 f"{type(self).__name__} startup measurements failed; using fallback values",
                 e,
@@ -526,7 +526,7 @@ class SQLiteStateStore(StateStore):
                 await db.commit()
             except Exception as cleanup_error:
                 if measurement_error is not None:
-                    await self._mn_logger._log_exception(
+                    await self._mn_logger._mn_log_exception(
                         ERROR,
                         f"{type(self).__name__} commit measurement probe cleanup failed after probe error",
                         cleanup_error,
@@ -576,7 +576,7 @@ class SQLiteStateStore(StateStore):
         ):
             return
 
-        await self._mn_logger._log(
+        await self._mn_logger._mn_log(
             WARNING,
             f"{type(self).__name__} batch_max_queued_writes is below the recommended batching range",
             batch_max_queued_writes=batch_max_queued_writes,
@@ -669,7 +669,7 @@ class SQLiteStateStore(StateStore):
         )
 
     async def _log_startup_measurements_summary(self, measurements: StartupMeasurements) -> None:
-        await self._mn_logger._log(
+        await self._mn_logger._mn_log(
             DEBUG,
             f"{type(self).__name__} startup measurement summary",
             p50_commit_ms=round(measurements.commit_p50_ms, 2),
@@ -813,7 +813,7 @@ class SQLiteStateStore(StateStore):
                 raise
             except BaseException as e:
                 try:
-                    await self._mn_logger._log_exception(
+                    await self._mn_logger._mn_log_exception(
                         ERROR,
                         f"{type(self).__name__} commit queue failed to commit batch",
                         e,
@@ -880,7 +880,7 @@ class SQLiteStateStore(StateStore):
                     await db.rollback()
                 except Exception as rollback_error:
                     try:
-                        await self._mn_logger._log_exception(
+                        await self._mn_logger._mn_log_exception(
                             ERROR,
                             f"{type(self).__name__} failed to rollback batch transaction after commit error",
                             rollback_error,
@@ -951,7 +951,7 @@ class SQLiteStateStore(StateStore):
             "Consider: increase batch caps; confirm WAL + synchronous=NORMAL; "
             "move to a stronger state store if sustained."
         )
-        safe_create_task(self._mn_logger._log(level, msg))
+        safe_create_task(self._mn_logger._mn_log(level, msg))
 
     def _maybe_warn_large_payload(
         self,
@@ -975,7 +975,7 @@ class SQLiteStateStore(StateStore):
             warn_kib = (self._warn_size_pages * sqlite_page_size) // 1024
             crit_kib = (self._warn_size_crit_pages * sqlite_page_size) // 1024
             safe_create_task(
-                self._mn_logger._log(
+                self._mn_logger._mn_log(
                     level,
                     f"{type(self).__name__}: Large workflow context blob detected",
                     size_bytes=size,

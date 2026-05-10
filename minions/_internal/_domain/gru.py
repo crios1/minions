@@ -277,9 +277,9 @@ class Gru:
             "component": type(comp).__name__,
             **(log_kwargs or {}),
         }
-        await self._logger._log(DEBUG, "async component starting", **log_kwargs)
+        await self._logger._mn_log(DEBUG, "async component starting", **log_kwargs)
         await comp._mn_startup()
-        await self._logger._log(DEBUG, "async component started", **log_kwargs)
+        await self._logger._mn_log(DEBUG, "async component started", **log_kwargs)
 
     # todo: extract shutdown logic from self.shutdown?
     # or put _startup logic in create?
@@ -293,9 +293,9 @@ class Gru:
             "component": type(comp).__name__,
             **(log_kwargs or {}),
         }
-        await self._logger._log(DEBUG, "async component shutting down", **log_kwargs)
+        await self._logger._mn_log(DEBUG, "async component shutting down", **log_kwargs)
         await comp._mn_shutdown()
-        await self._logger._log(DEBUG, "async component shutdown complete", **log_kwargs)
+        await self._logger._mn_log(DEBUG, "async component shutdown complete", **log_kwargs)
 
     # Minion Methods
 
@@ -550,7 +550,7 @@ class Gru:
         ...
 
     async def _start_resource(self, resource_id: str, resource_cls: type[Resource]) -> Resource:
-        await self._logger._log(DEBUG, "Resource starting", resource_id=resource_id)
+        await self._logger._mn_log(DEBUG, "Resource starting", resource_id=resource_id)
         resource = resource_cls(
             logger=self._logger,
             metrics=self._metrics,
@@ -564,15 +564,15 @@ class Gru:
             on_failure=self._make_task_failure_hook("resource", resource_id),
         )
         await resource._mn_wait_until_started()
-        await self._logger._log(DEBUG, "Resource started", resource_id=resource_id)
+        await self._logger._mn_log(DEBUG, "Resource started", resource_id=resource_id)
         return resource
 
     async def _stop_resource(self, resource_id: str):
-        await self._logger._log(DEBUG, "Resource stopping", resource_id=resource_id)
+        await self._logger._mn_log(DEBUG, "Resource stopping", resource_id=resource_id)
         self._resources.pop(resource_id)
         task = self._resource_tasks.pop(resource_id)
         await safe_cancel_task(task=task, logger=self._logger)
-        await self._logger._log(DEBUG, "Resource stopped", resource_id=resource_id)
+        await self._logger._mn_log(DEBUG, "Resource stopped", resource_id=resource_id)
 
     def _is_resource_in_use(self, resource_id: str) -> bool:
         # A resource is considered in use if its total reference count is > 0
@@ -626,7 +626,7 @@ class Gru:
         )
 
     async def _start_pipeline(self, pipeline_id: str, pipeline: Pipeline):
-        await self._logger._log(DEBUG, "Pipeline starting", pipeline_id=pipeline_id)
+        await self._logger._mn_log(DEBUG, "Pipeline starting", pipeline_id=pipeline_id)
         self._pipelines[pipeline_id] = pipeline
         self._pipeline_tasks[pipeline_id] = safe_create_task(
             pipeline._mn_start(),
@@ -635,14 +635,14 @@ class Gru:
             on_failure=self._make_task_failure_hook("pipeline", pipeline_id),
         )
         await pipeline._mn_wait_until_started()
-        await self._logger._log(DEBUG, "Pipeline started", pipeline_id=pipeline_id)
+        await self._logger._mn_log(DEBUG, "Pipeline started", pipeline_id=pipeline_id)
 
     async def _stop_pipeline(self, pipeline_id: str):
         released_resource_ids: set[str] = set()
         resource_owner_refs_released = False
         resources_cleaned = False
         try:
-            await self._logger._log(DEBUG, "Pipeline stopping", pipeline_id=pipeline_id)
+            await self._logger._mn_log(DEBUG, "Pipeline stopping", pipeline_id=pipeline_id)
             # remove pipeline from active map and cancel its task
             self._pipelines.pop(pipeline_id, None)
             task = self._pipeline_tasks.pop(pipeline_id, None)
@@ -659,7 +659,7 @@ class Gru:
                 await self._cleanup_resources(resource_ids)
                 resources_cleaned = True
 
-            await self._logger._log(DEBUG, "Pipeline stopped", pipeline_id=pipeline_id)
+            await self._logger._mn_log(DEBUG, "Pipeline stopped", pipeline_id=pipeline_id)
         except Exception:
             await self._finalize_failed_stop_pipeline(
                 pipeline_id=pipeline_id,
@@ -676,7 +676,7 @@ class Gru:
 
     def _make_task_failure_hook(self, component: str, identifier: str | None = None):
         async def _hook(exception: BaseException, task_name: str | None) -> None:
-            await self._logger._log_exception(
+            await self._logger._mn_log_exception(
                 ERROR,
                 "Gru runtime task failure observed",
                 exception,
@@ -798,7 +798,7 @@ class Gru:
                 suggestion = "Use a different config file if you want to launch another instance."
                 minion_instance_id = minion_inst._mn_minion_instance_id
                 minion_name = minion_inst._mn_name
-                await self._logger._log(
+                await self._logger._mn_log(
                     INFO,
                     "Failed to start minion",
                     reason=reason,
@@ -840,7 +840,7 @@ class Gru:
                 suggestion = "Update the minion or pipeline so they use the same event type."
                 minion_instance_id = minion_inst._mn_minion_instance_id
                 minion_name = minion_inst._mn_name
-                await self._logger._log(
+                await self._logger._mn_log(
                     INFO,
                     "Failed to start minion",
                     reason=reason,
@@ -860,7 +860,7 @@ class Gru:
                     instance_id=minion_instance_id
                 )
 
-            await self._logger._log(
+            await self._logger._mn_log(
                 DEBUG,
                 "Starting minion...",
                 minion_composite_key=minion_composite_key,
@@ -931,7 +931,7 @@ class Gru:
             # start minion
             await self._start_minion(minion_inst)
 
-            await self._logger._log(
+            await self._logger._mn_log(
                 INFO,
                 "Minion started",
                 minion_name=minion_inst._mn_name,
@@ -959,13 +959,13 @@ class Gru:
                     preexisting_resource_ids=preexisting_resource_ids,
                 )
             except Exception as cleanup_err:
-                await self._logger._log_exception(
+                await self._logger._mn_log_exception(
                     ERROR,
                     "Failed-start cleanup raised",
                     cleanup_err,
                 )
 
-            await self._logger._log_exception(ERROR, "Failed to start minion", e)
+            await self._logger._mn_log_exception(ERROR, "Failed to start minion", e)
             return StartMinionResult(
                 success=False,
                 reason=str(e)
@@ -990,7 +990,7 @@ class Gru:
                 try:
                     await pipeline._mn_unsubscribe(minion)
                 except Exception as e:
-                    await self._logger._log_exception(
+                    await self._logger._mn_log_exception(
                         ERROR,
                         "Failed-start cleanup could not unsubscribe minion",
                         e,
@@ -1020,7 +1020,7 @@ class Gru:
         try:
             await self._stop_minion(minion)
         except Exception as e:
-            await self._logger._log_exception(
+            await self._logger._mn_log_exception(
                 ERROR,
                 "Failed-start cleanup could not stop minion",
                 e,
@@ -1046,7 +1046,7 @@ class Gru:
             try:
                 await safe_cancel_task(task=task, logger=self._logger)
             except Exception as e:
-                await self._logger._log_exception(
+                await self._logger._mn_log_exception(
                     ERROR,
                     "Minion task discard cleanup failed",
                     e,
@@ -1060,7 +1060,7 @@ class Gru:
         try:
             await self._stop_pipeline(pipeline_id)
         except Exception as e:
-            await self._logger._log_exception(
+            await self._logger._mn_log_exception(
                 ERROR,
                 "Failed-start cleanup could not stop pipeline",
                 e,
@@ -1075,7 +1075,7 @@ class Gru:
             try:
                 await safe_cancel_task(task=task, logger=self._logger)
             except Exception as e:
-                await self._logger._log_exception(
+                await self._logger._mn_log_exception(
                     ERROR,
                     "Pipeline task discard cleanup failed",
                     e,
@@ -1113,7 +1113,7 @@ class Gru:
             try:
                 await safe_cancel_task(task=task, logger=self._logger)
             except Exception as e:
-                await self._logger._log_exception(
+                await self._logger._mn_log_exception(
                     ERROR,
                     "Resource task discard cleanup failed",
                     e,
@@ -1198,7 +1198,7 @@ class Gru:
             await self._cleanup_resources(resource_id_list)
         except Exception as e:
             try:
-                await self._logger._log_exception(
+                await self._logger._mn_log_exception(
                     ERROR,
                     "Resource cleanup could not stop resources",
                     e,
@@ -1229,7 +1229,7 @@ class Gru:
                         async with pipeline._mn_subs_lock:
                             pipeline._mn_subs.discard(minion)
                     except Exception as e:
-                        await self._logger._log_exception(
+                        await self._logger._mn_log_exception(
                             ERROR,
                             "Stop cleanup could not discard pipeline subscription",
                             e,
@@ -1254,7 +1254,7 @@ class Gru:
 
             await self._stop_minion_best_effort(minion)
         except Exception as e:
-            await self._logger._log_exception(
+            await self._logger._mn_log_exception(
                 ERROR,
                 "Stop cleanup failed",
                 e,
@@ -1312,7 +1312,7 @@ class Gru:
 
             if isinstance(minion_or_result, StopMinionResult):
                 result = minion_or_result
-                await self._logger._log(
+                await self._logger._mn_log(
                     INFO,
                     "Failed to stop minion",
                     reason=result.reason,
@@ -1323,7 +1323,7 @@ class Gru:
         
             minion = minion_or_result
         
-            await self._logger._log(
+            await self._logger._mn_log(
                 DEBUG,
                 "Stopping minion...",
                 minion_name=minion._mn_name,
@@ -1354,7 +1354,7 @@ class Gru:
             await self._stop_minion(minion)
             self._minions_by_composite_key.pop(minion._mn_minion_composite_key, None)
 
-            await self._logger._log(
+            await self._logger._mn_log(
                 INFO,
                 "Minion stopped",
                 minion_name=minion._mn_name,
@@ -1373,14 +1373,14 @@ class Gru:
                         released_resource_ids=released_resource_ids,
                     )
                 except Exception as cleanup_err:
-                    await self._logger._log_exception(
+                    await self._logger._mn_log_exception(
                         ERROR,
                         "Failed-stop cleanup raised",
                         cleanup_err,
                         minion_name=minion._mn_name,
                         minion_instance_id=minion._mn_minion_instance_id,
                     )
-            await self._logger._log_exception(ERROR, "Failed to stop minion", e)
+            await self._logger._mn_log_exception(ERROR, "Failed to stop minion", e)
             return StopMinionResult(
                 success=False,
                 reason=str(e),
@@ -1398,7 +1398,7 @@ class Gru:
 
         all_tasks = self._runtime_tasks_snapshot()
         try:
-            await self._logger._log(INFO, "Gru shutting down...")
+            await self._logger._mn_log(INFO, "Gru shutting down...")
             shutdown_errors: list[ShutdownError] = []
             
             async def _collect_phase_errors(phase: str, targets: list[tuple[str, Any]]) -> list[ShutdownError]:
@@ -1434,14 +1434,14 @@ class Gru:
             shutdown_errors.extend(await _collect_phase_errors("shutdown_component", component_targets))
             
             if shutdown_errors:
-                await self._logger._log(
+                await self._logger._mn_log(
                     ERROR,
                     "Gru shutdown completed with internal errors",
                     error_count=len(shutdown_errors),
                     errors=[asdict(e) for e in shutdown_errors],
                 )
             else:
-                await self._logger._log(INFO, "Gru shutdown complete")
+                await self._logger._mn_log(INFO, "Gru shutdown complete")
 
             await self._logger._mn_shutdown()
             if shutdown_errors:
@@ -1452,7 +1452,7 @@ class Gru:
                 )
             return ShutdownGruResult(success=True)
         except Exception as e:
-            await self._logger._log_exception(ERROR, "Gru.shutdown failed", e)
+            await self._logger._mn_log_exception(ERROR, "Gru.shutdown failed", e)
             return ShutdownGruResult(
                 success=False,
                 reason=str(e),
@@ -1486,7 +1486,7 @@ class Gru:
 
         if not cpu_count: # pragma: no cover
             cpu_count = 1
-            await self._logger._log(
+            await self._logger._mn_log(
                 WARNING,
                 "Unable to determine CPU count. Defaulting to single-core normalization for monitoring CPU usage."
             )
@@ -1498,12 +1498,12 @@ class Gru:
                 sys_mem_used_pct = int(sys_mem.percent)
                 sys_cpu_used_pct = int(psutil.cpu_percent(interval=None))
 
-                await self._metrics._set(SYSTEM_MEMORY_USED_PERCENT, sys_mem_used_pct)
-                await self._metrics._set(SYSTEM_CPU_USED_PERCENT, sys_cpu_used_pct)
+                await self._metrics._mn_set(SYSTEM_MEMORY_USED_PERCENT, sys_mem_used_pct)
+                await self._metrics._mn_set(SYSTEM_CPU_USED_PERCENT, sys_cpu_used_pct)
 
                 if sys_mem_used_pct >= 90:
                     if not warned_ram_high:
-                        await self._logger._log(
+                        await self._logger._mn_log(
                             WARNING,
                             "System memory usage is very high. This may impact Gru performance or stability.",
                             system_memory_used_percent=sys_mem_used_pct
@@ -1515,16 +1515,16 @@ class Gru:
                 proc_mem_used_pct = int((process.memory_info().rss / sys_mem.total) * 100)
                 proc_cpu_used_pct = int(process.cpu_percent(interval=None) / cpu_count)
 
-                await self._metrics._set(PROCESS_MEMORY_USED_PERCENT, proc_mem_used_pct)
-                await self._metrics._set(PROCESS_CPU_USED_PERCENT, proc_cpu_used_pct)
+                await self._metrics._mn_set(PROCESS_MEMORY_USED_PERCENT, proc_mem_used_pct)
+                await self._metrics._mn_set(PROCESS_CPU_USED_PERCENT, proc_cpu_used_pct)
 
                 if warned_monitoring_failed:
-                    await self._logger._log(INFO, "Resource monitoring recovered")
+                    await self._logger._mn_log(INFO, "Resource monitoring recovered")
                     warned_monitoring_failed = False
 
             except Exception as e:
                 if not warned_monitoring_failed:
-                    await self._logger._log_exception(
+                    await self._logger._mn_log_exception(
                         CRITICAL,
                         "Resource monitoring failed (continuing without it)",
                         e,

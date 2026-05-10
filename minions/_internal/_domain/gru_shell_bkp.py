@@ -95,7 +95,7 @@ class GruShell(cmd.Cmd):
         return True
 
     def do_metrics(self, line: str):
-        coro = self._gru._metrics._snapshot()
+        coro = self._gru._metrics._mn_snapshot()
         
         try:
             if self._loop.is_running():

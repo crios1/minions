@@ -104,7 +104,7 @@ class Resource(AsyncService):
         try:
             result = await method(*args, **kwargs)
         except Exception as e:
-            await self._mn_metrics._inc(
+            await self._mn_metrics._mn_inc(
                 metric_name=RESOURCE_ERROR_TOTAL,
                 labels={
                     LABEL_RESOURCE: resource,
@@ -112,9 +112,9 @@ class Resource(AsyncService):
                     LABEL_ERROR_TYPE: type(e).__name__,
                 },
             )
-            await self._mn_logger._log_exception(
+            await self._mn_logger._mn_log_exception(
                 WARNING,
-                f"Resource method failed",
+                "Resource method failed",
                 e,
                 resource=resource,
                 resource_method=resource_method,
@@ -124,7 +124,7 @@ class Resource(AsyncService):
             raise
         else:
             duration = time.monotonic() - start
-            await self._mn_metrics._observe(
+            await self._mn_metrics._mn_observe(
                 metric_name=RESOURCE_LATENCY_SECONDS,
                 value=duration,
                 labels={
@@ -132,7 +132,7 @@ class Resource(AsyncService):
                     LABEL_RESOURCE_METHOD: resource_method,
                 },
             )
-            await self._mn_metrics._inc(
+            await self._mn_metrics._mn_inc(
                 metric_name=RESOURCE_SERVES_TOTAL,
                 labels={
                     LABEL_RESOURCE: resource,

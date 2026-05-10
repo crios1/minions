@@ -32,23 +32,23 @@ class Logger(AsyncLifecycle):
     def __init__(self, level: int = INFO):
         self._level = level
     
-    def _iso_8601_ts(self) -> str:
+    def _mn_iso_8601_ts(self) -> str:
         "Returns ISO 8601 timestamp like '2025:07:03T20:45:01Z'"
         now_utc = datetime.now(timezone.utc)
         return now_utc.isoformat(timespec="seconds").replace("+00:00", "Z")
     
-    def _iso_8601_ts_fs_safe(self) -> str:
+    def _mn_iso_8601_ts_fs_safe(self) -> str:
         "Returns filesystem-safe ISO 8601 timestamp like '2025-07-03T20-45-01Z'"
-        return self._iso_8601_ts().replace(":", "-")
+        return self._mn_iso_8601_ts().replace(":", "-")
 
-    async def _log(self, level: int, msg: str, **kwargs: Any):
+    async def _mn_log(self, level: int, msg: str, **kwargs: Any):
         try:
             return await self.log(level, msg, **kwargs)
         except Exception as e:
             print(f"[Logger Error] {type(e).__name__}: {e}", file=sys.stderr)
             print(f"[Logger Fallback] {msg} | {kwargs}", file=sys.stderr)
 
-    async def _log_exception(
+    async def _mn_log_exception(
         self,
         level: int,
         msg: str,
@@ -67,7 +67,7 @@ class Logger(AsyncLifecycle):
             }
         )
 
-        await self._log(
+        await self._mn_log(
             level,
             msg,
             **log_kwargs,

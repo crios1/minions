@@ -11,8 +11,8 @@ async def test_metrics_create_metric_failure_is_contained():
     logger = InMemoryLogger()
     metrics = BoomCreateMetricMetrics(logger=logger)
 
-    assert await metrics._inc(MINION_WORKFLOW_STARTED_TOTAL) is None
-    assert logger.has_log("BoomCreateMetricMetrics._inc_unsafe failed")
+    assert await metrics._mn_inc(MINION_WORKFLOW_STARTED_TOTAL) is None
+    assert logger.has_log("BoomCreateMetricMetrics._mn_inc_unsafe failed")
 
 
 @pytest.mark.asyncio
@@ -22,14 +22,14 @@ async def test_metrics_child_operation_failure_is_contained(operation):
     metrics = BoomMetrics(logger=logger)
 
     if operation == "inc":
-        assert await metrics._inc(MINION_WORKFLOW_STARTED_TOTAL) is None
-        assert logger.has_log("BoomMetrics._inc_unsafe failed")
+        assert await metrics._mn_inc(MINION_WORKFLOW_STARTED_TOTAL) is None
+        assert logger.has_log("BoomMetrics._mn_inc_unsafe failed")
     elif operation == "set":
-        assert await metrics._set("boom_gauge", 1.0) is None
-        assert logger.has_log("BoomMetrics._set_unsafe failed")
+        assert await metrics._mn_set("boom_gauge", 1.0) is None
+        assert logger.has_log("BoomMetrics._mn_set_unsafe failed")
     elif operation == "observe":
-        assert await metrics._observe("boom_histogram", 1.0) is None
-        assert logger.has_log("BoomMetrics._observe_unsafe failed")
+        assert await metrics._mn_observe("boom_histogram", 1.0) is None
+        assert logger.has_log("BoomMetrics._mn_observe_unsafe failed")
     else:
         raise Exception("unhandled operation")
 
@@ -39,7 +39,7 @@ async def test_metrics_snapshot_failures_are_contained():
     logger = InMemoryLogger()
     metrics = BoomMetrics(logger=logger)
 
-    assert await metrics._snapshot() == {"counter": {}, "gauge": {}, "histogram": {}}
+    assert await metrics._mn_snapshot() == {"counter": {}, "gauge": {}, "histogram": {}}
     assert logger.has_log("BoomMetrics.snapshot_counters failed")
     assert logger.has_log("BoomMetrics.snapshot_gauges failed")
     assert logger.has_log("BoomMetrics.snapshot_histograms failed")

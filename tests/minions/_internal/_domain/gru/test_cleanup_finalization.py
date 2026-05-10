@@ -69,7 +69,7 @@ async def test_start_resource_startup_failure_discards_runtime_state_when_cleanu
         async def failing_cleanup_resources(_resource_ids):
             raise RuntimeError("resource cleanup boom")
 
-        original_log = gru._logger._log
+        original_log = gru._logger._mn_log
 
         async def failing_cleanup_log(level, msg, **kwargs):
             if msg == "Resource cleanup could not stop resources":
@@ -77,7 +77,7 @@ async def test_start_resource_startup_failure_discards_runtime_state_when_cleanu
             await original_log(level, msg, **kwargs)
 
         monkeypatch.setattr(gru, "_cleanup_resources", failing_cleanup_resources)
-        monkeypatch.setattr(gru._logger, "_log", failing_cleanup_log)
+        monkeypatch.setattr(gru._logger, "_mn_log", failing_cleanup_log)
 
         result = await gru.start_minion(
             "tests.assets.crash.minions.depends_on_boom_startup_resource",

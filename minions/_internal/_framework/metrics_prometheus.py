@@ -39,7 +39,7 @@ class PrometheusMetrics(Metrics):
                     start_http_server(port=self._port, addr=self._addr, registry=self._registry)
                     self._started = True
         except Exception as e:
-            await self._mn_logger._log_exception(
+            await self._mn_logger._mn_log_exception(
                 ERROR,
                 "[Prometheus] Failed to start metrics HTTP server",
                 e,
@@ -120,10 +120,3 @@ class PrometheusMetrics(Metrics):
 
         return out
 
-"""
-### tests (per minion asserts) ###
-snap = await metrics._snapshot()
-succ = next((s for s in snap["counters"]["MINION_WORKFLOW_SUCCEEDED_TOTAL"]
-             if s["labels"].get("minion") == "PriceMinion"), {"value": 0.0})
-assert succ["value"] == 1.0
-"""

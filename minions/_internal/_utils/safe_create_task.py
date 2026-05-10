@@ -47,7 +47,7 @@ def safe_create_task(
         if not logger:
             return
         try:
-            await logger._log_exception(ERROR, msg, exc)
+            await logger._mn_log_exception(ERROR, msg, exc)
         except Exception:
             pass
 

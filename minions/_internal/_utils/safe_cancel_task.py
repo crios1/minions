@@ -34,7 +34,7 @@ async def safe_cancel_task(
         task_stack = _format_task_stack(task)
 
         if logger:
-            await logger._log_exception(ERROR, msg, e, task_stack=task_stack)
+            await logger._mn_log_exception(ERROR, msg, e, task_stack=task_stack)
         else:
             print(msg, file=sys.stderr)
             print(task_stack, file=sys.stderr)

@@ -49,7 +49,7 @@ class AsyncComponent(AsyncLifecycle):
             **log_kwargs,
             "rel_modpath": rel_modpath,
         }
-        await self._mn_logger._log_exception(
+        await self._mn_logger._mn_log_exception(
             ERROR,
             msg,
             error,

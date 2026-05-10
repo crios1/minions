@@ -563,7 +563,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         await self._mn_decrement_workflow_persistence_blocked_count(blocked_labels)
                         blocked_labels = None
                     if attempts > 1:
-                        await self._mn_logger._log(
+                        await self._mn_logger._mn_log(
                             INFO,
                             "Workflow persistence resumed"
                             if operation == "save" else
@@ -710,9 +710,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             "minion_modpath": self._mn_minion_modpath,
         }
         if error is not None:
-            await self._mn_logger._log_exception(level, message, error, **log_kwargs)
+            await self._mn_logger._mn_log_exception(level, message, error, **log_kwargs)
         else:
-            await self._mn_logger._log(level, message, **log_kwargs)
+            await self._mn_logger._mn_log(level, message, **log_kwargs)
 
     def _mn_workflow_persistence_base_metric_labels(
         self,
@@ -779,7 +779,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         async with self._mn_workflow_persistence_blocked_counts_lock:
             value = self._mn_workflow_persistence_blocked_counts.get(key, 0) + 1
             self._mn_workflow_persistence_blocked_counts[key] = value
-        await self._mn_metrics._set(
+        await self._mn_metrics._mn_set(
             metric_name=MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
             value=value,
             labels=labels,
@@ -796,7 +796,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 self._mn_workflow_persistence_blocked_counts[key] = value
             else:
                 self._mn_workflow_persistence_blocked_counts.pop(key, None)
-        await self._mn_metrics._set(
+        await self._mn_metrics._mn_set(
             metric_name=MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
             value=value,
             labels=labels,
@@ -829,16 +829,16 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             )
         )
         await asyncio.gather(
-            self._mn_metrics._inc(
+            self._mn_metrics._mn_inc(
                 metric_name=MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL,
                 labels=base_labels,
             ),
-            self._mn_metrics._observe(
+            self._mn_metrics._mn_observe(
                 metric_name=MINION_WORKFLOW_PERSISTENCE_DURATION_SECONDS,
                 value=duration_seconds,
                 labels=base_labels,
             ),
-            self._mn_metrics._inc(
+            self._mn_metrics._mn_inc(
                 metric_name=result_metric_name,
                 labels=result_labels,
             ),
@@ -861,7 +861,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             try: # run workflow (step by step)
                 if ctx.next_step_index == 0:
                     await _shielded_gather(*[
-                        self._mn_logger._log(
+                        self._mn_logger._mn_log(
                             INFO,
                             "Workflow started",
                             workflow_id=ctx.workflow_id,
@@ -870,13 +870,13 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             minion_composite_key=self._mn_minion_composite_key,
                             minion_modpath=self._mn_minion_modpath
                         ),
-                        self._mn_metrics._inc(
+                        self._mn_metrics._mn_inc(
                             metric_name=MINION_WORKFLOW_STARTED_TOTAL,
                             labels={LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key},
                         )
                     ])
                 else:
-                    await self._mn_logger._log(
+                    await self._mn_logger._mn_log(
                         INFO,
                         "Workflow resumed",
                         workflow_id=ctx.workflow_id,
@@ -899,7 +899,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     step_status: ExecutionStatus = "undefined"
 
                     await _shielded_gather(*[
-                        self._mn_logger._log(
+                        self._mn_logger._mn_log(
                             DEBUG,
                             "Workflow Step started",
                             workflow_id=ctx.workflow_id,
@@ -910,7 +910,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             minion_composite_key=self._mn_minion_composite_key,
                             minion_modpath=self._mn_minion_modpath
                         ),
-                        self._mn_metrics._inc(
+                        self._mn_metrics._mn_inc(
                             metric_name=MINION_WORKFLOW_STEP_STARTED_TOTAL,
                             labels={
                                 LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
@@ -931,7 +931,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     except AbortWorkflow: # log / measure step aborted
                         step_status: ExecutionStatus = "aborted"
                         await _shielded_gather(*[
-                            self._mn_logger._log(
+                            self._mn_logger._mn_log(
                                 INFO,
                                 "Workflow Step aborted",
                                 workflow_id=ctx.workflow_id,
@@ -942,7 +942,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 minion_composite_key=self._mn_minion_composite_key,
                                 minion_modpath=self._mn_minion_modpath
                             ),
-                            self._mn_metrics._inc(
+                            self._mn_metrics._mn_inc(
                                 metric_name=MINION_WORKFLOW_STEP_ABORTED_TOTAL,
                                 labels={
                                     LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
@@ -971,13 +971,13 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 "line": err_loc["line"]
                             })
                         await _shielded_gather(
-                            self._mn_logger._log_exception(
+                            self._mn_logger._mn_log_exception(
                                 ERROR,
                                 "Workflow Step failed",
                                 e,
                                 **log_kwargs
                             ),
-                            self._mn_metrics._inc(
+                            self._mn_metrics._mn_inc(
                                 metric_name=MINION_WORKFLOW_STEP_FAILED_TOTAL,
                                 labels={
                                     LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
@@ -990,7 +990,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     else: # log / measure step success & update
                         step_status: ExecutionStatus = "succeeded"
                         await _shielded_gather(*[
-                            self._mn_logger._log(
+                            self._mn_logger._mn_log(
                                 DEBUG,
                                 "Workflow Step succeeded",
                                 workflow_id=ctx.workflow_id,
@@ -1001,7 +1001,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 minion_composite_key=self._mn_minion_composite_key,
                                 minion_modpath=self._mn_minion_modpath
                             ),
-                            self._mn_metrics._inc(
+                            self._mn_metrics._mn_inc(
                                 metric_name=MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
                                 labels={
                                     LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
@@ -1018,7 +1018,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             # Using duration=-1.0 to identify when a loaded context
                             # doesn't have its started_at time when it should.
                             duration = -1.0
-                        await self._mn_metrics._observe(
+                        await self._mn_metrics._mn_observe(
                             metric_name=MINION_WORKFLOW_STEP_DURATION_SECONDS,
                             value=duration,
                             labels={
@@ -1063,7 +1063,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
 
                 if workflow_status == "aborted" and terminal_workflow_log_message is not None:
                     await _shielded_gather(*[
-                        self._mn_logger._log(
+                        self._mn_logger._mn_log(
                             terminal_workflow_log_level or INFO,
                             terminal_workflow_log_message,
                             workflow_id=ctx.workflow_id,
@@ -1072,7 +1072,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             minion_composite_key=self._mn_minion_composite_key,
                             minion_modpath=self._mn_minion_modpath
                         ),
-                        self._mn_metrics._inc(
+                        self._mn_metrics._mn_inc(
                             metric_name=MINION_WORKFLOW_ABORTED_TOTAL,
                             labels={LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key},
                         )
@@ -1082,7 +1082,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     if failure_error is None:
                         failure_error = RuntimeError("workflow failed")
                     await _shielded_gather(*[
-                        self._mn_logger._log_exception(
+                        self._mn_logger._mn_log_exception(
                             terminal_workflow_log_level or ERROR,
                             terminal_workflow_log_message,
                             failure_error,
@@ -1092,7 +1092,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             minion_composite_key=self._mn_minion_composite_key,
                             minion_modpath=self._mn_minion_modpath,
                         ),
-                        self._mn_metrics._inc(
+                        self._mn_metrics._mn_inc(
                             metric_name=MINION_WORKFLOW_FAILED_TOTAL,
                             labels={
                                 LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
@@ -1102,7 +1102,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     ])
                 elif workflow_status == "succeeded" and terminal_workflow_log_message is not None:
                     await _shielded_gather(*[
-                        self._mn_logger._log(
+                        self._mn_logger._mn_log(
                             terminal_workflow_log_level or INFO,
                             terminal_workflow_log_message,
                             workflow_id=ctx.workflow_id,
@@ -1111,7 +1111,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             minion_composite_key=self._mn_minion_composite_key,
                             minion_modpath=self._mn_minion_modpath
                         ),
-                        self._mn_metrics._inc(
+                        self._mn_metrics._mn_inc(
                             metric_name=MINION_WORKFLOW_SUCCEEDED_TOTAL,
                             labels={LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key},
                         )
@@ -1124,7 +1124,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     # Cancellation can happen before step 0 sets started_at.
                     duration = -1.0
 
-                metric_obs = self._mn_metrics._observe(
+                metric_obs = self._mn_metrics._mn_observe(
                     metric_name=MINION_WORKFLOW_DURATION_SECONDS,
                     value=duration,
                     labels={
@@ -1139,7 +1139,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         self._mn_workflow_tasks.discard(task)
                         inflight = len(self._mn_workflow_tasks)
                     if not self._mn_shutting_down:
-                        await self._mn_metrics._set(
+                        await self._mn_metrics._mn_set(
                             metric_name=MINION_WORKFLOW_INFLIGHT_GAUGE,
                             value=inflight,
                             labels={LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key},
@@ -1220,7 +1220,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
 
         async with self._mn_tasks_gate:
             inflight = len(self._mn_workflow_tasks)
-        await self._mn_metrics._set(
+        await self._mn_metrics._mn_set(
             metric_name=MINION_WORKFLOW_INFLIGHT_GAUGE,
             value=inflight,
             labels={LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key},
