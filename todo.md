@@ -785,13 +785,14 @@
   - `minions gru attach` connects to an already-running Gru runtime without stopping it when the attach session exits
   - GruShell is deprecated as a production/control-plane direction; treat it as legacy design material and a temporary local demo/helper until serve/attach covers onboarding
   - migrate useful GruShell command semantics (`status`, `stop`, `redeploy`, `snapshot`, `deps`, etc.) into the serve/attach command model instead of expanding `cmd.Cmd` behavior
+  - GruShell transitional stability note:
+    - fixed obvious exported-helper crashes while it remains available:
+      - `wait` no longer references undefined helper functions
+      - `start` now calls the current `Gru.start_minion(...)` signature
+      - successful starts are tracked by `StartMinionResult.instance_id`
+    - continue fixing obvious GruShell crashes only as needed; do not add new product semantics there
   - convo: https://chatgpt.com/c/69406c80-f478-8327-85b2-e3fb54d89796
   - should consider creating a golang cli for a cli option of 'minions gru attach'
-
-- todo: keep GruShell stable only as a deprecated transitional helper
-  - do not complete GruShell as a first-class operator interface
-  - fix obvious crashes while it remains exported, but avoid adding new product semantics there
-  - use the existing GruShell code and docs as source material for the serve/attach design
 
 - todo: implement and lock in two-stage Ctrl-C shutdown semantics for the runtime controller
   - scope:
@@ -932,6 +933,7 @@
     - uptime model
     - storage/network estimates
   - include a simple break-even table
+  - related chat: https://chatgpt.com/c/69fe1264-d0e0-83ea-bf1f-daf66098f551
 
 - todo: benchmark an equivalent microservices baseline (narrow scope)
   - pick one representative workflow shape

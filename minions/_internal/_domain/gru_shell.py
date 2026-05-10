@@ -8,6 +8,7 @@ from pprint import pprint
 from typing import Literal, Optional
 
 from .gru import Gru
+from .gru_result_types import GruResult, StartMinionResult
 
 State = Literal[
     "starting","running","stopping",
@@ -66,16 +67,61 @@ class GruShell(cmd.Cmd):
             return asyncio.run_coroutine_threadsafe(coro, self._loop)
         return self._loop.create_task(coro)
 
+    def _future_exception(self, f) -> BaseException | None:
+        try:
+            return f.exception()
+        except (asyncio.InvalidStateError, cf.InvalidStateError):
+            return None
+
+    def _future_result(self, f, timeout: float | None = None):
+        if isinstance(f, cf.Future):
+            return f.result(timeout=timeout)
+        if timeout is not None and not f.done():
+            raise TimeoutError()
+        return f.result()
+
+    def _operation_failed(self, f) -> bool:
+        if not f.done():
+            return False
+        if self._future_exception(f):
+            return True
+        result = self._future_result(f)
+        return isinstance(result, GruResult) and not result.success
+
+    def _wait_on_future_if_any(self, target: str):
+        state = self._compute_state(target)
+        if target.startswith("pending:") or state == "starting":
+            return self._start_ops.get(target)
+        if state == "stopping":
+            return self._stop_ops.get(target)
+        return None
+
+    def _parse_wait_args(self, argv: list[str]) -> tuple[float | None, list[str]]:
+        timeout: float | None = None
+        targets: list[str] = []
+        i = 0
+        while i < len(argv):
+            arg = argv[i]
+            if arg == "--timeout":
+                if i + 1 >= len(argv):
+                    raise ValueError("Usage: wait [--timeout N] [targets...]")
+                timeout = float(argv[i + 1])
+                i += 2
+                continue
+            targets.append(arg)
+            i += 1
+        return timeout, targets or self._last_targets
+
     def _compute_state(self, key: str) -> State:
         if key.startswith("pending:"):
             f = self._start_ops.get(key)
-            return "failed" if (f and f.done() and f.exception()) \
+            return "failed" if (f and self._operation_failed(f)) \
             else ("starting" if f and not f.done() else "unknown")
         if key in self._stop_ops:
             f = self._stop_ops[key]
             if not f.done(): return "stopping"
             try:
-                f.result(); return "stopped"
+                self._future_result(f); return "stopped"
             except asyncio.CancelledError: return "aborted"
             except Exception: return "failed"
         if key in self._gru._minions_by_id:  # running if present
@@ -97,21 +143,31 @@ class GruShell(cmd.Cmd):
             print("Usage: start MINION_MODULEPATH MINION_CONFIG_MODULEPATH PIPELINE_MODULEPATH")
             return
 
-        fut = self._submit(self._gru.start_minion(*argv))  # must return instance_id
+        minion_modpath, minion_config_path, pipeline_modpath = argv
+        fut = self._submit(
+            self._gru.start_minion(
+                minion_modpath,
+                pipeline_modpath,
+                minion_config_path=minion_config_path,
+            )
+        )
         pending_id = f"pending:{id(fut)}"
         self._start_ops[pending_id] = fut
         self._last_targets = [pending_id]
         print("start queued")
 
-        def _cb(f: cf.Future):
+        def _cb(f):
             try:
-                inst_id = f.result()
+                result = self._future_result(f)
             except Exception:
                 self._start_ops[pending_id] = f  # keep for status to show 'failed'
                 return
+            if not isinstance(result, StartMinionResult) or not result.success or not result.instance_id:
+                self._start_ops[pending_id] = f  # keep for status to show 'failed'
+                return
             self._start_ops.pop(pending_id, None)
-            self._start_ops[inst_id] = f
-            self._last_targets = [inst_id]
+            self._start_ops[result.instance_id] = f
+            self._last_targets = [result.instance_id]
 
         fut.add_done_callback(_cb)
 
@@ -167,9 +223,9 @@ class GruShell(cmd.Cmd):
         if futs:
             try:
                 if timeout is None:
-                    for f in futs: f.result()
+                    for f in futs: self._future_result(f)
                 else:
-                    for f in futs: f.result(timeout=timeout)
+                    for f in futs: self._future_result(f, timeout=timeout)
             except Exception as e:
                 print(f"status/await error: {e}")
 
@@ -184,17 +240,19 @@ class GruShell(cmd.Cmd):
 
     def do_wait(self, line: str):
         argv = self._to_argv(line)
-        timeout = parse_timeout(argv)  # whatever you're already doing
-        targets = parse_targets_or_last(argv, self._last_targets)
+        try:
+            timeout, targets = self._parse_wait_args(argv)
+        except ValueError as e:
+            print(e)
+            return
         if not targets:
             print("No targets to wait on"); return
 
-        futs = [f for t in targets if (f := _wait_on_future_if_any(t)) is not None]
+        futs = [f for t in targets if (f := self._wait_on_future_if_any(t)) is not None]
 
         try:
             if futs:
                 cf.wait(futs, timeout=timeout)
-            # optionally: poll for IDs without futures until they leave transitional states
         except KeyboardInterrupt:
             print("wait interrupted by user")
 
