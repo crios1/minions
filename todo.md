@@ -267,6 +267,74 @@
     - implementation note:
       - audit every user-code invocation site and add tests that would "go boom" immediately if the runtime forgets to use the guarded path
 
+- todo: mature Gru lifecycle failure management
+  - context:
+    - `docs/concepts/gru-lifecycle-failure-management.md` captures the current cleanup model and the boundary between Gru-owned framework state and user-owned process state
+    - the current implementation hardens failed start, stop, and shutdown cleanup, but the API/result surface and long-term diagnostics still need deliberate design
+  - implementation order:
+    - formalize Gru stop commit/fail-closed semantics
+    - refine lifecycle result contracts
+    - design lifecycle leak-check tooling and cookbook
+    - add optional lifecycle diagnostics
+
+  - todo: formalize Gru stop commit/fail-closed semantics
+    - define the point where `stop_minion(...)` becomes committed and cannot be rolled back to a running orchestration
+    - keep tests proving committed stop failures remove active routing and framework-owned runtime state
+    - document which failures are primary operation failures versus secondary cleanup/finalization failures
+    - why it matters:
+      - stop is not transactional once detachment begins, so the code and tests need explicit fail-closed semantics
+
+  - todo: refine lifecycle result contracts
+    - distinguish operation failure from framework cleanup status and possible user-owned process pollution
+    - consider structured fields for cleanup phases, cancelled tasks, degraded cleanup, and restart recommendations
+    - preserve the simple success/failure path while making degraded cleanup machine-readable for operators and callers
+    - apply the result model consistently to `start_minion(...)`, `stop_minion(...)`, and `shutdown()`
+    - why it matters:
+      - current `success=False` results are too coarse for lifecycle failures and make it hard for callers/operators to react correctly
+
+  - todo: design lifecycle leak-check tooling and cookbook
+    - goal:
+      - give users a practical way to find likely lifecycle cleanup leaks in the single-process runtime model without pretending Gru can prove process cleanliness
+    - utility flow:
+      - start an orchestration or component lifecycle
+      - optionally exercise it briefly
+      - stop it
+      - let the event loop settle and force garbage collection
+      - measure process memory, live tasks, and retained component objects
+      - repeat for many iterations
+      - report suspicious monotonic growth or retained runtime objects
+    - layers:
+      - individual component checks that repeatedly exercise minion, pipeline, or resource startup/shutdown with the least framework context needed
+      - minimal orchestration checks that use the smallest valid Gru orchestration containing the target component
+      - scenario checks that repeatedly start, exercise, and stop realistic orchestrations to catch workload-dependent leaks
+    - likely report fields:
+      - iteration count and configured settle/gc behavior
+      - process memory delta and monotonic-growth signal
+      - live asyncio tasks introduced during the run
+      - retained weakref-tracked component instances after stop
+      - top `tracemalloc` allocation deltas when enabled
+      - recommended component/hook areas to inspect
+    - cookbook:
+      - show how to run the check against a resource with a background task
+      - show how to run the check against a full orchestration scenario
+      - explain that this detects likely leaks, not proof of leak freedom
+      - explain when process restart is still the only hard cleanup boundary
+    - tests:
+      - leak-check utility passes for known-good component/orchestration assets
+      - utility flags retained component references
+      - utility flags un-cancelled background tasks
+      - utility flags monotonic memory growth when `tracemalloc`/memory measurement is enabled
+      - utility result remains stable enough for CI without relying on exact byte counts
+    - why it matters:
+      - Minions runs in-process, so users need practical diagnostics for cooperative lifecycle cleanup issues
+
+  - todo: add optional lifecycle diagnostics
+    - consider memory deltas, `tracemalloc` snapshots, live asyncio task inspection, and weakref collectability checks
+    - decide which diagnostics belong in one-off leak-check tooling versus runtime debug logging
+    - keep diagnostics opt-in so normal lifecycle guarantees do not depend on heavyweight inspection
+    - why it matters:
+      - diagnostics help debug user-owned cleanup leaks without changing Gru's core cleanup guarantee
+
 - todo: once the reusable Gru testing routine is ready, fill out coverage for the ways users interact with Gru, especially the file shapes they can pass to it
  - audit each test asset in the suite and ensure it is useful and covered by a reasonable Gru test; otherwise, add the test or delete the asset
 

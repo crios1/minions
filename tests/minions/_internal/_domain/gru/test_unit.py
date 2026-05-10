@@ -15,6 +15,7 @@ from minions._internal._framework.state_store_noop import NoOpStateStore
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 
+
 class TestUnit:
     def patch_sleep_cancel_after(self, monkeypatch, n: int):
         """
@@ -186,6 +187,127 @@ class TestUnit:
             assert {e.component for e in result.errors} == {"state_store", "metrics"}
             assert all(e.error_type == "RuntimeError" for e in result.errors)
             assert all("component shutdown boom" in e.error_message for e in result.errors)
+
+    @pytest.mark.asyncio
+    async def test_shutdown_clears_runtime_state_when_component_shutdown_fails(
+        self,
+        monkeypatch,
+        gru_factory,
+    ):
+        async with gru_factory(
+            logger=InMemoryLogger(),
+            metrics=InMemoryMetrics(),
+            state_store=NoOpStateStore(),
+        ) as gru:
+            result = await gru.start_minion(
+                "tests.assets.crash.minions.good",
+                "tests.assets.crash.pipelines.emit_1_then_block",
+            )
+            assert result.success
+
+            async def failing_shutdown_async_component(_comp, log_kwargs=None):
+                raise RuntimeError("component shutdown boom")
+
+            monkeypatch.setattr(gru, "_shutdown_async_component", failing_shutdown_async_component)
+            shutdown = await gru.shutdown()
+
+            assert not shutdown.success
+            assert gru._runtime_state_snapshot() == {}
+
+    @pytest.mark.asyncio
+    async def test_shutdown_reports_task_cancel_errors_and_clears_runtime_state(
+        self,
+        monkeypatch,
+        gru_factory,
+    ):
+        async with gru_factory(
+            logger=InMemoryLogger(),
+            metrics=InMemoryMetrics(),
+            state_store=NoOpStateStore(),
+        ) as gru:
+            result = await gru.start_minion(
+                "tests.assets.crash.minions.good",
+                "tests.assets.crash.pipelines.emit_1_then_block",
+            )
+            assert result.success
+
+            async def failing_safe_cancel_task(*args, **kwargs):
+                raise RuntimeError("cancel boom")
+
+            monkeypatch.setattr(
+                "minions._internal._domain.gru.safe_cancel_task",
+                failing_safe_cancel_task,
+            )
+            shutdown = await gru.shutdown()
+
+            assert not shutdown.success
+            assert shutdown.reason == "Gru shutdown completed with 3 internal error(s)."
+            assert len(shutdown.errors) == 3
+            assert all(error.phase == "cancel_task" for error in shutdown.errors)
+            assert all(error.error_message == "cancel boom" for error in shutdown.errors)
+            assert gru._runtime_state_snapshot() == {}
+
+    @pytest.mark.asyncio
+    async def test_shutdown_clears_runtime_state_when_initial_log_fails(
+        self,
+        monkeypatch,
+        gru_factory,
+    ):
+        async with gru_factory(
+            logger=InMemoryLogger(),
+            metrics=InMemoryMetrics(),
+            state_store=NoOpStateStore(),
+        ) as gru:
+            result = await gru.start_minion(
+                "tests.assets.crash.minions.good",
+                "tests.assets.crash.pipelines.emit_1_then_block",
+            )
+            assert result.success
+            monitor_task = gru._resource_monitor_task
+            shutdown_components = []
+
+            async def tracking_shutdown_async_component(comp, log_kwargs=None):
+                shutdown_components.append(comp)
+
+            async def failing_log(*args, **kwargs):
+                raise RuntimeError("log boom")
+
+            monkeypatch.setattr(gru, "_shutdown_async_component", tracking_shutdown_async_component)
+            monkeypatch.setattr(gru._logger, "log", failing_log)
+            shutdown = await gru.shutdown()
+
+            assert shutdown.success
+            assert shutdown_components == [gru._state_store, gru._metrics]
+            assert monitor_task.done()
+            assert monitor_task.cancelled()
+            assert gru._runtime_state_snapshot() == {}
+
+    @pytest.mark.asyncio
+    async def test_shutdown_clears_runtime_state_when_logger_shutdown_fails(
+        self,
+        monkeypatch,
+        gru_factory,
+    ):
+        async with gru_factory(
+            logger=InMemoryLogger(),
+            metrics=InMemoryMetrics(),
+            state_store=NoOpStateStore(),
+        ) as gru:
+            result = await gru.start_minion(
+                "tests.assets.crash.minions.good",
+                "tests.assets.crash.pipelines.emit_1_then_block",
+            )
+            assert result.success
+
+            async def failing_logger_shutdown():
+                raise RuntimeError("logger shutdown boom")
+
+            monkeypatch.setattr(gru._logger, "_mn_shutdown", failing_logger_shutdown)
+            shutdown = await gru.shutdown()
+
+            assert not shutdown.success
+            assert shutdown.reason == "logger shutdown boom"
+            assert gru._runtime_state_snapshot() == {}
 
 
 

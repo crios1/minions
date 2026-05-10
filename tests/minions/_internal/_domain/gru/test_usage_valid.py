@@ -1,6 +1,7 @@
 import pytest
 
 from minions._internal._domain.gru import Gru
+from minions._internal._domain.minion import WorkflowPersistenceFailurePolicy
 from minions._internal._framework.logger_console import ConsoleLogger
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_noop import NoOpMetrics
@@ -20,6 +21,9 @@ from tests.support.gru_scenario import (
     WaitWorkflowCompletions,
     run_gru_scenario,
 )
+
+
+FIXED_RESOURCE_ID = "tests.assets.resources.fixed.base.FixedResource"
 
 
 class TestValidUsage:
@@ -49,7 +53,11 @@ class TestValidUsage:
         "policy",
         ["continue-on-failure", "idle-until-persisted"],
     )
-    async def test_gru_accepts_workflow_persistence_failure_policy(self, gru_factory, policy):
+    async def test_gru_accepts_workflow_persistence_failure_policy(
+        self,
+        gru_factory,
+        policy: WorkflowPersistenceFailurePolicy,
+    ):
         async with gru_factory(
             state_store=NoOpStateStore(),
             logger=NoOpLogger(),
@@ -538,6 +546,34 @@ class TestValidUsageDSL:
             directives,
             pipeline_event_counts={pipeline_modpath: 1},
         )
+
+    @pytest.mark.asyncio
+    async def test_minion_and_pipeline_share_resource_without_duplicate_owner_ref(
+        self,
+        gru,
+    ):
+        # Exact owner-ref counts are not currently expressible through the scenario DSL.
+        first = await gru.start_minion(
+            "tests.assets.minions.two_steps.counter.resourced",
+            "tests.assets.pipelines.resourced.counter.with_fixed_resource",
+            minion_config_path="tests/assets/config/minions/a.toml",
+        )
+        second = await gru.start_minion(
+            "tests.assets.minions.two_steps.counter.resourced_shared_b",
+            "tests.assets.pipelines.resourced.counter.with_fixed_resource",
+            minion_config_path="tests/assets/config/minions/b.toml",
+        )
+        assert first.success
+        assert second.success
+        assert gru._resource_refcounts[FIXED_RESOURCE_ID] == 3
+
+        first_stop = await gru.stop_minion(first.instance_id or "")
+        assert first_stop.success
+        assert gru._resource_refcounts[FIXED_RESOURCE_ID] == 2
+
+        second_stop = await gru.stop_minion(second.instance_id or "")
+        assert second_stop.success
+        assert gru._runtime_state_snapshot() == {}
 
     @pytest.mark.asyncio
     async def test_gru_start_minion_shutdown_without_stop(

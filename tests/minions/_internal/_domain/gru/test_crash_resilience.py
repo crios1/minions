@@ -23,26 +23,10 @@ from tests.assets.support.state_store_inmemory import InMemoryStateStore
 
 GOOD_MINION = "tests.assets.crash.minions.good"
 GOOD_PIPELINE = "tests.assets.crash.pipelines.emit_1_then_block"
-GOOD_CONFIG = None
 
 
 def composite_key(minion_modpath: str, pipeline_modpath: str, config: str = "") -> str:
     return f"{minion_modpath}|{config}|{pipeline_modpath}"
-
-
-def assert_no_orphaned_runtime_state(gru) -> None:
-    assert gru._minions_by_id == {}
-    assert dict(gru._minions_by_name) == {}
-    assert gru._minions_by_composite_key == {}
-    assert gru._minion_tasks == {}
-    assert gru._pipelines == {}
-    assert gru._pipeline_tasks == {}
-    assert gru._resources == {}
-    assert gru._resource_tasks == {}
-    assert gru._minion_pipeline_map == {}
-    assert gru._minion_resource_map == {}
-    assert gru._pipeline_resource_map == {}
-    assert all(value >= 0 for value in gru._resource_refcounts.values())
 
 
 async def assert_gru_can_start_and_stop_known_good_minion(gru) -> None:
@@ -52,7 +36,7 @@ async def assert_gru_can_start_and_stop_known_good_minion(gru) -> None:
     assert await gru._logger.wait_for_log("Workflow succeeded", timeout=1.0, poll_interval=0.01)
     stop = await gru.stop_minion(result.instance_id)
     assert stop.success
-    assert_no_orphaned_runtime_state(gru)
+    assert gru._runtime_state_snapshot() == {}
 
 
 def assert_counter(metrics: InMemoryMetrics, metric_name: str, labels: dict[str, str]) -> None:
@@ -74,7 +58,7 @@ async def test_start_minion_contains_state_store_resume_read_failure(gru_factory
             log_kwargs={"error_type": "BoomError"},
         )
         assert logger.has_log("Failed to start minion", log_kwargs={"error_message": BOOM_MESSAGE})
-        assert_no_orphaned_runtime_state(gru)
+        assert gru._runtime_state_snapshot() == {}
 
 
 @pytest.mark.asyncio
@@ -106,7 +90,7 @@ async def test_start_minion_contains_user_code_startup_failures(
 
         assert not result.success
         assert logger.has_log("Failed to start minion", log_kwargs={"error_message": BOOM_MESSAGE})
-        assert_no_orphaned_runtime_state(gru)
+        assert gru._runtime_state_snapshot() == {}
         await assert_gru_can_start_and_stop_known_good_minion(gru)
 
 
@@ -147,7 +131,7 @@ async def test_minion_step_failure_is_logged_measured_and_contained(gru_factory,
         )
         stop = await gru.stop_minion(result.instance_id or "")
         assert stop.success
-        assert_no_orphaned_runtime_state(gru)
+        assert gru._runtime_state_snapshot() == {}
 
 
 @pytest.mark.asyncio
@@ -203,7 +187,7 @@ async def test_resource_method_failure_is_logged_measured_and_contained(gru_fact
         )
         stop = await gru.stop_minion(result.instance_id or "")
         assert stop.success
-        assert_no_orphaned_runtime_state(gru)
+        assert gru._runtime_state_snapshot() == {}
 
 
 @pytest.mark.asyncio
@@ -231,9 +215,11 @@ async def test_shutdown_failures_are_reported_and_singleton_is_released(
         if minion_modpath.endswith(".boom_shutdown"):
             assert not stop.success
             assert logger.has_log("Failed to stop minion")
+            assert gru._runtime_state_snapshot() == {}
         else:
             assert stop.success
             assert logger.has_log("shutdown failed during startup error recovery")
+            assert gru._runtime_state_snapshot() == {}
 
     # The factory shutdown must release the global singleton even after a failed stop path.
     async with gru_factory(
