@@ -272,7 +272,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         self._mn_minion_composite_key = minion_composite_key
         self._mn_minion_modpath = minion_modpath
         self._mn_config_path = config_path
-        self._mn_config = None
+        self._mn_config: dict[str, Any] | None = None
         self._mn_config_lock = asyncio.Lock()
         self._mn_state_store = state_store
         self._mn_metrics = metrics
@@ -389,6 +389,10 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         except LookupError:
             raise RuntimeError("No context is currently bound to this workflow")
 
+    @property
+    def config(self) -> dict[str, Any] | None:
+        return self._mn_config
+
     def _mn_make_workflow(self) -> tuple[Callable]:
         "workflow is defined as the subclass's methods tagged as minion steps, in declaration order"
         steps: list[tuple[int, str]] = []
@@ -456,11 +460,16 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             post=_post
         )
 
-    async def _mn_load_config(self, config_path: str) -> dict:
+    async def _mn_load_config(self, config_path: str) -> dict[str, Any]:
         async with self._mn_config_lock:
-            return await self.load_config(config_path)
+            config = await self.load_config(config_path)
+            if not isinstance(config, dict):
+                raise TypeError(
+                    f"{type(self).__name__}.load_config must return a dict, got {type(config).__name__}"
+                )
+            return config
 
-    async def load_config(self, config_path: str) -> dict:
+    async def load_config(self, config_path: str) -> dict[str, Any]:
         """
         Default config loader that supports TOML, JSON, and YAML files.
 

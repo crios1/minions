@@ -277,6 +277,38 @@ class TestValidUsage:
             assert result.instance_id in gru._minion_tasks
 
     @pytest.mark.asyncio
+    async def test_gru_loads_minion_config_into_workflow_context(self, gru_factory, tests_dir):
+        minion_modpath = "tests.assets.minions.two_steps.counter.uses_config"
+        pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
+
+        logger = InMemoryLogger()
+        from tests.assets.minions.two_steps.counter.uses_config import ConfigMinion
+
+        ConfigMinion.enable_spy()
+        ConfigMinion.reset_spy()
+        async with gru_factory(
+            state_store=InMemoryStateStore(logger=logger),
+            logger=logger,
+            metrics=InMemoryMetrics(),
+        ) as gru:
+            result = await gru.start_minion(
+                minion=minion_modpath,
+                minion_config_path=config_path,
+                pipeline=pipeline_modpath,
+            )
+
+            assert result.success
+            assert result.instance_id is not None
+
+            await ConfigMinion.wait_for_calls(expected={"step_1": 1, "step_2": 1}, timeout=5.0)
+
+            minion = gru._minions_by_id[result.instance_id]
+            assert minion.config["config"]["name"] == "alpha"
+
+            await gru.stop_minion(result.instance_id)
+
+    @pytest.mark.asyncio
     async def test_minion_and_pipeline_share_resource_dependency(self, gru_factory, tests_dir):
         minion_modpath = "tests.assets.minions.two_steps.simple.resourced_1"
         pipeline_modpath = "tests.assets.pipelines.simple.simple_event.resourced"

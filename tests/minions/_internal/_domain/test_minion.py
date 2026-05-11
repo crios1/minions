@@ -79,6 +79,49 @@ class TestMinionSubclassingValid:
 
         assert len(m._mn_workflow) == 2
 
+    def test_minion_exposes_loaded_config_through_public_property(self):
+        class MyMinion(Minion[dict, dict]):
+            @minion_step
+            async def step_1(self):
+                ...
+
+        m = MyMinion(
+            minion_instance_id="mock",
+            minion_composite_key="mock",
+            minion_modpath="mock",
+            config_path="mock",
+            state_store=NoOpStateStore(),
+            metrics=NoOpMetrics(),
+            logger=NoOpLogger(),
+        )
+
+        assert m.config is None
+        m._mn_config = {"config": {"name": "alpha"}}
+        assert m.config == {"config": {"name": "alpha"}}
+
+    @pytest.mark.asyncio
+    async def test_minion_rejects_non_dict_config_loads(self):
+        class MyMinion(Minion[dict, dict]):
+            @minion_step
+            async def step_1(self):
+                ...
+
+            async def load_config(self, config_path: str): # pyright: ignore[reportIncompatibleMethodOverride]
+                return ["not", "a", "dict"]
+
+        m = MyMinion(
+            minion_instance_id="mock",
+            minion_composite_key="mock",
+            minion_modpath="mock",
+            config_path="mock",
+            state_store=NoOpStateStore(),
+            metrics=NoOpMetrics(),
+            logger=NoOpLogger(),
+        )
+
+        with pytest.raises(TypeError, match="load_config must return a dict, got list"):
+            await m._mn_load_config("mock")
+
 class TestMinionSubclassingInvalid:
     def test_missing_event_and_context_types(self):
         with pytest.raises(TypeError) as excinfo:
