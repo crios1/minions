@@ -779,20 +779,111 @@
       - write a "composing/designing your Minions system" guide
       - consider guidance around committing observability definitions to the repo
 
-- todo: implement "minions gru serve" and "minions gru attach"
-  - this replaces GruShell as the canonical runtime controller / operator UX
-  - `minions gru serve` owns the long-lived Gru runtime lifecycle
-  - `minions gru attach` connects to an already-running Gru runtime without stopping it when the attach session exits
-  - GruShell is deprecated as a production/control-plane direction; treat it as legacy design material and a temporary local demo/helper until serve/attach covers onboarding
-  - migrate useful GruShell command semantics (`status`, `stop`, `redeploy`, `snapshot`, `deps`, etc.) into the serve/attach command model instead of expanding `cmd.Cmd` behavior
-  - GruShell transitional stability note:
-    - fixed obvious exported-helper crashes while it remains available:
-      - `wait` no longer references undefined helper functions
-      - `start` now calls the current `Gru.start_minion(...)` signature
-      - successful starts are tracked by `StartMinionResult.instance_id`
-    - continue fixing obvious GruShell crashes only as needed; do not add new product semantics there
+- todo: implement `minions gru serve` / `minions gru attach`
+  - goal:
+    - replace `GruShell` as the canonical runtime controller/operator UX
+    - `minions gru serve` owns the long-lived `Gru` runtime lifecycle
+    - `minions gru attach` connects to an already-running runtime, sends control-plane commands, and exits without stopping it
+  - architecture:
+    - split process model: work process = `minions gru serve`; control-plane client = `minions gru attach`
+    - runtime remains single-process for Minions work; IPC is only for low-volume operator commands/responses
+    - default transport: localhost TCP + JSONL request/response + per-runtime auth token
+    - do not start with shared memory, Unix sockets, Windows named pipes, HTTP, gRPC, or a browser-facing API
+  - serve:
+    - command: `minions gru serve [--runtime default]`
+    - create and own the long-lived `Gru` instance
+    - bind TCP server to `127.0.0.1` on an ephemeral port by default
+    - generate auth token with `secrets.token_urlsafe(32)`
+    - write runtime metadata to a user-private state file
+    - accept/authenticate JSONL requests, dispatch supported commands, return structured JSONL responses
+    - clean up metadata file on graceful shutdown
+  - runtime metadata:
+    - path: `platformdirs.user_state_dir("minions")` + `/runtimes/<runtime>.json`
+    - shape:
+      ```json
+      {
+        "runtime": "default",
+        "pid": 12345,
+        "endpoint": "tcp://127.0.0.1:49152",
+        "token": "...",
+        "created_at": "..."
+      }
+      ```
+    - on Unix, create parent dirs privately where practical and set metadata file mode to `0600`
+    - on Windows, rely on user profile/app-data ACLs for v1
+  - attach:
+    - command: `minions gru attach [--runtime default]`
+    - read runtime metadata, connect to endpoint, include token on every request
+    - support interactive command loop or command passthrough
+    - `exit`, `quit`, and Ctrl-D close attach only; they must not stop the served runtime
+  - protocol:
+    - JSON lines, one JSON object per request/response
+    - request:
+      ```json
+      {"id": "request-id", "token": "...", "cmd": "status", "args": {}}
+      ```
+    - success response:
+      ```json
+      {"id": "request-id", "ok": true, "result": {}}
+      ```
+    - error response:
+      ```json
+      {"id": "request-id", "ok": false, "error": {"code": "unauthorized", "message": "unauthorized"}}
+      ```
+    - use `secrets.compare_digest(...)`; reject malformed/unauthenticated requests before command dispatch
+  - initial commands:
+    - migrate useful `GruShell` semantics into serve/attach instead of expanding `cmd.Cmd`
+    - commands: `status`, `stop`, `redeploy`, `snapshot`, `deps`, `shutdown`, `help`
+    - naming: `stop` stops work/component; `shutdown` stops serve daemon/runtime; `exit` closes attach only
+  - security posture:
+    - trusted single-user developer/operator environment; not internet-facing or hostile multi-tenant
+    - not defending against root/admin or malware already running as the same OS user
+    - bind `127.0.0.1` only by default; never bind `0.0.0.0` by default
+    - require random token auth for every request
+    - store token only in user-private runtime metadata
+    - do not log token; do not print token unless explicitly requested for debugging
+    - constant-time token comparison; reject malformed requests safely
+    - v1 narrows access from "anything on localhost" to "anything that can read user-private runtime metadata"
+  - non-goals for v1:
+    - TLS, user accounts, RBAC, remote attach, public interface binding, Unix sockets, Windows named pipes, gRPC, shared memory, HTTP server, web UI, browser-facing API, multi-tenant isolation
+  - future extensions:
+    - one-shot commands: `minions gru status`, `minions gru stop <id>`, `minions gru redeploy <id>`, `minions gru snapshot`
+    - optional transports: `--listen tcp://127.0.0.1:<port>`, `--listen unix://...`
+    - possible future Go/polyglot attach client using the same protocol
+    - remote attach requires a separate security design before implementation
+  - GruShell deprecation:
+    - treat `GruShell` as legacy design material, temporary local demo/helper, and source command semantics to migrate
+    - do not expand `cmd.Cmd` behavior
+    - transitional stability note:
+      - fixed obvious exported-helper crashes: `wait` no longer references undefined helpers; `start` calls the current `Gru.start_minion(...)` signature; successful starts are tracked by `StartMinionResult.instance_id`
+      - continue fixing obvious `GruShell` crashes only as needed; do not add new product semantics there
+  - suggested implementation order:
+    - add runtime metadata path helpers
+    - add runtime metadata read/write/delete helpers
+    - add JSONL request/response models
+    - add token generation and auth validation
+    - add `serve` TCP listener
+    - add minimal `status` command
+    - add `attach` client with one-shot request support
+    - add interactive attach loop
+    - migrate remaining commands
+    - add graceful shutdown behavior
+    - add tests for auth, malformed requests, attach exit behavior, and metadata cleanup
+  - testing checklist:
+    - serve writes metadata with endpoint, pid, token, runtime name
+    - token is not logged
+    - attach can connect using metadata
+    - invalid/missing token is rejected
+    - malformed JSON is rejected
+    - unknown command returns structured error
+    - `exit` closes attach only
+    - `shutdown` stops served runtime
+    - server binds only to `127.0.0.1`
+    - stale metadata is handled cleanly
+    - second `serve --runtime same-name` fails or handles conflict explicitly
+    - metadata is cleaned up on graceful shutdown
+    - Unix metadata file mode is `0600` where applicable
   - convo: https://chatgpt.com/c/69406c80-f478-8327-85b2-e3fb54d89796
-  - should consider creating a golang cli for a cli option of 'minions gru attach'
 
 - todo: implement and lock in two-stage Ctrl-C shutdown semantics for the runtime controller
   - scope:
