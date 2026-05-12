@@ -185,7 +185,10 @@ class Gru:
 
         self._loop = loop
 
-        # TODO: use these locks properly
+        # Serializes access to Gru's mutable runtime lifecycle state.
+        # Use it for writes and for reads that need a coherent snapshot across
+        # registries, task maps, relationship maps, refcounts, and cleanup bookkeeping.
+        self._runtime_state_lock = asyncio.Lock()
 
         # per-entity ID locks
         self._minion_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
@@ -387,33 +390,35 @@ class Gru:
         id = minion._mn_minion_instance_id
         name = minion._mn_name
 
-        self._minions_by_id[id] = minion
-        if name:
-            self._minions_by_name[name].append(minion)
+        async with self._runtime_state_lock:
+            self._minions_by_id[id] = minion
+            if name:
+                self._minions_by_name[name].append(minion)
 
-        self._minion_tasks[id] = safe_create_task(
-            minion._mn_start(),
-            self._logger,
-            name=f"minion:{id}",
-            on_failure=self._make_task_failure_hook("minion", id),
-        )
+            self._minion_tasks[id] = safe_create_task(
+                minion._mn_start(),
+                self._logger,
+                name=f"minion:{id}",
+                on_failure=self._make_task_failure_hook("minion", id),
+            )
 
         await minion._mn_wait_until_started()
 
     async def _stop_minion(self, minion: Minion):
         instance_id = minion._mn_minion_instance_id
-        self._minions_by_id.pop(instance_id, None)
+        async with self._runtime_state_lock:
+            self._minions_by_id.pop(instance_id, None)
 
-        name = minion._mn_name
-        if name:
-            minions = self._minions_by_name.get(name, [])
-            minions = [m for m in minions if m._mn_minion_instance_id != instance_id]
-            if minions:
-                self._minions_by_name[name] = minions
-            else:
-                self._minions_by_name.pop(name, None)
+            name = minion._mn_name
+            if name:
+                minions = self._minions_by_name.get(name, [])
+                minions = [m for m in minions if m._mn_minion_instance_id != instance_id]
+                if minions:
+                    self._minions_by_name[name] = minions
+                else:
+                    self._minions_by_name.pop(name, None)
 
-        task = self._minion_tasks.pop(instance_id, None)
+            task = self._minion_tasks.pop(instance_id, None)
         if task:
             await safe_cancel_task(task=task, logger=self._logger)
         if not minion._mn_shutting_down:
@@ -489,20 +494,19 @@ class Gru:
 
         for cls in start_order:
             rid = self._make_resource_id(cls)
-            if rid in self._resources:
-                continue
-
             await self._start_resource(rid, cls)
             
-            for dep_cls in self._get_direct_resource_dependencies(cls):
-                dep_id = self._make_resource_id(dep_cls)
-                if dep_id in self._resource_dependencies[rid]:
-                    continue
-                self._resource_dependencies[rid].add(dep_id)
-                self._resource_dependents[dep_id].add(rid)
-                self._resource_refcounts[dep_id] += 1
+            async with self._runtime_state_lock:
+                for dep_cls in self._get_direct_resource_dependencies(cls):
+                    dep_id = self._make_resource_id(dep_cls)
+                    if dep_id in self._resource_dependencies[rid]:
+                        continue
+                    self._resource_dependencies[rid].add(dep_id)
+                    self._resource_dependents[dep_id].add(rid)
+                    self._resource_refcounts[dep_id] += 1
 
-        return self._resources[self._make_resource_id(resource_cls)]
+        async with self._runtime_state_lock:
+            return self._resources[self._make_resource_id(resource_cls)]
 
     async def _cleanup_resources(self, candidates: Iterable[str]):
         """
@@ -517,25 +521,27 @@ class Gru:
                 continue
             visited.add(rid)
 
-            # only attempt stop if running and unreferenced
-            if rid not in self._resources:
-                continue
-            if self._resource_refcounts.get(rid, 0) > 0:
-                continue
+            async with self._runtime_state_lock:
+                # only attempt stop if running and unreferenced
+                if rid not in self._resources:
+                    continue
+                if self._resource_refcounts.get(rid, 0) > 0:
+                    continue
 
-            deps = list(self._resource_dependencies.get(rid, ()))
+                deps = list(self._resource_dependencies.get(rid, ()))
             await self._stop_resource(rid)
 
-            # Remove edges and decrement dependency refcounts; enqueue deps that hit zero
-            for dep_id in deps:
-                self._resource_dependencies[rid].discard(dep_id)
-                self._resource_dependents[dep_id].discard(rid)
-                self._resource_refcounts[dep_id] -= 1
-                if self._resource_refcounts[dep_id] == 0:
-                    queue.append(dep_id)
-            self._resource_dependencies.pop(rid, None)
-            self._resource_dependents.pop(rid, None)
-            self._resource_refcounts.pop(rid, None)
+            async with self._runtime_state_lock:
+                # Remove edges and decrement dependency refcounts; enqueue deps that hit zero
+                for dep_id in deps:
+                    self._resource_dependencies[rid].discard(dep_id)
+                    self._resource_dependents[dep_id].discard(rid)
+                    self._resource_refcounts[dep_id] -= 1
+                    if self._resource_refcounts[dep_id] == 0:
+                        queue.append(dep_id)
+                self._resource_dependencies.pop(rid, None)
+                self._resource_dependents.pop(rid, None)
+                self._resource_refcounts.pop(rid, None)
 
     # TODO: in start and stop minion,
     # i need to start resources of resources
@@ -550,29 +556,41 @@ class Gru:
         ...
 
     async def _start_resource(self, resource_id: str, resource_cls: type[Resource]) -> Resource:
-        await self._logger._mn_log(DEBUG, "Resource starting", resource_id=resource_id)
-        resource = resource_cls(
-            logger=self._logger,
-            metrics=self._metrics,
-            resource_modpath=f"{resource_cls.__module__}.{resource_cls.__name__}"
-        )
-        self._resources[resource_id] = resource
-        self._resource_tasks[resource_id] = safe_create_task(
-            resource._mn_start(),
-            self._logger,
-            name=f"resource:{resource_id}",
-            on_failure=self._make_task_failure_hook("resource", resource_id),
-        )
-        await resource._mn_wait_until_started()
-        await self._logger._mn_log(DEBUG, "Resource started", resource_id=resource_id)
-        return resource
+        async with self._resource_locks[resource_id]:
+            created = False
+            async with self._runtime_state_lock:
+                existing = self._resources.get(resource_id)
+                if existing is not None:
+                    resource = existing
+                else:
+                    created = True
+                    resource = resource_cls(
+                        logger=self._logger,
+                        metrics=self._metrics,
+                        resource_modpath=f"{resource_cls.__module__}.{resource_cls.__name__}"
+                    )
+                    self._resources[resource_id] = resource
+                    self._resource_tasks[resource_id] = safe_create_task(
+                        resource._mn_start(),
+                        self._logger,
+                        name=f"resource:{resource_id}",
+                        on_failure=self._make_task_failure_hook("resource", resource_id),
+                    )
+            if created:
+                await self._logger._mn_log(DEBUG, "Resource starting", resource_id=resource_id)
+            await resource._mn_wait_until_started()
+            await self._logger._mn_log(DEBUG, "Resource started", resource_id=resource_id)
+            return resource
 
     async def _stop_resource(self, resource_id: str):
-        await self._logger._mn_log(DEBUG, "Resource stopping", resource_id=resource_id)
-        self._resources.pop(resource_id)
-        task = self._resource_tasks.pop(resource_id)
-        await safe_cancel_task(task=task, logger=self._logger)
-        await self._logger._mn_log(DEBUG, "Resource stopped", resource_id=resource_id)
+        async with self._resource_locks[resource_id]:
+            await self._logger._mn_log(DEBUG, "Resource stopping", resource_id=resource_id)
+            async with self._runtime_state_lock:
+                self._resources.pop(resource_id, None)
+                task = self._resource_tasks.pop(resource_id, None)
+            if task is not None:
+                await safe_cancel_task(task=task, logger=self._logger)
+            await self._logger._mn_log(DEBUG, "Resource stopped", resource_id=resource_id)
 
     def _is_resource_in_use(self, resource_id: str) -> bool:
         # A resource is considered in use if its total reference count is > 0
@@ -626,40 +644,54 @@ class Gru:
         )
 
     async def _start_pipeline(self, pipeline_id: str, pipeline: Pipeline):
-        await self._logger._mn_log(DEBUG, "Pipeline starting", pipeline_id=pipeline_id)
-        self._pipelines[pipeline_id] = pipeline
-        self._pipeline_tasks[pipeline_id] = safe_create_task(
-            pipeline._mn_start(),
-            self._logger,
-            name=f"pipeline:{pipeline_id}",
-            on_failure=self._make_task_failure_hook("pipeline", pipeline_id),
-        )
-        await pipeline._mn_wait_until_started()
-        await self._logger._mn_log(DEBUG, "Pipeline started", pipeline_id=pipeline_id)
+        async with self._pipeline_locks[pipeline_id]:
+            created = False
+            async with self._runtime_state_lock:
+                existing = self._pipelines.get(pipeline_id)
+                if existing is not None:
+                    pipeline = existing
+                else:
+                    created = True
+                    self._pipelines[pipeline_id] = pipeline
+                    self._pipeline_tasks[pipeline_id] = safe_create_task(
+                        pipeline._mn_start(),
+                        self._logger,
+                        name=f"pipeline:{pipeline_id}",
+                        on_failure=self._make_task_failure_hook("pipeline", pipeline_id),
+                    )
+            if created:
+                await self._logger._mn_log(DEBUG, "Pipeline starting", pipeline_id=pipeline_id)
+            await pipeline._mn_wait_until_started()
+            await self._logger._mn_log(DEBUG, "Pipeline started", pipeline_id=pipeline_id)
 
     async def _stop_pipeline(self, pipeline_id: str):
         released_resource_ids: set[str] = set()
         resource_owner_refs_released = False
         resources_cleaned = False
         try:
-            await self._logger._mn_log(DEBUG, "Pipeline stopping", pipeline_id=pipeline_id)
-            # remove pipeline from active map and cancel its task
-            self._pipelines.pop(pipeline_id, None)
-            task = self._pipeline_tasks.pop(pipeline_id, None)
-            if task:
-                await safe_cancel_task(task=task, logger=self._logger)
+            resource_ids: Iterable[str] | None = None
+            async with self._pipeline_locks[pipeline_id]:
+                await self._logger._mn_log(DEBUG, "Pipeline stopping", pipeline_id=pipeline_id)
+                # remove pipeline from active map and cancel its task
+                async with self._runtime_state_lock:
+                    self._pipelines.pop(pipeline_id, None)
+                    task = self._pipeline_tasks.pop(pipeline_id, None)
+                    resource_ids = self._pipeline_resource_map.pop(pipeline_id, None)
+                if task:
+                    await safe_cancel_task(task=task, logger=self._logger)
 
-            # manage resource lifecycle for resources owned by this pipeline
-            if (resource_ids := self._pipeline_resource_map.pop(pipeline_id, None)):
-                released_resource_ids = set(resource_ids)
-                # Decrement owner refs and cleanup
-                for r_id in resource_ids:
-                    self._resource_refcounts[r_id] -= 1
-                resource_owner_refs_released = True
-                await self._cleanup_resources(resource_ids)
-                resources_cleaned = True
+                # manage resource lifecycle for resources owned by this pipeline
+                if resource_ids:
+                    released_resource_ids = set(resource_ids)
+                    # Decrement owner refs and cleanup
+                    async with self._runtime_state_lock:
+                        for r_id in resource_ids:
+                            self._resource_refcounts[r_id] -= 1
+                    resource_owner_refs_released = True
+                    await self._cleanup_resources(resource_ids)
+                    resources_cleaned = True
 
-            await self._logger._mn_log(DEBUG, "Pipeline stopped", pipeline_id=pipeline_id)
+                await self._logger._mn_log(DEBUG, "Pipeline stopped", pipeline_id=pipeline_id)
         except Exception:
             await self._finalize_failed_stop_pipeline(
                 pipeline_id=pipeline_id,
@@ -783,193 +815,203 @@ class Gru:
         minion_inst: Minion | None = None
         pipeline_inst: Pipeline | None = None
         pipeline_id: str | None = None
-        preexisting_pipeline_ids = set(self._pipelines)
-        preexisting_resource_ids = set(self._resources)
 
-        try:
-            # prev sig: 
-            # async def start_minion(self, minion_modpath: str, minion_config_path: str, pipeline_modpath: str) -> StartMinionResult:
+        async with self._minion_locks[minion_composite_key]:
+            async with self._runtime_state_lock:
+                preexisting_pipeline_ids = set(self._pipelines)
+                preexisting_resource_ids = set(self._resources)
 
-            # ensure minion is not running
+            try:
+                # ensure minion is not running
+                async with self._runtime_state_lock:
+                    minion_inst = self._minions_by_composite_key.get(minion_composite_key)
+                if minion_inst:
+                    reason = "Minion already running — start request was rejected."
+                    suggestion = "Use a different config file if you want to launch another instance."
+                    minion_instance_id = minion_inst._mn_minion_instance_id
+                    minion_name = minion_inst._mn_name
+                    await self._logger._mn_log(
+                        INFO,
+                        "Failed to start minion",
+                        reason=reason,
+                        suggestion=suggestion,
+                        minion_name=minion_name,
+                        minion_instance_id=minion_instance_id,
+                        minion_composite_key=minion_composite_key,
+                        minion_modpath=minion_modpath,
+                        minion_config_path=minion_config_path,
+                        pipeline_modpath=pipeline_modpath,
+                    )
+                    return StartMinionResult(
+                        success=False,
+                        reason=reason,
+                        suggestion=suggestion,
+                        name=minion_name,
+                        instance_id=minion_instance_id,
+                    )
 
-            minion_inst = self._minions_by_composite_key.get(minion_composite_key)
-            if minion_inst:
-                reason = "Minion already running — start request was skipped."
-                suggestion = "Use a different config file if you want to launch another instance."
-                minion_instance_id = minion_inst._mn_minion_instance_id
-                minion_name = minion_inst._mn_name
-                await self._logger._mn_log(
-                    INFO,
-                    "Failed to start minion",
-                    reason=reason,
-                    suggestion=suggestion,
-                    minion_name=minion_name,
+                # ensure minion and pipeline event compatibility
+                minion_inst = self._get_minion(
                     minion_instance_id=minion_instance_id,
                     minion_composite_key=minion_composite_key,
                     minion_modpath=minion_modpath,
                     minion_config_path=minion_config_path,
-                    pipeline_modpath=pipeline_modpath
                 )
-                return StartMinionResult(
-                    success=False,
-                    reason=reason,
-                    suggestion=suggestion,
-                    name=minion_name,
-                    instance_id=minion_instance_id
-                )
+                pipeline_id = self._make_pipeline_id(pipeline_modpath)
+                pipeline_inst = self._get_pipeline(pipeline_id, pipeline_modpath)
 
-            # ensure minion and pipeline event compatibility
+                if minion_inst._mn_event_cls != pipeline_inst._mn_event_cls:
+                    reason = (
+                        "Incompatible minion and pipeline event types: "
+                        f"pipeline_emits={pipeline_inst._mn_event_cls.__name__}; "
+                        f"minion_expects={minion_inst._mn_event_cls.__name__}"
+                    )
+                    suggestion = "Update the minion or pipeline so they use the same event type."
+                    minion_instance_id = minion_inst._mn_minion_instance_id
+                    minion_name = minion_inst._mn_name
+                    await self._logger._mn_log(
+                        INFO,
+                        "Failed to start minion",
+                        reason=reason,
+                        suggestion=suggestion,
+                        minion_name=minion_name,
+                        minion_instance_id=minion_instance_id,
+                        minion_composite_key=minion_composite_key,
+                        minion_modpath=minion_modpath,
+                        minion_config_path=minion_config_path,
+                        pipeline_modpath=pipeline_modpath,
+                    )
+                    return StartMinionResult(
+                        success=False,
+                        reason=reason,
+                        suggestion=suggestion,
+                        name=minion_name,
+                        instance_id=minion_instance_id,
+                    )
 
-            minion_inst = self._get_minion(
-                minion_instance_id=minion_instance_id,
-                minion_composite_key=minion_composite_key,
-                minion_modpath=minion_modpath,
-                minion_config_path=minion_config_path
-            )
-            
-            pipeline_id = self._make_pipeline_id(pipeline_modpath)
-            pipeline_inst = self._get_pipeline(pipeline_id, pipeline_modpath)
-            
-            if minion_inst._mn_event_cls != pipeline_inst._mn_event_cls:
-
-                reason = (
-                    "Incompatible minion and pipeline event types: "
-                    f"pipeline_emits={pipeline_inst._mn_event_cls.__name__}; "
-                    f"minion_expects={minion_inst._mn_event_cls.__name__}"
-                )
-                suggestion = "Update the minion or pipeline so they use the same event type."
-                minion_instance_id = minion_inst._mn_minion_instance_id
-                minion_name = minion_inst._mn_name
                 await self._logger._mn_log(
-                    INFO,
-                    "Failed to start minion",
-                    reason=reason,
-                    suggestion=suggestion,
-                    minion_name=minion_name,
-                    minion_instance_id=minion_instance_id,
+                    DEBUG,
+                    "Starting minion...",
                     minion_composite_key=minion_composite_key,
                     minion_modpath=minion_modpath,
                     minion_config_path=minion_config_path,
-                    pipeline_modpath=pipeline_modpath
-                )
-                return StartMinionResult(
-                    success=False,
-                    reason=reason,
-                    suggestion=suggestion,
-                    name=minion_name,
-                    instance_id=minion_instance_id
+                    pipeline_modpath=pipeline_modpath,
                 )
 
-            await self._logger._mn_log(
-                DEBUG,
-                "Starting minion...",
-                minion_composite_key=minion_composite_key,
-                minion_modpath=minion_modpath,
-                minion_config_path=minion_config_path,
-                pipeline_modpath=pipeline_modpath
-            )
+                async with self._runtime_state_lock:
+                    self._minions_by_composite_key[minion_composite_key] = minion_inst
 
-            self._minions_by_composite_key[minion_composite_key] = minion_inst
-
-            # ensure required resources are started and minion resource relationships are tracked
-            resources_running: list[tuple[str, str, type[Resource]]] = []     # (id, name, class)
-            resources_not_running: list[tuple[str, str, type[Resource]]] = [] # (id, name, class)
-            for attr, hint in get_type_hints(type(minion_inst)).items():
-                cls = get_class(hint)
-                if isinstance(cls, type) and issubclass(cls, Resource):
-                    id = self._make_resource_id(cls)
-                    item = (id, attr, cls)
-                    if id in self._resources:
-                        resources_running.append(item)
-                    else:
-                        resources_not_running.append(item)
-                
-            # Start any missing resource trees (includes transitive dependencies)
-            await asyncio.gather(*[
-                self._ensure_resource_tree_started(cls)
-                for id, name, cls in resources_not_running
-            ])
-
-            for id, name, cls in resources_running + resources_not_running:
-                setattr(minion_inst, name, self._resources[id])
-                self._minion_resource_map.setdefault(minion_instance_id, set()).add(id)
-                self._resource_refcounts[id] += 1  # owner ref from minion
-
-            # ensure pipeline is started, minion is subscribed, and minion pipeline relationship is tracked
-            if pipeline_id not in self._pipelines:
-                # ensure pipeline resources are started and pipeline-resource relationships are tracked
-                pipeline_resources_running: list[tuple[str, str, type[Resource]]] = []     # (id, name, class)
-                pipeline_resources_not_running: list[tuple[str, str, type[Resource]]] = [] # (id, name, class)
-                for attr, hint in get_type_hints(pipeline_inst.__class__).items():
-                    cls = get_class(hint)
-                    if isinstance(cls, type) and issubclass(cls, Resource):
-                        id = self._make_resource_id(cls)
-                        item = (id, attr, cls)
-                        if id in self._resources:
-                            pipeline_resources_running.append(item)
-                        else:
-                            pipeline_resources_not_running.append(item)
+                resources_running: list[tuple[str, str, type[Resource]]] = []
+                resources_not_running: list[tuple[str, str, type[Resource]]] = []
+                async with self._runtime_state_lock:
+                    for attr, hint in get_type_hints(type(minion_inst)).items():
+                        cls = get_class(hint)
+                        if isinstance(cls, type) and issubclass(cls, Resource):
+                            resource_id = self._make_resource_id(cls)
+                            item = (resource_id, attr, cls)
+                            if resource_id in self._resources:
+                                resources_running.append(item)
+                            else:
+                                resources_not_running.append(item)
 
                 await asyncio.gather(*[
                     self._ensure_resource_tree_started(cls)
-                    for id, name, cls in pipeline_resources_not_running
+                    for resource_id, name, cls in resources_not_running
                 ])
 
-                for id, name, cls in pipeline_resources_running + pipeline_resources_not_running:
-                    setattr(pipeline_inst, name, self._resources[id])
-                    self._pipeline_resource_map.setdefault(pipeline_id, set()).add(id)
-                    self._resource_refcounts[id] += 1  # owner ref from pipeline
+                for resource_id, name, cls in resources_running + resources_not_running:
+                    resource = self._resources.get(resource_id)
+                    if resource is None:
+                        resource = await self._ensure_resource_tree_started(cls)
+                    async with self._runtime_state_lock:
+                        resource = self._resources.get(resource_id, resource)
+                        setattr(minion_inst, name, resource)
+                        self._minion_resource_map.setdefault(minion_instance_id, set()).add(resource_id)
+                        self._resource_refcounts[resource_id] += 1
 
-                await self._start_pipeline(pipeline_id, pipeline_inst)
-            else:
-                pipeline_inst = self._pipelines[pipeline_id]
+                async with self._runtime_state_lock:
+                    pipeline_running = pipeline_id in self._pipelines
 
-            await pipeline_inst._mn_subscribe(minion_inst)
+                if not pipeline_running:
+                    pipeline_resources_running: list[tuple[str, str, type[Resource]]] = []
+                    pipeline_resources_not_running: list[tuple[str, str, type[Resource]]] = []
+                    async with self._runtime_state_lock:
+                        for attr, hint in get_type_hints(pipeline_inst.__class__).items():
+                            cls = get_class(hint)
+                            if isinstance(cls, type) and issubclass(cls, Resource):
+                                resource_id = self._make_resource_id(cls)
+                                item = (resource_id, attr, cls)
+                                if resource_id in self._resources:
+                                    pipeline_resources_running.append(item)
+                                else:
+                                    pipeline_resources_not_running.append(item)
 
-            self._minion_pipeline_map[minion_instance_id] = pipeline_id
+                    await asyncio.gather(*[
+                        self._ensure_resource_tree_started(cls)
+                        for resource_id, name, cls in pipeline_resources_not_running
+                    ])
 
-            # start minion
-            await self._start_minion(minion_inst)
+                    for resource_id, name, cls in pipeline_resources_running + pipeline_resources_not_running:
+                        resource = self._resources.get(resource_id)
+                        if resource is None:
+                            resource = await self._ensure_resource_tree_started(cls)
+                        async with self._runtime_state_lock:
+                            resource = self._resources.get(resource_id, resource)
+                            setattr(pipeline_inst, name, resource)
+                            self._pipeline_resource_map.setdefault(pipeline_id, set()).add(resource_id)
+                            self._resource_refcounts[resource_id] += 1
 
-            await self._logger._mn_log(
-                INFO,
-                "Minion started",
-                minion_name=minion_inst._mn_name,
-                minion_instance_id=minion_inst._mn_minion_instance_id,
-                minion_composite_key=minion_inst._mn_minion_composite_key,
-                minion_modpath=minion_modpath,
-                minion_config_path=minion_config_path,
-                pipeline_modpath=pipeline_modpath
-            )
+                    await self._start_pipeline(pipeline_id, pipeline_inst)
+                else:
+                    async with self._runtime_state_lock:
+                        pipeline_inst = self._pipelines[pipeline_id]
 
-            return StartMinionResult(
-                success=True,
-                name=minion_inst._mn_name,
-                instance_id=minion_inst._mn_minion_instance_id,
-            )
-        
-        except Exception as e:
-            try:
-                await self._cleanup_failed_start_minion(
-                    minion=minion_inst,
-                    pipeline=pipeline_inst,
-                    pipeline_id=pipeline_id,
-                    minion_composite_key=minion_composite_key,
-                    preexisting_pipeline_ids=preexisting_pipeline_ids,
-                    preexisting_resource_ids=preexisting_resource_ids,
+                await pipeline_inst._mn_subscribe(minion_inst)
+
+                async with self._runtime_state_lock:
+                    self._minion_pipeline_map[minion_instance_id] = pipeline_id
+
+                await self._start_minion(minion_inst)
+
+                await self._logger._mn_log(
+                    INFO,
+                    "Minion started",
+                    minion_name=minion_inst._mn_name,
+                    minion_instance_id=minion_inst._mn_minion_instance_id,
+                    minion_composite_key=minion_inst._mn_minion_composite_key,
+                    minion_modpath=minion_modpath,
+                    minion_config_path=minion_config_path,
+                    pipeline_modpath=pipeline_modpath,
                 )
-            except Exception as cleanup_err:
-                await self._logger._mn_log_exception(
-                    ERROR,
-                    "Failed-start cleanup raised",
-                    cleanup_err,
+
+                return StartMinionResult(
+                    success=True,
+                    name=minion_inst._mn_name,
+                    instance_id=minion_inst._mn_minion_instance_id,
                 )
 
-            await self._logger._mn_log_exception(ERROR, "Failed to start minion", e)
-            return StartMinionResult(
-                success=False,
-                reason=str(e)
-            )
+            except Exception as e:
+                try:
+                    await self._cleanup_failed_start_minion(
+                        minion=minion_inst,
+                        pipeline=pipeline_inst,
+                        pipeline_id=pipeline_id,
+                        minion_composite_key=minion_composite_key,
+                        preexisting_pipeline_ids=preexisting_pipeline_ids,
+                        preexisting_resource_ids=preexisting_resource_ids,
+                    )
+                except Exception as cleanup_err:
+                    await self._logger._mn_log_exception(
+                        ERROR,
+                        "Failed-start cleanup raised",
+                        cleanup_err,
+                    )
+
+                await self._logger._mn_log_exception(ERROR, "Failed to start minion", e)
+                return StartMinionResult(
+                    success=False,
+                    reason=str(e),
+                )
 
     async def _cleanup_failed_start_minion(
         self,
@@ -981,11 +1023,13 @@ class Gru:
         preexisting_pipeline_ids: set[str],
         preexisting_resource_ids: set[str],
     ) -> None:
-        self._minions_by_composite_key.pop(minion_composite_key, None)
+        async with self._runtime_state_lock:
+            self._minions_by_composite_key.pop(minion_composite_key, None)
 
         if minion is not None:
             instance_id = minion._mn_minion_instance_id
-            self._minion_pipeline_map.pop(instance_id, None)
+            async with self._runtime_state_lock:
+                self._minion_pipeline_map.pop(instance_id, None)
             if pipeline is not None:
                 try:
                     await pipeline._mn_unsubscribe(minion)
@@ -999,9 +1043,12 @@ class Gru:
                         pipeline_id=pipeline_id,
                     )
 
-            if resource_ids := self._minion_resource_map.pop(instance_id, None):
-                for resource_id in resource_ids:
-                    self._resource_refcounts[resource_id] -= 1
+            async with self._runtime_state_lock:
+                resource_ids = self._minion_resource_map.pop(instance_id, None)
+                if resource_ids:
+                    for resource_id in resource_ids:
+                        self._resource_refcounts[resource_id] -= 1
+            if resource_ids:
                 await self._cleanup_resources_best_effort(resource_ids)
 
             await self._stop_minion_best_effort(minion)
@@ -1009,9 +1056,10 @@ class Gru:
         if pipeline_id is not None and pipeline_id not in preexisting_pipeline_ids:
             await self._stop_pipeline_best_effort(pipeline_id)
 
-        new_resource_ids = set(self._resources) - preexisting_resource_ids
-        for resource_id in list(new_resource_ids):
-            self._resource_refcounts[resource_id] = 0
+        async with self._runtime_state_lock:
+            new_resource_ids = set(self._resources) - preexisting_resource_ids
+            for resource_id in list(new_resource_ids):
+                self._resource_refcounts[resource_id] = 0
         await self._cleanup_resources_best_effort(new_resource_ids)
 
         self._prune_resource_maps()
@@ -1031,17 +1079,18 @@ class Gru:
 
     async def _discard_minion_runtime_state(self, minion: Minion) -> None:
         instance_id = minion._mn_minion_instance_id
-        self._minions_by_id.pop(instance_id, None)
-        if minion._mn_name:
-            remaining = [
-                item for item in self._minions_by_name.get(minion._mn_name, [])
-                if item._mn_minion_instance_id != instance_id
-            ]
-            if remaining:
-                self._minions_by_name[minion._mn_name] = remaining
-            else:
-                self._minions_by_name.pop(minion._mn_name, None)
-        task = self._minion_tasks.pop(instance_id, None)
+        async with self._runtime_state_lock:
+            self._minions_by_id.pop(instance_id, None)
+            if minion._mn_name:
+                remaining = [
+                    item for item in self._minions_by_name.get(minion._mn_name, [])
+                    if item._mn_minion_instance_id != instance_id
+                ]
+                if remaining:
+                    self._minions_by_name[minion._mn_name] = remaining
+                else:
+                    self._minions_by_name.pop(minion._mn_name, None)
+            task = self._minion_tasks.pop(instance_id, None)
         if task is not None:
             try:
                 await safe_cancel_task(task=task, logger=self._logger)
@@ -1069,8 +1118,9 @@ class Gru:
             await self._discard_pipeline_runtime_state(pipeline_id)
 
     async def _discard_pipeline_runtime_state(self, pipeline_id: str) -> None:
-        self._pipelines.pop(pipeline_id, None)
-        task = self._pipeline_tasks.pop(pipeline_id, None)
+        async with self._runtime_state_lock:
+            self._pipelines.pop(pipeline_id, None)
+            task = self._pipeline_tasks.pop(pipeline_id, None)
         if task is not None:
             try:
                 await safe_cancel_task(task=task, logger=self._logger)
@@ -1081,7 +1131,8 @@ class Gru:
                     e,
                     pipeline_id=pipeline_id,
                 )
-        self._pipeline_resource_map.pop(pipeline_id, None)
+        async with self._runtime_state_lock:
+            self._pipeline_resource_map.pop(pipeline_id, None)
 
     async def _finalize_failed_stop_pipeline(
         self,
@@ -1091,13 +1142,15 @@ class Gru:
         resources_cleaned: bool,
         released_resource_ids: Iterable[str] = (),
     ) -> None:
-        resource_ids = list(released_resource_ids)
-        if not resource_ids:
-            resource_ids = list(self._pipeline_resource_map.pop(pipeline_id, ()) or ())
+        async with self._runtime_state_lock:
+            resource_ids = list(released_resource_ids)
+            if not resource_ids:
+                resource_ids = list(self._pipeline_resource_map.pop(pipeline_id, ()) or ())
 
         if resource_ids and not resource_owner_refs_released:
-            for resource_id in resource_ids:
-                self._resource_refcounts[resource_id] -= 1
+            async with self._runtime_state_lock:
+                for resource_id in resource_ids:
+                    self._resource_refcounts[resource_id] -= 1
             resource_owner_refs_released = True
 
         if resource_ids and resource_owner_refs_released and not resources_cleaned:
@@ -1107,8 +1160,9 @@ class Gru:
         self._prune_resource_maps()
 
     async def _discard_resource_runtime_state(self, resource_id: str) -> None:
-        self._resources.pop(resource_id, None)
-        task = self._resource_tasks.pop(resource_id, None)
+        async with self._runtime_state_lock:
+            self._resources.pop(resource_id, None)
+            task = self._resource_tasks.pop(resource_id, None)
         if task is not None:
             try:
                 await safe_cancel_task(task=task, logger=self._logger)
@@ -1120,24 +1174,29 @@ class Gru:
                     resource_id=resource_id,
                 )
 
-        deps = set(self._resource_dependencies.pop(resource_id, ()))
-        for dep_id in deps:
-            self._resource_dependents[dep_id].discard(resource_id)
-            if dep_id in self._resource_refcounts:
-                self._resource_refcounts[dep_id] -= 1
-                if self._resource_refcounts[dep_id] <= 0 and dep_id in self._resources:
-                    await self._discard_resource_runtime_state(dep_id)
+        cascade_discard_ids: list[str] = []
+        async with self._runtime_state_lock:
+            deps = set(self._resource_dependencies.pop(resource_id, ()))
+            for dep_id in deps:
+                self._resource_dependents[dep_id].discard(resource_id)
+                if dep_id in self._resource_refcounts:
+                    self._resource_refcounts[dep_id] -= 1
+                    if self._resource_refcounts[dep_id] <= 0 and dep_id in self._resources:
+                        cascade_discard_ids.append(dep_id)
 
-        self._resource_dependents.pop(resource_id, None)
-        self._resource_refcounts.pop(resource_id, None)
-        for dependencies in self._resource_dependencies.values():
-            dependencies.discard(resource_id)
-        for dependents in self._resource_dependents.values():
-            dependents.discard(resource_id)
-        for resource_ids in self._minion_resource_map.values():
-            resource_ids.discard(resource_id)
-        for resource_ids in self._pipeline_resource_map.values():
-            resource_ids.discard(resource_id)
+            self._resource_dependents.pop(resource_id, None)
+            self._resource_refcounts.pop(resource_id, None)
+            for dependencies in self._resource_dependencies.values():
+                dependencies.discard(resource_id)
+            for dependents in self._resource_dependents.values():
+                dependents.discard(resource_id)
+            for resource_ids in self._minion_resource_map.values():
+                resource_ids.discard(resource_id)
+            for resource_ids in self._pipeline_resource_map.values():
+                resource_ids.discard(resource_id)
+
+        for dep_id in cascade_discard_ids:
+            await self._discard_resource_runtime_state(dep_id)
 
     def _prune_resource_maps(self) -> None:
         for mapping in (
@@ -1279,36 +1338,33 @@ class Gru:
 
             # ensure minion is running
 
-            def _resolve_minion(name_or_id: str) -> Minion | StopMinionResult:
-                minion = self._minions_by_id.get(name_or_id, None)
-                if minion:
-                    return minion
-
-                minions = self._minions_by_name.get(name_or_id, [])
-                if not minions:
-                    return StopMinionResult(
-                        success=False,
-                        reason="No minion found with the given name or instance ID."
-                    )
-
-                if len(minions) == 1:
-                    return minions[0]
+            async with self._runtime_state_lock:
+                minion = self._minions_by_id.get(name_or_instance_id, None)
+                if minion is not None:
+                    minion_or_result: Minion | StopMinionResult = minion
                 else:
-                    return StopMinionResult(
-                        success=False,
-                        reason="Multiple minions found with the same name.",
-                        suggestion="Use the full instance ID to stop the intended minion.",
-                        conflicts=[
-                            ConflictingMinion(
-                                instance_id=m._mn_minion_instance_id,
-                                modpath=m._mn_minion_modpath,
-                                config_modpath=m._mn_config_path,
-                                pipeline_modpath=self._pipelines[self._minion_pipeline_map[m._mn_minion_instance_id]]._mn_pipeline_modpath
-                            ) for m in minions
-                        ]
-                    )
-
-            minion_or_result = _resolve_minion(name_or_instance_id)
+                    minions = self._minions_by_name.get(name_or_instance_id, [])
+                    if not minions:
+                        minion_or_result = StopMinionResult(
+                            success=False,
+                            reason="No minion found with the given name or instance ID."
+                        )
+                    elif len(minions) == 1:
+                        minion_or_result = minions[0]
+                    else:
+                        minion_or_result = StopMinionResult(
+                            success=False,
+                            reason="Multiple minions found with the same name.",
+                            suggestion="Use the full instance ID to stop the intended minion.",
+                            conflicts=[
+                                ConflictingMinion(
+                                    instance_id=m._mn_minion_instance_id,
+                                    modpath=m._mn_minion_modpath,
+                                    config_modpath=m._mn_config_path,
+                                    pipeline_modpath=self._pipelines[self._minion_pipeline_map[m._mn_minion_instance_id]]._mn_pipeline_modpath
+                                ) for m in minions
+                            ]
+                        )
 
             if isinstance(minion_or_result, StopMinionResult):
                 result = minion_or_result
@@ -1322,46 +1378,53 @@ class Gru:
                 return result
         
             minion = minion_or_result
-        
-            await self._logger._mn_log(
-                DEBUG,
-                "Stopping minion...",
-                minion_name=minion._mn_name,
-                minion_instance_id=minion._mn_minion_instance_id
-            )
 
-            # unsub minion from pipeline
-            pipeline_id = self._minion_pipeline_map[minion._mn_minion_instance_id]
-            pipeline = self._pipelines[pipeline_id]
-            stop_committed = True
-            await pipeline._mn_unsubscribe(minion)
-            self._minion_pipeline_map.pop(minion._mn_minion_instance_id, None)
+            async with self._minion_locks[minion._mn_minion_composite_key]:
+                await self._logger._mn_log(
+                    DEBUG,
+                    "Stopping minion...",
+                    minion_name=minion._mn_name,
+                    minion_instance_id=minion._mn_minion_instance_id
+                )
 
-            # manage pipeline lifecycle
-            if not self._is_pipeline_in_use(pipeline_id):
-                await self._stop_pipeline(pipeline_id)
+                # unsub minion from pipeline
+                async with self._runtime_state_lock:
+                    pipeline_id = self._minion_pipeline_map[minion._mn_minion_instance_id]
+                    pipeline = self._pipelines[pipeline_id]
+                stop_committed = True
+                await pipeline._mn_unsubscribe(minion)
+                async with self._runtime_state_lock:
+                    self._minion_pipeline_map.pop(minion._mn_minion_instance_id, None)
 
-            # manage resource lifecycle(s)
-            if (resource_ids := self._minion_resource_map.pop(minion._mn_minion_instance_id, None)):
-                released_resource_ids = set(resource_ids)
-                for r_id in resource_ids:
-                    self._resource_refcounts[r_id] -= 1 # remove owner ref from minion
-                resource_owner_refs_released = True
-                await self._cleanup_resources(resource_ids)
-                resources_cleaned = True
+                # manage pipeline lifecycle
+                if not self._is_pipeline_in_use(pipeline_id):
+                    await self._stop_pipeline(pipeline_id)
 
-            # stop minion
-            await self._stop_minion(minion)
-            self._minions_by_composite_key.pop(minion._mn_minion_composite_key, None)
+                # manage resource lifecycle(s)
+                async with self._runtime_state_lock:
+                    resource_ids = self._minion_resource_map.pop(minion._mn_minion_instance_id, None)
+                    if resource_ids:
+                        released_resource_ids = set(resource_ids)
+                        for r_id in resource_ids:
+                            self._resource_refcounts[r_id] -= 1 # remove owner ref from minion
+                if resource_ids:
+                    resource_owner_refs_released = True
+                    await self._cleanup_resources(resource_ids)
+                    resources_cleaned = True
 
-            await self._logger._mn_log(
-                INFO,
-                "Minion stopped",
-                minion_name=minion._mn_name,
-                minion_instance_id=minion._mn_minion_instance_id
-            )
+                # stop minion
+                await self._stop_minion(minion)
+                async with self._runtime_state_lock:
+                    self._minions_by_composite_key.pop(minion._mn_minion_composite_key, None)
 
-            return StopMinionResult(success=True)
+                await self._logger._mn_log(
+                    INFO,
+                    "Minion stopped",
+                    minion_name=minion._mn_name,
+                    minion_instance_id=minion._mn_minion_instance_id
+                )
+
+                return StopMinionResult(success=True)
 
         except Exception as e:
             if stop_committed and minion is not None:
