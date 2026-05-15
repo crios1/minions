@@ -70,7 +70,7 @@ async def test_gru_does_not_replay_same_workflow_id_during_startup(gru_factory):
 
 
 @pytest.mark.asyncio
-async def test_gru_serializes_concurrent_start_requests_for_same_minion(gru_factory):
+async def test_gru_serializes_concurrent_starts_for_same_minion(gru_factory):
     logger = InMemoryLogger()
     metrics = InMemoryMetrics()
     state_store = InMemoryStateStore(logger=logger)
@@ -119,7 +119,98 @@ async def test_gru_serializes_concurrent_start_requests_for_same_minion(gru_fact
 
 
 @pytest.mark.asyncio
-async def test_gru_allows_concurrent_start_requests_for_different_minions(gru_factory):
+async def test_gru_serializes_concurrent_stops_for_same_minion(gru_factory):
+    logger = InMemoryLogger()
+    metrics = InMemoryMetrics()
+    state_store = InMemoryStateStore(logger=logger)
+
+    async with gru_factory(
+        logger=logger,
+        metrics=metrics,
+        state_store=state_store,
+    ) as gru:
+        start_result = await gru.start_minion(
+            minion="tests.assets.minions.two_steps.simple.basic",
+            pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
+        )
+        assert start_result.success
+
+        gru._minion_locks = defaultdict(lambda: GatedLock())
+        minion_key = gru._make_minion_composite_key(
+            "tests.assets.minions.two_steps.simple.basic",
+            None,
+            "tests.assets.pipelines.simple.simple_event.single_event_1",
+        )
+        minion_gated_lock = gru._minion_locks[minion_key]
+
+        stop_task_1 = asyncio.create_task(gru.stop_minion(start_result.instance_id or ""))
+        stop_task_2 = asyncio.create_task(gru.stop_minion(start_result.instance_id or ""))
+
+        await asyncio.wait_for(minion_gated_lock.entered.wait(), timeout=1.0)
+        await asyncio.sleep(0)
+        assert minion_gated_lock.enter_count == 1
+        assert not stop_task_2.done()
+
+        minion_gated_lock.release.set()
+        stop_result_1, stop_result_2 = await asyncio.gather(stop_task_1, stop_task_2)
+
+        successes = [result for result in (stop_result_1, stop_result_2) if result.success]
+        failures = [result for result in (stop_result_1, stop_result_2) if not result.success]
+
+        assert len(successes) == 1
+        assert len(failures) == 1
+        assert gru._runtime_state_snapshot() == {}
+
+
+@pytest.mark.asyncio
+async def test_gru_serializes_concurrent_start_and_stop_for_same_minion(gru_factory):
+    logger = InMemoryLogger()
+    metrics = InMemoryMetrics()
+    state_store = InMemoryStateStore(logger=logger)
+
+    async with gru_factory(
+        logger=logger,
+        metrics=metrics,
+        state_store=state_store,
+    ) as gru:
+        # Start once normally so the race only covers the stop/start window.
+        start_result = await gru.start_minion(
+            minion="tests.assets.minions.two_steps.simple.basic",
+            pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
+        )
+        assert start_result.success
+        gru._minion_locks = defaultdict(lambda: GatedLock())
+        minion_key = gru._make_minion_composite_key(
+            "tests.assets.minions.two_steps.simple.basic",
+            None,
+            "tests.assets.pipelines.simple.simple_event.single_event_1",
+        )
+        minion_gated_lock = gru._minion_locks[minion_key]
+
+        stop_task = asyncio.create_task(gru.stop_minion(start_result.instance_id or ""))
+        await asyncio.wait_for(minion_gated_lock.entered.wait(), timeout=1.0)
+
+        start_task = asyncio.create_task(
+            gru.start_minion(
+                minion="tests.assets.minions.two_steps.simple.basic",
+                pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
+            )
+        )
+
+        await asyncio.sleep(0)
+        assert minion_gated_lock.enter_count == 1
+        assert not start_task.done()
+
+        minion_gated_lock.release.set()
+        stop_result, restart_result = await asyncio.gather(stop_task, start_task)
+
+        assert stop_result.success
+        assert restart_result.success
+        assert len(gru._minions_by_composite_key) == 1
+
+
+@pytest.mark.asyncio
+async def test_gru_allows_concurrent_starts_for_different_minions(gru_factory):
     logger = InMemoryLogger()
     metrics = InMemoryMetrics()
     state_store = InMemoryStateStore(logger=logger)
@@ -173,7 +264,7 @@ async def test_gru_allows_concurrent_start_requests_for_different_minions(gru_fa
 
 
 @pytest.mark.asyncio
-async def test_gru_serializes_concurrent_start_and_stop_for_same_minion(gru_factory):
+async def test_gru_allows_concurrent_starts_for_different_minions_while_stop_is_in_flight(gru_factory, monkeypatch):
     logger = InMemoryLogger()
     metrics = InMemoryMetrics()
     state_store = InMemoryStateStore(logger=logger)
@@ -183,40 +274,42 @@ async def test_gru_serializes_concurrent_start_and_stop_for_same_minion(gru_fact
         metrics=metrics,
         state_store=state_store,
     ) as gru:
-        # Start once normally so the race only covers the stop/start window.
-        start_result = await gru.start_minion(
+        minion1_start_result = await gru.start_minion(
             minion="tests.assets.minions.two_steps.simple.basic",
             pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
         )
-        assert start_result.success
-        gru._minion_locks = defaultdict(lambda: GatedLock())
-        minion_key = gru._make_minion_composite_key(
-            "tests.assets.minions.two_steps.simple.basic",
-            None,
-            "tests.assets.pipelines.simple.simple_event.single_event_1",
-        )
-        minion_gated_lock = gru._minion_locks[minion_key]
+        assert minion1_start_result.success
 
-        stop_task = asyncio.create_task(gru.stop_minion(start_result.instance_id or ""))
-        await asyncio.wait_for(minion_gated_lock.entered.wait(), timeout=1.0)
+        minion1_stop_gate = GatedAsyncCallable()
+        monkeypatch.setattr(gru, "_stop_minion", minion1_stop_gate)
 
-        start_task = asyncio.create_task(
+        minion1_stop_task = asyncio.create_task(gru.stop_minion(minion1_start_result.instance_id or ""))
+        await asyncio.wait_for(minion1_stop_gate.entered.wait(), timeout=1.0)
+
+        minion2_start_task = asyncio.create_task(
             gru.start_minion(
                 minion="tests.assets.minions.two_steps.simple.basic",
-                pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
+                pipeline="tests.assets.pipelines.simple.simple_event.single_event_2",
             )
         )
 
-        await asyncio.sleep(0)
-        assert minion_gated_lock.enter_count == 1
-        assert not start_task.done()
+        minion2_start_result = await asyncio.wait_for(minion2_start_task, timeout=1.0)
+        assert minion2_start_result.success
+        assert minion2_start_result.instance_id is not None
+        assert minion2_start_result.instance_id in gru._minions_by_id
+        minion2_key = gru._make_minion_composite_key(
+            "tests.assets.minions.two_steps.simple.basic",
+            None,
+            "tests.assets.pipelines.simple.simple_event.single_event_2",
+        )
+        assert minion2_key in gru._minions_by_composite_key
+        assert minion1_start_result.instance_id in gru._minions_by_id
+        assert len(gru._minions_by_composite_key) == 2
 
-        minion_gated_lock.release.set()
-        stop_result, restart_result = await asyncio.gather(stop_task, start_task)
+        minion1_stop_gate.release.set()
+        minion1_stop_result = await minion1_stop_task
 
-        assert stop_result.success
-        assert restart_result.success
-        assert len(gru._minions_by_composite_key) == 1
+        assert minion1_stop_result.success
 
 
 @pytest.mark.asyncio
@@ -231,7 +324,7 @@ async def test_gru_shutdown_advertises_shutdown_before_waiting(gru_factory):
         state_store=state_store,
     ) as gru:
         # Hold the lifecycle lock so shutdown stays in the pending window deterministically.
-        await gru._lifecycle_state_lock.acquire()
+        await gru._lifecycle_ops_state_lock.acquire()
         try:
             assert not gru._is_shutting_down
             shutdown_task = asyncio.create_task(gru.shutdown())
@@ -239,7 +332,7 @@ async def test_gru_shutdown_advertises_shutdown_before_waiting(gru_factory):
             assert gru._is_shutting_down
             assert not shutdown_task.done()
         finally:
-            gru._lifecycle_state_lock.release()
+            gru._lifecycle_ops_state_lock.release()
 
         shutdown_result = await shutdown_task
         assert shutdown_result.success
@@ -330,7 +423,7 @@ async def test_gru_shutdown_rejects_new_lifecycle_work_while_shutdown_is_pending
     ) as gru:
         # Hold the lifecycle lock so shutdown stays pending and new lifecycle work
         # must contend with the shutdown-in-progress state.
-        await gru._lifecycle_state_lock.acquire()
+        await gru._lifecycle_ops_state_lock.acquire()
         try:
             shutdown_task = asyncio.create_task(gru.shutdown())
             await asyncio.sleep(0)
@@ -346,7 +439,7 @@ async def test_gru_shutdown_rejects_new_lifecycle_work_while_shutdown_is_pending
             await asyncio.sleep(0)
             assert not start_task.done()
         finally:
-            gru._lifecycle_state_lock.release()
+            gru._lifecycle_ops_state_lock.release()
 
         start_result, shutdown_result = await asyncio.gather(start_task, shutdown_task)
 
