@@ -1,5 +1,8 @@
+import asyncio
 import time
 from typing import Any
+
+import pytest
 
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.minion_workflow_context_codec import persist_workflow_context
@@ -30,6 +33,17 @@ def blob_for(ctx: MinionWorkflowContext) -> bytes:
     return serialize(persist_workflow_context(ctx))
 
 
+async def cancel_and_drain_tasks(*tasks: asyncio.Task | None) -> None:
+    active_tasks = [task for task in tasks if task is not None]
+    if not active_tasks:
+        return
+
+    _done, pending = await asyncio.wait(active_tasks, timeout=2.0)
+    for task in pending:
+        task.cancel()
+    await asyncio.gather(*active_tasks, return_exceptions=True)
+
+
 class _StaticRowCursor:
     def __init__(self, row: tuple[str, bytes] | None):
         self._row = row
@@ -55,6 +69,46 @@ class _AwaitableResult:
             return None
 
         return _done().__await__()
+
+
+class BlockedCommitBatchNowGate:
+    def __init__(self, s, monkeypatch: pytest.MonkeyPatch):
+        self.entered = asyncio.Event()
+        self.commit_count = 0
+        self.max_active_commit_count = 0
+        self.operation_order: list[tuple[str, str]] = []
+        self._active_commit_count = 0
+        self._release = asyncio.Event()
+        # Hold the private commit worker open at a deterministic point for race tests.
+        original_commit_batch_now = s._commit_batch_now
+
+        async def wrapped_commit_batch_now(items):
+            self.commit_count += 1
+            self.operation_order.extend((item.op, item.workflow_id) for item in items)
+            self._active_commit_count += 1
+            self.max_active_commit_count = max(
+                self.max_active_commit_count,
+                self._active_commit_count,
+            )
+            try:
+                if not self.entered.is_set():
+                    self.entered.set()
+                    await self._release.wait()
+                return await original_commit_batch_now(items)
+            finally:
+                self._active_commit_count -= 1
+
+        monkeypatch.setattr(s, "_commit_batch_now", wrapped_commit_batch_now)
+
+    async def wait_until_entered(self) -> None:
+        await asyncio.wait_for(self.entered.wait(), timeout=1.0)
+
+    def release(self) -> None:
+        self._release.set()
+
+    async def release_and_cancel_and_drain_tasks(self, *tasks: asyncio.Task | None) -> None:
+        self.release()
+        await cancel_and_drain_tasks(*tasks)
 
 
 class StartupProbeDb:

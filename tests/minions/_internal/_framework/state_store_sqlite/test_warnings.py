@@ -5,7 +5,11 @@ import pytest
 from minions._internal._framework.logger import CRITICAL, WARNING
 from minions._internal._framework.state_store_sqlite import SQLiteStateStore, WarnThreshold
 from tests.assets.support.logger_inmemory import InMemoryLogger
-from tests.minions._internal._framework.state_store_sqlite._support import blob_for, mk_ctx
+from tests.minions._internal._framework.state_store_sqlite._support import (
+    BlockedCommitBatchNowGate,
+    blob_for,
+    mk_ctx,
+)
 from tests.minions._internal._framework.state_store_sqlite.conftest import MakeStateStoreAndLogger
 
 
@@ -135,17 +139,7 @@ async def test_queued_writes_warning_counts_batches_waiting_for_commit(
         batch_max_flush_delay_ms=40,
     )
 
-    commit_entered = asyncio.Event()
-    allow_commit = asyncio.Event()
-    # Block the commit worker so queued-write pressure includes batches waiting to commit.
-    original_commit_batch_now = s._commit_batch_now
-
-    async def wrapped_commit_batch_now(items):
-        commit_entered.set()
-        await allow_commit.wait()
-        return await original_commit_batch_now(items)
-
-    monkeypatch.setattr(s, "_commit_batch_now", wrapped_commit_batch_now)
+    commit_gate = BlockedCommitBatchNowGate(s, monkeypatch)
     tasks = [
         asyncio.create_task(
             s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx))
@@ -154,14 +148,13 @@ async def test_queued_writes_warning_counts_batches_waiting_for_commit(
     ]
 
     try:
-        await asyncio.wait_for(commit_entered.wait(), timeout=1.0)
+        await commit_gate.wait_until_entered()
         assert await logger.wait_for_log("queued_writes=", timeout=1.0)
         assert any("queued_writes=" in log.msg and ">warn(8)" in log.msg for log in logger.logs)
-        allow_commit.set()
+        commit_gate.release()
         await asyncio.wait_for(asyncio.gather(*tasks), timeout=2.0)
     finally:
-        allow_commit.set()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await commit_gate.release_and_cancel_and_drain_tasks(*tasks)
 
 
 async def test_commit_p95_warning(make_state_store_and_logger: MakeStateStoreAndLogger):
