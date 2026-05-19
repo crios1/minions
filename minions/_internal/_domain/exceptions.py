@@ -1,3 +1,6 @@
+from collections.abc import Mapping
+
+
 class UnsupportedUserCode(Exception):
     """
     Raised when user-submitted code uses invalid patterns or APIs
@@ -11,6 +14,11 @@ class AbortWorkflow(Exception): # minion workflow
 
 class MinionsError(Exception):
     "Exception used to bubble up context about framework exceptions"
-    def __init__(self, message, *, context: dict | None = None):
+    def __init__(
+        self,
+        message: str,
+        *,
+        context: Mapping[str, object] | None = None,
+    ) -> None:
         super().__init__(message)
-        self.context = context or {}
+        self.context: dict[str, object] = dict(context or {})

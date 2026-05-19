@@ -25,6 +25,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "pyright[nodejs]>=1.1,<2.0",
   "pytest>=8.4,<9.0",
   "pytest-asyncio>=1.0,<2.0",
   "sphinx>=7,<8",
@@ -47,5 +48,33 @@ minions = "minions.__main__:main"
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["minions*"]
+
 [tool.pytest.ini_options]
 python_paths = ["."]
+
+[tool.pyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.10"
+venvPath = "."
+venv = "venv"
+# `_mn_*` is Minions' framework-internal namespace, not class-private.
+# Runtime validation blocks user code from defining or mutating it.
+reportPrivateUsage = "none"
+
+include = [
+  "minions",
+  "tests",
+]
+
+# Exclude until GruShell is phased out
+exclude = [
+  "**/.*",
+  "**/node_modules",
+  "**/__pycache__",
+  "venv",
+  ".venv",
+  "minions/_internal/_domain/gru_shell*.py",
+]

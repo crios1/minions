@@ -2,7 +2,7 @@ import asyncio
 import inspect
 from collections.abc import Awaitable
 from collections.abc import Coroutine
-from typing import Protocol
+from typing import Any, Protocol
 
 from .._framework.logger import Logger, ERROR
 
@@ -21,11 +21,11 @@ class TaskFailureHandler(Protocol):
 
 
 def safe_create_task(
-    coro: Coroutine,
+    coro: Coroutine[Any, Any, object],
     logger: Logger | None = None,
     name: str | None = None,
     on_failure: TaskFailureHandler | None = None,
-) -> asyncio.Task:
+) -> asyncio.Task[None]:
     """
     Create an asyncio task with a strict runtime-safety boundary for user code.
 
@@ -64,7 +64,7 @@ def safe_create_task(
                 notify_error,
             )
 
-    async def wrapper():
+    async def wrapper() -> None:
         try:
             await coro
         except asyncio.CancelledError:

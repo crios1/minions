@@ -55,9 +55,16 @@ class Logger(AsyncLifecycle):
         exc: BaseException,
         **kwargs: Any,
     ):
+        def _is_context_mapping(obj: object):
+            return isinstance(obj, Mapping)
+
+        log_kwargs: dict[Any, Any] = {}
         context = getattr(exc, "context", {}) or {}
-        log_kwargs = dict(context) if isinstance(context, Mapping) else {}
+        if _is_context_mapping(context):
+            log_kwargs = dict(context)
+
         log_kwargs.update(kwargs)
+
         trace = getattr(exc, "__cause__", None) or exc
         log_kwargs.update(
             {

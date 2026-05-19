@@ -1,12 +1,13 @@
 import asyncio
 
 from abc import abstractmethod
-from typing import Awaitable, Callable, Generic, Any, get_args, get_origin
+from typing import Any, Generic, get_args, get_origin
 
 from .types import T_Event
 from .minion import Minion
+from .._framework.async_lifecycle import LifecycleCallback
 from .._framework.async_service import AsyncService
-from .._framework.logger import Logger, DEBUG, INFO, WARNING, ERROR, CRITICAL
+from .._framework.logger import Logger, DEBUG
 from .._framework.metrics import Metrics
 from .._framework.metrics_constants import (
     LABEL_ERROR_TYPE, LABEL_MINION_COMPOSITE_KEY, LABEL_PIPELINE,
@@ -19,7 +20,12 @@ from .._utils.get_original_bases import get_original_bases
 class Pipeline(AsyncService, Generic[T_Event]):
     _mn_user_facing = True
 
-    def __init_subclass__(cls, *, defer_pipeline_setup=False, **kwargs):
+    def __init_subclass__(
+        cls,
+        *,
+        defer_pipeline_setup: bool = False,
+        **kwargs: Any,
+    ) -> None:
         super().__init_subclass__(**kwargs)
 
         if defer_pipeline_setup:
@@ -88,18 +94,18 @@ class Pipeline(AsyncService, Generic[T_Event]):
         self._mn_pipeline_modpath = pipeline_modpath
         self._mn_metrics = metrics
         self._mn_logger = logger
-        self._mn_subs: set[Minion] = set()
+        self._mn_subs: set[Minion[T_Event, Any]] = set()
         self._mn_subs_lock = asyncio.Lock()
         self._mn_event_cls = type(self)._mn_event_cls
     
     async def _mn_startup(
         self,
         *,
-        log_kwargs: dict | None = None,
-        pre: Callable[..., Any | Awaitable[Any]] | None = None,
-        pre_args: list | None = None,
-        post: Callable[..., Any | Awaitable[Any]] | None = None,
-        post_args: list | None = None
+        log_kwargs: dict[str, object] | None = None,
+        pre: LifecycleCallback | None = None,
+        pre_args: list[object] | None = None,
+        post: LifecycleCallback | None = None,
+        post_args: list[object] | None = None
     ) -> None:
         return await super()._mn_startup(
             log_kwargs={'pipeline_id': self._mn_pipeline_id},
@@ -110,11 +116,11 @@ class Pipeline(AsyncService, Generic[T_Event]):
     async def _mn_shutdown(
         self,
         *,
-        log_kwargs: dict | None = None,
-        pre: Callable[..., Any | Awaitable[Any]] | None = None,
-        pre_args: list | None = None,
-        post: Callable[..., Any | Awaitable[Any]] | None = None,
-        post_args: list | None = None
+        log_kwargs: dict[str, object] | None = None,
+        pre: LifecycleCallback | None = None,
+        pre_args: list[object] | None = None,
+        post: LifecycleCallback | None = None,
+        post_args: list[object] | None = None
     ) -> None:
         return await super()._mn_shutdown(
             log_kwargs={'pipeline_id': self._mn_pipeline_id}
@@ -123,11 +129,11 @@ class Pipeline(AsyncService, Generic[T_Event]):
     async def _mn_run(
         self,
         *,
-        log_kwargs: dict | None = None,
-        pre: Callable[..., Any | Awaitable[Any]] | None = None,
-        pre_args: list | None = None,
-        post: Callable[..., Any | Awaitable[Any]] | None = None,
-        post_args: list | None = None
+        log_kwargs: dict[str, object] | None = None,
+        pre: LifecycleCallback | None = None,
+        pre_args: list[object] | None = None,
+        post: LifecycleCallback | None = None,
+        post_args: list[object] | None = None
     ) -> None:
         return await super()._mn_run(
             log_kwargs={'pipeline_id': self._mn_pipeline_id}
@@ -185,11 +191,11 @@ class Pipeline(AsyncService, Generic[T_Event]):
             )
             raise
 
-    async def _mn_subscribe(self, minion: Minion):
+    async def _mn_subscribe(self, minion: Minion[T_Event, Any]) -> None:
         async with self._mn_subs_lock:
             self._mn_subs.add(minion)
 
-    async def _mn_unsubscribe(self, minion: Minion):
+    async def _mn_unsubscribe(self, minion: Minion[T_Event, Any]) -> None:
         async with self._mn_subs_lock:
             self._mn_subs.discard(minion)
 

@@ -2,12 +2,12 @@ import ast
 import inspect
 import textwrap
 from abc import ABC
-from typing import TypeVar, Callable, Awaitable
+from typing import Awaitable, Callable, TypeAlias
 
 from .._domain.exceptions import UnsupportedUserCode, MinionsError
 from .._utils.get_relative_module_path import get_relative_module_path
 
-T = TypeVar("T")
+LifecycleCallback: TypeAlias = Callable[..., object | Awaitable[object]]
 
 class AsyncLifecycle(ABC):
     """
@@ -18,7 +18,7 @@ class AsyncLifecycle(ABC):
     """
     _mn_user_facing = False
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
         if cls.__module__.startswith("minions._internal."):
             return
@@ -30,7 +30,7 @@ class AsyncLifecycle(ABC):
         cls._mn_validate_class_user_code(cls.__module__)
 
     @classmethod
-    def _mn_ensure_attrspace(cls):
+    def _mn_ensure_attrspace(cls) -> None:
         "Ensure no user-defined class attributes or annotations violate the reserved _mn_ attrspace."
         names = {**cls.__dict__, **getattr(cls, "__annotations__", {})}
         allowed = {"_mn_user_facing"} # allows subclasses of user facing classes to be user facing too
@@ -49,7 +49,7 @@ class AsyncLifecycle(ABC):
             )
 
     @classmethod
-    def _mn_validate_class_user_code(cls, modpath: str | None = None):
+    def _mn_validate_class_user_code(cls, modpath: str | None = None) -> None:
         modpath = modpath or cls.__module__
         isfunction = inspect.isfunction
 
@@ -64,7 +64,7 @@ class AsyncLifecycle(ABC):
             cls._mn_validate_user_code(func, modpath)
 
     @classmethod
-    def _mn_validate_user_code(cls, func: Callable, modpath: str):
+    def _mn_validate_user_code(cls, func: Callable[..., object], modpath: str) -> None:
         try:
             src = textwrap.dedent(inspect.getsource(func))
             tree = ast.parse(src)
@@ -175,7 +175,7 @@ class AsyncLifecycle(ABC):
                     owner = getattr(t.value, "id", None)
                     if owner != "self":
                         continue
-                    if not (isinstance(t.attr, str) and t.attr.startswith("_mn_")):
+                    if not t.attr.startswith("_mn_"):
                         continue
                     raise UnsupportedUserCode(
                         f"Invalid attribute assignment: `self.{t.attr}` in `{func.__name__}` ({modpath}). "
@@ -205,7 +205,7 @@ class AsyncLifecycle(ABC):
                 )
 
     @staticmethod
-    def _mn_raise_not_implemented(method_name: str, cls: type):
+    def _mn_raise_not_implemented(method_name: str, cls: type) -> None:
         raise NotImplementedError(
             f"{cls.__name__}.{method_name} must be implemented in a subclass and "
             f"should only be called via _{method_name}(), which ensures logging and lifecycle safety."
@@ -215,17 +215,17 @@ class AsyncLifecycle(ABC):
         self,
         *,
         name: str,
-        lifecycle_method: Callable[[], Awaitable[T]],
-        log_kwargs: dict | None = None,
-        pre: Callable[..., T | Awaitable[T]] | None = None,
-        pre_args: list | None = None,
-        post: Callable[..., T | Awaitable[T]] | None = None,
-        post_args: list | None = None,
-    ):
+        lifecycle_method: Callable[[], Awaitable[object]],
+        log_kwargs: dict[str, object] | None = None,
+        pre: LifecycleCallback | None = None,
+        pre_args: list[object] | None = None,
+        post: LifecycleCallback | None = None,
+        post_args: list[object] | None = None,
+    ) -> None:
         try:
             if pre:
                 pre_args = pre_args or []
-                result = pre(*pre_args) if pre else None
+                result = pre(*pre_args)
                 if inspect.isawaitable(result):
                     await result
             await lifecycle_method()
@@ -245,14 +245,14 @@ class AsyncLifecycle(ABC):
     async def _mn_startup(
         self,
         *,
-        log_kwargs: dict | None = None,
-        pre: Callable[..., T | Awaitable[T]] | None = None,
-        pre_args: list | None = None,
-        post: Callable[..., T | Awaitable[T]] | None = None,
-        post_args: list | None = None
+        log_kwargs: dict[str, object] | None = None,
+        pre: LifecycleCallback | None = None,
+        pre_args: list[object] | None = None,
+        post: LifecycleCallback | None = None,
+        post_args: list[object] | None = None
     ) -> None:
         pre_args = pre_args or []
-        async def _pre():
+        async def _pre() -> None:
             self._mn_validate_user_code(self.startup, type(self).__module__)
             self._mn_validate_user_code(self.shutdown, type(self).__module__)
             if pre:
@@ -272,11 +272,11 @@ class AsyncLifecycle(ABC):
     async def _mn_shutdown(
         self,
         *,
-        log_kwargs: dict | None = None,
-        pre: Callable[..., T | Awaitable[T]] | None = None,
-        pre_args: list | None = None,
-        post: Callable[..., T | Awaitable[T]] | None = None,
-        post_args: list | None = None
+        log_kwargs: dict[str, object] | None = None,
+        pre: LifecycleCallback | None = None,
+        pre_args: list[object] | None = None,
+        post: LifecycleCallback | None = None,
+        post_args: list[object] | None = None
     ) -> None:
         await self._mn_run_lifecycle_phase(
             name="shutdown",

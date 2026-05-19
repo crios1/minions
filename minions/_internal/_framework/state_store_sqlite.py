@@ -6,7 +6,7 @@ import time
 from collections.abc import Iterable
 from collections import deque
 from dataclasses import dataclass, field, replace
-from typing import Literal, cast
+from typing import Literal
 
 from .logger import CRITICAL, DEBUG, ERROR, WARNING, Logger
 from .state_store import StateStore, StoredWorkflowContext
@@ -268,17 +268,16 @@ class SQLiteStateStore(StateStore):
         except BaseException as startup_error:
             db = self._db
             self._db = None
-            if db is not None:
-                try:
-                    await db.close()
-                except Exception as close_error:
-                    await self._mn_logger._mn_log_exception(
-                        ERROR,
-                        f"{type(self).__name__} failed to close SQLite connection after startup failure",
-                        close_error,
-                        startup_error_type=type(startup_error).__name__,
-                        startup_error_message=str(startup_error),
-                    )
+            try:
+                await db.close()
+            except Exception as close_error:
+                await self._mn_logger._mn_log_exception(
+                    ERROR,
+                    f"{type(self).__name__} failed to close SQLite connection after startup failure",
+                    close_error,
+                    startup_error_type=type(startup_error).__name__,
+                    startup_error_message=str(startup_error),
+                )
             raise
 
     async def shutdown(self) -> None:
@@ -545,7 +544,7 @@ class SQLiteStateStore(StateStore):
     ) -> BatchTuningMode:
         if batch_tuning not in _ALLOWED_BATCH_TUNING_MODES:
             raise ValueError(f"batch_tuning must be 'manual' or 'calibrated'; got {batch_tuning!r}")
-        return cast(BatchTuningMode, batch_tuning)
+        return batch_tuning
 
     def _validate_batch_config(
         self,

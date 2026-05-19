@@ -26,17 +26,19 @@ def serialize(obj: Any, *, exp_msg_prefix: str = "") -> bytes:
 
 
 @lru_cache(maxsize=64)
-def _cached_decoder(t: Any) -> msgspec.msgpack.Decoder:
+def _cached_decoder(t: Any) -> msgspec.msgpack.Decoder[Any]:
     """Hashable types/annotations only."""
     return msgspec.msgpack.Decoder(type=t)
 
-def _get_decoder(t: Any) -> msgspec.msgpack.Decoder:
+
+def _get_decoder(t: Any) -> msgspec.msgpack.Decoder[Any]:
     """Return a decoder for `t`, caching only when `t` is hashable."""
     try:
         return _cached_decoder(t)
     except TypeError:
         # Unhashable key for lru_cache; skip caching
         return msgspec.msgpack.Decoder(type=t)
+
 
 @overload
 def deserialize(payload: bytes, type_: type[T], *, exp_msg_prefix: str = "") -> T: ...

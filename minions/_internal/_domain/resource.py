@@ -1,19 +1,22 @@
 
-import time
 import inspect
-from typing import Awaitable, Callable, Coroutine, ParamSpec, TypeVar, Any, overload
+import time
+from typing import Awaitable, Callable, Coroutine, ParamSpec, TypeGuard, TypeVar, Any, overload
 
 from .._framework.async_service import AsyncService
-from .._framework.logger import Logger, DEBUG, INFO, WARNING, ERROR
+from .._framework.async_lifecycle import LifecycleCallback
+from .._framework.logger import Logger, WARNING
 from .._framework.metrics import Metrics
 from .._framework.metrics_constants import (
     LABEL_RESOURCE, LABEL_RESOURCE_METHOD, LABEL_ERROR_TYPE,
     RESOURCE_SERVES_TOTAL, RESOURCE_LATENCY_SECONDS, RESOURCE_ERROR_TOTAL
 )
 
+
 T = TypeVar("T")
 P = ParamSpec("P")
 R = TypeVar("R")
+
 
 class Resource(AsyncService):
     """
@@ -32,11 +35,11 @@ class Resource(AsyncService):
     async def _mn_startup(
         self,
         *,
-        log_kwargs: dict | None = None,
-        pre: Callable[..., T | Awaitable[T]] | None = None,
-        pre_args: list | None = None,
-        post: Callable[..., T | Awaitable[T]] | None = None,
-        post_args: list | None = None
+        log_kwargs: dict[str, object] | None = None,
+        pre: LifecycleCallback | None = None,
+        pre_args: list[object] | None = None,
+        post: LifecycleCallback | None = None,
+        post_args: list[object] | None = None
     ) -> None:
         return await super()._mn_startup(
             log_kwargs={'resource_id': self._mn_resource_modpath},
@@ -46,11 +49,11 @@ class Resource(AsyncService):
     async def _mn_shutdown(
         self,
         *,
-        log_kwargs: dict | None = None,
-        pre: Callable[..., T | Awaitable[T]] | None = None,
-        pre_args: list | None = None,
-        post: Callable[..., T | Awaitable[T]] | None = None,
-        post_args: list | None = None
+        log_kwargs: dict[str, object] | None = None,
+        pre: LifecycleCallback | None = None,
+        pre_args: list[object] | None = None,
+        post: LifecycleCallback | None = None,
+        post_args: list[object] | None = None
     ) -> None:
         return await super()._mn_shutdown(
             log_kwargs={'resource_id': self._mn_resource_modpath}
@@ -59,28 +62,34 @@ class Resource(AsyncService):
     async def _mn_run(
         self,
         *,
-        log_kwargs: dict | None = None,
-        pre: Callable[..., Any | Awaitable[Any]] | None = None,
-        pre_args: list | None = None,
-        post: Callable[..., Any | Awaitable[Any]] | None = None,
-        post_args: list | None = None
+        log_kwargs: dict[str, object] | None = None,
+        pre: LifecycleCallback | None = None,
+        pre_args: list[object] | None = None,
+        post: LifecycleCallback | None = None,
+        post_args: list[object] | None = None
     ) -> None:
         return await super()._mn_run(log_kwargs={'resource_id': self._mn_resource_modpath})
 
-    def _mn_validate_and_wrap_public_async_methods(self):
+    def _mn_validate_and_wrap_public_async_methods(self) -> None:
+        def _is_async_callable(obj: object) -> TypeGuard[Callable[..., Coroutine[Any, Any, object]]]:
+            return inspect.iscoroutinefunction(obj)
+
         for attr_name in dir(self):
             if attr_name.startswith("_"):
                 continue
             method = getattr(self, attr_name)
-            if not inspect.iscoroutinefunction(method):
+            if not _is_async_callable(method):
                 continue
             if getattr(method, "__untracked__", False):
                 continue
 
             self._mn_validate_user_code(method, self._mn_resource_modpath)
 
-            def make_wrapper(attr_name=attr_name, method=method):
-                async def wrapper(*args, **kwargs):
+            def make_wrapper(
+                attr_name: str,
+                method: Callable[..., Coroutine[Any, Any, object]],
+            ) -> Callable[..., Coroutine[Any, Any, object]]:
+                async def wrapper(*args: object, **kwargs: object) -> object:
                     return await self._mn_run_with_tracking(
                         type(self).__name__,
                         attr_name,
@@ -90,15 +99,15 @@ class Resource(AsyncService):
                     )
                 return wrapper
 
-            setattr(self, attr_name, make_wrapper())
+            setattr(self, attr_name, make_wrapper(attr_name, method))
 
     async def _mn_run_with_tracking(
         self,
         resource: str,
         resource_method: str,
         method: Callable[..., Coroutine[Any, Any, T]],
-        *args,
-        **kwargs
+        *args: object,
+        **kwargs: object
     ) -> T:
         start = time.monotonic()
         try:

@@ -1,6 +1,7 @@
 import asyncio
 import ast
 import contextvars
+import importlib
 import inspect
 import random
 import sys
@@ -8,11 +9,12 @@ import textwrap
 import time
 import traceback
 import uuid
+from collections.abc import Awaitable
 from pathlib import Path
-from types import TracebackType
+from types import ModuleType, TracebackType
 from typing import (
-    Any, Awaitable, Callable, ClassVar,
-    Generic, Literal, Type, cast,
+    Any, Callable, ClassVar,
+    Generic, Literal, Type,
     get_args, get_origin, get_type_hints
 )
 
@@ -20,8 +22,9 @@ from .types import T_Event, T_Ctx
 from .minion_workflow_context import MinionWorkflowContext
 from .exceptions import AbortWorkflow
 from .resource import Resource
+from .._framework.async_lifecycle import LifecycleCallback
 from .._framework.async_service import AsyncService
-from .._framework.logger import Logger, DEBUG, INFO, WARNING, ERROR, CRITICAL
+from .._framework.logger import Logger, DEBUG, INFO, WARNING, ERROR
 from .._framework.metrics import Metrics
 from .._framework.metrics_constants import (
     MINION_WORKFLOW_STARTED_TOTAL, MINION_WORKFLOW_INFLIGHT_GAUGE,
@@ -33,7 +36,7 @@ from .._framework.metrics_constants import (
     MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL,
     MINION_WORKFLOW_PERSISTENCE_DURATION_SECONDS,
     MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
-    MINION_WORKFLOW_STEP_STARTED_TOTAL, MINION_WORKFLOW_STEP_INFLIGHT_GAUGE,
+    MINION_WORKFLOW_STEP_STARTED_TOTAL,
     MINION_WORKFLOW_STEP_ABORTED_TOTAL, MINION_WORKFLOW_STEP_FAILED_TOTAL,
     MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
     MINION_WORKFLOW_STEP_DURATION_SECONDS,
@@ -48,7 +51,7 @@ from .._framework.metrics_constants import (
     LABEL_STATUS,
 )
 from .._framework.state_store import PersistenceOperationResult, StateStore
-from .._utils.get_class import get_class
+from .._utils.get_type_from_hint import get_type_from_hint
 from .._utils.serialization import require_type_not_primitive, require_type_serializable
 from .._utils.get_original_bases import get_original_bases
 
@@ -79,7 +82,15 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     _mn_workflow_spec: ClassVar[tuple[str, ...] | None] = None # tuple of ordered workflow step names
     _mn_defer_minion_setup: ClassVar[bool] = False
 
-    def __init_subclass__(cls, *, defer_minion_setup=False, **kwargs):
+    @staticmethod
+    def _mn_is_minion_class(typ: type[Any]) -> bool:
+        return issubclass(typ, Minion)
+    
+    @staticmethod
+    def _mn_get_descriptor_func(descriptor: Any) -> Any:
+        return descriptor.__func__
+
+    def __init_subclass__(cls, *, defer_minion_setup: bool = False, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
 
         cls._mn_defer_minion_setup = bool(defer_minion_setup)
@@ -97,7 +108,11 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             "When subclassing Minion, declare exactly one Minion[...] base with concrete Event and WorkflowCtx types."
         )
 
-        nearest_minion = next((b for b in cls.__mro__[1:] if issubclass(b, Minion)), None)
+        nearest_minion: type[Any] | None = None
+        for base in cls.__mro__[1:]:
+            if cls._mn_is_minion_class(base):
+                nearest_minion = base
+                break
         if nearest_minion is None:
             raise TypeError(f"{cls.__name__} must subclass Minion.")
         if nearest_minion is not Minion and not getattr(nearest_minion, "_mn_defer_minion_setup", False):
@@ -151,9 +166,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
 
         res_map: dict[str, list[str]] = {}
         for attr, hint in get_type_hints(cls).items():
-            candidate = get_class(hint)
-            if isinstance(candidate, type) and issubclass(candidate, Resource):
-                resource_id = f"{candidate.__module__}.{candidate.__name__}"
+            typ = get_type_from_hint(hint)
+            if typ is not None and issubclass(typ, Resource):
+                resource_id = f"{typ.__module__}.{typ.__name__}"
                 res_map.setdefault(resource_id, []).append(attr)
 
         duplicates = {rid: names for rid, names in res_map.items() if len(names) > 1}
@@ -165,32 +180,38 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             )
 
         steps: list[tuple[int, str]] = []
-        sources: dict[type, list[str]] = {}
+        sources: dict[type[Any], list[str]] = {}
 
         for c in reversed(cls.__mro__):
-            if not issubclass(c, Minion):
+            if not cls._mn_is_minion_class(c):
                 continue
             for name, obj in c.__dict__.items():
-                kind = "instance"
-                raw = obj
+                step = obj
+                step_kind = "instance"
                 if isinstance(obj, staticmethod):
-                    kind = "staticmethod"
-                    raw = obj.__func__
+                    step = cls._mn_get_descriptor_func(obj)
+                    step_kind = "staticmethod"
                 elif isinstance(obj, classmethod):
-                    kind = "classmethod"
-                    raw = obj.__func__
+                    step = cls._mn_get_descriptor_func(obj)
+                    step_kind = "classmethod"
 
-                raw = inspect.unwrap(raw)
+                if not callable(step):
+                    continue
 
-                if getattr(raw, "__minion_step__", False):
-                    if kind != "instance":
+                step = inspect.unwrap(step)
+                if not inspect.isfunction(step):
+                    continue
+
+                if getattr(step, "__minion_step__", False):
+                    if step_kind != "instance":
                         raise TypeError(
                             f"{cls.__name__}.{name}: @minion_step must decorate an **instance** method, "
-                            f"not a {kind}."
+                            f"not a {step_kind}."
                         )
-                    lineno = inspect.getsourcelines(raw)[1]
+                    lineno = inspect.getsourcelines(step)[1]
                     steps.append((lineno, name))
-                    sources.setdefault(c, []).append(name)
+                    source_cls: type[Any] = c
+                    sources.setdefault(source_cls, []).append(name)
 
         if len(sources) > 1:
             details = ", ".join(f"{c.__name__}: ({', '.join(names)})" for c, names in sources.items())
@@ -310,7 +331,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             "workflow_persistence_retry_error_after_seconds",
             workflow_persistence_retry_error_after_seconds,
         )
-        self._mn_workflow_tasks: set[asyncio.Task] = set()
+        self._mn_workflow_tasks: set[asyncio.Task[None]] = set()
         self._mn_shutting_down = False
 
         cls = type(self)
@@ -340,11 +361,11 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             raise ValueError(
                 f"workflow_persistence_failure_policy must be {policies}"
             )
-        return cast(WorkflowPersistenceFailurePolicy, policy)
+        return policy
 
     @staticmethod
     def _mn_validate_positive_seconds(name: str, value: float) -> float:
-        if isinstance(value, bool) or not isinstance(value, int | float) or value <= 0:
+        if isinstance(value, bool) or value <= 0:
             raise ValueError(f"{name} must be a positive number of seconds")
         return float(value)
 
@@ -352,19 +373,19 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     def _mn_validate_optional_nonnegative_seconds(name: str, value: float | None) -> float | None:
         if value is None:
             return None
-        if isinstance(value, bool) or not isinstance(value, int | float) or value < 0:
+        if isinstance(value, bool) or value < 0:
             raise ValueError(f"{name} must be None or a non-negative number of seconds")
         return float(value)
 
     @staticmethod
     def _mn_validate_backoff_multiplier(name: str, value: float) -> float:
-        if isinstance(value, bool) or not isinstance(value, int | float) or value < 1:
+        if isinstance(value, bool) or value < 1:
             raise ValueError(f"{name} must be a number greater than or equal to 1")
         return float(value)
 
     @staticmethod
     def _mn_validate_jitter_ratio(name: str, value: float) -> float:
-        if isinstance(value, bool) or not isinstance(value, int | float) or value < 0 or value > 1:
+        if isinstance(value, bool) or value < 0 or value > 1:
             raise ValueError(f"{name} must be a number between 0 and 1")
         return float(value)
 
@@ -393,19 +414,19 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     def config(self) -> dict[str, Any] | None:
         return self._mn_config
 
-    def _mn_make_workflow(self) -> tuple[Callable]:
+    def _mn_make_workflow(self) -> tuple[Callable[..., Any], ...]:
         "workflow is defined as the subclass's methods tagged as minion steps, in declaration order"
         steps: list[tuple[int, str]] = []
         sources: dict[type, list[str]] = {}
 
-        for cls in reversed(type(self).__mro__):
-            if not issubclass(cls, Minion):
+        for typ in reversed(type(self).__mro__):
+            if not self._mn_is_minion_class(typ):
                 continue
-            for name, method in cls.__dict__.items():
+            for name, method in typ.__dict__.items():
                 if getattr(method, "__minion_step__", False):
                     lineno = inspect.getsourcelines(method)[1]
                     steps.append((lineno, name))
-                    sources.setdefault(cls, []).append(name)
+                    sources.setdefault(typ, []).append(name)
 
         if not sources:
             raise TypeError(
@@ -431,11 +452,11 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     async def _mn_startup(
         self,
         *,
-        log_kwargs: dict | None = None,
-        pre: Callable[..., Any | Awaitable[Any]] | None = None,
-        pre_args: list | None = None,
-        post: Callable[..., Any | Awaitable[Any]] | None = None,
-        post_args: list | None = None
+        log_kwargs: dict[str, object] | None = None,
+        pre: LifecycleCallback | None = None,
+        pre_args: list[object] | None = None,
+        post: LifecycleCallback | None = None,
+        post_args: list[object] | None = None
     ) -> None:
         async def _pre():
             self._mn_validate_user_code(self._mn_load_config, type(self).__module__)
@@ -443,10 +464,12 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 self._mn_config = await self._mn_load_config(self._mn_config_path)
         
         async def _post():
-            contexts = await self._mn_state_store._mn_get_decoded_contexts_for_orchestration(
-                self._mn_minion_composite_key,
-                event_cls=type(self)._mn_event_cls,
-                context_cls=type(self)._mn_workflow_ctx_cls,
+            contexts = (
+                await self._mn_state_store._mn_get_decoded_contexts_for_orchestration(
+                    self._mn_minion_composite_key,
+                    event_cls=type(self)._mn_event_cls,
+                    context_cls=type(self)._mn_workflow_ctx_cls,
+                )
             )
             if contexts:
                 await asyncio.gather( 
@@ -463,11 +486,22 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     async def _mn_load_config(self, config_path: str) -> dict[str, Any]:
         async with self._mn_config_lock:
             config = await self.load_config(config_path)
-            if not isinstance(config, dict):
-                raise TypeError(
-                    f"{type(self).__name__}.load_config must return a dict, got {type(config).__name__}"
-                )
-            return config
+            return self._mn_validate_config_dict(config, source=f"{type(self).__name__}.load_config")
+
+    @staticmethod
+    def _mn_validate_config_dict(config: object, *, source: str) -> dict[str, Any]:
+        if not isinstance(config, dict):
+            raise TypeError(f"{source} must return a dict, got {type(config).__name__}")
+
+        def copy_validated_config_dict(config: Any, *, source: str) -> dict[str, Any]:
+            typed_config: dict[str, Any] = {}
+            for key, value in config.items():
+                if not isinstance(key, str):
+                    raise TypeError(f"{source} must return a dict with str keys, got {type(key).__name__}")
+                typed_config[key] = value
+            return typed_config
+
+        return copy_validated_config_dict(config, source=source)
 
     async def load_config(self, config_path: str) -> dict[str, Any]:
         """
@@ -495,29 +529,47 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
 
             if suffix in (".yaml", ".yml"):
                 try:
-                    import yaml
+                    yaml_module = importlib.import_module("yaml")
                 except ImportError:
                     raise RuntimeError(
                         "YAML support requires 'PyYAML'. Install it or override load_config()."
                     )
-                return yaml.safe_load(contents)
+                safe_load: Callable[[str], object] | None = getattr(yaml_module, "safe_load", None)
+                if safe_load is None:
+                    raise RuntimeError("YAML parser module does not define safe_load().")
+                return self._mn_validate_config_dict(
+                    safe_load(contents),
+                    source=f"config file '{path}'",
+                )
 
             elif suffix == ".toml":
                 try:
-                    import tomllib  # Python 3.11+
-                except ImportError:
+                    toml_module: ModuleType
                     try:
-                        import tomli as tomllib  # fallback for <3.11  # pyright: ignore[reportMissingImports]
+                        # Python 3.11+
+                        toml_module = importlib.import_module("tomllib")
                     except ImportError:
-                        raise RuntimeError(
-                            "TOML support requires Python 3.11+ or installing 'tomli'. "
-                            "Install tomli or override load_config()."
-                        )
-                return tomllib.loads(contents)
+                        # Python < 3.11
+                        toml_module = importlib.import_module("tomli")
+                except ImportError:
+                    raise RuntimeError(
+                        "TOML support requires Python 3.11+ or installing 'tomli'. "
+                        "Install tomli or override load_config()."
+                    )
+                loads: Callable[[str], object] | None = getattr(toml_module, "loads", None)
+                if loads is None:
+                    raise RuntimeError("TOML parser module does not define loads().")
+                return self._mn_validate_config_dict(
+                    loads(contents),
+                    source=f"config file '{path}'",
+                )
 
             elif suffix == ".json":
                 import json
-                return json.loads(contents)
+                return self._mn_validate_config_dict(
+                    json.loads(contents),
+                    source=f"config file '{path}'",
+                )
 
             else:
                 raise ValueError(
@@ -695,6 +747,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             "serialize": "Ensure workflow event and context values are supported by the Minions persistence codec.",
             "save": "Ensure the configured StateStore is available and can persist workflow context blobs.",
             "delete": "Ensure the configured StateStore is available so completed workflow contexts can be removed.",
+            None: "Inspect the persistence failure details and runtime configuration.",
         }
         log_kwargs = {
             "workflow_id": ctx.workflow_id,
@@ -706,10 +759,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             "persistence_retry_elapsed_seconds": elapsed_seconds,
             "persistence_failure_stage": result.failure_stage,
             "persistence_retryable": result.retryable,
-            "suggestion": suggestion_by_stage.get(
-                result.failure_stage,
-                "Inspect the persistence failure details and runtime configuration.",
-            ),
+            "suggestion": suggestion_by_stage[result.failure_stage],
             "state_store": type(self._mn_state_store).__name__,
             "event_type": type(ctx.event).__name__,
             "context_type": getattr(ctx.context_cls, "__name__", type(ctx.context).__name__),
@@ -853,13 +903,13 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             ),
         )
 
-    async def _mn_run_workflow(self, ctx: MinionWorkflowContext[T_Event, T_Ctx]):
+    async def _mn_run_workflow(self, ctx: MinionWorkflowContext[T_Event, T_Ctx]) -> None:
         if self._mn_shutting_down:
             return
-        async def _shielded_gather(*aws):
+        async def _shielded_gather(*aws: Awaitable[object]) -> list[object]:
             return await asyncio.shield(asyncio.gather(*aws))
 
-        async def run():
+        async def run() -> None:
             event_token = self._mn_event_var.set(ctx.event)
             context_token = self._mn_context_var.set(ctx.context)
             workflow_status: ExecutionStatus = "undefined"
@@ -962,7 +1012,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         raise
                     except Exception as e: # log / measure step failure
                         step_status: ExecutionStatus = "failed"
-                        log_kwargs = {
+                        log_kwargs: dict[str, object] = {
                             "workflow_id": ctx.workflow_id,
                             "step_name": step_name,
                             "step_index": i,
@@ -1156,7 +1206,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 self._mn_event_var.reset(event_token)
                 self._mn_context_var.reset(context_token)
 
-        def get_user_error_location(tb: TracebackType | None) -> dict | None:
+        def get_user_error_location(tb: TracebackType | None) -> dict[str, object] | None:
             if not tb:
                 return None
             cwd = Path.cwd()
@@ -1180,18 +1230,18 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     async def _mn_shutdown(
         self,
         *,
-        log_kwargs: dict | None = None,
-        pre: Callable[..., Any | Awaitable[Any]] | None = None,
-        pre_args: list | None = None,
-        post: Callable[..., Any | Awaitable[Any]] | None = None,
-        post_args: list | None = None
+        log_kwargs: dict[str, object] | None = None,
+        pre: LifecycleCallback | None = None,
+        pre_args: list[object] | None = None,
+        post: LifecycleCallback | None = None,
+        post_args: list[object] | None = None
     ) -> None:
         self._mn_shutting_down = True
         async def _post():
             async with self._mn_tasks_gate:
                 tasks = list(self._mn_workflow_tasks)
             if tasks:
-                done, pending = await asyncio.wait(
+                _done, pending = await asyncio.wait(
                     tasks,
                     timeout=self._mn_shutdown_grace_seconds,
                 )

@@ -44,7 +44,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "tune":
         if not rest:
             parser.error("tune requires a target (currently: sqlite)")
-        target, *tune_argv = rest
+        target, *_ = rest
         if target != "sqlite":
             parser.error(f"Unknown tune target: {target}")
         parser.error("Use `minions tune sqlite ...` to run the SQLiteStateStore tuner")

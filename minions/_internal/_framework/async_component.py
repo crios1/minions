@@ -1,4 +1,5 @@
 import inspect
+from collections.abc import Mapping, Sequence
 from typing import ParamSpec, TypeVar, Callable, Awaitable, overload
 
 from .async_lifecycle import AsyncLifecycle
@@ -24,12 +25,12 @@ class AsyncComponent(AsyncLifecycle):
     async def _mn_call_bound_method(
         self,
         method: Callable[..., T | Awaitable[T]],
-        method_args: list | None = None,
-        method_kwargs: dict | None = None,
+        method_args: Sequence[object] | None = None,
+        method_kwargs: Mapping[str, object] | None = None,
     ) -> T:
-        method_args = method_args or []
-        method_kwargs = method_kwargs or {}
-        result = method(*method_args, **method_kwargs)
+        args = method_args or ()
+        kwargs = method_kwargs or {}
+        result = method(*args, **kwargs)
         if inspect.isawaitable(result):
             return await result
         return result
@@ -39,31 +40,30 @@ class AsyncComponent(AsyncLifecycle):
         method: Callable[..., object],
         error: Exception,
         log_msg: str | None = None,
-        log_kwargs: dict | None = None,
+        log_kwargs: Mapping[str, object] | None = None,
     ) -> None:
-        log_kwargs = log_kwargs or {}
         rel_modpath = get_relative_module_path(type(self))
         method_name = getattr(method, "__name__", None) or type(method).__name__
         msg = log_msg or f"{type(self).__name__}.{method_name} failed ({rel_modpath})"
-        effective_log_kwargs = {
-            **log_kwargs,
+        kwargs = {
+            **(log_kwargs or {}),
             "rel_modpath": rel_modpath,
         }
         await self._mn_logger._mn_log_exception(
             ERROR,
             msg,
             error,
-            **effective_log_kwargs,
+            **kwargs,
         )
 
     @overload
     async def _mn_run_and_log_failure(
         self,
         method: Callable[P, Awaitable[T]],
-        method_args: list | None = ...,
-        method_kwargs: dict | None = ...,
+        method_args: Sequence[object] | None = ...,
+        method_kwargs: Mapping[str, object] | None = ...,
         log_msg: str | None = ...,
-        log_kwargs: dict | None = ...
+        log_kwargs: Mapping[str, object] | None = ...
     ) -> T:
         ...
 
@@ -71,20 +71,20 @@ class AsyncComponent(AsyncLifecycle):
     async def _mn_run_and_log_failure(
         self,
         method: Callable[P, T],
-        method_args: list | None = ...,
-        method_kwargs: dict | None = ...,
+        method_args: Sequence[object] | None = ...,
+        method_kwargs: Mapping[str, object] | None = ...,
         log_msg: str | None = ...,
-        log_kwargs: dict | None = ...
+        log_kwargs: Mapping[str, object] | None = ...
     ) -> T:
         ...
 
     async def _mn_run_and_log_failure(
         self,
         method: Callable[..., T | Awaitable[T]],
-        method_args: list | None = None,
-        method_kwargs: dict | None = None,
+        method_args: Sequence[object] | None = None,
+        method_kwargs: Mapping[str, object] | None = None,
         log_msg: str | None = None,
-        log_kwargs: dict | None = None,
+        log_kwargs: Mapping[str, object] | None = None,
     ) -> T:
         """Run a bound instance/class method, log failures, and re-raise them."""
         self._mn_require_bound_method(method)
@@ -102,10 +102,10 @@ class AsyncComponent(AsyncLifecycle):
     async def _mn_safe_run_and_log_failure(
         self,
         method: Callable[P, Awaitable[T]],
-        method_args: list | None = ...,
-        method_kwargs: dict | None = ...,
+        method_args: Sequence[object] | None = ...,
+        method_kwargs: Mapping[str, object] | None = ...,
         log_msg: str | None = ...,
-        log_kwargs: dict | None = ...
+        log_kwargs: Mapping[str, object] | None = ...
     ) -> T | None:
         ...
     
@@ -113,20 +113,20 @@ class AsyncComponent(AsyncLifecycle):
     async def _mn_safe_run_and_log_failure(
         self,
         method: Callable[P, T],
-        method_args: list | None = ...,
-        method_kwargs: dict | None = ...,
+        method_args: Sequence[object] | None = ...,
+        method_kwargs: Mapping[str, object] | None = ...,
         log_msg: str | None = ...,
-        log_kwargs: dict | None = ...
+        log_kwargs: Mapping[str, object] | None = ...
     ) -> T | None:
         ...
 
     async def _mn_safe_run_and_log_failure(
         self,
         method: Callable[..., T | Awaitable[T]],
-        method_args: list | None = None,
-        method_kwargs: dict | None = None,
+        method_args: Sequence[object] | None = None,
+        method_kwargs: Mapping[str, object] | None = None,
         log_msg: str | None = None,
-        log_kwargs: dict | None = None,
+        log_kwargs: Mapping[str, object] | None = None,
     ) -> T | None:
         """Run a bound instance/class method and log any exception it raises.
 

@@ -9,6 +9,10 @@
 -->
 
 ### Test Suite:
+- todo: migrate the local development virtualenv from `venv` to `.venv`
+  - update Pyright config and docs/scripts that assume the current `venv` path
+  - keep Python-version support enforced by CI/test matrix rather than the local venv name
+
 - todo: review the latest StateStore blob-contract refactor
   - review order:
     - `minions/_internal/_framework/state_store.py`: review the new contract surface
@@ -420,6 +424,10 @@
     - document recommended operator usage:
       - alert on `minion_workflow_persistence_*` for workflow durability impact
       - inspect `state_store_*` for backend health and root cause
+
+- todo: wire `MINION_WORKFLOW_STEP_INFLIGHT_GAUGE` into `minion.py`
+  - keep the step-level gauge as a live execution-state complement to step duration and outcome counters
+  - update the gauge in the step start/finally paths once the wiring is ready
 
 - todo: add family-level metrics exposure controls
   - goal:
@@ -857,6 +865,7 @@
     - transitional stability note:
       - fixed obvious exported-helper crashes: `wait` no longer references undefined helpers; `start` calls the current `Gru.start_minion(...)` signature; successful starts are tracked by `StartMinionResult.instance_id`
       - continue fixing obvious `GruShell` crashes only as needed; do not add new product semantics there
+      - remove the temporary `pyproject.toml` Pyright exclude for `minions/_internal/_domain/gru_shell*.py` once `GruShell` is phased out
   - suggested implementation order:
     - add runtime metadata path helpers
     - add runtime metadata read/write/delete helpers

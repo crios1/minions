@@ -11,6 +11,7 @@ from minions._internal._domain.minion_workflow_context import MinionWorkflowCont
 from minions._internal._framework.minion_workflow_context_codec import (
     deserialize_workflow_context_blob,
 )
+from minions._internal._framework.state_store import StateStore
 
 from tests.assets.support.mixin_spy import SpyMixin
 from tests.assets.support.minion_spied import SpiedMinion
@@ -30,6 +31,16 @@ from .directives import (
 )
 from .introspect import GruIntrospector
 from .plan import ScenarioPlan
+
+
+def _get_minion_event_and_context_types(
+    minion_cls: type[Minion],
+) -> tuple[type, type]:
+    event_cls = getattr(minion_cls, "_mn_event_cls", None)
+    context_cls = getattr(minion_cls, "_mn_workflow_ctx_cls", None)
+    if not isinstance(event_cls, type) or not isinstance(context_cls, type):
+        raise TypeError(f"{minion_cls.__name__} is missing runtime Minion types.")
+    return event_cls, context_cls
 
 
 @dataclass
@@ -443,11 +454,10 @@ class ScenarioRunner:
         self,
     ) -> dict[str, tuple[MinionWorkflowContext, ...]] | None:
         state_store = getattr(self._gru, "_state_store", None)
-        snapshot_fn = getattr(state_store, "_mn_get_all_contexts", None)
-        if not callable(snapshot_fn):
+        if not isinstance(state_store, StateStore):
             return None
         try:
-            stored_contexts = await snapshot_fn()
+            stored_contexts = await state_store._mn_get_all_contexts()
         except Exception:
             return None
 
@@ -460,16 +470,15 @@ class ScenarioRunner:
         try:
             for stored_context in stored_contexts:
                 receipt = receipts_by_composite_key.get(stored_context.orchestration_id)
-                kwargs = {}
                 if receipt is not None and receipt.minion_cls is not None:
-                    kwargs = {
-                        "event_cls": receipt.minion_cls._mn_event_cls,
-                        "context_cls": receipt.minion_cls._mn_workflow_ctx_cls,
-                    }
-                ctx = deserialize_workflow_context_blob(
-                    stored_context.context,
-                    **kwargs,
-                )
+                    event_cls, context_cls = _get_minion_event_and_context_types(receipt.minion_cls)
+                    ctx = deserialize_workflow_context_blob(
+                        stored_context.context,
+                        event_cls=event_cls,
+                        context_cls=context_cls,
+                    )
+                else:
+                    ctx = deserialize_workflow_context_blob(stored_context.context)
                 contexts_by_modpath[ctx.minion_modpath].append(ctx)
         except Exception:
             return None

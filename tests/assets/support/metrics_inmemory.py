@@ -1,6 +1,6 @@
 import threading
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Tuple, TypeVar, cast
+from typing import Any, Callable, Dict, Literal, Tuple, TypeVar, overload
 
 from minions._internal._framework.metrics import (
     CounterSample,
@@ -13,7 +13,12 @@ from minions._internal._framework.metrics import (
     SnapshotResult,
 )
 from minions._internal._framework.logger import Logger
-from minions._internal._framework.metrics_interface import LabelledMetric
+from minions._internal._framework.metrics_interface import (
+    LabelledCounter,
+    LabelledGauge,
+    LabelledHistogram,
+    LabelledMetric,
+)
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_constants import METRIC_LABEL_NAMES
 
@@ -84,17 +89,15 @@ def _normalize_labels(metric_name: str, labels: Dict[str, Any]) -> LabelKey:
     return items
 
 
-class _InMemoryMetricChild(LabelledMetric):
+class _InMemoryMetricChild:
     """
-    A LabelledMetric bound to a specific label set (label_key).
-    Implements the LabelledMetric protocol: labels/inc/set/observe.
+    A metric bound to a specific label set (label_key).
     """
     def __init__(self, parent: "_InMemoryMetric", label_key: LabelKey):
         self._parent = parent
         self._label_key = label_key
 
-    # Protocol: def labels(self, **kwargs: str) -> "LabelledMetric"
-    def labels(self, **kwargs: str) -> "LabelledMetric":
+    def labels(self, **kwargs: str) -> "_InMemoryMetricChild":
         # Already bound; ignore kwargs and return self to satisfy chaining.
         return self # pragma: no cover
 
@@ -129,10 +132,10 @@ class _InMemoryMetricChild(LabelledMetric):
             self._parent._values[self._label_key] = agg
 
 
-class _InMemoryMetric(LabelledMetric):
+class _InMemoryMetric:
     """
     Registry entry for a single metric (name+kind).
-    `.labels(**kwargs)` returns a bound child that also conforms to LabelledMetric.
+    `.labels(**kwargs)` returns a bound child that conforms to its metric protocol.
     """
     def __init__(
         self,
@@ -148,7 +151,7 @@ class _InMemoryMetric(LabelledMetric):
         self._values: Dict[LabelKey, Any] = {}
         self._lock = threading.Lock()
 
-    def labels(self, **kwargs: str) -> LabelledMetric:
+    def labels(self, **kwargs: str) -> _InMemoryMetricChild:
         self._record_metric_labels(
             MetricLabelEmission(
                 metric_name=self.name,
@@ -188,16 +191,47 @@ class InMemoryMetrics(SpiedMetrics):
     def __init__(self, logger: Logger | None = None):
         super().__init__(logger or NoOpLogger())
         self._snapshot_lock = threading.Lock()
+        self._metrics: dict[Kind, dict[str, _InMemoryMetric]] = {
+            "counter": {},
+            "gauge": {},
+            "histogram": {},
+        }
         self._metric_label_emissions: list[MetricLabelEmission] = []
         self._metric_label_emissions_lock = threading.Lock()
 
+    @overload
+    def create_metric(
+        self,
+        metric_name: str,
+        label_names: list[str],
+        kind: Literal["counter"],
+    ) -> LabelledCounter: ...
+
+    @overload
+    def create_metric(
+        self,
+        metric_name: str,
+        label_names: list[str],
+        kind: Literal["gauge"],
+    ) -> LabelledGauge: ...
+
+    @overload
+    def create_metric(
+        self,
+        metric_name: str,
+        label_names: list[str],
+        kind: Literal["histogram"],
+    ) -> LabelledHistogram: ...
+
     def create_metric(self, metric_name: str, label_names: list[str], kind: Kind) -> LabelledMetric:
-        return _InMemoryMetric(
+        metric = _InMemoryMetric(
             metric_name,
             label_names,
             kind,
             self._record_metric_labels,
         )
+        self._metrics[kind][metric_name] = metric
+        return metric
 
     # ----------------- Test helpers (read-only) -----------------
 
@@ -253,40 +287,34 @@ class InMemoryMetrics(SpiedMetrics):
     def snapshot_counters(self) -> SnapshotCounters:
         out: SnapshotCounters = {}
         with self._snapshot_lock:
-            reg = self._mn_registries["counter"]
-            for name, metric in reg.items():
-                metric_impl = cast(_InMemoryMetric, metric)
+            for name, metric in self._metrics["counter"].items():
                 out[name] = [
                     {"labels": dict(label_key), "value": float(value)}
-                    for label_key, value in metric_impl.snapshot_values().items()
+                    for label_key, value in metric.snapshot_values().items()
                 ]
         return out
 
     def snapshot_gauges(self) -> SnapshotGauges:
         out: SnapshotGauges = {}
         with self._snapshot_lock:
-            reg = self._mn_registries["gauge"]
-            for name, metric in reg.items():
-                metric_impl = cast(_InMemoryMetric, metric)
+            for name, metric in self._metrics["gauge"].items():
                 out[name] = [
                     {"labels": dict(label_key), "value": float(value)}
-                    for label_key, value in metric_impl.snapshot_values().items()
+                    for label_key, value in metric.snapshot_values().items()
                 ]
         return out
 
     def snapshot_histograms(self) -> SnapshotHistograms:
         out: SnapshotHistograms = {}
         with self._snapshot_lock:
-            reg = self._mn_registries["histogram"]
-            for name, metric in reg.items():
-                metric_impl = cast(_InMemoryMetric, metric)
+            for name, metric in self._metrics["histogram"].items():
                 out[name] = [
                     {
                         "labels": dict(label_key),
                         "count": float(agg["count"]),
                         "sum": float(agg["sum"]),
                     }
-                    for label_key, agg in metric_impl.snapshot_values().items()
+                    for label_key, agg in metric.snapshot_values().items()
                 ]
         return out
 

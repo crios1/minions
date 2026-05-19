@@ -19,7 +19,13 @@ from tests.assets.support.state_store_spied import SpiedStateStore
 
 from .directives import ExpectRuntime, MinionStart
 from .plan import ScenarioPlan
-from .runner import ScenarioCheckpoint, ScenarioRunResult, SpyRegistry, StartReceipt
+from .runner import (
+    ScenarioCheckpoint,
+    ScenarioRunResult,
+    SpyRegistry,
+    StartReceipt,
+    _get_minion_event_and_context_types,
+)
 
 
 class _ExtraCallRecorder:
@@ -245,6 +251,7 @@ class ScenarioVerifier:
                         f"{modpath!r} at checkpoint {checkpoint.order}."
                     )
                 workflow_len = len(m_cls._mn_workflow_spec or ())
+                event_cls, context_cls = _get_minion_event_and_context_types(m_cls)
                 for ctx in contexts:
                     receipt = receipt_by_composite_key.get(ctx.minion_composite_key)
                     if receipt is None:
@@ -260,23 +267,23 @@ class ScenarioVerifier:
                             f"workflow_id={ctx.workflow_id!r}, "
                             f"expected {receipt.minion_modpath!r}, got {ctx.minion_modpath!r}."
                         )
-                    if not isinstance(ctx.event, m_cls._mn_event_cls):
+                    if not isinstance(ctx.event, event_cls):
                         pytest.fail(
                             "Persisted context event type mismatch: "
                             f"workflow_id={ctx.workflow_id!r}, "
-                            f"expected {m_cls._mn_event_cls.__name__}, got {type(ctx.event).__name__}."
+                            f"expected {event_cls.__name__}, got {type(ctx.event).__name__}."
                         )
-                    if not isinstance(ctx.context, m_cls._mn_workflow_ctx_cls):
+                    if not isinstance(ctx.context, context_cls):
                         pytest.fail(
                             "Persisted context context type mismatch: "
                             f"workflow_id={ctx.workflow_id!r}, "
-                            f"expected {m_cls._mn_workflow_ctx_cls.__name__}, got {type(ctx.context).__name__}."
+                            f"expected {context_cls.__name__}, got {type(ctx.context).__name__}."
                         )
-                    if ctx.context_cls is not m_cls._mn_workflow_ctx_cls:
+                    if ctx.context_cls is not context_cls:
                         pytest.fail(
                             "Persisted context context_cls mismatch: "
                             f"workflow_id={ctx.workflow_id!r}, "
-                            f"expected {m_cls._mn_workflow_ctx_cls!r}, got {ctx.context_cls!r}."
+                            f"expected {context_cls!r}, got {ctx.context_cls!r}."
                         )
                     if ctx.next_step_index < 0 or ctx.next_step_index >= workflow_len:
                         pytest.fail(

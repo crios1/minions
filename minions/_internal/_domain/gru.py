@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from collections import defaultdict, deque
 from dataclasses import asdict
 from pathlib import Path
-from typing import Iterable, Mapping, Any, get_type_hints, overload
+from typing import Any, Iterable, Mapping, TypeGuard, get_type_hints, overload
 
 from .minion import Minion, WorkflowPersistenceFailurePolicy
 from .pipeline import Pipeline
@@ -43,15 +43,14 @@ from .._framework.state_store_noop import NoOpStateStore
 from .._framework.state_store_sqlite import SQLiteStateStore
 
 from .._utils.safe_cancel_task import safe_cancel_task
-from .._utils.get_class import get_class
+from .._utils.get_type_from_hint import get_type_from_hint
 from .._utils.safe_create_task import safe_create_task
 
 class _UnsetType: ...
 
 _UNSET = _UnsetType()
 
-_GRU_INSTANCE: Gru | None = None
-
+_gru_instance: Gru | None = None
 
 class Gru:
     """Runtime orchestrator.
@@ -187,10 +186,10 @@ class Gru:
         else:
             raise TypeError(f"Invalid metrics: {type(metrics).__name__}")
         
-        global _GRU_INSTANCE
-        if _GRU_INSTANCE is not None:
+        global _gru_instance
+        if _gru_instance is not None:
             raise RuntimeError("Only one Gru instance is allowed per process.")
-        _GRU_INSTANCE = self
+        _gru_instance = self
 
         self._loop = loop
 
@@ -210,16 +209,16 @@ class Gru:
         self._resource_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
         # registries
-        self._minions_by_id: dict[str, Minion] = {}                        # minion_instance_id -> Minion
-        self._minions_by_name: dict[str, list[Minion]] = defaultdict(list) # minion_name -> Minion (minions could have the same name)
-        self._minions_by_composite_key: dict[str, Minion] = {}             # composite_key -> Minion
-        self._minion_tasks: dict[str, asyncio.Task] = {}                   # minion_instance_id -> asyncio.Task
+        self._minions_by_id: dict[str, Minion[Any, Any]] = {}                        # minion_instance_id -> Minion
+        self._minions_by_name: dict[str, list[Minion[Any, Any]]] = defaultdict(list) # minion_name -> Minion (minions could have the same name)
+        self._minions_by_composite_key: dict[str, Minion[Any, Any]] = {}             # composite_key -> Minion
+        self._minion_tasks: dict[str, asyncio.Task[None]] = {}             # minion_instance_id -> asyncio.Task
 
-        self._pipelines: dict[str, Pipeline] = {}          # pipeline_id -> Pipeline
-        self._pipeline_tasks: dict[str, asyncio.Task] = {} # pipeline_id -> asyncio.Task
+        self._pipelines: dict[str, Pipeline[Any]] = {}     # pipeline_id -> Pipeline
+        self._pipeline_tasks: dict[str, asyncio.Task[None]] = {} # pipeline_id -> asyncio.Task
 
         self._resources: dict[str, Resource] = {}          # resource_id -> Resource
-        self._resource_tasks: dict[str, asyncio.Task] = {} # resource_id -> asyncio.Task
+        self._resource_tasks: dict[str, asyncio.Task[None]] = {} # resource_id -> asyncio.Task
 
         # dependency maps used to manage domain object lifecycles
         self._dependency_maps_lock = asyncio.Lock()
@@ -272,9 +271,9 @@ class Gru:
         try:
             await inst._startup()
         except Exception:
-            global _GRU_INSTANCE
-            if _GRU_INSTANCE is inst:
-                _GRU_INSTANCE = None
+            global _gru_instance
+            if _gru_instance is inst:
+                _gru_instance = None
             raise
         return inst
 
@@ -287,7 +286,7 @@ class Gru:
         )
         self._is_started = True
     
-    async def _startup_async_component(self, comp: AsyncComponent, log_kwargs: dict | None = None):
+    async def _startup_async_component(self, comp: AsyncComponent, log_kwargs: dict[str, object] | None = None):
         if not hasattr(comp, "_mn_startup"):
             return # pragma: no cover
         log_kwargs = {
@@ -303,7 +302,7 @@ class Gru:
     async def _shutdown(self):
         ...
 
-    async def _shutdown_async_component(self, comp: AsyncComponent, log_kwargs: dict | None = None):
+    async def _shutdown_async_component(self, comp: AsyncComponent, log_kwargs: dict[str, object] | None = None):
         if not hasattr(comp, "_mn_shutdown"):
             return # pragma: no cover
         log_kwargs = {
@@ -346,16 +345,20 @@ class Gru:
             cfg = ""
         return f"{minion_modpath}|{cfg}|{pipeline_modpath}"
 
-    def _get_minion_class(self, minion_modpath: str) -> type[Minion]:
+    def _get_minion_class(self, minion_modpath: str) -> type[Minion[Any, Any]]:
         mod = importlib.import_module(minion_modpath)
 
-        minion_cls = getattr(mod, "minion", None)
+        def is_minion_class(obj: object) -> TypeGuard[type[Minion[Any, Any]]]:
+            return isinstance(obj, type) and issubclass(obj, Minion)
 
-        if minion_cls is None:
+        minion_attr = getattr(mod, "minion", None)
+        minion_cls: type[Minion[Any, Any]]
+
+        if minion_attr is None:
             
-            minion_classes = [
+            minion_classes: list[type[Minion[Any, Any]]] = [
                 obj for obj in vars(mod).values()
-                if isinstance(obj, type) and issubclass(obj, Minion) and obj is not Minion
+                if is_minion_class(obj) and obj is not Minion
             ]
 
             if len(minion_classes) == 1:
@@ -369,7 +372,9 @@ class Gru:
                     f"Module '{minion_modpath}' contains multiple Minion subclasses but no explicit `minion` variable to resolve the entrypoint."
                 )
 
-        elif not isinstance(minion_cls, type) or not issubclass(minion_cls, Minion):
+        elif is_minion_class(minion_attr):
+            minion_cls = minion_attr
+        else:
             raise TypeError(f"`minion` attribute in module '{minion_modpath}' is not a subclass of Minion")
         
         return minion_cls
@@ -380,7 +385,7 @@ class Gru:
         minion_composite_key: str,
         minion_modpath: str,
         minion_config_path: str | None
-    ) -> Minion:
+    ) -> Minion[Any, Any]:
         minion_cls = self._get_minion_class(minion_modpath)
 
         return minion_cls(
@@ -400,7 +405,7 @@ class Gru:
             workflow_persistence_retry_error_after_seconds=self._workflow_persistence_retry_error_after_seconds,
         )
 
-    async def _start_minion(self, minion: Minion):
+    async def _start_minion(self, minion: Minion[Any, Any]):
         id = minion._mn_minion_instance_id
         name = minion._mn_name
 
@@ -418,7 +423,7 @@ class Gru:
 
         await minion._mn_wait_until_started()
 
-    async def _stop_minion(self, minion: Minion):
+    async def _stop_minion(self, minion: Minion[Any, Any]):
         instance_id = minion._mn_minion_instance_id
         async with self._runtime_state_lock:
             self._minions_by_id.pop(instance_id, None)
@@ -438,35 +443,30 @@ class Gru:
         if not minion._mn_shutting_down:
             await minion._mn_shutdown()
 
-    # TODO: i need to clean up my helpers
-    # in addition to making helpers that
-    # that ensure thru unit tests
-    # that internal data structures aren't misused
-    # i should have some test(s)
-    # that after running start or stop minion
-    # all the minion data structures contain the expected data
-    # (maybe check the pipeline and resource ones too)
-    async def _get_running_minion(self, identifier) -> Minion | None:
-        ...
-        # given an identifier
-        # return Minion or None
+    # TODO: add helper methods for coherent runtime state inspection. Tests
+    # should use them to verify minion, pipeline, resource, task, dependency,
+    # and refcount state after lifecycle operations instead of reaching into
+    # registries directly. A running-minion lookup helper should acquire
+    # _runtime_state_lock, check instance ID before name, and account for
+    # duplicate names instead of collapsing "not found" and "ambiguous name"
+    # into the same None result.
 
     # Resource Methods
 
     def _make_resource_id(self, resource_cls: type[Resource]) -> str:
         return f"{resource_cls.__module__}.{resource_cls.__name__}"
 
-    def _get_direct_resource_dependencies(self, cls: type[Minion | Pipeline | Resource]) -> list[type[Resource]]:
-        classes = []
-        for attr, hint in get_type_hints(cls).items():
-            r_cls = get_class(hint)
-            if isinstance(r_cls, type) and issubclass(r_cls, Resource):
+    def _get_direct_resource_dependencies(self, cls: type[Minion[Any, Any] | Pipeline[Any] | Resource]) -> list[type[Resource]]:
+        classes: list[type[Resource]] = []
+        for _attr, hint in get_type_hints(cls).items():
+            r_cls = get_type_from_hint(hint)
+            if r_cls is not None and issubclass(r_cls, Resource):
                 classes.append(r_cls)
         return classes
 
-    def _get_all_resource_dependencies(self, cls: type[Minion | Pipeline | Resource]) -> set[type[Resource]]:
+    def _get_all_resource_dependencies(self, cls: type[Minion[Any, Any] | Pipeline[Any] | Resource]) -> set[type[Resource]]:
         "get all resource dependencies (direct and indirect)"
-        seen = set()
+        seen: set[type[Resource]] = set()
         stack = list(self._get_direct_resource_dependencies(cls))
         while stack:
             c = stack.pop()
@@ -616,16 +616,20 @@ class Gru:
         """idempotently make pipeline id"""
         return pipeline_modpath
 
-    def _get_pipeline_class(self, pipeline_modpath: str) -> type[Pipeline]:
+    def _get_pipeline_class(self, pipeline_modpath: str) -> type[Pipeline[Any]]:
         mod = importlib.import_module(pipeline_modpath)
 
-        pipeline_cls = getattr(mod, "pipeline", None)
+        def is_pipeline_class(obj: object) -> TypeGuard[type[Pipeline[Any]]]:
+            return isinstance(obj, type) and issubclass(obj, Pipeline)
 
-        if pipeline_cls is None:
+        pipeline_attr = getattr(mod, "pipeline", None)
+        pipeline_cls: type[Pipeline[Any]]
 
-            pipeline_classes = [
+        if pipeline_attr is None:
+
+            pipeline_classes: list[type[Pipeline[Any]]] = [
                 obj for obj in vars(mod).values()
-                if isinstance(obj, type) and issubclass(obj, Pipeline) and obj is not Pipeline
+                if is_pipeline_class(obj) and obj is not Pipeline
             ]
 
             if len(pipeline_classes) == 1:
@@ -639,12 +643,14 @@ class Gru:
                     f"Module '{pipeline_modpath}' contains multiple Pipeline subclasses but no explicit `pipeline` variable to resolve the entrypoint."
                 )
 
-        elif not isinstance(pipeline_cls, type) or not issubclass(pipeline_cls, Pipeline):
+        elif is_pipeline_class(pipeline_attr):
+            pipeline_cls = pipeline_attr
+        else:
             raise TypeError(f"`pipeline` attribute in module '{pipeline_modpath}' is not a subclass of Pipeline")
         
         return pipeline_cls
 
-    def _get_pipeline(self, pipeline_id: str, pipeline_modpath: str) -> Pipeline:
+    def _get_pipeline(self, pipeline_id: str, pipeline_modpath: str) -> Pipeline[Any]:
         if pipeline_id in self._pipelines:
             return self._pipelines[pipeline_id]
         
@@ -657,7 +663,7 @@ class Gru:
             logger=self._logger
         )
 
-    async def _start_pipeline(self, pipeline_id: str, pipeline: Pipeline):
+    async def _start_pipeline(self, pipeline_id: str, pipeline: Pipeline[Any]):
         async with self._pipeline_locks[pipeline_id]:
             created = False
             async with self._runtime_state_lock:
@@ -787,8 +793,8 @@ class Gru:
 
     async def start_minion(
         self,
-        minion: type[Minion[Any, Any]] | str,
-        pipeline: type[Pipeline[Any]] | str,
+        minion: object,
+        pipeline: object,
         *,
         minion_config: Mapping[str, Any] | None = None,
         minion_config_path: str | None = None,
@@ -854,8 +860,8 @@ class Gru:
 
             minion_instance_id = self._make_minion_instance_id()
             minion_composite_key = self._make_minion_composite_key(minion_modpath, minion_config_path, pipeline_modpath)
-            minion_inst: Minion | None = None
-            pipeline_inst: Pipeline | None = None
+            minion_inst: Minion[Any, Any] | None = None
+            pipeline_inst: Pipeline[Any] | None = None
             pipeline_id: str | None = None
 
             async with self._minion_locks[minion_composite_key]:
@@ -947,8 +953,8 @@ class Gru:
                     resources_not_running: list[tuple[str, str, type[Resource]]] = []
                     async with self._runtime_state_lock:
                         for attr, hint in get_type_hints(type(minion_inst)).items():
-                            cls = get_class(hint)
-                            if isinstance(cls, type) and issubclass(cls, Resource):
+                            cls = get_type_from_hint(hint)
+                            if cls is not None and issubclass(cls, Resource):
                                 resource_id = self._make_resource_id(cls)
                                 item = (resource_id, attr, cls)
                                 if resource_id in self._resources:
@@ -958,7 +964,7 @@ class Gru:
 
                     await asyncio.gather(*[
                         self._ensure_resource_tree_started(cls)
-                        for resource_id, name, cls in resources_not_running
+                        for _resource_id, _name, cls in resources_not_running
                     ])
 
                     for resource_id, name, cls in resources_running + resources_not_running:
@@ -979,8 +985,8 @@ class Gru:
                         pipeline_resources_not_running: list[tuple[str, str, type[Resource]]] = []
                         async with self._runtime_state_lock:
                             for attr, hint in get_type_hints(pipeline_inst.__class__).items():
-                                cls = get_class(hint)
-                                if isinstance(cls, type) and issubclass(cls, Resource):
+                                cls = get_type_from_hint(hint)
+                                if cls is not None and issubclass(cls, Resource):
                                     resource_id = self._make_resource_id(cls)
                                     item = (resource_id, attr, cls)
                                     if resource_id in self._resources:
@@ -990,7 +996,7 @@ class Gru:
 
                         await asyncio.gather(*[
                             self._ensure_resource_tree_started(cls)
-                            for resource_id, name, cls in pipeline_resources_not_running
+                            for _resource_id, _name, cls in pipeline_resources_not_running
                         ])
 
                         for resource_id, name, cls in pipeline_resources_running + pipeline_resources_not_running:
@@ -1058,8 +1064,8 @@ class Gru:
     async def _cleanup_failed_start_minion(
         self,
         *,
-        minion: Minion | None,
-        pipeline: Pipeline | None,
+        minion: Minion[Any, Any] | None,
+        pipeline: Pipeline[Any] | None,
         pipeline_id: str | None,
         minion_composite_key: str,
         preexisting_pipeline_ids: set[str],
@@ -1106,7 +1112,7 @@ class Gru:
 
         self._prune_resource_maps()
 
-    async def _stop_minion_best_effort(self, minion: Minion) -> None:
+    async def _stop_minion_best_effort(self, minion: Minion[Any, Any]) -> None:
         try:
             await self._stop_minion(minion)
         except Exception as e:
@@ -1119,7 +1125,7 @@ class Gru:
             )
             await self._discard_minion_runtime_state(minion)
 
-    async def _discard_minion_runtime_state(self, minion: Minion) -> None:
+    async def _discard_minion_runtime_state(self, minion: Minion[Any, Any]) -> None:
         instance_id = minion._mn_minion_instance_id
         async with self._runtime_state_lock:
             self._minions_by_id.pop(instance_id, None)
@@ -1274,7 +1280,7 @@ class Gru:
         }
         return {name: value for name, value in runtime_state.items() if value}
 
-    def _runtime_tasks_snapshot(self) -> list[asyncio.Task]:
+    def _runtime_tasks_snapshot(self) -> list[asyncio.Task[None]]:
         return [
             task
             for task in (
@@ -1286,7 +1292,7 @@ class Gru:
             if task is not None
         ]
 
-    async def _cancel_runtime_tasks_best_effort(self, tasks: Iterable[asyncio.Task]) -> None:
+    async def _cancel_runtime_tasks_best_effort(self, tasks: Iterable[asyncio.Task[None]]) -> None:
         for task in tasks:
             try:
                 await safe_cancel_task(task=task, logger=self._logger)
@@ -1315,7 +1321,7 @@ class Gru:
     async def _finalize_failed_stop_minion(
         self,
         *,
-        minion: Minion,
+        minion: Minion[Any, Any],
         resource_owner_refs_released: bool,
         resources_cleaned: bool,
         released_resource_ids: Iterable[str] = (),
@@ -1376,7 +1382,7 @@ class Gru:
                     reason="Gru is shutting down.",
                 )
 
-            minion: Minion | None = None
+            minion: Minion[Any, Any] | None = None
             stop_committed = False
             resource_owner_refs_released = False
             resources_cleaned = False
@@ -1389,7 +1395,7 @@ class Gru:
                 async with self._runtime_state_lock:
                     minion = self._minions_by_id.get(name_or_instance_id, None)
                     if minion is not None:
-                        minion_or_result: Minion | StopMinionResult = minion
+                        minion_or_result: Minion[Any, Any] | StopMinionResult = minion
                     else:
                         minions = self._minions_by_name.get(name_or_instance_id, [])
                         if not minions:
@@ -1498,13 +1504,13 @@ class Gru:
                 )
 
     async def shutdown(self) -> ShutdownGruResult:
-        global _GRU_INSTANCE
+        global _gru_instance
         if self._is_shutdown:
             return ShutdownGruResult(success=True)
         if not self._is_started:
             self._is_shutdown = True
-            if _GRU_INSTANCE is self:
-                _GRU_INSTANCE = None
+            if _gru_instance is self:
+                _gru_instance = None
             return ShutdownGruResult(success=True)
 
         # Wait until all in-flight lifecycle operations drain.
@@ -1596,8 +1602,8 @@ class Gru:
                 self._is_shutdown = True
                 self._is_shutting_down = False
                 self._lifecycle_ops_drained.notify_all()
-                if _GRU_INSTANCE is self:
-                    _GRU_INSTANCE = None
+                if _gru_instance is self:
+                    _gru_instance = None
 
     # Background Tasks
 

@@ -1,4 +1,6 @@
 import threading
+from typing import Literal, overload
+
 from prometheus_client import (
     CollectorRegistry, REGISTRY,
     Counter, Gauge, Histogram, start_http_server
@@ -7,15 +9,49 @@ from prometheus_client import (
 from .metrics import (
     Metrics, Kind,
     SnapshotCounters, SnapshotGauges, SnapshotHistograms,
-    CounterSample, GaugeSample, HistogramSample
+    HistogramSample
 )
 from .logger import Logger, ERROR
-from .metrics_interface import LabelledMetric
+from .metrics_interface import LabelledCounter, LabelledGauge, LabelledHistogram, LabelledMetric
+
+
+class _PrometheusCounter:
+    def __init__(self, metric: Counter):
+        self._metric = metric
+
+    def labels(self, **kwargs: str) -> LabelledCounter:
+        return _PrometheusCounter(self._metric.labels(**kwargs))
+
+    def inc(self, amount: float = 1):
+        return self._metric.inc(amount=amount)
+
+
+class _PrometheusGauge:
+    def __init__(self, metric: Gauge):
+        self._metric = metric
+
+    def labels(self, **kwargs: str) -> LabelledGauge:
+        return _PrometheusGauge(self._metric.labels(**kwargs))
+
+    def set(self, value: float):
+        return self._metric.set(value)
+
+
+class _PrometheusHistogram:
+    def __init__(self, metric: Histogram):
+        self._metric = metric
+
+    def labels(self, **kwargs: str) -> LabelledHistogram:
+        return _PrometheusHistogram(self._metric.labels(**kwargs))
+
+    def observe(self, value: float):
+        return self._metric.observe(value)
+
 
 class PrometheusMetrics(Metrics):
     """
     Prometheus-backed metrics registry. Exposes a /metrics endpoint on the specified port.
-    Implements create_metric(...) by returning native prometheus_client metric instances.
+    Implements create_metric(...) by adapting native prometheus_client metric instances.
     """
 
     def __init__(
@@ -43,28 +79,66 @@ class PrometheusMetrics(Metrics):
                 ERROR,
                 "[Prometheus] Failed to start metrics HTTP server",
                 e,
-            )
+    )
+
+    @overload
+    def create_metric(
+        self,
+        metric_name: str,
+        label_names: list[str],
+        kind: Literal["counter"],
+    ) -> LabelledCounter: ...
+
+    @overload
+    def create_metric(
+        self,
+        metric_name: str,
+        label_names: list[str],
+        kind: Literal["gauge"],
+    ) -> LabelledGauge: ...
+
+    @overload
+    def create_metric(
+        self,
+        metric_name: str,
+        label_names: list[str],
+        kind: Literal["histogram"],
+    ) -> LabelledHistogram: ...
 
     def create_metric(self, metric_name: str, label_names: list[str], kind: Kind) -> LabelledMetric:
         """
         Create and return a Prometheus metric (Counter, Gauge, or Histogram) with the given name and labels.
         """
 
-        metric_cls = {
-            "counter": Counter,
-            "gauge": Gauge,
-            "histogram": Histogram,
-        }.get(kind)
+        if kind == "counter":
+            return _PrometheusCounter(
+                Counter(
+                    metric_name,
+                    f"{metric_name} ({kind})",
+                    labelnames=label_names,
+                    registry=self._registry
+                )
+            )
+        if kind == "gauge":
+            return _PrometheusGauge(
+                Gauge(
+                    metric_name,
+                    f"{metric_name} ({kind})",
+                    labelnames=label_names,
+                    registry=self._registry
+                )
+            )
+        if kind == "histogram":
+            return _PrometheusHistogram(
+                Histogram(
+                    metric_name,
+                    f"{metric_name} ({kind})",
+                    labelnames=label_names,
+                    registry=self._registry
+                )
+            )
 
-        if metric_cls is None:
-            raise ValueError(f"[Prometheus] Unknown metric kind: {kind}")
-
-        return metric_cls(
-            metric_name,
-            f"{metric_name} ({kind})",
-            labelnames=label_names,
-            registry=self._registry
-        )
+        raise ValueError(f"[Prometheus] Unknown metric kind: {kind}")
 
     def snapshot_counters(self) -> SnapshotCounters:
         out: SnapshotCounters = {}
@@ -119,4 +193,3 @@ class PrometheusMetrics(Metrics):
             out.setdefault(metric_name, []).append(rec)
 
         return out
-

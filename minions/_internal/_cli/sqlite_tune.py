@@ -12,7 +12,10 @@ import time
 from dataclasses import dataclass
 
 from minions._internal._framework.logger_noop import NoOpLogger
-from minions._internal._framework.state_store_sqlite import SQLiteStateStore
+from minions._internal._framework.state_store_sqlite import (
+    BatchTuningMode,
+    SQLiteStateStore,
+)
 
 __all__ = ["main"]
 
@@ -90,7 +93,7 @@ async def _run_once(
     *,
     label: str,
     db_path: str,
-    batch_tuning: str = "manual",
+    batch_tuning: BatchTuningMode = "manual",
     batch_max_queued_writes: int | None,
     batch_max_interarrival_delay_ms: int | None,
     ops: int,
@@ -99,30 +102,37 @@ async def _run_once(
     warmup_ops: int,
     flush_delay_ms: int | None,
 ) -> RunResult:
-    store_kwargs: dict[str, int | str] = {"batch_tuning": batch_tuning}
     if batch_tuning == "manual":
         if batch_max_queued_writes is None:
             raise ValueError("manual tuning requires batch_max_queued_writes")
-        store_kwargs["batch_max_queued_writes"] = batch_max_queued_writes
+        store = SQLiteStateStore(
+            db_path=db_path,
+            logger=NoOpLogger(),
+            batch_tuning=batch_tuning,
+            batch_max_queued_writes=batch_max_queued_writes,
+            batch_max_flush_delay_ms=flush_delay_ms,
+            batch_max_interarrival_delay_ms=batch_max_interarrival_delay_ms,
+        )
     elif batch_tuning == "calibrated":
         if batch_max_queued_writes is not None or flush_delay_ms is not None:
             raise ValueError("calibrated tuning derives batch settings from startup measurements")
+        store = SQLiteStateStore(
+            db_path=db_path,
+            logger=NoOpLogger(),
+            batch_tuning=batch_tuning,
+            batch_max_interarrival_delay_ms=batch_max_interarrival_delay_ms,
+        )
     else:
         raise ValueError(f"unexpected batch_tuning: {batch_tuning!r}")
-    if flush_delay_ms is not None and batch_tuning == "manual":
-        store_kwargs["batch_max_flush_delay_ms"] = flush_delay_ms
-    if batch_max_interarrival_delay_ms is not None:
-        store_kwargs["batch_max_interarrival_delay_ms"] = batch_max_interarrival_delay_ms
-    store = SQLiteStateStore(db_path=db_path, logger=NoOpLogger(), **store_kwargs)
     commit_count = 0
-    row_count = 0
+    total_rows = 0
     original_record_commit_metrics = store._record_commit_metrics
 
-    def record_commit_metrics(dt_ms: float, rows: int) -> None:
-        nonlocal commit_count, row_count
+    def record_commit_metrics(dt_ms: float, row_count: int) -> None:
+        nonlocal commit_count, total_rows
         commit_count += 1
-        row_count += rows
-        original_record_commit_metrics(dt_ms, rows)
+        total_rows += row_count
+        original_record_commit_metrics(dt_ms, row_count)
 
     store._record_commit_metrics = record_commit_metrics
     payload = b"x" * payload_bytes
@@ -144,7 +154,7 @@ async def _run_once(
         await store._flush()
         store._metric_commit_latency_ms_hist.clear()
         commit_count = 0
-        row_count = 0
+        total_rows = 0
 
         latencies_ms: list[float] = []
         t0 = time.perf_counter()
@@ -179,26 +189,31 @@ async def _run_once(
         save_p50_ms=statistics.median(latencies_ms),
         save_p95_ms=_percentile(latencies_ms, 0.95),
         commits=commit_count,
-        rows_per_commit=row_count / commit_count if commit_count else 0.0,
+        rows_per_commit=total_rows / commit_count if commit_count else 0.0,
         db_bytes=db_bytes,
     )
 
 
 async def _run_benchmark(args: argparse.Namespace) -> list[RunResult]:
     results: list[RunResult] = []
+    batched_tuning = _batch_tuning_mode_from_arg(args.batched_tuning)
     with tempfile.TemporaryDirectory(prefix="minions-sqlite-bench-") as tmp_dir:
         for round_index in range(args.rounds):
             round_dir = os.path.join(tmp_dir, f"round-{round_index}")
             os.mkdir(round_dir)
-            for label, batch_tuning, batch_max_queued_writes, flush_delay_ms in (
+            modes: tuple[
+                tuple[str, BatchTuningMode, int | None, int | None],
+                tuple[str, BatchTuningMode, int | None, int | None],
+            ] = (
                 ("immediate", "manual", 1, None),
                 (
-                    "autotuned" if args.batched_tuning == "calibrated" else "batched",
-                    args.batched_tuning,
-                    None if args.batched_tuning == "calibrated" else args.batched_batch_max_queued_writes,
-                    None if args.batched_tuning == "calibrated" else args.flush_delay_ms,
+                    "autotuned" if batched_tuning == "calibrated" else "batched",
+                    batched_tuning,
+                    None if batched_tuning == "calibrated" else args.batched_batch_max_queued_writes,
+                    None if batched_tuning == "calibrated" else args.flush_delay_ms,
                 ),
-            ):
+            )
+            for label, batch_tuning, batch_max_queued_writes, flush_delay_ms in modes:
                 result = await _run_once(
                     label=label,
                     db_path=os.path.join(round_dir, f"{label}.sqlite3"),
@@ -217,6 +232,7 @@ async def _run_benchmark(args: argparse.Namespace) -> list[RunResult]:
 
 async def _run_tradeoff_profile(args: argparse.Namespace) -> list[RunResult]:
     results: list[RunResult] = []
+    batched_tuning = _batch_tuning_mode_from_arg(args.batched_tuning)
     scenarios = (
         ("low", max(1, args.profile_low_ops), max(1, args.profile_low_concurrency)),
         ("upper", max(1, args.profile_upper_ops), max(1, args.profile_upper_concurrency)),
@@ -227,30 +243,30 @@ async def _run_tradeoff_profile(args: argparse.Namespace) -> list[RunResult]:
             for round_index in range(args.rounds):
                 round_dir = os.path.join(tmp_dir, f"{scenario}-round-{round_index}")
                 os.mkdir(round_dir)
-                modes = [
+                modes: list[tuple[str, BatchTuningMode, int | None, int | None, int | None]] = [
                     (f"{scenario}:immediate", "manual", 1, None, None),
                     (
-                        f"{scenario}:autotuned" if args.batched_tuning == "calibrated" else f"{scenario}:batched",
-                        args.batched_tuning,
-                        None if args.batched_tuning == "calibrated" else args.batched_batch_max_queued_writes,
-                        None if args.batched_tuning == "calibrated" else args.flush_delay_ms,
+                        f"{scenario}:autotuned" if batched_tuning == "calibrated" else f"{scenario}:batched",
+                        batched_tuning,
+                        None if batched_tuning == "calibrated" else args.batched_batch_max_queued_writes,
+                        None if batched_tuning == "calibrated" else args.flush_delay_ms,
                         args.batch_max_interarrival_delay_ms,
                     ),
                 ]
                 if args.compare_interarrival and args.batch_max_interarrival_delay_ms is not None:
                     modes[1] = (
-                        f"{scenario}:autotuned-base" if args.batched_tuning == "calibrated" else f"{scenario}:batched-base",
-                        args.batched_tuning,
-                        None if args.batched_tuning == "calibrated" else args.batched_batch_max_queued_writes,
-                        None if args.batched_tuning == "calibrated" else args.flush_delay_ms,
+                        f"{scenario}:autotuned-base" if batched_tuning == "calibrated" else f"{scenario}:batched-base",
+                        batched_tuning,
+                        None if batched_tuning == "calibrated" else args.batched_batch_max_queued_writes,
+                        None if batched_tuning == "calibrated" else args.flush_delay_ms,
                         None,
                     )
                     modes.append(
                         (
-                            f"{scenario}:autotuned-inter" if args.batched_tuning == "calibrated" else f"{scenario}:batched-inter",
-                            args.batched_tuning,
-                            None if args.batched_tuning == "calibrated" else args.batched_batch_max_queued_writes,
-                            None if args.batched_tuning == "calibrated" else args.flush_delay_ms,
+                            f"{scenario}:autotuned-inter" if batched_tuning == "calibrated" else f"{scenario}:batched-inter",
+                            batched_tuning,
+                            None if batched_tuning == "calibrated" else args.batched_batch_max_queued_writes,
+                            None if batched_tuning == "calibrated" else args.flush_delay_ms,
                             args.batch_max_interarrival_delay_ms,
                         )
                     )
@@ -399,6 +415,14 @@ def _parse_optional_int_list(raw: str) -> list[int | None]:
     if not values:
         raise ValueError("expected at least one integer value or 'none'")
     return values
+
+
+def _batch_tuning_mode_from_arg(raw: object) -> BatchTuningMode:
+    if raw == "manual":
+        return "manual"
+    if raw == "calibrated":
+        return "calibrated"
+    raise ValueError(f"unexpected batch_tuning: {raw!r}")
 
 
 def _group_tuning_results(
@@ -588,7 +612,7 @@ def _confidence_for_recommendation(
     return "low"
 
 
-def _score_to_json(score: TunedConfigScore) -> dict[str, float | int | None | str]:
+def _score_to_json(score: TunedConfigScore) -> dict[str, object]:
     return {
         "label": score.label,
         "batch_max_queued_writes": score.batch_max_queued_writes,
@@ -1047,11 +1071,11 @@ def main(
     if args.recommend_config:
         results = asyncio.run(_run_tuning_sweep(args))
         _print_recommendation(results, args=args)
-        return
+        return 0
     if args.tune_curve:
         results = asyncio.run(_run_tuning_sweep(args))
         _print_tuning_results(results, args=args, top_n=args.tune_top_n)
-        return
+        return 0
     if args.tradeoff_profile:
         results = asyncio.run(_run_tradeoff_profile(args))
         sweep = False

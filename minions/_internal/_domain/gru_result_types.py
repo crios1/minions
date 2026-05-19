@@ -17,6 +17,7 @@ class ShutdownError:
     error_type: str
     error_message: str
 
+
 # === Gru Return Types ===
 
 @dataclass
@@ -31,7 +32,7 @@ class GruResult:
 
 @dataclass
 class StopMinionResult(GruResult):
-    conflicts: list[ConflictingMinion] = field(default_factory=list)
+    conflicts: list[ConflictingMinion] = field(default_factory=list[ConflictingMinion])
 
 @dataclass
 class StartMinionResult(GruResult):
@@ -40,7 +41,7 @@ class StartMinionResult(GruResult):
 
 @dataclass
 class ShutdownGruResult(GruResult):
-    errors: list[ShutdownError] = field(default_factory=list)
+    errors: list[ShutdownError] = field(default_factory=list[ShutdownError])
 
 @dataclass
 class MinionStatusResult(GruResult):

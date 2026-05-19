@@ -218,6 +218,44 @@ def test_adapter_payload_roundtrips_context_cls_and_schema_version():
     assert loaded_ctx == ctx
 
 
+def test_deserialize_workflow_context_rejects_invalid_context_cls_string():
+    payload = serialize_workflow_context(
+        MinionWorkflowContext(
+            minion_composite_key="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
+            minion_modpath="tests.assets.minions.sample",
+            workflow_id="wf-invalid-context-cls",
+            event={"v": 1},
+            context={"c": 1},
+            context_cls=dict,
+            next_step_index=0,
+        )
+    )
+    payload["context_cls"] = "not-a-real.module.Class"
+
+    with pytest.raises(WorkflowContextSchemaError, match="Invalid workflow context context_cls"):
+        deserialize_workflow_context(payload)
+
+
+def test_deserialize_workflow_context_accepts_integer_started_at():
+    payload = serialize_workflow_context(
+        MinionWorkflowContext(
+            minion_composite_key="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
+            minion_modpath="tests.assets.minions.sample",
+            workflow_id="wf-int-started-at",
+            event={"v": 1},
+            context={"c": 1},
+            context_cls=dict,
+            next_step_index=0,
+        )
+    )
+    payload["started_at"] = 123
+
+    loaded_ctx = deserialize_workflow_context(payload)
+
+    assert loaded_ctx.started_at == 123.0
+    assert isinstance(loaded_ctx.started_at, float)
+
+
 def test_deserialize_workflow_context_rejects_unknown_leftover_fields():
     payload = serialize_workflow_context(
         MinionWorkflowContext(

@@ -2,9 +2,10 @@ import asyncio
 import inspect
 
 from collections.abc import Coroutine
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from .async_component import AsyncComponent
+from .async_lifecycle import LifecycleCallback
 from .logger import Logger, ERROR
 
 from .._utils.safe_cancel_task import safe_cancel_task
@@ -16,7 +17,7 @@ class AsyncService(AsyncComponent):
         super().__init__(logger)
         self._mn_started = asyncio.Event()
         self._mn_start_error: BaseException | None = None
-        self._mn_service_tasks: set[asyncio.Task] = set()  # canonical task registry for this service; subclasses may keep narrower domain-specific task views when they need isolated lifecycle control
+        self._mn_service_tasks: set[asyncio.Task[None]] = set()  # canonical task registry for this service; subclasses may keep narrower domain-specific task views when they need isolated lifecycle control
         self._mn_tasks_gate = asyncio.Lock()  # serializes access to domain-level tasks owned by subclasses; serializes reads and shutdown cleanup of service-level tasks while creates and deletes happen sync on-loop
         self._mn_shutdown_grace_seconds = 1.0
 
@@ -36,14 +37,14 @@ class AsyncService(AsyncComponent):
     async def _mn_run(
         self,
         *,
-        log_kwargs: dict | None = None,
-        pre: Callable[..., Any | Awaitable[Any]] | None = None,
-        pre_args: list | None = None,
-        post: Callable[..., Any | Awaitable[Any]] | None = None,
-        post_args: list | None = None
+        log_kwargs: dict[str, object] | None = None,
+        pre: LifecycleCallback | None = None,
+        pre_args: list[object] | None = None,
+        post: LifecycleCallback | None = None,
+        post_args: list[object] | None = None
     ) -> None:
         pre_args = pre_args or []
-        async def _pre():
+        async def _pre() -> None:
             self._mn_validate_user_code(self.run, type(self).__module__)
             if pre:
                 result = pre(*pre_args)
@@ -85,13 +86,13 @@ class AsyncService(AsyncComponent):
     async def _mn_shutdown(
         self,
         *,
-        log_kwargs: dict | None = None,
-        pre: Callable[..., Any | Awaitable[Any]] | None = None,
-        pre_args: list | None = None,
-        post: Callable[..., Any | Awaitable[Any]] | None = None,
-        post_args: list | None = None
+        log_kwargs: dict[str, object] | None = None,
+        pre: LifecycleCallback | None = None,
+        pre_args: list[object] | None = None,
+        post: LifecycleCallback | None = None,
+        post_args: list[object] | None = None
     ) -> None:
-        async def _post():
+        async def _post() -> None:
             if post:
                 post_args_list = post_args or []
                 result = post(*post_args_list)
@@ -131,7 +132,11 @@ class AsyncService(AsyncComponent):
             post=_post,
         )
 
-    def safe_create_task(self, coro: Coroutine, name: str | None = None) -> asyncio.Task:
+    def safe_create_task(
+        self,
+        coro: Coroutine[Any, Any, object],
+        name: str | None = None,
+    ) -> asyncio.Task[None]:
         "A safe wrapper around asyncio.create_task that optionally logs exceptions."
         task = safe_create_task(
             coro,

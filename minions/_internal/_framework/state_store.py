@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, overload
 
 from .async_component import AsyncComponent
 from .logger import ERROR
@@ -9,6 +9,7 @@ from .minion_workflow_context_codec import (
     serialize_persisted_workflow_context,
 )
 from .._domain.minion_workflow_context import MinionWorkflowContext
+from .._domain.types import T_Ctx, T_Event
 
 @dataclass(frozen=True)
 class StoredWorkflowContext:
@@ -129,7 +130,7 @@ class StateStore(AsyncComponent):
 
     async def _mn_serialize_and_save_context(
         self,
-        ctx: MinionWorkflowContext,
+        ctx: MinionWorkflowContext[Any, Any],
     ) -> PersistenceOperationResult:
         workflow_id = ctx.workflow_id
         orchestration_id = ctx.minion_composite_key
@@ -157,16 +158,40 @@ class StateStore(AsyncComponent):
             serialized_context,
         )
 
+    @overload
     async def _mn_decode_stored_contexts(
         self,
         stored_contexts: list[StoredWorkflowContext],
         *,
-        event_cls: Any | None = None,
-        context_cls: type | None = None,
+        event_cls: type[T_Event],
+        context_cls: type[T_Ctx],
+        log_action: str,
+        log_kwargs: dict[str, object] | None = ...,
+    ) -> list[MinionWorkflowContext[T_Event, T_Ctx]]:
+        ...
+
+    @overload
+    async def _mn_decode_stored_contexts(
+        self,
+        stored_contexts: list[StoredWorkflowContext],
+        *,
+        event_cls: None = ...,
+        context_cls: None = ...,
+        log_action: str,
+        log_kwargs: dict[str, object] | None = ...,
+    ) -> list[MinionWorkflowContext[Any, Any]]:
+        ...
+
+    async def _mn_decode_stored_contexts(
+        self,
+        stored_contexts: list[StoredWorkflowContext],
+        *,
+        event_cls: type[T_Event] | None = None,
+        context_cls: type[T_Ctx] | None = None,
         log_action: str,
         log_kwargs: dict[str, object] | None = None,
-    ) -> list[MinionWorkflowContext]:
-        contexts: list[MinionWorkflowContext] = []
+    ) -> list[MinionWorkflowContext[T_Event, T_Ctx]] | list[MinionWorkflowContext[Any, Any]]:
+        contexts: list[MinionWorkflowContext[T_Event, T_Ctx]] | list[MinionWorkflowContext[Any, Any]] = []
         for stored_context in stored_contexts:
             try:
                 contexts.append(
@@ -189,26 +214,52 @@ class StateStore(AsyncComponent):
                 )
         return contexts
 
+    @overload
     async def _mn_get_decoded_contexts_for_orchestration(
         self,
         orchestration_id: str,
         *,
-        event_cls: Any | None = None,
-        context_cls: type | None = None,
-    ) -> list[MinionWorkflowContext]:
+        event_cls: type[T_Event],
+        context_cls: type[T_Ctx],
+    ) -> list[MinionWorkflowContext[T_Event, T_Ctx]]:
+        ...
+
+    @overload
+    async def _mn_get_decoded_contexts_for_orchestration(
+        self,
+        orchestration_id: str,
+        *,
+        event_cls: None = ...,
+        context_cls: None = ...,
+    ) -> list[MinionWorkflowContext[Any, Any]]:
+        ...
+
+    async def _mn_get_decoded_contexts_for_orchestration(
+        self,
+        orchestration_id: str,
+        *,
+        event_cls: type[T_Event] | None = None,
+        context_cls: type[T_Ctx] | None = None,
+    ) -> list[MinionWorkflowContext[T_Event, T_Ctx]] | list[MinionWorkflowContext[Any, Any]]:
         stored_contexts = await self._mn_get_contexts_for_orchestration(
             orchestration_id,
         )
-        decoded_contexts = await self._mn_decode_stored_contexts(
+        log_kwargs: dict[str, object] = {"requested_orchestration_id": orchestration_id}
+        if event_cls is None or context_cls is None:
+            return await self._mn_decode_stored_contexts(
+                stored_contexts,
+                log_action="get_contexts_for_orchestration",
+                log_kwargs=log_kwargs,
+            )
+        return await self._mn_decode_stored_contexts(
             stored_contexts,
             event_cls=event_cls,
             context_cls=context_cls,
             log_action="get_contexts_for_orchestration",
-            log_kwargs={"requested_orchestration_id": orchestration_id},
+            log_kwargs=log_kwargs,
         )
-        return decoded_contexts
 
-    async def _mn_get_all_decoded_contexts(self) -> list[MinionWorkflowContext]:
+    async def _mn_get_all_decoded_contexts(self) -> list[MinionWorkflowContext[Any, Any]]:
         stored_contexts = await self._mn_get_all_contexts()
         decoded_contexts = await self._mn_decode_stored_contexts(
             stored_contexts,

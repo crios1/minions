@@ -3,7 +3,7 @@ Framework Metrics
 
 To create a custom metrics backend:
 1. Subclass `Metrics`
-2. Implement `create_metric(...)`, returning an object that conforms to `LabelledMetric`
+2. Implement `create_metric(...)`, returning an object that conforms to the metric kind
 
 The framework will automatically:
 - Look up metric label names from METRIC_LABEL_NAMES
@@ -14,12 +14,17 @@ The framework will automatically:
 import asyncio
 import threading
 from abc import abstractmethod
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, overload
 
 from .async_component import AsyncComponent
 from .logger import Logger, WARNING
 from .metrics_constants import METRIC_LABEL_NAMES
-from .metrics_interface import LabelledMetric
+from .metrics_interface import (
+    LabelledCounter,
+    LabelledGauge,
+    LabelledHistogram,
+    LabelledMetric,
+)
 
 from minions._internal._utils.safe_create_task import safe_create_task
 
@@ -74,19 +79,33 @@ class Metrics(AsyncComponent):
         }
         self._mn_unknown_metrics: set[str] = set()
 
+    def _mn_get_label_names_for_metric(self, metric_name: str) -> list[str]:
+        labels = METRIC_LABEL_NAMES.get(metric_name, [])
+        if not labels and metric_name not in self._mn_unknown_metrics:
+            self._mn_unknown_metrics.add(metric_name)
+            safe_create_task(self._mn_logger._mn_log(WARNING, f"metrics: unknown metric '{metric_name}', using no labels"))
+        return labels
+
+    @overload
+    def _mn_get_metric_unsafe(self, kind: Literal["counter"], metric_name: str) -> LabelledCounter: ...
+
+    @overload
+    def _mn_get_metric_unsafe(self, kind: Literal["gauge"], metric_name: str) -> LabelledGauge: ...
+
+    @overload
+    def _mn_get_metric_unsafe(self, kind: Literal["histogram"], metric_name: str) -> LabelledHistogram: ...
+
     def _mn_get_metric_unsafe(self, kind: Kind, metric_name: str) -> LabelledMetric:
         registry = self._mn_registries[kind]
-        if m := registry.get(metric_name):
-            return m
+        if metric := registry.get(metric_name):
+            return metric
         with self._mn_locks[kind]:
-            if m := registry.get(metric_name):
-                return m
-            labels = METRIC_LABEL_NAMES.get(metric_name, [])
-            if not labels and metric_name not in self._mn_unknown_metrics:
-                self._mn_unknown_metrics.add(metric_name)
-                safe_create_task(self._mn_logger._mn_log(WARNING, f"metrics: unknown metric '{metric_name}', using no labels"))
-            registry[metric_name] = self.create_metric(metric_name, labels, kind)
-            return registry[metric_name]
+            if metric := registry.get(metric_name):
+                return metric
+            labels = self._mn_get_label_names_for_metric(metric_name)
+            metric = self.create_metric(metric_name, labels, kind)
+            registry[metric_name] = metric
+            return metric
 
     def _mn_inc_unsafe(self, metric_name: str, amount: float = 1, labels: Labels | None = None):
         metric = self._mn_get_metric_unsafe("counter", metric_name)
@@ -133,10 +152,34 @@ class Metrics(AsyncComponent):
             'histogram': histograms if histograms else {}
         }
 
+    @overload
+    def create_metric(
+        self,
+        metric_name: str,
+        label_names: list[str],
+        kind: Literal["counter"],
+    ) -> LabelledCounter: ...
+
+    @overload
+    def create_metric(
+        self,
+        metric_name: str,
+        label_names: list[str],
+        kind: Literal["gauge"],
+    ) -> LabelledGauge: ...
+
+    @overload
+    def create_metric(
+        self,
+        metric_name: str,
+        label_names: list[str],
+        kind: Literal["histogram"],
+    ) -> LabelledHistogram: ...
+
     @abstractmethod
     def create_metric(self, metric_name: str, label_names: list[str], kind: Kind) -> LabelledMetric:
         """
-        Create and return a backend-specific metric object that conforms to LabelledMetric.
+        Create and return a backend-specific metric object that conforms to its kind's protocol.
         The framework will call `.labels(...).inc()/set()/observe()` on it.
         """
 
