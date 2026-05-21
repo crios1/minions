@@ -25,6 +25,18 @@ def test_mixin_with_nonmixin_base_is_instantiable_either_order():
     LeftFirst()
     RightFirst()
 
+def test_mixin_validation_does_not_participate_in_allocation_chain() -> None:
+    class NonMixinBase:
+        def __new__(cls, required_arg: object) -> object:
+            raise AssertionError("NonMixinBase.__new__ should not be called")
+
+    class Concrete(Mixin, NonMixinBase):
+        pass
+
+    obj = Concrete()
+
+    assert isinstance(obj, Concrete)
+
 def test_deep_chain_pure_until_concrete_then_ok():
     class A(Mixin): ...
     class B(A): ...

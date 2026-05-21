@@ -2,6 +2,7 @@ import asyncio
 from collections import defaultdict
 from collections.abc import Awaitable
 from dataclasses import dataclass, field
+from typing import Any, cast
 
 import pytest
 
@@ -34,7 +35,7 @@ from .plan import ScenarioPlan
 
 
 def _get_minion_event_and_context_types(
-    minion_cls: type[Minion],
+    minion_cls: type[Minion[Any, Any]],
 ) -> tuple[type, type]:
     event_cls = getattr(minion_cls, "_mn_event_cls", None)
     context_cls = getattr(minion_cls, "_mn_workflow_ctx_cls", None)
@@ -45,9 +46,9 @@ def _get_minion_event_and_context_types(
 
 @dataclass
 class SpyRegistry:
-    minions: dict[str, type[SpiedMinion]] = field(default_factory=dict)
-    pipelines: dict[str, type[SpiedPipeline]] = field(default_factory=dict)
-    resources: set[type[SpiedResource]] = field(default_factory=set)
+    minions: dict[str, type[SpiedMinion[Any, Any]]] = field(default_factory=lambda: dict())
+    pipelines: dict[str, type[SpiedPipeline[Any]]] = field(default_factory=lambda: dict())
+    resources: set[type[SpiedResource]] = field(default_factory=lambda: set())
     pipeline_start_attempt_counts: defaultdict[str, int] = field(default_factory=lambda: defaultdict(int))
 
     def enable_and_reset(self) -> None:
@@ -69,7 +70,7 @@ class StartReceipt:
     pipeline_modpath: str
     instance_id: str | None
     resolved_name: str | None
-    minion_cls: type[SpiedMinion] | None
+    minion_cls: type[SpiedMinion[Any, Any]] | None
     success: bool
     composite_key: str | None = None
 
@@ -78,11 +79,11 @@ class StartReceipt:
 class ScenarioRunResult:
     seen_shutdown: bool = False
     spies: SpyRegistry | None = None
-    started_minions: set[SpiedMinion] = field(default_factory=set)
+    started_minions: set[SpiedMinion[Any, Any]] = field(default_factory=lambda: set())
     instance_tags: defaultdict[type[SpyMixin], set[int]] = field(default_factory=lambda: defaultdict(set))
-    extra_calls: list[tuple[type[SpyMixin], tuple, dict]] = field(default_factory=list)
-    receipts: list[StartReceipt] = field(default_factory=list)
-    checkpoints: list["ScenarioCheckpoint"] = field(default_factory=list)
+    extra_calls: list[tuple[type[SpyMixin], tuple[object, ...], dict[str, object]]] = field(default_factory=lambda: list())
+    receipts: list[StartReceipt] = field(default_factory=lambda: list())
+    checkpoints: list["ScenarioCheckpoint"] = field(default_factory=lambda: list())
 
 
 @dataclass(frozen=True)
@@ -101,8 +102,8 @@ class ScenarioCheckpoint:
     spy_call_counts_by_instance: dict[str, dict[int, dict[str, int]]] | None = None
     workflow_step_started_ids_by_class: dict[str, dict[str, tuple[str, ...]]] | None = None
     persisted_contexts_by_modpath: dict[str, int] | None = None
-    persisted_context_snapshots_by_modpath: dict[str, tuple[MinionWorkflowContext, ...]] | None = None
-    metrics_counters: dict[str, list[dict]] | None = None
+    persisted_context_snapshots_by_modpath: dict[str, tuple[MinionWorkflowContext[Any, Any], ...]] | None = None
+    metrics_counters: dict[str, list[dict[str, object]]] | None = None
 
 
 class ScenarioRunner:
@@ -197,7 +198,11 @@ class ScenarioRunner:
 
     async def _run_start(self, d: MinionStart) -> None:
         result = self._require_result()
-        r = await self._gru.start_minion(**d.as_kwargs())
+        r = await self._gru.start_minion(
+            minion=d.minion,
+            pipeline=d.pipeline,
+            minion_config_path=d.minion_config_path,
+        )
         if r.success != d.expect_success:
             pytest.fail(f"start_minion mismatch: {d} -> {r}")
 
@@ -224,12 +229,14 @@ class ScenarioRunner:
             m_cls = type(minion_inst)
             minion_cls = m_cls if issubclass(m_cls, SpiedMinion) else None
             receipt = StartReceipt(
-                **{
-                    **receipt.__dict__,
-                    "resolved_name": resolved_name,
-                    "minion_cls": minion_cls,
-                    "composite_key": getattr(minion_inst, "_mn_minion_composite_key", None),
-                }
+                directive_index=receipt.directive_index,
+                minion_modpath=receipt.minion_modpath,
+                pipeline_modpath=receipt.pipeline_modpath,
+                instance_id=receipt.instance_id,
+                resolved_name=resolved_name,
+                minion_cls=minion_cls,
+                success=receipt.success,
+                composite_key=getattr(minion_inst, "_mn_minion_composite_key", None),
             )
             if isinstance(minion_inst, SpiedMinion):
                 result.started_minions.add(minion_inst)
@@ -238,7 +245,7 @@ class ScenarioRunner:
         self._record_instance_tags(minion_inst, d.pipeline, receipt.instance_id)
 
     async def _run_stop(self, d: MinionStop) -> None:
-        r = await self._gru.stop_minion(**d.as_kwargs())
+        r = await self._gru.stop_minion(name_or_instance_id=d.name_or_instance_id)
         if r.success != d.expect_success:
             pytest.fail(f"stop_minion mismatch: {d} -> {r}")
 
@@ -296,7 +303,7 @@ class ScenarioRunner:
 
     def _record_instance_tags(
         self,
-        minion_inst: Minion | None,
+        minion_inst: Minion[Any, Any] | None,
         pipeline_modpath: str,
         instance_id: str | None,
     ) -> None:
@@ -415,6 +422,7 @@ class ScenarioRunner:
         logs = getattr(logger, "logs", None)
         if not isinstance(logs, list):
             return None
+        logs = cast(list[object], logs)
 
         class_key_by_modpath = {
             modpath: f"{cls.__module__}.{cls.__name__}"
@@ -424,12 +432,13 @@ class ScenarioRunner:
             lambda: defaultdict(set)
         )
 
-        for entry in logs:
-            if getattr(entry, "msg", None) != "Workflow Step started":
+        for log in logs:
+            if getattr(log, "msg", None) != "Workflow Step started":
                 continue
-            kwargs = getattr(entry, "kwargs", None)
+            kwargs = getattr(log, "kwargs", None)
             if not isinstance(kwargs, dict):
                 continue
+            kwargs = cast(dict[str, object], kwargs)
 
             modpath = kwargs.get("minion_modpath")
             step_name = kwargs.get("step_name")
@@ -452,7 +461,7 @@ class ScenarioRunner:
 
     async def _snapshot_persisted_context_snapshots_by_modpath(
         self,
-    ) -> dict[str, tuple[MinionWorkflowContext, ...]] | None:
+    ) -> dict[str, tuple[MinionWorkflowContext[Any, Any], ...]] | None:
         state_store = getattr(self._gru, "_state_store", None)
         if not isinstance(state_store, StateStore):
             return None
@@ -466,10 +475,11 @@ class ScenarioRunner:
             for r in self._require_result().receipts
             if r.success and r.composite_key and r.minion_cls is not None
         }
-        contexts_by_modpath: defaultdict[str, list[MinionWorkflowContext]] = defaultdict(list)
+        contexts_by_modpath: defaultdict[str, list[MinionWorkflowContext[Any, Any]]] = defaultdict(list)
         try:
             for stored_context in stored_contexts:
                 receipt = receipts_by_composite_key.get(stored_context.orchestration_id)
+                ctx: MinionWorkflowContext[Any, Any]
                 if receipt is not None and receipt.minion_cls is not None:
                     event_cls, context_cls = _get_minion_event_and_context_types(receipt.minion_cls)
                     ctx = deserialize_workflow_context_blob(
@@ -490,7 +500,7 @@ class ScenarioRunner:
 
     def _count_persisted_context_snapshots(
         self,
-        snapshots: dict[str, tuple[MinionWorkflowContext, ...]] | None,
+        snapshots: dict[str, tuple[MinionWorkflowContext[Any, Any], ...]] | None,
     ) -> dict[str, int] | None:
         if snapshots is None:
             return None
@@ -499,15 +509,40 @@ class ScenarioRunner:
             counts[modpath] += len(contexts)
         return dict(counts)
 
-    def _snapshot_metrics_counters(self) -> dict[str, list[dict]] | None:
+    def _snapshot_metrics_counters(self) -> dict[str, list[dict[str, object]]] | None:
         metrics = getattr(self._gru, "_metrics", None)
-        snapshot_fn = getattr(metrics, "snapshot_counters", None)
+        snapshot_fn = getattr(metrics, "snapshot_counters", None) # TODO: should we call the user defined method directly or from a wrapper like _mn_snapshot (or create _mn_snapshot_counters and such if they don't exist)?
+
         if not callable(snapshot_fn):
             return None
+
         counters = snapshot_fn()
+
         if not isinstance(counters, dict):
             return None
-        return counters
+
+        counters = cast(dict[str, object], counters)
+
+        normalized: dict[str, list[dict[str, object]]] = {}
+
+        for name, samples in counters.items():
+            if not isinstance(samples, list):
+                normalized[name] = []
+                continue
+
+            samples = cast(list[object], samples)
+            normalized_samples: list[dict[str, object]] = []
+
+            for sample in samples:
+                if not isinstance(sample, dict):
+                    continue
+
+                sample = cast(dict[str, object], sample)
+                normalized_samples.append(sample)
+
+            normalized[name] = normalized_samples
+
+        return normalized
 
 
 class ScenarioWaiter:
@@ -535,10 +570,6 @@ class ScenarioWaiter:
             pytest.fail("AfterWorkflowStarts.expected must be a non-empty dict.")
         waits: list[Awaitable[None]] = []
         for name, count in expected.items():
-            if not isinstance(count, int):
-                pytest.fail(
-                    f"AfterWorkflowStarts.expected[{name!r}] must be an int, got {type(count).__name__}."
-                )
             if count <= 0:
                 pytest.fail(
                     f"AfterWorkflowStarts.expected[{name!r}] must be >= 1, got {count}."
@@ -569,7 +600,7 @@ class ScenarioWaiter:
         if minion_names is not None and not minion_names:
             return
 
-        expected_per_class: defaultdict[type[SpiedMinion], int] = defaultdict(int)
+        expected_per_class: defaultdict[type[SpiedMinion[Any, Any]], int] = defaultdict(int)
 
         if minion_names is None:
             self._add_expected_for_receipts(expected_per_class, self._result.receipts)
@@ -597,7 +628,7 @@ class ScenarioWaiter:
 
     def _add_expected_for_receipts(
         self,
-        expected_per_class: defaultdict[type[SpiedMinion], int],
+        expected_per_class: defaultdict[type[SpiedMinion[Any, Any]], int],
         receipts: list[StartReceipt],
     ) -> None:
         for receipt in receipts:
@@ -611,7 +642,7 @@ class ScenarioWaiter:
                 continue
             expected_per_class[m_cls] += expected_events
 
-    async def _wait_minion_tasks(self, minions: set[SpiedMinion]) -> None:
+    async def _wait_minion_tasks(self, minions: set[SpiedMinion[Any, Any]]) -> None:
         if not minions:
             return
 

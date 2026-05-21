@@ -4,7 +4,6 @@ import pytest
 
 from minions._internal._framework.logger import CRITICAL, WARNING
 from minions._internal._framework.state_store_sqlite import SQLiteStateStore, WarnThreshold
-from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.minions._internal._framework.state_store_sqlite._support import (
     BlockedCommitBatchNowGate,
     blob_for,
@@ -43,8 +42,8 @@ async def test_save_context_records_commit_latency_metric(make_state_store_and_l
     assert s._metric_commit_latency_ms_hist, "expected commit timings recorded"
 
 
-async def _queue_three_writes(s: SQLiteStateStore) -> list[asyncio.Task]:
-    tasks = []
+async def _queue_three_writes(s: SQLiteStateStore) -> list[asyncio.Task[None]]:
+    tasks: list[asyncio.Task[None]] = []
     for i in range(1, 4):
         ctx = mk_ctx(i=i)
         tasks.append(
@@ -132,7 +131,7 @@ async def test_queued_writes_critical_bypasses_warning_cooldown(
 
 async def test_queued_writes_warning_counts_batches_waiting_for_commit(
     make_state_store_and_logger: MakeStateStoreAndLogger,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     s, logger = await make_state_store_and_logger(
         batch_max_queued_writes=2,

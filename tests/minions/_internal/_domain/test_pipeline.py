@@ -1,5 +1,8 @@
-import pytest
+# pyright: reportUnusedClass=false
+
 import msgspec
+import pytest
+from typing import TypedDict
 from minions import Pipeline
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_constants import (
@@ -15,18 +18,21 @@ class MyStructEvent(msgspec.Struct):
     ts: int
 
 
+class MyTypedDictEvent(TypedDict):
+    ts: int
+
+
 class TestPipelineSubclassingValid:
     def test_valid_msgspec_struct_event_type(self):
         class SomePipeline(Pipeline[MyStructEvent]):
             async def produce_event(self):
                 return MyStructEvent(1)
 
-
 class TestPipelineSubclassingInvalid:
     def test_missing_event_type(self):
         with pytest.raises(TypeError) as excinfo:
-            class SomePipeline(Pipeline):
-                async def produce_event(self):  # pragma: no cover
+            class SomePipeline(Pipeline):  # pyright: ignore[reportMissingTypeArgument]
+                async def produce_event(self) -> MyTypedDictEvent:  # pragma: no cover
                     ...
         assert str(excinfo.value) == (
             "SomePipeline must declare an event type "
@@ -34,7 +40,7 @@ class TestPipelineSubclassingInvalid:
         )
 
     @pytest.mark.parametrize("event_type", SERIALIZABLE_PRIMITIVE_TYPES)
-    def test_reject_primitive_event_type(self, event_type):
+    def test_reject_primitive_event_type(self, event_type: type[object]):
         with pytest.raises(
             TypeError,
             match="SomePipeline: event type must be a structured type, not a primitive",
@@ -42,6 +48,33 @@ class TestPipelineSubclassingInvalid:
             class SomePipeline(Pipeline[event_type]):
                 async def produce_event(self):  # pragma: no cover
                     ...
+
+    def test_reject_bare_dict_event_type(self):
+        with pytest.raises(TypeError) as excinfo:
+            class SomePipeline(Pipeline[dict]):  # pyright: ignore[reportMissingTypeArgument]
+                async def produce_event(self):  # pyright: ignore[reportIncompatibleMethodOverride] # pragma: no cover
+                    ...
+        assert str(excinfo.value) == (
+            "SomePipeline: event type must be a dataclass or msgspec Struct type."
+        )
+
+    def test_reject_parameterized_dict_event_type(self):
+        with pytest.raises(TypeError) as excinfo:
+            class SomePipeline(Pipeline[dict[str, int]]):
+                async def produce_event(self):  # pyright: ignore[reportIncompatibleMethodOverride] # pragma: no cover
+                    ...
+        assert str(excinfo.value) == (
+            "SomePipeline: event type must be a dataclass or msgspec Struct type."
+        )
+
+    def test_reject_typed_dict_event_type(self):
+        with pytest.raises(TypeError) as excinfo:
+            class SomePipeline(Pipeline[MyTypedDictEvent]):
+                async def produce_event(self) -> MyTypedDictEvent:  # pragma: no cover
+                    return {"ts": 1}
+        assert str(excinfo.value) == (
+            "SomePipeline: event type must be a dataclass or msgspec Struct type."
+        )
 
 
 @pytest.mark.asyncio

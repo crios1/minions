@@ -1,8 +1,14 @@
+import contextlib
+from collections.abc import Callable
+from pathlib import Path
+
 import pytest
 
+from minions._internal._domain.gru import Gru
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_noop import NoOpStateStore
+
 
 class TestInvalidComposition:
     # NOTE: should have test for each case where gru
@@ -10,7 +16,11 @@ class TestInvalidComposition:
 
     class TestMinionFile:
         @pytest.mark.asyncio
-        async def test_gru_returns_error_on_empty_minion_file(self, gru_factory, tests_dir):
+        async def test_gru_returns_error_on_empty_minion_file(
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+            tests_dir: Path,
+        ) -> None:
 
             minion_modpath = "tests.assets.entrypoints.invalid.empty_simple"
             pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
@@ -32,7 +42,11 @@ class TestInvalidComposition:
                 assert "must define a `minion` variable or contain at least one subclass of `Minion`" in result.reason
 
         @pytest.mark.asyncio
-        async def test_gru_returns_error_on_minion_file_with_multiple_minions_and_no_explicit_minion(self, gru_factory, tests_dir):
+        async def test_gru_returns_error_on_minion_file_with_multiple_minions_and_no_explicit_minion(
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+            tests_dir: Path,
+        ) -> None:
             
             minion_modpath = "tests.assets.entrypoints.invalid.two_minions_simple"
             pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
@@ -54,7 +68,11 @@ class TestInvalidComposition:
                 assert "multiple Minion subclasses but no explicit `minion` variable" in result.reason
 
         @pytest.mark.asyncio
-        async def test_gru_returns_error_on_minion_file_with_invalid_explicit_minion(self, gru_factory, tests_dir):
+        async def test_gru_returns_error_on_minion_file_with_invalid_explicit_minion(
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+            tests_dir: Path,
+        ) -> None:
 
             minion_modpath = "tests.assets.entrypoints.invalid.invalid_explicit_minion_simple"
             pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
@@ -76,7 +94,11 @@ class TestInvalidComposition:
                 assert "is not a subclass of Minion" in result.reason
 
         @pytest.mark.asyncio
-        async def test_gru_returns_error_on_minion_workflow_context_not_serializable(self, gru_factory, tests_dir):
+        async def test_gru_returns_error_on_minion_workflow_context_not_serializable(
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+            tests_dir: Path,
+        ) -> None:
             minion_modpath = "tests.assets.entrypoints.invalid.unserializable_workflow_context_minion_simple"
             pipeline_modpath = "tests.assets.pipeline_single_event"
             config_path = str(tests_dir / "assets" / "config/minions/a.toml")
@@ -97,7 +119,11 @@ class TestInvalidComposition:
                 assert "workflow context is not serializable" in result.reason
 
         @pytest.mark.asyncio
-        async def test_gru_returns_error_on_minion_event_not_serializable(self, gru_factory, tests_dir):
+        async def test_gru_returns_error_on_minion_event_not_serializable(
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+            tests_dir: Path,
+        ) -> None:
             minion_modpath = "tests.assets.minions.invalid.bad_event"
             pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -119,7 +145,11 @@ class TestInvalidComposition:
 
     class TestPipelineFile:
         @pytest.mark.asyncio
-        async def test_gru_returns_error_on_empty_pipeline_file(self, gru_factory, tests_dir):
+        async def test_gru_returns_error_on_empty_pipeline_file(
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+            tests_dir: Path,
+        ) -> None:
 
             minion_modpath = "tests.assets.minions.two_steps.simple.basic"
             pipeline_modpath = "tests.assets.entrypoints.invalid.empty_simple"
@@ -141,7 +171,11 @@ class TestInvalidComposition:
                 assert "must define a `pipeline` variable or contain at least one subclass of `Pipeline`" in result.reason
 
         @pytest.mark.asyncio 
-        async def test_gru_returns_error_on_pipeline_file_with_multiple_pipelines_and_no_explicit_pipeline(self, gru_factory, tests_dir):
+        async def test_gru_returns_error_on_pipeline_file_with_multiple_pipelines_and_no_explicit_pipeline(
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+            tests_dir: Path,
+        ) -> None:
             
             minion_modpath = "tests.assets.minions.two_steps.simple.basic"
             pipeline_modpath = "tests.assets.entrypoints.invalid.two_pipelines_simple"
@@ -163,7 +197,11 @@ class TestInvalidComposition:
                 assert "multiple Pipeline subclasses but no explicit `pipeline` variable" in result.reason
 
         @pytest.mark.asyncio
-        async def test_gru_returns_error_on_pipeline_file_with_invalid_explicit_pipeline(self, gru_factory, tests_dir):
+        async def test_gru_returns_error_on_pipeline_file_with_invalid_explicit_pipeline(
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+            tests_dir: Path,
+        ) -> None:
 
             minion_modpath = "tests.assets.minions.two_steps.simple.basic"
             pipeline_modpath = "tests.assets.entrypoints.invalid.invalid_explicit_pipeline_simple"
@@ -185,7 +223,11 @@ class TestInvalidComposition:
                 assert "is not a subclass of Pipeline" in result.reason
 
         @pytest.mark.asyncio
-        async def test_gru_returns_error_on_pipeline_event_not_serializable(self, gru_factory, tests_dir):
+        async def test_gru_returns_error_on_pipeline_event_not_serializable(
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+            tests_dir: Path,
+        ) -> None:
             minion_modpath = "tests.assets.minions.two_steps.simple.basic"
             pipeline_modpath = "tests.assets.pipelines.invalid.unserializable_event"
             config_path = str(tests_dir / "assets" / "config/minions/a.toml")
@@ -214,8 +256,10 @@ class TestInvalidCompositionUsingNewAssets:
     class TestMinionFile:
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_empty_minion_file(
-            self, gru_factory, tests_dir
-        ):
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+            tests_dir: Path,
+        ) -> None:
             minion_modpath = "tests.assets.entrypoints.invalid.empty"
             pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -233,8 +277,10 @@ class TestInvalidCompositionUsingNewAssets:
 
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_minion_file_with_multiple_minions_and_no_explicit_minion(
-            self, gru_factory, tests_dir
-        ):
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+            tests_dir: Path,
+        ) -> None:
             minion_modpath = "tests.assets.entrypoints.invalid.two_minions"
             pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -252,8 +298,10 @@ class TestInvalidCompositionUsingNewAssets:
 
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_minion_file_with_invalid_explicit_minion(
-            self, gru_factory, tests_dir
-        ):
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+            tests_dir: Path,
+        ) -> None:
             minion_modpath = "tests.assets.entrypoints.invalid.invalid_explicit_minion"
             pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -271,8 +319,10 @@ class TestInvalidCompositionUsingNewAssets:
 
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_minion_workflow_context_not_serializable(
-            self, gru_factory, tests_dir
-        ):
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+            tests_dir: Path,
+        ) -> None:
             minion_modpath = "tests.assets.minions.invalid.bad_context"
             pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -290,8 +340,10 @@ class TestInvalidCompositionUsingNewAssets:
 
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_minion_event_not_serializable(
-            self, gru_factory, tests_dir
-        ):
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+            tests_dir: Path,
+        ) -> None:
             minion_modpath = "tests.assets.minions.invalid.bad_event"
             pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -309,7 +361,11 @@ class TestInvalidCompositionUsingNewAssets:
 
     class TestPipelineFile:
         @pytest.mark.asyncio
-        async def test_gru_returns_error_on_empty_pipeline_file(self, gru_factory, tests_dir):
+        async def test_gru_returns_error_on_empty_pipeline_file(
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+            tests_dir: Path,
+        ) -> None:
             minion_modpath = "tests.assets.minions.two_steps.counter.basic"
             pipeline_modpath = "tests.assets.entrypoints.invalid.empty"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -326,7 +382,11 @@ class TestInvalidCompositionUsingNewAssets:
                 assert "must define a `pipeline` variable" in result.reason
 
         @pytest.mark.asyncio
-        async def test_gru_returns_error_on_pipeline_file_with_multiple_pipelines_and_no_explicit_pipeline(self, gru_factory, tests_dir):
+        async def test_gru_returns_error_on_pipeline_file_with_multiple_pipelines_and_no_explicit_pipeline(
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+            tests_dir: Path,
+        ) -> None:
             minion_modpath = "tests.assets.minions.two_steps.counter.basic"
             pipeline_modpath = "tests.assets.entrypoints.invalid.two_pipelines"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -343,7 +403,11 @@ class TestInvalidCompositionUsingNewAssets:
                 assert "multiple Pipeline subclasses" in result.reason
 
         @pytest.mark.asyncio
-        async def test_gru_returns_error_on_pipeline_file_with_invalid_explicit_pipeline(self, gru_factory, tests_dir):
+        async def test_gru_returns_error_on_pipeline_file_with_invalid_explicit_pipeline(
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+            tests_dir: Path,
+        ) -> None:
             minion_modpath = "tests.assets.minions.two_steps.counter.basic"
             pipeline_modpath = "tests.assets.entrypoints.invalid.invalid_explicit_pipeline"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -360,7 +424,11 @@ class TestInvalidCompositionUsingNewAssets:
                 assert "is not a subclass of Pipeline" in result.reason
 
         @pytest.mark.asyncio
-        async def test_gru_returns_error_on_pipeline_event_not_serializable(self, gru_factory, tests_dir):
+        async def test_gru_returns_error_on_pipeline_event_not_serializable(
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+            tests_dir: Path,
+        ) -> None:
             minion_modpath = "tests.assets.minions.two_steps.counter.basic"
             pipeline_modpath = "tests.assets.pipelines.invalid.unserializable_event"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")

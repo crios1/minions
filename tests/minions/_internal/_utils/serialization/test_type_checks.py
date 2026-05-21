@@ -12,6 +12,7 @@ from minions._internal._utils.serialization import (
     SERIALIZABLE_PRIMITIVE_TYPES,
     deserialize,
     is_type_serializable,
+    require_type_model,
     require_type_not_primitive,
     require_type_serializable,
     serialize,
@@ -84,6 +85,11 @@ def test_is_type_serializable():
     assert is_type_serializable(int)
 
 
+@pytest.mark.parametrize("primitive_type", SERIALIZABLE_PRIMITIVE_TYPES)
+def test_serializable_primitive_types_are_serializable(primitive_type: object) -> None:
+    assert is_type_serializable(primitive_type)
+
+
 def test_require_type_serializable_raises_centralized_error_message():
     with pytest.raises(
         TypeError,
@@ -100,7 +106,9 @@ def test_require_type_serializable_accepts_serializable_type():
 
 
 @pytest.mark.parametrize("primitive_type", SERIALIZABLE_PRIMITIVE_TYPES)
-def test_require_type_not_primitive_raises_centralized_error_message(primitive_type):
+def test_serializable_primitive_types_are_rejected_as_top_level_contracts(
+    primitive_type: object,
+) -> None:
     with pytest.raises(
         TypeError,
         match=(
@@ -112,6 +120,26 @@ def test_require_type_not_primitive_raises_centralized_error_message(primitive_t
 
 def test_require_type_not_primitive_accepts_structured_type():
     require_type_not_primitive(MyDC, owner="MyOwner", type_label="event type")
+
+
+def test_require_type_model_rejects_mapping_contracts():
+    with pytest.raises(
+        TypeError,
+        match=(
+            r"MyOwner: event type must be a dataclass or msgspec Struct type\."
+        ),
+    ):
+        require_type_model(dict[str, int], owner="MyOwner", type_label="event type")
+
+
+def test_require_type_model_rejects_typed_dict_contracts():
+    with pytest.raises(TypeError):
+        require_type_model(MyTD, owner="MyOwner", type_label="event type")
+
+
+def test_require_type_model_accepts_runtime_models():
+    require_type_model(MyDC, owner="MyOwner", type_label="event type")
+    require_type_model(MyStruct, owner="MyOwner", type_label="event type")
 
 
 def test_is_type_serializable_enforces_dict_key_and_value_recursion():
@@ -209,7 +237,7 @@ def test_dataclass_default_factory_any_annotation_but_serializable_instance():
         MyStruct,
     ],
 )
-def test_serializable_type_annotations_are_accepted(tp):
+def test_serializable_type_annotations_are_accepted(tp: object) -> None:
     assert s.is_type_serializable(tp) is True
 
 
@@ -230,7 +258,7 @@ def test_serializable_type_annotations_are_accepted(tp):
         _BadTD,
     ],
 )
-def test_unserializable_type_annotations_are_rejected(tp):
+def test_unserializable_type_annotations_are_rejected(tp: object) -> None:
     assert s.is_type_serializable(tp) is False
 
 

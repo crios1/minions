@@ -1,4 +1,6 @@
 import asyncio
+from typing import Any
+
 import pytest
 from weakref import WeakSet
 from tests.assets.support.mixin_spy import SpyMixin
@@ -19,12 +21,17 @@ async def test_spymixin_is_order_agnostic():
     class B(SpyMixin, Base):
         async def bar(self): ...
 
-    A.enable_spy(); B.enable_spy()
+    A.enable_spy()
+    B.enable_spy()
 
-    a = A(); b = B()
+    a = A()
+    b = B()
 
-    await a.foo(); await a.bar()
-    await b.foo(); await b.bar()
+    await a.foo()
+    await a.bar()
+
+    await b.foo()
+    await b.bar()
 
     assert A.get_call_counts() == B.get_call_counts() == {
         "__init__": 1, "foo": 1, "bar": 1
@@ -42,12 +49,17 @@ async def test_spymixin_wraps_noncooperative_init():
     class B(SpyMixin, Base):
         async def bar(self): ...
 
-    A.enable_spy(); B.enable_spy()
+    A.enable_spy()
+    B.enable_spy()
 
-    a = A(); b = B()
+    a = A()
+    b = B()
 
-    await a.foo(); await a.bar()
-    await b.foo(); await b.bar()
+    await a.foo()
+    await a.bar()
+
+    await b.foo()
+    await b.bar()
 
     assert A.get_call_counts() == B.get_call_counts() == {
         "__init__": 1, "foo": 1, "bar": 1
@@ -346,7 +358,7 @@ async def test_spymixin_records_and_resets_call_history():
 
     hist = Sub.get_call_history()
 
-    assert [n for n, ts, inst_tag in hist] == ['__init__', 'foo', 'sync', 'bar']
+    assert [n for n, _ts, _inst_tag in hist] == ['__init__', 'foo', 'sync', 'bar']
 
     # timestamps should be non-decreasing
     assert all(t1 <= t2 for (_, t1, _), (_, t2, _) in zip(hist, hist[1:]))
@@ -375,7 +387,7 @@ async def test_spymixin_records_and_resets_call_history_multiple_instances():
 
     hist = Sub.get_call_history()
 
-    assert [n for n, ts, inst_tag in hist] == ['__init__', '__init__', 'foo', 'foo', 'foo']
+    assert [n for n, _ts, _inst_tag in hist] == ['__init__', '__init__', 'foo', 'foo', 'foo']
 
     # timestamps should be non-decreasing
     assert all(t1 <= t2 for (_, t1, _), (_, t2, _) in zip(hist, hist[1:]))
@@ -450,7 +462,7 @@ async def test_await_and_pin_custom_on_extra():
     class Sub(Base, SpyMixin):
         pass
 
-    def raise_runtime_err(*args, **kwargs):
+    def raise_runtime_err(*args: object, **kwargs: object) -> None:
         raise RuntimeError()
 
     Sub.enable_spy()
@@ -472,7 +484,7 @@ async def test_await_and_pin_custom_on_extra():
 # ---- Test fixtures ----
 
 @pytest.fixture
-def S():
+def S() -> Any:
     class Base:
         pass
     class S(SpyMixin, Base):
@@ -485,7 +497,7 @@ def S():
     S.reset_spy()
 
 @pytest.fixture
-def T():
+def T() -> Any:
     class Base:
         pass
     class T(SpyMixin, Base):
@@ -497,25 +509,31 @@ def T():
 
 # ---- Tests ----
 
-def test_empty_subsequence_noop(S):
+def test_empty_subsequence_noop(S: Any) -> None:
     S.assert_call_order([])
 
-def test_contiguous_in_order(S):
+def test_contiguous_in_order(S: Any) -> None:
     s = S()
-    s.a(); s.b()
+    s.a()
+    s.b()
     S.assert_call_order(['__init__', 'a', 'b'])
 
-def test_noncontiguous_in_order(S):
+def test_noncontiguous_in_order(S: Any) -> None:
     s = S()
-    s.a(); s.c(); s.b()
+    s.a()
+    s.c()
+    s.b()
     S.assert_call_order(['__init__', 'a', 'b'])
 
-def test_noncontiguous_in_order_multicalls(S):
+def test_noncontiguous_in_order_multicalls(S: Any) -> None:
     s = S()
-    s.a(); s.a(); s.c(); s.b()
+    s.a()
+    s.a()
+    s.c()
+    s.b()
     S.assert_call_order(['__init__', 'a', 'b'])
 
-def test_missing_raises_and_message_contains_tail_and_history(S):
+def test_missing_raises_and_message_contains_tail_and_history(S: Any) -> None:
     s = S()
     s.a()
     with pytest.raises(AssertionError) as e:
@@ -525,14 +543,20 @@ def test_missing_raises_and_message_contains_tail_and_history(S):
     assert "Full history names: " in msg
     assert "__init__" in msg and "a" in msg
 
-def test_interleaved_histories_are_isolated(S, T):
-    s = S(); t = T()
-    s.a(); t.x(); s.b(); t.y()
+def test_interleaved_histories_are_isolated(S: Any, T: Any) -> None:
+    s = S()
+    t = T()
+
+    s.a()
+    t.x()
+    s.b()
+    t.y()
+
     S.assert_call_order(['__init__', 'a', 'b'])
     T.assert_call_order(['__init__', 'x', 'y'])
 
 @pytest.mark.asyncio
-async def test_async_method_participates_in_ordering(S):
+async def test_async_method_participates_in_ordering(S: Any) -> None:
     s = S()
     await s.aa()
     s.a()

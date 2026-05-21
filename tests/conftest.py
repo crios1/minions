@@ -1,7 +1,8 @@
 import contextlib
 import importlib
 import sys
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator, Callable, Generator
+from typing import Any
 from pathlib import Path
 
 import pytest
@@ -19,8 +20,8 @@ def tests_dir() -> Path:
 
 
 @pytest.fixture
-def reload_wait_for_subs_pipeline():
-    def _reload(*, expected_subs: int):
+def reload_wait_for_subs_pipeline() -> Callable[..., None]:
+    def _reload(*, expected_subs: int) -> None:
         from tests.assets.support import pipeline_wait_for_subs
 
         importlib.reload(pipeline_wait_for_subs)
@@ -32,8 +33,8 @@ def reload_wait_for_subs_pipeline():
 
 
 @pytest.fixture
-def reload_pipeline_module():
-    def _reload(module_name: str):
+def reload_pipeline_module() -> Callable[[str], None]:
+    def _reload(module_name: str) -> None:
         mod = importlib.import_module(module_name)
         pipeline_cls = getattr(mod, "pipeline", None)
         if pipeline_cls is None:
@@ -48,7 +49,7 @@ def reload_pipeline_module():
 
 
 @pytest.fixture(autouse=True)
-def scrub_asset_modules():
+def scrub_asset_modules() -> Generator[None, None, None]:
     "enables non-leaky reuse of assets across tests"
     importlib.invalidate_caches()
 
@@ -65,13 +66,13 @@ def scrub_asset_modules():
 
 
 @pytest.fixture
-def logger():
+def logger() -> InMemoryLogger:
     InMemoryLogger.enable_spy()
     InMemoryLogger.reset_spy()
     return InMemoryLogger()
 
 @pytest.fixture
-def metrics():
+def metrics() -> Generator[InMemoryMetrics, None, None]:
     InMemoryMetrics.enable_spy()
     InMemoryMetrics.reset_spy()
     metrics = InMemoryMetrics()
@@ -79,17 +80,17 @@ def metrics():
     metrics.assert_recorded_labels_match_contract()
 
 @pytest.fixture
-def state_store(logger):
+def state_store(logger: InMemoryLogger) -> InMemoryStateStore:
     InMemoryStateStore.enable_spy()
     InMemoryStateStore.reset_spy()
     return InMemoryStateStore(logger=logger)
 
 @pytest.fixture
-def gru_factory():
+def gru_factory() -> Callable[..., contextlib.AbstractAsyncContextManager[Gru]]:
     active_context = False
 
     @contextlib.asynccontextmanager
-    async def _factory(**kwargs) -> AsyncIterator[Gru]:
+    async def _factory(**kwargs: Any) -> AsyncGenerator[Gru, None]:
         nonlocal active_context
         if active_context:
             raise RuntimeError(
@@ -109,7 +110,10 @@ def gru_factory():
 
 @pytest_asyncio.fixture
 async def gru(
-    logger, metrics, state_store, gru_factory
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
 ) -> AsyncGenerator[Gru, None]:
     async with gru_factory(
         logger=logger,

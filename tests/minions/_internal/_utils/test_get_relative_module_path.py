@@ -5,9 +5,13 @@ import types
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
+
 from minions._internal._utils.get_relative_module_path import get_relative_module_path
 
-def test_returns_relative_path_when_module_file_under_cwd(tmp_path, monkeypatch):
+def test_returns_relative_path_when_module_file_under_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # Unique module name to avoid collisions across tests
     mod_name = f"mymod_{uuid4().hex}"
 
@@ -17,7 +21,7 @@ def test_returns_relative_path_when_module_file_under_cwd(tmp_path, monkeypatch)
         "class C:\n"
         "    pass\n"
     )
-    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.syspath_prepend(str(tmp_path))  # pyright: ignore[reportUnknownMemberType]
 
     try:
         mod = importlib.import_module(mod_name)
@@ -33,7 +37,7 @@ def test_returns_relative_path_when_module_file_under_cwd(tmp_path, monkeypatch)
         sys.modules.pop(mod_name, None)
 
 
-def test_fallback_when_module_has_no_file(monkeypatch):
+def test_fallback_when_module_has_no_file(monkeypatch: pytest.MonkeyPatch) -> None:
     # Unique module name
     fake_mod_name = f"fake_mod_no_file_{uuid4().hex}"
     fake_mod = types.ModuleType(fake_mod_name)
@@ -55,7 +59,9 @@ def test_fallback_when_module_has_no_file(monkeypatch):
         sys.modules.pop(fake_mod_name, None)
 
 
-def test_fallback_when_module_path_not_under_cwd(tmp_path, monkeypatch):
+def test_fallback_when_module_path_not_under_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # Unique module name and separate dirs
     mod_name = f"mymod2_{uuid4().hex}"
     mod_dir = tmp_path / "moddir"
@@ -68,7 +74,7 @@ def test_fallback_when_module_path_not_under_cwd(tmp_path, monkeypatch):
         "    pass\n"
     )
 
-    monkeypatch.syspath_prepend(str(mod_dir))
+    monkeypatch.syspath_prepend(str(mod_dir))  # pyright: ignore[reportUnknownMemberType]
     monkeypatch.chdir(cwd_dir)
 
     try:

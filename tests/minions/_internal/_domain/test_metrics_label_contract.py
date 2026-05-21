@@ -1,5 +1,7 @@
 import asyncio
+from collections.abc import Coroutine
 from dataclasses import dataclass
+from typing import Any
 
 import pytest
 
@@ -22,11 +24,11 @@ class ContractContext:
 @pytest.mark.asyncio
 async def test_pipeline_runtime_metric_labels_match_contract():
     class SuccessPipeline(Pipeline[ContractEvent]):
-        async def produce_event(self):
+        async def produce_event(self) -> ContractEvent:
             return ContractEvent()
 
     class ErrorPipeline(Pipeline[ContractEvent]):
-        async def produce_event(self):
+        async def produce_event(self) -> ContractEvent:
             raise RuntimeError("boom")
 
     class FakeMinion:
@@ -35,13 +37,13 @@ async def test_pipeline_runtime_metric_labels_match_contract():
         _mn_minion_composite_key = "contract-minion-key"
         _mn_minion_modpath = "tests.metrics_contract.FakeMinion"
 
-        def __init__(self):
-            self.tasks: list[asyncio.Task] = []
+        def __init__(self) -> None:
+            self.tasks: list[asyncio.Task[None]] = []
 
-        async def _mn_handle_event(self, event):
+        async def _mn_handle_event(self, event: ContractEvent) -> None:
             return None
 
-        def safe_create_task(self, coro):
+        def safe_create_task(self, coro: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
             task = asyncio.create_task(coro)
             self.tasks.append(task)
             return task
@@ -73,10 +75,10 @@ async def test_pipeline_runtime_metric_labels_match_contract():
 
 @pytest.mark.asyncio
 async def test_resource_runtime_metric_labels_match_contract():
-    async def succeed():
+    async def succeed() -> str:
         return "ok"
 
-    async def fail():
+    async def fail() -> str:
         raise ValueError("boom")
 
     metrics = InMemoryMetrics()

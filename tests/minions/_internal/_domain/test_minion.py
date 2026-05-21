@@ -1,7 +1,9 @@
+# pyright: reportUnusedClass=false
+
 import asyncio
 import pytest
 from dataclasses import dataclass
-from typing import TypeVar
+from typing import TypedDict, TypeVar
 import msgspec
 from minions import Minion, Resource, minion_step
 from minions._internal._domain.exceptions import UnsupportedUserCode
@@ -12,7 +14,6 @@ from minions._internal._framework.state_store_noop import NoOpStateStore
 from minions._internal._utils.serialization import SERIALIZABLE_PRIMITIVE_TYPES
 
 from tests.assets.support.mixin import Mixin
-
 # compositional validation happens on instantiation of each domain object
 # so each domain object has it's own test
 
@@ -36,13 +37,15 @@ class MyStructContext(msgspec.Struct):
     ts: int
 
 
+class MyTypedDictEvent(TypedDict):
+    ts: int
+
+
 class TestMinionSubclassingValid:
     def test_valid_event_and_context_types(self):
-        class MyMinion1(Minion[dict, dict]):
+        class MyMinion1(Minion[MyEvent, MyContext]):
             ...
-        class MyMinion2(Minion[MyEvent, MyContext]):
-            ...
-        class MyMinion3(Minion[MyStructEvent, MyStructContext]):
+        class MyMinion2(Minion[MyStructEvent, MyStructContext]):
             ...
 
     def test_distinct_resource_dependencies(self):
@@ -50,7 +53,7 @@ class TestMinionSubclassingValid:
             ...
         class MyResource2(Resource):
             ...
-        class MyMinion(Minion[dict, dict]):
+        class MyMinion(Minion[MyEvent, MyContext]):
             r1: MyResource1
             r2: MyResource2
  
@@ -80,7 +83,7 @@ class TestMinionSubclassingValid:
         assert len(m._mn_workflow) == 2
 
     def test_minion_exposes_loaded_config_through_public_property(self):
-        class MyMinion(Minion[dict, dict]):
+        class MyMinion(Minion[MyEvent, MyContext]):
             @minion_step
             async def step_1(self):
                 ...
@@ -101,7 +104,7 @@ class TestMinionSubclassingValid:
 
     @pytest.mark.asyncio
     async def test_minion_rejects_non_dict_config_loads(self):
-        class MyMinion(Minion[dict, dict]):
+        class MyMinion(Minion[MyEvent, MyContext]):
             @minion_step
             async def step_1(self):
                 ...
@@ -125,7 +128,7 @@ class TestMinionSubclassingValid:
 class TestMinionSubclassingInvalid:
     def test_missing_event_and_context_types(self):
         with pytest.raises(TypeError) as excinfo:
-            class MyMinion(Minion):
+            class MyMinion(Minion):  # pyright: ignore[reportMissingTypeArgument]
                 ...
         assert str(excinfo.value) == (
             "MyMinion must declare both event and workflow context types. "
@@ -133,14 +136,14 @@ class TestMinionSubclassingInvalid:
         )
 
     @pytest.mark.parametrize("event_type", SERIALIZABLE_PRIMITIVE_TYPES)
-    def test_reject_primitive_event_type(self, event_type):
+    def test_reject_primitive_event_type(self, event_type: type[object]):
         with pytest.raises(TypeError) as excinfo:
             class MyMinion(Minion[event_type, MyContext]):
                 ...
         assert str(excinfo.value) == "MyMinion: event type must be a structured type, not a primitive"
 
     @pytest.mark.parametrize("context_type", SERIALIZABLE_PRIMITIVE_TYPES)
-    def test_reject_primitive_context_type(self, context_type):
+    def test_reject_primitive_context_type(self, context_type: type[object]):
         with pytest.raises(TypeError) as excinfo:
             class MyMinion(Minion[MyEvent, context_type]):
                 ...
@@ -151,10 +154,42 @@ class TestMinionSubclassingInvalid:
             class MyMinion(Minion[int, int]):
                 ...
         assert str(excinfo.value) == "MyMinion: event type must be a structured type, not a primitive"
+
+    def test_reject_bare_dict_event_type(self):
+        with pytest.raises(TypeError) as excinfo:
+            class MyMinion(Minion[dict, MyContext]):  # pyright: ignore[reportMissingTypeArgument]
+                ...
+        assert str(excinfo.value) == (
+            "MyMinion: event type must be a dataclass or msgspec Struct type."
+        )
+
+    def test_reject_bare_dict_context_type(self):
+        with pytest.raises(TypeError) as excinfo:
+            class MyMinion(Minion[MyEvent, dict]):  # pyright: ignore[reportMissingTypeArgument]
+                ...
+        assert str(excinfo.value) == (
+            "MyMinion: workflow context type must be a dataclass or msgspec Struct type."
+        )
+
+    def test_reject_parameterized_dict_event_type(self):
+        with pytest.raises(TypeError) as excinfo:
+            class MyMinion(Minion[dict[str, int], MyContext]):
+                ...
+        assert str(excinfo.value) == (
+            "MyMinion: event type must be a dataclass or msgspec Struct type."
+        )
+
+    def test_reject_typed_dict_event_type(self):
+        with pytest.raises(TypeError) as excinfo:
+            class MyMinion(Minion[MyTypedDictEvent, MyContext]):
+                ...
+        assert str(excinfo.value) == (
+            "MyMinion: event type must be a dataclass or msgspec Struct type."
+        )
     
     def test_reject_multiple_minion_bases(self):
         with pytest.raises(TypeError) as excinfo:
-            class MyMinion(Minion[MyEvent, MyContext], Minion[dict, dict]): # type: ignore
+            class MyMinion(Minion[MyEvent, MyContext], Minion[MyStructEvent, MyStructContext]): # type: ignore
                 ...
         assert str(excinfo.value) == "duplicate base class Minion"
     
@@ -171,7 +206,7 @@ class TestMinionSubclassingInvalid:
 
     def test_invalid_name(self):
         with pytest.raises(TypeError) as excinfo:
-            class MyMinion(Minion[dict, dict]):
+            class MyMinion(Minion[MyEvent, MyContext]):
                 name = set('invalid_name') # only kebab-case is valid
             MyMinion(
                 minion_instance_id="mock",
@@ -188,7 +223,7 @@ class TestMinionSubclassingInvalid:
         class MyResource(Resource):
             ...
         with pytest.raises(TypeError) as excinfo:
-            class MyMinion(Minion[dict, dict]):
+            class MyMinion(Minion[MyEvent, MyContext]):
                 r1: MyResource
                 r2: MyResource
         resource_id = f"{MyResource.__module__}.{MyResource.__name__}"

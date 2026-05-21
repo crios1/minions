@@ -6,7 +6,9 @@ from tests.assets.support.logger_inmemory import InMemoryLogger
 
 
 @pytest.mark.asyncio
-async def test_logger_log_failure_is_contained_by_log_wrapper(capsys):
+async def test_logger_log_failure_is_contained_by_log_wrapper(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     logger = BoomLogger()
 
     await logger._mn_log(INFO, "hello", key="value")
@@ -20,7 +22,7 @@ async def test_logger_log_failure_is_contained_by_log_wrapper(capsys):
 async def test_log_exception_records_standard_exception_fields():
     logger = InMemoryLogger()
     exc = RuntimeError("outer")
-    exc.context = {"workflow_id": "wf-1"}
+    setattr(exc, "context", {"workflow_id": "wf-1"})
 
     await logger._mn_log_exception(ERROR, "operation failed", exc)
 
@@ -42,11 +44,15 @@ async def test_log_exception_uses_cause_and_call_site_kwargs_override_context():
         except ValueError as inner:
             raise RuntimeError("outer") from inner
     except RuntimeError as exc:
-        exc.context = {
-            "component": "context-component",
-            "workflow_id": "wf-1",
-            "error_type": "MockError",
-        }
+        setattr(
+            exc,
+            "context",
+            {
+                "component": "context-component",
+                "workflow_id": "wf-1",
+                "error_type": "MockError",
+            },
+        )
         await logger._mn_log_exception(
             ERROR,
             "operation failed",

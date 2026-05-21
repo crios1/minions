@@ -1,15 +1,18 @@
 import asyncio
+from typing import cast
 
 import pytest
 
 from minions import Minion
 
+from tests.assets.contexts.counter import CounterContext
+from tests.assets.events.record import RecordEvent
 from tests.assets.support.pipeline_spied import SpiedPipeline
 
 
-class DummyPipeline(SpiedPipeline[dict]):
-    async def produce_event(self) -> dict:
-        return {}
+class DummyPipeline(SpiedPipeline[RecordEvent]):
+    async def produce_event(self) -> RecordEvent:
+        return RecordEvent()
 
 
 def make_pipeline() -> DummyPipeline:
@@ -22,7 +25,9 @@ def make_pipeline() -> DummyPipeline:
 @pytest.mark.asyncio
 async def test_wait_for_subscribers_returns_when_expected_subscribers_present():
     pipeline = make_pipeline()
-    pipeline._mn_subs.add(object.__new__(Minion))
+    pipeline._mn_subs.add(
+        cast(Minion[RecordEvent, CounterContext], object.__new__(Minion))
+    )
     await pipeline.wait_for_subscribers()
 
 

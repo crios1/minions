@@ -1,7 +1,9 @@
 import sqlite3
+from typing import Any
 
 import pytest
 
+from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.minion_workflow_context_codec import deserialize_workflow_context_blob
 from tests.minions._internal._framework.state_store_sqlite._support import blob_for, mk_ctx
 from tests.minions._internal._framework.state_store_sqlite.conftest import MakeStateStoreAndLogger
@@ -44,11 +46,11 @@ async def test_framework_serialized_context_remains_hydratable(make_state_store_
 
 async def test_runtime_save_context_serialize_failure_is_non_retryable_and_logged(
     make_state_store_and_logger: MakeStateStoreAndLogger,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     s, logger = await make_state_store_and_logger()
 
-    def _boom(_ctx):
+    def _boom(_ctx: MinionWorkflowContext[Any, Any]) -> bytes:
         raise ValueError("serialize boom")
 
     monkeypatch.setattr(
@@ -70,11 +72,11 @@ async def test_runtime_save_context_serialize_failure_is_non_retryable_and_logge
 
 async def test_runtime_save_context_failure_returns_structured_result(
     make_state_store_and_logger: MakeStateStoreAndLogger,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     s, logger = await make_state_store_and_logger()
 
-    async def _boom(*_args):
+    async def _boom(*_args: object) -> None:
         raise RuntimeError("save boom")
 
     monkeypatch.setattr(s, "save_context", _boom)

@@ -1,10 +1,11 @@
 import inspect
 import pytest
-from typing import Callable
+from collections.abc import Callable
+from typing import Any
 
 from minions._internal._domain.minion_step import minion_step
 
-def is_minion_step(fn: Callable) -> bool:
+def is_minion_step(fn: Callable[..., Any]) -> bool:
     attr = getattr(fn, "__minion_step__", None)
     return isinstance(attr, dict)
 
@@ -30,6 +31,6 @@ async def test_minion_step_with_parens():
 
 def test_minion_step_sync_function_raises():
     with pytest.raises(TypeError):
-        @minion_step # type: ignore[reportArgumentType]
-        def not_async():
+        @minion_step  # pyright: ignore[reportArgumentType]
+        def not_async() -> None:  # pyright: ignore[reportUnusedFunction]
             ...

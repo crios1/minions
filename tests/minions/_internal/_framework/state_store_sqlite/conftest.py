@@ -2,6 +2,7 @@ import inspect
 import os
 from collections.abc import AsyncGenerator, Awaitable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal, Protocol, get_type_hints
 
 import pytest_asyncio
@@ -100,7 +101,7 @@ class MakeStateStoreAndLogger(Protocol):
 
 @pytest_asyncio.fixture
 async def make_state_store_and_logger(
-    tmp_path,
+    tmp_path: Path,
 ) -> AsyncGenerator[MakeStateStoreAndLogger, None]:
     _assert_factory_kwargs_match_state_store_constructor()
     store_loggers: list[StoreAndLogger] = []
@@ -123,7 +124,7 @@ async def make_state_store_and_logger(
         warn_write_cooldown_s: float = 30.0,
     ) -> StoreAndLogger:
         if db_path is None:
-            db_path = os.path.join(tmp_path, f"state-{len(store_loggers)}.db")
+            db_path = os.path.join(str(tmp_path), f"state-{len(store_loggers)}.db")
         if logger is None:
             logger = InMemoryLogger()
 

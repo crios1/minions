@@ -6,9 +6,7 @@ from tests.assets.support.pipeline_spied import SpiedPipeline
 
 
 class DataclassPersistenceGuaranteePipeline(SpiedPipeline[DataclassEvent]):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._emitted = False
+    _emitted = False
 
     async def produce_event(self) -> DataclassEvent:
         if self._emitted:

@@ -1,3 +1,5 @@
+# pyright: reportUnusedClass=false
+
 import pytest
 
 from minions import Resource

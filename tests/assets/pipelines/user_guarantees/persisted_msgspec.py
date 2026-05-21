@@ -6,9 +6,7 @@ from tests.assets.support.pipeline_spied import SpiedPipeline
 
 
 class StructPersistenceGuaranteePipeline(SpiedPipeline[StructEvent]):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._emitted = False
+    _emitted = False
 
     async def produce_event(self) -> StructEvent:
         if self._emitted:

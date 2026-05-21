@@ -28,7 +28,7 @@ class MinionStart(Directive):
     minion_config_path: str | None = None
     expect_success: bool = True
 
-    def as_kwargs(self) -> dict:
+    def as_kwargs(self) -> dict[str, object]:
         return {k: v for k, v in self.__dict__.items() if k in _MINION_START_PARAMS}
 
 
@@ -37,7 +37,7 @@ class MinionStop(Directive):
     name_or_instance_id: str
     expect_success: bool
 
-    def as_kwargs(self) -> dict:
+    def as_kwargs(self) -> dict[str, object]:
         return {k: v for k, v in self.__dict__.items() if k in _MINION_STOP_PARAMS}
 
 

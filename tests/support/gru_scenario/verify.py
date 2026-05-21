@@ -1,7 +1,8 @@
 import asyncio
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable, cast
+
 
 import pytest
 
@@ -12,9 +13,12 @@ from minions._internal._framework.metrics_constants import (
     LABEL_MINION_COMPOSITE_KEY,
 )
 
-from tests.assets.support.mixin_spy import SpyMixin
 from tests.assets.support.logger_spied import SpiedLogger
 from tests.assets.support.metrics_spied import SpiedMetrics
+from tests.assets.support.minion_spied import SpiedMinion
+from tests.assets.support.mixin_spy import SpyMixin
+from tests.assets.support.pipeline_spied import SpiedPipeline
+from tests.assets.support.resource_spied import SpiedResource
 from tests.assets.support.state_store_spied import SpiedStateStore
 
 from .directives import ExpectRuntime, MinionStart
@@ -29,11 +33,15 @@ from .runner import (
 
 
 class _ExtraCallRecorder:
-    def __init__(self, result: ScenarioRunResult, cls: type[SpyMixin]):
+    def __init__(
+        self,
+        result: ScenarioRunResult,
+        cls: type[SpiedMinion[Any, Any]] | type[SpiedResource] | type[SpiedStateStore],
+    ):
         self._result = result
         self._cls = cls
 
-    def __call__(self, *a, **kw) -> None:
+    def __call__(self, *a: object, **kw: object) -> None:
         self._result.extra_calls.append((self._cls, a, kw))
 
 
@@ -45,16 +53,19 @@ def _names_for_tag(cls: type[SpyMixin], tag: int) -> list[str]:
 class MinionExpectations:
     """Computed expectations for minion starts and workflow calls."""
 
-    minion_start_counts: defaultdict[type[SpyMixin], int]
-    expected_workflows_by_class: defaultdict[type[SpyMixin], int]
+    minion_start_counts: defaultdict[type[SpiedMinion[Any, Any]], int]
+    expected_workflows_by_class: defaultdict[type[SpiedMinion[Any, Any]], int]
 
 
 @dataclass(frozen=True)
 class ExpectedCallCounts:
     """Expected call counts plus spy classes allowed to have extra calls."""
 
-    call_counts: dict[type[SpyMixin], dict[str, int]]
-    allow_unlisted: set[type[SpyMixin]]
+    call_counts: dict[
+        type[SpiedMinion[Any, Any]] | type[SpiedResource] | type[SpiedStateStore],
+        dict[str, int],
+    ]
+    allow_unlisted: set[type[SpiedPipeline[Any]] | type[SpiedResource]]
 
 
 @dataclass(frozen=True)
@@ -124,14 +135,21 @@ class ScenarioVerifier:
     def _build_expected_call_counts(self) -> ExpectedCallCounts:
         spies = self._require_spies()
         expectations = self._compute_minion_expectations(spies)
-        call_counts: dict[type[SpyMixin], dict[str, int]] = {}
-        allow_unlisted: set[type[SpyMixin]] = set()
+        call_counts: dict[
+            type[SpiedMinion[Any, Any]] | type[SpiedResource] | type[SpiedStateStore],
+            dict[str, int],
+        ] = {}
+        allow_unlisted: set[type[SpiedPipeline[Any]] | type[SpiedResource]] = set()
 
         for r_cls in spies.resources:
             call_counts[r_cls] = {"__init__": 1, "startup": 1, "run": 1}
             allow_unlisted.add(r_cls)
 
         for p_cls in spies.pipelines.values():
+            # TODO: Decide whether pipelines should be pinned in _pin_and_assert_calls.
+            # This allow-list entry is currently inert because pipelines are not added
+            # to call_counts; pipeline behavior is asserted separately in
+            # _assert_pipeline_events().
             allow_unlisted.add(p_cls)
 
         for m_cls in spies.minions.values():
@@ -189,8 +207,8 @@ class ScenarioVerifier:
     def _compute_replayed_step_counts(
         self,
         spies: SpyRegistry,
-    ) -> dict[type[SpyMixin], dict[str, int]]:
-        replayed: defaultdict[type[SpyMixin], defaultdict[str, int]] = defaultdict(lambda: defaultdict(int))
+    ) -> dict[type[SpiedMinion[Any, Any]], dict[str, int]]:
+        replayed: defaultdict[type[SpiedMinion[Any, Any]], defaultdict[str, int]] = defaultdict(lambda: defaultdict(int))
         seen: set[tuple[str, str]] = set()
         for checkpoint in self._result.checkpoints:
             snapshots = checkpoint.persisted_context_snapshots_by_modpath
@@ -318,8 +336,8 @@ class ScenarioVerifier:
         spies: SpyRegistry,
         receipts: list[StartReceipt],
     ) -> MinionExpectations:
-        minion_start_counts: defaultdict[type[SpyMixin], int] = defaultdict(int)
-        expected_workflows_by_class: defaultdict[type[SpyMixin], int] = defaultdict(int)
+        minion_start_counts: defaultdict[type[SpiedMinion[Any, Any]], int] = defaultdict(int)
+        expected_workflows_by_class: defaultdict[type[SpiedMinion[Any, Any]], int] = defaultdict(int)
 
         for receipt in receipts:
             directive = self._plan.flat_directives[receipt.directive_index]
@@ -396,7 +414,10 @@ class ScenarioVerifier:
                 curr_workflow_ids_by_step = (cp.workflow_step_started_ids_by_class or {}).get(key, {})
                 prev_workflow_ids_by_step = prev_workflow_step_ids.get(key, {})
 
-                for step_name in m_cls._mn_workflow_spec:  # type: ignore
+                if not m_cls._mn_workflow_spec:
+                    continue
+
+                for step_name in m_cls._mn_workflow_spec:
                     expected_delta = expected_workflows
                     start_count_in_window = window_expectations.minion_start_counts.get(m_cls, 0)
                     max_tolerated_delta = expected_delta + start_count_in_window
@@ -544,6 +565,24 @@ class ScenarioVerifier:
         prev_ids = set(prev)
         return len(curr_ids - prev_ids)
 
+    def _counter_sample_value(self, sample: dict[str, object]) -> int:
+        value = sample.get("value", 0)
+        if isinstance(value, int | float | str):
+            return int(value)
+        return 0
+
+    def _counter_sample_label(self, sample: dict[str, object], label_name: str) -> object:
+        labels = sample.get("labels", {})
+
+        if not isinstance(labels, dict):
+            return None
+
+        for k, v in cast(dict[Any, Any], labels).items():
+            if str(k) == label_name:
+                return v
+
+        return None
+
     def _assert_runtime_expectations(self) -> None:
         expect_directives = [
             d for d in self._plan.flat_directives
@@ -593,7 +632,7 @@ class ScenarioVerifier:
                         pytest.fail(
                             f"ExpectRuntime.persistence references unknown minion name: {minion_name!r}."
                         )
-                    if not isinstance(expected_count, int) or expected_count < 0:
+                    if expected_count < 0:
                         pytest.fail(
                             "ExpectRuntime.persistence counts must be ints >= 0; "
                             f"got {minion_name!r}={expected_count!r}."
@@ -622,19 +661,19 @@ class ScenarioVerifier:
                     metric_keys = metric_keys_by_name[minion_name]
                     counts = {
                         "succeeded": sum(
-                            int(s["value"])
+                            self._counter_sample_value(s)
                             for s in counters.get(MINION_WORKFLOW_SUCCEEDED_TOTAL, [])
-                            if s["labels"].get(LABEL_MINION_COMPOSITE_KEY) in metric_keys
+                            if self._counter_sample_label(s, LABEL_MINION_COMPOSITE_KEY) in metric_keys
                         ),
                         "failed": sum(
-                            int(s["value"])
+                            self._counter_sample_value(s)
                             for s in counters.get(MINION_WORKFLOW_FAILED_TOTAL, [])
-                            if s["labels"].get(LABEL_MINION_COMPOSITE_KEY) in metric_keys
+                            if self._counter_sample_label(s, LABEL_MINION_COMPOSITE_KEY) in metric_keys
                         ),
                         "aborted": sum(
-                            int(s["value"])
+                            self._counter_sample_value(s)
                             for s in counters.get(MINION_WORKFLOW_ABORTED_TOTAL, [])
-                            if s["labels"].get(LABEL_MINION_COMPOSITE_KEY) in metric_keys
+                            if self._counter_sample_label(s, LABEL_MINION_COMPOSITE_KEY) in metric_keys
                         ),
                     }
 
@@ -643,7 +682,7 @@ class ScenarioVerifier:
                             pytest.fail(
                                 f"ExpectRuntime.resolutions has unknown status {status!r} for {minion_name}."
                             )
-                        if not isinstance(expected_count, int) or expected_count < 0:
+                        if expected_count < 0:
                             pytest.fail(
                                 "ExpectRuntime.resolutions counts must be ints >= 0; "
                                 f"got {minion_name}.{status}={expected_count!r}."
@@ -684,7 +723,7 @@ class ScenarioVerifier:
                     class_keys = [class_key_by_modpath[m] for m in modpaths if m in class_key_by_modpath]
 
                     for step_name, expected_count in expected_steps.items():
-                        if not isinstance(expected_count, int) or expected_count < 0:
+                        if expected_count < 0:
                             pytest.fail(
                                 "ExpectRuntime.workflow_steps counts must be ints >= 0; "
                                 f"got {minion_name}.{step_name}={expected_count!r}."
@@ -748,7 +787,10 @@ class ScenarioVerifier:
 
             actual_counts = m_cls.get_call_counts()
 
-            for step_name in m_cls._mn_workflow_spec:  # type: ignore
+            if not m_cls._mn_workflow_spec:
+                continue
+
+            for step_name in m_cls._mn_workflow_spec:
                 actual = actual_counts.get(step_name, 0)
                 if actual < expected_workflows or actual > max_expected_workflows:
                     pytest.fail(
@@ -830,8 +872,11 @@ class ScenarioVerifier:
 
     async def _pin_and_assert_calls(
         self,
-        call_counts: dict[type[SpyMixin], dict[str, int]],
-        allow_unlisted: set[type[SpyMixin]],
+        call_counts: dict[
+            type[SpiedMinion[Any, Any]] | type[SpiedResource] | type[SpiedStateStore],
+            dict[str, int],
+        ],
+        allow_unlisted: set[type[SpiedPipeline[Any]] | type[SpiedResource]],
     ) -> list[Callable[[], None]]:
         try:
             return await asyncio.gather(*[
@@ -856,7 +901,13 @@ class ScenarioVerifier:
                     mismatches.append(f"{cls.__name__}: {diff}")
             pytest.fail("Call counts did not reach expected values. " + "; ".join(mismatches))
 
-    def _assert_call_order(self, call_counts: dict[type[SpyMixin], dict[str, int]]) -> None:
+    def _assert_call_order(
+        self,
+        call_counts: dict[
+            type[SpiedMinion[Any, Any]] | type[SpiedResource] | type[SpiedStateStore],
+            dict[str, int],
+        ],
+    ) -> None:
         spies = self._require_spies()
         minion_start_counts = self._compute_minion_expectations(spies).minion_start_counts
         ss_tag = getattr(self._state_store, "_mspy_instance_tag", None)

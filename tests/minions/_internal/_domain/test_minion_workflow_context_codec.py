@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 
 import pytest
 import msgspec
@@ -8,6 +9,7 @@ from minions._internal._framework.minion_workflow_context_codec import (
     _normalize_workflow_context_data,
     CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION,
     PersistedMinionWorkflowContext,
+    WorkflowContextData,
     WorkflowContextSchemaError,
     decode_persisted_workflow_context_typed,
     deserialize_workflow_context_blob,
@@ -45,12 +47,12 @@ class ContextStruct(msgspec.Struct):
     ],
 )
 def test_adapter_payload_roundtrip_restores_typed_event_and_context(
-    event,
-    context,
-    event_cls,
-    context_cls,
-):
-    ctx = MinionWorkflowContext(
+    event: Any,
+    context: Any,
+    event_cls: type[Any],
+    context_cls: type[Any],
+) -> None:
+    ctx: MinionWorkflowContext[Any, Any] = MinionWorkflowContext(
         minion_composite_key="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
         minion_modpath="tests.assets.minions.sample",
         workflow_id="wf-typed-blob",
@@ -61,7 +63,7 @@ def test_adapter_payload_roundtrip_restores_typed_event_and_context(
     )
 
     encoded_adapter_payload = serialize(dict(serialize_workflow_context(ctx)))
-    payload = deserialize(encoded_adapter_payload, dict)
+    payload = deserialize(encoded_adapter_payload, dict[str, object])
     loaded_ctx = deserialize_workflow_context(payload, event_cls=event_cls)
 
     assert isinstance(loaded_ctx.event, event_cls)
@@ -77,12 +79,12 @@ def test_adapter_payload_roundtrip_restores_typed_event_and_context(
     ],
 )
 def test_direct_typed_decoder_accepts_persisted_workflow_context(
-    event,
-    context,
-    event_cls,
-    context_cls,
-):
-    ctx = MinionWorkflowContext(
+    event: Any,
+    context: Any,
+    event_cls: type[Any],
+    context_cls: type[Any],
+) -> None:
+    ctx: MinionWorkflowContext[Any, Any] = MinionWorkflowContext(
         minion_composite_key="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
         minion_modpath="tests.assets.minions.sample",
         workflow_id="wf-direct-typed",
@@ -185,7 +187,7 @@ def test_normalize_workflow_context_data_rejects_legacy_unversioned_payload():
 
 
 def test_normalize_workflow_context_data_rejects_future_schema_version():
-    payload = {
+    payload: WorkflowContextData = {
         "schema_version": 999,
         "minion_composite_key": "tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
         "minion_modpath": "tests.assets.minions.sample",

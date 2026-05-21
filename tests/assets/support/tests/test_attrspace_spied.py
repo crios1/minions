@@ -14,57 +14,59 @@ from minions._internal._framework.state_store import StateStore
 from tests.assets.support.minion_spied import SpiedMinion
 from tests.assets.support.pipeline_spied import SpiedPipeline
 from tests.assets.support.resource_spied import SpiedResource
+from tests.assets.contexts.counter import CounterContext
+from tests.assets.events.record import RecordEvent
 
 
 def test_spied_minion_attrspace_rejects_mn_class_attr():
     with pytest.raises(UnsupportedUserCode):
-        class BadMinion(SpiedMinion[dict, dict]):
+        class BadMinion(SpiedMinion[RecordEvent, CounterContext]):  # pyright: ignore[reportUnusedClass]
             _mn_bad_cls_atrr = 1
 
 
 def test_spied_minion_attrspace_rejects_mn_method_name():
     with pytest.raises(UnsupportedUserCode):
-        class BadMinion(SpiedMinion[dict, dict]):
+        class BadMinion(SpiedMinion[RecordEvent, CounterContext]):  # pyright: ignore[reportUnusedClass]
             async def _mn_bad_method(self):
                 ...
 
 
 def test_spied_pipeline_attrspace_rejects_mn_class_attr():
     with pytest.raises(UnsupportedUserCode):
-        class BadPipeline(SpiedPipeline[dict]):
+        class BadPipeline(SpiedPipeline[RecordEvent]):  # pyright: ignore[reportUnusedClass]
             _mn_bad_cls_atrr = 1
 
 
 def test_spied_pipeline_attrspace_rejects_mn_method_name():
     with pytest.raises(UnsupportedUserCode):
-        class BadPipeline(SpiedPipeline[dict]):
+        class BadPipeline(SpiedPipeline[RecordEvent]):  # pyright: ignore[reportUnusedClass]
             async def _mn_bad_method(self):
                 ...
 
 
 def test_spied_resource_attrspace_rejects_mn_class_attr():
     with pytest.raises(UnsupportedUserCode):
-        class BadResource(SpiedResource):
+        class BadResource(SpiedResource):  # pyright: ignore[reportUnusedClass]
             _mn_bad_cls_atrr = 1
 
 
 def test_spied_resource_attrspace_rejects_mn_method_name():
     with pytest.raises(UnsupportedUserCode):
-        class BadResource(SpiedResource):
+        class BadResource(SpiedResource):  # pyright: ignore[reportUnusedClass]
             async def _mn_bad_method(self):
                 ...
 
 
 def test_spied_minion_attrspace_rejects_mn_assignment_in_lifecycle_hook():
     with pytest.raises(UnsupportedUserCode):
-        class BadMinion(SpiedMinion[dict, dict]):
+        class BadMinion(SpiedMinion[RecordEvent, CounterContext]):  # pyright: ignore[reportUnusedClass]
             async def startup(self):
                 self._mn_bad_attr = 1
 
 
 def test_spied_minion_attrspace_rejects_mn_assignment_in_workflow_step():
     with pytest.raises(UnsupportedUserCode):
-        class BadMinion(SpiedMinion[dict, dict]):
+        class BadMinion(SpiedMinion[RecordEvent, CounterContext]):  # pyright: ignore[reportUnusedClass]
             @minion_step
             async def step(self):
                 self._mn_bad_attr = 1
@@ -72,28 +74,28 @@ def test_spied_minion_attrspace_rejects_mn_assignment_in_workflow_step():
 
 def test_spied_pipeline_attrspace_rejects_mn_assignment_in_lifecycle_hook():
     with pytest.raises(UnsupportedUserCode):
-        class BadPipeline(SpiedPipeline[dict]):
+        class BadPipeline(SpiedPipeline[RecordEvent]):  # pyright: ignore[reportUnusedClass]
             async def startup(self):
                 self._mn_bad_attr = 1
 
 
 def test_spied_pipeline_attrspace_rejects_mn_assignment_in_emit_event_loop():
     with pytest.raises(UnsupportedUserCode):
-        class BadPipeline(SpiedPipeline[dict]):
+        class BadPipeline(SpiedPipeline[RecordEvent]):  # pyright: ignore[reportUnusedClass]
             async def run(self):
                 self._mn_bad_attr = 1
 
 
 def test_spied_resource_attrspace_rejects_mn_assignment_in_lifecycle_hook():
     with pytest.raises(UnsupportedUserCode):
-        class BadResource(SpiedResource):
+        class BadResource(SpiedResource):  # pyright: ignore[reportUnusedClass]
             async def startup(self):
                 self._mn_bad_attr = 1
 
 
 def test_spied_resource_attrspace_rejects_mn_assignment_in_user_method():
     with pytest.raises(UnsupportedUserCode):
-        class BadResource(SpiedResource):
+        class BadResource(SpiedResource):  # pyright: ignore[reportUnusedClass]
             async def fetch(self):
                 self._mn_bad_attr = 1
 

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from .directives import Directive, MinionStart, iter_directives_flat
 
 
@@ -14,13 +14,19 @@ class ScenarioPlan:
         self,
         directives: Sequence[Directive],
         *,
-        pipeline_event_counts: dict[str, int],
+        pipeline_event_counts: Mapping[str, object],
     ) -> None:
         self.directives = list(directives)
         self.flat_directives = list(iter_directives_flat(self.directives))
         self._validate_unique_directive_instances()
         self.directive_index_map = {id(d): idx for idx, d in enumerate(self.flat_directives)}
-        self.pipeline_event_targets = dict(pipeline_event_counts)
+        self.pipeline_event_targets = {}
+        for pipeline, count in pipeline_event_counts.items():
+            if not isinstance(count, int):
+                raise ValueError(
+                    f"pipeline_event_counts[{pipeline!r}] must be an int, got {type(count).__name__}."
+                )
+            self.pipeline_event_targets[pipeline] = count
         self._validate()
 
     def directive_index(self, directive: Directive) -> int:
@@ -28,10 +34,6 @@ class ScenarioPlan:
 
     def _validate(self) -> None:
         for pipeline, count in self.pipeline_event_targets.items():
-            if not isinstance(count, int):
-                raise ValueError(
-                    f"pipeline_event_counts[{pipeline!r}] must be an int, got {type(count).__name__}."
-                )
             if count < 0:
                 raise ValueError(f"pipeline_event_counts[{pipeline!r}] must be >= 0, got {count}.")
 

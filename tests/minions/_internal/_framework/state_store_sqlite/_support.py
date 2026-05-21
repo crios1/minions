@@ -1,5 +1,7 @@
 import asyncio
 import time
+from collections.abc import Generator
+from types import TracebackType
 from typing import Any
 
 import pytest
@@ -7,15 +9,21 @@ import pytest
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.minion_workflow_context_codec import persist_workflow_context
 from minions._internal._framework.state_store_sqlite import (
+    PendingWrite,
     SQL_WORKFLOW_DELETE,
     SQL_WORKFLOW_SELECT_BY_ID,
     SQL_WORKFLOW_UPSERT,
+    SQLiteStateStore,
     WORKFLOW_ID_STARTUP_PROBE,
 )
 from minions._internal._utils.serialization import serialize
 
 
-def mk_ctx(i=0, size=32, modpath="app.minion"):
+def mk_ctx(
+    i: int = 0,
+    size: int = 32,
+    modpath: str = "app.minion",
+) -> MinionWorkflowContext[dict[str, int], dict[str, str]]:
     return MinionWorkflowContext(
         minion_composite_key=f"{modpath}|cfg-{i}|app.pipeline",
         minion_modpath=modpath,
@@ -29,11 +37,11 @@ def mk_ctx(i=0, size=32, modpath="app.minion"):
     )
 
 
-def blob_for(ctx: MinionWorkflowContext) -> bytes:
+def blob_for(ctx: MinionWorkflowContext[Any, Any]) -> bytes:
     return serialize(persist_workflow_context(ctx))
 
 
-async def cancel_and_drain_tasks(*tasks: asyncio.Task | None) -> None:
+async def cancel_and_drain_tasks(*tasks: asyncio.Task[Any] | None) -> None:
     active_tasks = [task for task in tasks if task is not None]
     if not active_tasks:
         return
@@ -59,20 +67,24 @@ class _StaticCursorContext:
     async def __aenter__(self) -> _StaticRowCursor:
         return _StaticRowCursor(self._row)
 
-    async def __aexit__(self, exc_type, exc, tb) -> bool:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> bool:
         return False
 
 
 class _AwaitableResult:
-    def __await__(self):
-        async def _done():
-            return None
-
-        return _done().__await__()
+    def __await__(self) -> Generator[Any, None, None]:
+        if False:
+            yield
+        return None
 
 
 class BlockedCommitBatchNowGate:
-    def __init__(self, s, monkeypatch: pytest.MonkeyPatch):
+    def __init__(self, s: SQLiteStateStore, monkeypatch: pytest.MonkeyPatch):
         self.entered = asyncio.Event()
         self.commit_count = 0
         self.max_active_commit_count = 0
@@ -82,7 +94,7 @@ class BlockedCommitBatchNowGate:
         # Hold the private commit worker open at a deterministic point for race tests.
         original_commit_batch_now = s._commit_batch_now
 
-        async def wrapped_commit_batch_now(items):
+        async def wrapped_commit_batch_now(items: list[PendingWrite]) -> float:
             self.commit_count += 1
             self.operation_order.extend((item.op, item.workflow_id) for item in items)
             self._active_commit_count += 1
@@ -106,7 +118,7 @@ class BlockedCommitBatchNowGate:
     def release(self) -> None:
         self._release.set()
 
-    async def release_and_cancel_and_drain_tasks(self, *tasks: asyncio.Task | None) -> None:
+    async def release_and_cancel_and_drain_tasks(self, *tasks: asyncio.Task[Any] | None) -> None:
         self.release()
         await cancel_and_drain_tasks(*tasks)
 

@@ -1,4 +1,9 @@
 import asyncio
+import contextlib
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any, cast
+
 import pytest
 
 from minions._internal._domain.gru import Gru
@@ -6,7 +11,11 @@ from minions._internal._framework.logger_console import ConsoleLogger
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_noop import NoOpStateStore
+from tests.assets.support.logger_inmemory import InMemoryLogger
+from tests.assets.support.metrics_inmemory import InMemoryMetrics
+from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.support.gru_scenario import (
+    Directive,
     GruShutdown,
     MinionStart,
     MinionStop,
@@ -14,12 +23,13 @@ from tests.support.gru_scenario import (
     run_gru_scenario,
 )
 
+
 class TestInvalidUsage:
     # Legacy/manual baseline during DSL confidence window.
     # Orchestration-invalid coverage should be added/updated in `TestInvalidUsageDSL`
     # and `TestInvalidUsageUsingNewAssetsDSL`.
     @pytest.mark.asyncio
-    async def test_gru_raises_on_direct_instantiation(self):
+    async def test_gru_raises_on_direct_instantiation(self) -> None:
         with pytest.raises(RuntimeError):
             Gru(
                 loop=asyncio.get_running_loop(),
@@ -29,7 +39,10 @@ class TestInvalidUsage:
             )
 
     @pytest.mark.asyncio
-    async def test_gru_raises_on_multiple_instances(self, gru_factory):
+    async def test_gru_raises_on_multiple_instances(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
+    ) -> None:
         async with gru_factory(
             logger=NoOpLogger(),
             metrics=NoOpMetrics(),
@@ -44,36 +57,36 @@ class TestInvalidUsage:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("bad_logger", [123, "invalid"])
-    async def test_gru_raises_on_invalid_logger_param(self, bad_logger):
+    async def test_gru_raises_on_invalid_logger_param(self, bad_logger: object) -> None:
         with pytest.raises(TypeError):
             await Gru.create(
-                logger=bad_logger,
+                logger=cast(Any, bad_logger),
                 metrics=NoOpMetrics(),
                 state_store=NoOpStateStore()
             )
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("bad_metrics", [123, "invalid"])
-    async def test_gru_raises_on_invalid_metrics_param(self, bad_metrics):
+    async def test_gru_raises_on_invalid_metrics_param(self, bad_metrics: object) -> None:
         with pytest.raises(TypeError):
             await Gru.create(
                 logger=NoOpLogger(),
-                metrics=bad_metrics,
+                metrics=cast(Any, bad_metrics),
                 state_store=NoOpStateStore()
             )
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("bad_state_store", [123, "invalid"])
-    async def test_gru_raises_on_invalid_state_store_param(self, bad_state_store):
+    async def test_gru_raises_on_invalid_state_store_param(self, bad_state_store: object) -> None:
         with pytest.raises(TypeError):
             await Gru.create(
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics(),
-                state_store=bad_state_store
+                state_store=cast(Any, bad_state_store)
             )
 
     @pytest.mark.asyncio
-    async def test_gru_raises_on_invalid_workflow_persistence_failure_policy(self):
+    async def test_gru_raises_on_invalid_workflow_persistence_failure_policy(self) -> None:
         with pytest.raises(
             ValueError,
             match="workflow_persistence_failure_policy must be 'continue-on-failure' or 'idle-until-persisted'",
@@ -82,7 +95,7 @@ class TestInvalidUsage:
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics(),
                 state_store=NoOpStateStore(),
-                workflow_persistence_failure_policy="invalid",
+                workflow_persistence_failure_policy=cast(Any, "invalid"),
             )
 
     @pytest.mark.asyncio
@@ -98,17 +111,23 @@ class TestInvalidUsage:
             ("workflow_persistence_retry_error_after_seconds", -1, "must be None or a non-negative number of seconds"),
         ],
     )
-    async def test_gru_raises_on_invalid_workflow_persistence_retry_settings(self, kwarg, value, match):
+    async def test_gru_raises_on_invalid_workflow_persistence_retry_settings(
+        self,
+        kwarg: str,
+        value: object,
+        match: str
+    ) -> None:
+        kwargs: dict[str, Any] = {kwarg: value}
         with pytest.raises(ValueError, match=match):
             await Gru.create(
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics(),
                 state_store=NoOpStateStore(),
-                **{kwarg: value},
+                **kwargs,
             )
 
     @pytest.mark.asyncio
-    async def test_gru_raises_when_workflow_persistence_retry_max_delay_is_below_initial_delay(self):
+    async def test_gru_raises_when_workflow_persistence_retry_max_delay_is_below_initial_delay(self) -> None:
         with pytest.raises(
             ValueError,
             match="workflow_persistence_retry_max_delay_seconds must be greater than or equal to workflow_persistence_retry_delay_seconds",
@@ -122,7 +141,11 @@ class TestInvalidUsage:
             )
 
     @pytest.mark.asyncio
-    async def test_gru_returns_error_when_starting_running_minion(self, gru_factory, tests_dir):
+    async def test_gru_returns_error_when_starting_running_minion(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        tests_dir: Path
+    ) -> None:
         # TODO:
         # - start 2 minions with the same name (would need to start different minion but give the same name)
         # - stop minion by name => and get error as a value
@@ -149,6 +172,7 @@ class TestInvalidUsage:
 
             assert result1.success
             assert result1.name == "simple-minion"
+            assert result1.instance_id is not None
             assert result1.instance_id in gru._minions_by_id
             assert result1.instance_id in gru._minion_tasks
 
@@ -165,7 +189,10 @@ class TestInvalidUsage:
             assert "Minion already running" in result2.reason
 
     @pytest.mark.asyncio
-    async def test_gru_returns_error_when_stopping_nonexistant_minion(self, gru_factory):
+    async def test_gru_returns_error_when_stopping_nonexistant_minion(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
+    ) -> None:
         async with gru_factory(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
@@ -180,9 +207,13 @@ class TestInvalidUsage:
             assert "No minion found with the given name or instance ID" in result.reason
 
     @pytest.mark.asyncio
-    async def test_gru_returns_error_when_mismatched_minion_and_pipeline_event_types(self, gru_factory, tests_dir):
+    async def test_gru_returns_error_when_mismatched_minion_and_pipeline_event_types(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        tests_dir: Path
+    ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.simple.basic"
-        pipeline_modpath = "tests.assets.pipelines.simple.dict_event"
+        pipeline_modpath = "tests.assets.pipelines.simple.record_event"
         config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
         async with gru_factory(
@@ -218,12 +249,17 @@ class TestInvalidUsage:
 class TestInvalidUsageDSL:
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_starting_running_minion(
-        self, gru, logger, metrics, state_store, tests_dir
-    ):
+        self,
+        gru: Gru,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
+        tests_dir: Path,
+    ) -> None:
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
 
-        directives = [
+        directives: list[Directive] = [
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
                 minion_config_path=config_path,
@@ -250,9 +286,13 @@ class TestInvalidUsageDSL:
 
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_stopping_nonexistant_minion(
-        self, gru, logger, metrics, state_store
-    ):
-        directives = [
+        self,
+        gru: Gru,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
+    ) -> None:
+        directives: list[Directive] = [
             MinionStop(name_or_instance_id="mock", expect_success=False),
             GruShutdown(expect_success=True),
         ]
@@ -268,15 +308,20 @@ class TestInvalidUsageDSL:
 
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_mismatched_minion_and_pipeline_event_types(
-        self, gru, logger, metrics, state_store, tests_dir
-    ):
+        self,
+        gru: Gru,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
+        tests_dir: Path,
+    ) -> None:
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-        directives = [
+        directives: list[Directive] = [
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
                 minion_config_path=config_path,
-                pipeline="tests.assets.pipelines.types.dict_event",
+                pipeline="tests.assets.pipelines.types.record_event",
                 expect_success=False,
             ),
             GruShutdown(expect_success=True),
@@ -295,12 +340,17 @@ class TestInvalidUsageDSL:
 class TestInvalidUsageUsingNewAssetsDSL:
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_starting_running_minion(
-        self, gru, logger, metrics, state_store, tests_dir
-    ):
+        self,
+        gru: Gru,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
+        tests_dir: Path,
+    ) -> None:
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
 
-        directives = [
+        directives: list[Directive] = [
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
                 minion_config_path=config_path,
@@ -327,9 +377,13 @@ class TestInvalidUsageUsingNewAssetsDSL:
 
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_stopping_nonexistant_minion(
-        self, gru, logger, metrics, state_store
-    ):
-        directives = [
+        self,
+        gru: Gru,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
+    ) -> None:
+        directives: list[Directive] = [
             MinionStop(name_or_instance_id="mock", expect_success=False),
             GruShutdown(expect_success=True),
         ]
@@ -345,15 +399,20 @@ class TestInvalidUsageUsingNewAssetsDSL:
 
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_mismatched_minion_and_pipeline_event_types(
-        self, gru, logger, metrics, state_store, tests_dir
-    ):
+        self,
+        gru: Gru,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
+        tests_dir: Path,
+    ) -> None:
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-        directives = [
+        directives: list[Directive] = [
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
                 minion_config_path=config_path,
-                pipeline="tests.assets.pipelines.types.dict_event",
+                pipeline="tests.assets.pipelines.types.record_event",
                 expect_success=False,
             ),
             GruShutdown(expect_success=True),
@@ -372,7 +431,7 @@ class TestInvalidUsageUsingNewAssets:
     # Orchestration-invalid coverage should be added/updated in
     # `TestInvalidUsageUsingNewAssetsDSL`.
     @pytest.mark.asyncio
-    async def test_gru_raises_on_direct_instantiation(self):
+    async def test_gru_raises_on_direct_instantiation(self) -> None:
         with pytest.raises(RuntimeError):
             Gru(
                 loop=asyncio.get_running_loop(),
@@ -382,7 +441,10 @@ class TestInvalidUsageUsingNewAssets:
             )
 
     @pytest.mark.asyncio
-    async def test_gru_raises_on_multiple_instances(self, gru_factory):
+    async def test_gru_raises_on_multiple_instances(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
+    ) -> None:
         async with gru_factory(
             logger=NoOpLogger(),
             metrics=NoOpMetrics(),
@@ -397,38 +459,40 @@ class TestInvalidUsageUsingNewAssets:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("bad_logger", [123, "invalid"])
-    async def test_gru_raises_on_invalid_logger_param(self, bad_logger):
+    async def test_gru_raises_on_invalid_logger_param(self, bad_logger: object) -> None:
         with pytest.raises(TypeError):
             await Gru.create(
-                logger=bad_logger,
+                logger=cast(Any, bad_logger),
                 metrics=NoOpMetrics(),
                 state_store=NoOpStateStore(),
             )
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("bad_metrics", [123, "invalid"])
-    async def test_gru_raises_on_invalid_metrics_param(self, bad_metrics):
+    async def test_gru_raises_on_invalid_metrics_param(self, bad_metrics: object) -> None:
         with pytest.raises(TypeError):
             await Gru.create(
                 logger=NoOpLogger(),
-                metrics=bad_metrics,
+                metrics=cast(Any, bad_metrics),
                 state_store=NoOpStateStore(),
             )
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("bad_state_store", [123, "invalid"])
-    async def test_gru_raises_on_invalid_state_store_param(self, bad_state_store):
+    async def test_gru_raises_on_invalid_state_store_param(self, bad_state_store: object) -> None:
         with pytest.raises(TypeError):
             await Gru.create(
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics(),
-                state_store=bad_state_store,
+                state_store=cast(Any, bad_state_store),
             )
 
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_starting_running_minion(
-        self, gru_factory, tests_dir
-    ):
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        tests_dir: Path
+    ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.counter.basic"
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -442,6 +506,7 @@ class TestInvalidUsageUsingNewAssets:
 
             assert result1.success
             assert result1.name == "two-step-minion"
+            assert result1.instance_id is not None
             assert result1.instance_id in gru._minions_by_id
             assert result1.instance_id in gru._minion_tasks
 
@@ -456,7 +521,10 @@ class TestInvalidUsageUsingNewAssets:
             assert "Minion already running" in result2.reason
 
     @pytest.mark.asyncio
-    async def test_gru_returns_error_when_stopping_nonexistant_minion(self, gru_factory):
+    async def test_gru_returns_error_when_stopping_nonexistant_minion(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
+    ) -> None:
         async with gru_factory(state_store=NoOpStateStore(), logger=ConsoleLogger(), metrics=NoOpMetrics()) as gru:
             result = await gru.stop_minion("mock")
 
@@ -465,9 +533,13 @@ class TestInvalidUsageUsingNewAssets:
             assert "No minion found" in result.reason
 
     @pytest.mark.asyncio
-    async def test_gru_returns_error_when_mismatched_minion_and_pipeline_event_types(self, gru_factory, tests_dir):
+    async def test_gru_returns_error_when_mismatched_minion_and_pipeline_event_types(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        tests_dir: Path
+    ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.counter.basic"
-        pipeline_modpath = "tests.assets.pipelines.types.dict_event"
+        pipeline_modpath = "tests.assets.pipelines.types.record_event"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
         async with gru_factory(state_store=NoOpStateStore(), logger=ConsoleLogger(), metrics=NoOpMetrics()) as gru:

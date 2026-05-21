@@ -28,8 +28,8 @@ class Event:
     type: str = "generic.event"
     source: str | None = None
     payload: dict[str, Any] | None = None
-    metadata: dict[str, str] = field(default_factory=dict)
-    tags: list[str] = field(default_factory=list)
+    metadata: dict[str, str] = field(default_factory=lambda: dict())
+    tags: list[str] = field(default_factory=lambda: list())
 
 
 def _make_event() -> Event:
@@ -48,19 +48,19 @@ def _make_event() -> Event:
     )
 
 
-def test_invalid_serialize():
+def test_invalid_serialize() -> None:
     with pytest.raises(TypeError):
         serialize(print)
 
 
-def test_invalid_deserialize():
+def test_invalid_deserialize() -> None:
     with pytest.raises(ValueError):
         deserialize(bytes([1, 2, 3]), Event)
     with pytest.raises(TypeError):
         deserialize("invalid", None)  # type: ignore[arg-type]
 
 
-def test_decoder_cache_used_for_hashable_types():
+def test_decoder_cache_used_for_hashable_types() -> None:
     orig = _cached_decoder
     orig.cache_clear()
 
@@ -80,11 +80,13 @@ def test_decoder_cache_used_for_hashable_types():
     assert ci2.hits == 1
 
 
-def test_decoder_fallback_for_unhashable_annotation(monkeypatch):
+def test_decoder_fallback_for_unhashable_annotation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     orig = _cached_decoder
     orig.cache_clear()
 
-    def boom(_t):
+    def boom(_t: object) -> msgspec.msgpack.Decoder[object]:
         raise TypeError("unhashable")
 
     monkeypatch.setattr(f"{MODULE}._cached_decoder", boom)
@@ -95,19 +97,21 @@ def test_decoder_fallback_for_unhashable_annotation(monkeypatch):
     assert out == evt
 
 
-def test_decoder_cache_prevents_repeated_decoder_instantiation(monkeypatch):
+def test_decoder_cache_prevents_repeated_decoder_instantiation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     orig = _cached_decoder
     orig.cache_clear()
     Decoder = msgspec.msgpack.Decoder
     inst = {"n": 0}
 
     class SpyDecoder:
-        def __init__(self, *a, **kw):
+        def __init__(self, *a: object, **kw: object) -> None:
             inst["n"] += 1
             self._inner = Decoder(*a, **kw)
 
-        def decode(self, *a, **kw):
-            return self._inner.decode(*a, **kw)
+        def decode(self, buf: bytes) -> object:
+            return self._inner.decode(buf)
 
     monkeypatch.setattr("msgspec.msgpack.Decoder", SpyDecoder)
 

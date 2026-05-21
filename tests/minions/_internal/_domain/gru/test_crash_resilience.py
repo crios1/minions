@@ -1,5 +1,10 @@
+import contextlib
+from collections.abc import Callable
+from pathlib import Path
+
 import pytest
 
+from minions._internal._domain.gru import Gru
 from minions._internal._framework.metrics_constants import (
     LABEL_ERROR_TYPE,
     LABEL_MINION_COMPOSITE_KEY,
@@ -29,10 +34,11 @@ def composite_key(minion_modpath: str, pipeline_modpath: str, config: str = "") 
     return f"{minion_modpath}|{config}|{pipeline_modpath}"
 
 
-async def assert_gru_can_start_and_stop_known_good_minion(gru) -> None:
+async def assert_gru_can_start_and_stop_known_good_minion(gru: Gru) -> None:
     result = await gru.start_minion(GOOD_MINION, GOOD_PIPELINE)
     assert result.success
     assert result.instance_id is not None
+    assert isinstance(gru._logger, InMemoryLogger)
     assert await gru._logger.wait_for_log("Workflow succeeded", timeout=1.0, poll_interval=0.01)
     stop = await gru.stop_minion(result.instance_id)
     assert stop.success
@@ -45,7 +51,11 @@ def assert_counter(metrics: InMemoryMetrics, metric_name: str, labels: dict[str,
 
 
 @pytest.mark.asyncio
-async def test_start_minion_contains_state_store_resume_read_failure(gru_factory, logger, metrics):
+async def test_start_minion_contains_state_store_resume_read_failure(
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+) -> None:
     state_store = BoomGetContextsForOrchestrationStateStore(logger=logger)
 
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
@@ -72,14 +82,14 @@ async def test_start_minion_contains_state_store_resume_read_failure(gru_factory
     ],
 )
 async def test_start_minion_contains_user_code_startup_failures(
-    gru_factory,
-    logger,
-    metrics,
-    state_store,
-    minion_modpath,
-    pipeline_modpath,
-    tests_dir,
-):
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    minion_modpath: str,
+    pipeline_modpath: str,
+    tests_dir: Path,
+) -> None:
     config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_minion(
@@ -95,7 +105,12 @@ async def test_start_minion_contains_user_code_startup_failures(
 
 
 @pytest.mark.asyncio
-async def test_minion_step_failure_is_logged_measured_and_contained(gru_factory, logger, metrics, state_store):
+async def test_minion_step_failure_is_logged_measured_and_contained(
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_minion("tests.assets.crash.minions.boom_step", GOOD_PIPELINE)
         assert result.success
@@ -136,11 +151,11 @@ async def test_minion_step_failure_is_logged_measured_and_contained(gru_factory,
 
 @pytest.mark.asyncio
 async def test_pipeline_produce_event_failure_is_logged_measured_and_shutdown_is_clean(
-    gru_factory,
-    logger,
-    metrics,
-    state_store,
-):
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_minion(GOOD_MINION, "tests.assets.crash.pipelines.boom_produce_event")
         assert result.success
@@ -164,7 +179,12 @@ async def test_pipeline_produce_event_failure_is_logged_measured_and_shutdown_is
 
 
 @pytest.mark.asyncio
-async def test_resource_method_failure_is_logged_measured_and_contained(gru_factory, logger, metrics, state_store):
+async def test_resource_method_failure_is_logged_measured_and_contained(
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_minion("tests.assets.crash.minions.boom_resource_method", GOOD_PIPELINE)
         assert result.success
@@ -200,13 +220,13 @@ async def test_resource_method_failure_is_logged_measured_and_contained(gru_fact
     ],
 )
 async def test_shutdown_failures_are_reported_and_singleton_is_released(
-    gru_factory,
-    logger,
-    metrics,
-    state_store,
-    minion_modpath,
-    pipeline_modpath,
-):
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    minion_modpath: str,
+    pipeline_modpath: str,
+) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_minion(minion_modpath, pipeline_modpath)
         assert result.success

@@ -1,5 +1,15 @@
+import contextlib
+from collections.abc import Callable
+from typing import Any
+
 import pytest
 
+from minions._internal._domain.gru import Gru
+from minions._internal._domain.minion import Minion
+
+from tests.assets.support.logger_inmemory import InMemoryLogger
+from tests.assets.support.metrics_inmemory import InMemoryMetrics
+from tests.assets.support.state_store_inmemory import InMemoryStateStore
 
 GOOD_MINION = "tests.assets.crash.minions.good"
 GOOD_PIPELINE = "tests.assets.crash.pipelines.emit_1_then_block"
@@ -8,17 +18,17 @@ FIXED_RESOURCE_ID = "tests.assets.resources.fixed.base.FixedResource"
 
 @pytest.mark.asyncio
 async def test_stop_committed_minion_shutdown_failure_discards_runtime_state_when_cleanup_helper_fails(
-    gru_factory,
-    logger,
-    metrics,
-    state_store,
-    monkeypatch,
-):
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_minion("tests.assets.crash.minions.boom_shutdown", GOOD_PIPELINE)
         assert result.success
 
-        async def failing_stop_minion_best_effort(_minion):
+        async def failing_stop_minion_best_effort(_minion: Minion[Any, Any]) -> None:
             raise RuntimeError("cleanup helper boom")
 
         monkeypatch.setattr(gru, "_stop_minion_best_effort", failing_stop_minion_best_effort)
@@ -31,19 +41,20 @@ async def test_stop_committed_minion_shutdown_failure_discards_runtime_state_whe
 
 @pytest.mark.asyncio
 async def test_stop_unsubscribe_failure_discards_runtime_state_after_subscription_is_removed(
-    gru_factory,
-    logger,
-    metrics,
-    state_store,
-    monkeypatch,
-):
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_minion(GOOD_MINION, GOOD_PIPELINE)
         assert result.success
+        assert result.instance_id is not None
         minion = gru._minions_by_id[result.instance_id]
         pipeline = gru._pipelines[GOOD_PIPELINE]
 
-        async def failing_unsubscribe(detached_minion):
+        async def failing_unsubscribe(detached_minion: Minion[Any, Any]) -> None:
             async with pipeline._mn_subs_lock:
                 pipeline._mn_subs.discard(detached_minion)
             raise RuntimeError("unsubscribe boom")
@@ -59,19 +70,19 @@ async def test_stop_unsubscribe_failure_discards_runtime_state_after_subscriptio
 
 @pytest.mark.asyncio
 async def test_start_resource_startup_failure_discards_runtime_state_when_cleanup_and_logging_fail(
-    gru_factory,
-    logger,
-    metrics,
-    state_store,
-    monkeypatch,
-):
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        async def failing_cleanup_resources(_resource_ids):
+        async def failing_cleanup_resources(_resource_ids: set[str]) -> None:
             raise RuntimeError("resource cleanup boom")
 
         original_log = gru._logger._mn_log
 
-        async def failing_cleanup_log(level, msg, **kwargs):
+        async def failing_cleanup_log(level: int, msg: str, **kwargs: object) -> None:
             if msg == "Resource cleanup could not stop resources":
                 raise RuntimeError("cleanup log boom")
             await original_log(level, msg, **kwargs)
@@ -91,12 +102,12 @@ async def test_start_resource_startup_failure_discards_runtime_state_when_cleanu
 
 @pytest.mark.asyncio
 async def test_stop_resource_cleanup_failure_discards_runtime_state_when_no_shared_owners_remain(
-    gru_factory,
-    logger,
-    metrics,
-    state_store,
-    monkeypatch,
-):
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_minion(
             "tests.assets.crash.minions.depends_on_boom_shutdown_resource",
@@ -104,7 +115,7 @@ async def test_stop_resource_cleanup_failure_discards_runtime_state_when_no_shar
         )
         assert result.success
 
-        async def failing_cleanup_resources(_resource_ids):
+        async def failing_cleanup_resources(_resource_ids: set[str]) -> None:
             raise RuntimeError("resource cleanup boom")
 
         monkeypatch.setattr(gru, "_cleanup_resources", failing_cleanup_resources)
@@ -117,12 +128,12 @@ async def test_stop_resource_cleanup_failure_discards_runtime_state_when_no_shar
 
 @pytest.mark.asyncio
 async def test_stop_resource_cleanup_failure_preserves_shared_runtime_state_for_live_owner(
-    gru_factory,
-    logger,
-    metrics,
-    state_store,
-    monkeypatch,
-):
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
         first = await gru.start_minion(
             "tests.assets.minions.two_steps.counter.resourced",
@@ -138,7 +149,7 @@ async def test_stop_resource_cleanup_failure_preserves_shared_runtime_state_for_
         assert second.success
         assert gru._resource_refcounts[FIXED_RESOURCE_ID] == 2
 
-        async def failing_cleanup_resources(_resource_ids):
+        async def failing_cleanup_resources(_resource_ids: set[str]) -> None:
             raise RuntimeError("resource cleanup boom")
 
         monkeypatch.setattr(gru, "_cleanup_resources", failing_cleanup_resources)
@@ -154,12 +165,12 @@ async def test_stop_resource_cleanup_failure_preserves_shared_runtime_state_for_
 
 @pytest.mark.asyncio
 async def test_stop_pipeline_resource_cleanup_failure_discards_runtime_state_when_no_owners_remain(
-    gru_factory,
-    logger,
-    metrics,
-    state_store,
-    monkeypatch,
-):
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_minion(
             "tests.assets.minions.two_steps.simple.resourced_1",
@@ -168,7 +179,7 @@ async def test_stop_pipeline_resource_cleanup_failure_discards_runtime_state_whe
         )
         assert result.success
 
-        async def failing_cleanup_resources(_resource_ids):
+        async def failing_cleanup_resources(_resource_ids: set[str]) -> None:
             raise RuntimeError("resource cleanup boom")
 
         monkeypatch.setattr(gru, "_cleanup_resources", failing_cleanup_resources)
@@ -181,12 +192,12 @@ async def test_stop_pipeline_resource_cleanup_failure_discards_runtime_state_whe
 
 @pytest.mark.asyncio
 async def test_start_subscribe_failure_preserves_shared_runtime_state_for_live_owner(
-    gru_factory,
-    logger,
-    metrics,
-    state_store,
-    monkeypatch,
-):
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
         first = await gru.start_minion(
             "tests.assets.minions.two_steps.counter.resourced",
@@ -197,12 +208,12 @@ async def test_start_subscribe_failure_preserves_shared_runtime_state_for_live_o
         assert FIXED_RESOURCE_ID in gru._resources
         assert gru._resource_refcounts[FIXED_RESOURCE_ID] == 1
 
-        async def failing_cleanup_resources(_resource_ids):
+        async def failing_cleanup_resources(_resource_ids: set[str]) -> None:
             raise RuntimeError("resource cleanup boom")
 
         pipeline = next(iter(gru._pipelines.values()))
 
-        async def failing_subscribe(_minion):
+        async def failing_subscribe(_minion: Minion[Any, Any]) -> None:
             raise RuntimeError("subscribe boom")
 
         monkeypatch.setattr(pipeline, "_mn_subscribe", failing_subscribe)
@@ -222,7 +233,12 @@ async def test_start_subscribe_failure_preserves_shared_runtime_state_for_live_o
 
 
 @pytest.mark.asyncio
-async def test_forced_resource_discard_releases_dependency_refcounts(gru_factory, logger, metrics, state_store):
+async def test_forced_resource_discard_releases_dependency_refcounts(
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> None:
     from tests.assets.resources.fixed.base import FixedResource
     from tests.assets.resources.fixed.base_b import FixedResourceB
 

@@ -1,5 +1,7 @@
 import os
 import sqlite3
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -46,7 +48,7 @@ async def test_startup_creates_table_index_and_collects_measurements_even_in_man
     assert any(row[1] == "idx_workflows_orchestration_id" for row in rows)
 
 
-async def test_startup_scrubs_orphaned_probe_rows(tmp_path):
+async def test_startup_scrubs_orphaned_probe_rows(tmp_path: Path):
     logger = InMemoryLogger()
     db_path = os.path.join(tmp_path, "state.db")
     conn = sqlite3.connect(db_path)
@@ -143,7 +145,10 @@ async def test_startup_applies_configured_synchronous(
 # Measurement Fallback Policy
 
 
-async def test_startup_degrades_when_page_size_lookup_fails(tmp_path, monkeypatch):
+async def test_startup_degrades_when_page_size_lookup_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
     logger = InMemoryLogger()
     db_path = os.path.join(tmp_path, "state.db")
     s = SQLiteStateStore(
@@ -152,7 +157,7 @@ async def test_startup_degrades_when_page_size_lookup_fails(tmp_path, monkeypatc
         batch_tuning="calibrated",
     )
 
-    async def _boom(self):
+    async def _boom(self: SQLiteStateStore) -> int | None:
         raise RuntimeError("page_size boom")
 
     # Force the private page-size probe to fail so startup must use fallback measurements.
@@ -174,7 +179,10 @@ async def test_startup_degrades_when_page_size_lookup_fails(tmp_path, monkeypatc
         await logger._mn_shutdown()
 
 
-async def test_startup_degrades_when_page_size_is_unusable(tmp_path, monkeypatch):
+async def test_startup_degrades_when_page_size_is_unusable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
     logger = InMemoryLogger()
     db_path = os.path.join(tmp_path, "state.db")
     s = SQLiteStateStore(
@@ -183,7 +191,7 @@ async def test_startup_degrades_when_page_size_is_unusable(tmp_path, monkeypatch
         batch_tuning="calibrated",
     )
 
-    async def _bad_page_size(self):
+    async def _bad_page_size(self: SQLiteStateStore) -> int:
         return 0
 
     # Return an unusable private page-size probe result so fallback policy is exercised.
@@ -201,8 +209,8 @@ async def test_startup_degrades_when_page_size_is_unusable(tmp_path, monkeypatch
 
 
 async def test_startup_uses_fallback_measurements_when_commit_timing_fails_without_cleanup_failure(
-    tmp_path,
-    monkeypatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     logger = InMemoryLogger()
     db_path = os.path.join(tmp_path, "state.db")
@@ -212,7 +220,7 @@ async def test_startup_uses_fallback_measurements_when_commit_timing_fails_witho
         batch_tuning="calibrated",
     )
 
-    async def _boom(self, _page_size):
+    async def _boom(self: SQLiteStateStore, _page_size: int) -> tuple[float, float]:
         raise RuntimeError("timing boom")
 
     # Force private commit measurement to fail after page-size probing succeeds.
@@ -235,14 +243,14 @@ async def test_startup_uses_fallback_measurements_when_commit_timing_fails_witho
 
 async def test_measure_commit_latency_percentiles_raises_when_probe_cleanup_delete_fails_after_measurement(
     make_state_store_and_logger: MakeStateStoreAndLogger,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     s, _ = await make_state_store_and_logger()
     assert s._db is not None
     # Fail only the private cleanup delete after measurement work completes.
     original_execute = s._db.execute
 
-    async def failing_execute(sql, params=None):
+    async def failing_execute(sql: str, params: tuple[Any, ...] | None = None) -> object:
         if sql == SQL_WORKFLOW_DELETE and params == (WORKFLOW_ID_COMMIT_MEASUREMENT_PROBE,):
             raise RuntimeError("delete boom")
         if params is None:
@@ -257,14 +265,14 @@ async def test_measure_commit_latency_percentiles_raises_when_probe_cleanup_dele
 
 async def test_measure_commit_latency_percentiles_raises_when_measurement_and_probe_cleanup_fail(
     make_state_store_and_logger: MakeStateStoreAndLogger,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     s, logger = await make_state_store_and_logger()
     assert s._db is not None
     # Fail both the private measurement transaction and its cleanup delete.
     original_execute = s._db.execute
 
-    async def failing_execute(sql, params=None):
+    async def failing_execute(sql: str, params: tuple[Any, ...] | None = None) -> object:
         if sql == SQL_WORKFLOW_DELETE and params == (WORKFLOW_ID_COMMIT_MEASUREMENT_PROBE,):
             raise RuntimeError("delete boom")
         if sql == "BEGIN IMMEDIATE":
@@ -292,19 +300,22 @@ async def test_measure_commit_latency_percentiles_raises_when_measurement_and_pr
 # Startup Resource Cleanup
 
 
-async def test_startup_closes_connection_when_startup_phase_fails(tmp_path, monkeypatch):
+async def test_startup_closes_connection_when_startup_phase_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
     logger = InMemoryLogger()
     db_path = os.path.join(tmp_path, "state.db")
     s = SQLiteStateStore(db_path=db_path, logger=logger)
     close_called = False
 
-    async def _boom(self):
+    async def _boom(self: SQLiteStateStore) -> None:
         nonlocal close_called
         assert self._db is not None
         # Wrap the private connection close to prove startup cleans up after probe failure.
         original_close = self._db.close
 
-        async def close_wrapper():
+        async def close_wrapper() -> None:
             nonlocal close_called
             close_called = True
             await original_close()
@@ -322,7 +333,10 @@ async def test_startup_closes_connection_when_startup_phase_fails(tmp_path, monk
     assert s._db is None
 
 
-async def test_startup_propagates_commit_measurement_probe_cleanup_failure(tmp_path, monkeypatch):
+async def test_startup_propagates_commit_measurement_probe_cleanup_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
     logger = InMemoryLogger()
     db_path = os.path.join(tmp_path, "state.db")
     s = SQLiteStateStore(
@@ -331,7 +345,7 @@ async def test_startup_propagates_commit_measurement_probe_cleanup_failure(tmp_p
         batch_tuning="calibrated",
     )
 
-    async def _cleanup_boom(self, _page_size):
+    async def _cleanup_boom(self: SQLiteStateStore, _page_size: int) -> tuple[float, float]:
         raise CommitMeasurementProbeCleanupError("cleanup boom")
 
     # Make the private measurement helper raise a non-fallback cleanup failure.
@@ -348,7 +362,7 @@ async def test_startup_propagates_commit_measurement_probe_cleanup_failure(tmp_p
             s._db = None
 
 
-async def test_startup_probe_raises_when_cleanup_delete_fails(monkeypatch):
+async def test_startup_probe_raises_when_cleanup_delete_fails(monkeypatch: pytest.MonkeyPatch):
     logger = InMemoryLogger()
     s = SQLiteStateStore(db_path=":memory:", logger=logger)
     fake_db = StartupProbeDb(
@@ -362,7 +376,9 @@ async def test_startup_probe_raises_when_cleanup_delete_fails(monkeypatch):
         await s._run_startup_probe()
 
 
-async def test_startup_probe_preserves_primary_failure_when_cleanup_delete_also_fails(monkeypatch):
+async def test_startup_probe_preserves_primary_failure_when_cleanup_delete_also_fails(
+    monkeypatch: pytest.MonkeyPatch,
+):
     logger = InMemoryLogger()
     s = SQLiteStateStore(db_path=":memory:", logger=logger)
     fake_db = StartupProbeDb(

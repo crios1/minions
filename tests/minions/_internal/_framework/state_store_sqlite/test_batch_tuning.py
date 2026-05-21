@@ -79,13 +79,16 @@ async def test_init_with_calibrated_batch_tuning_defers_batch_resolution_until_s
 
 
 @pytest.mark.parametrize(
-    "explicit_batch_config",
+    ("batch_max_queued_writes", "batch_max_flush_delay_ms"),
     [
-        {"batch_max_queued_writes": 128},
-        {"batch_max_flush_delay_ms": 16},
+        (128, None),
+        (None, 16),
     ],
 )
-async def test_init_rejects_explicit_batch_config_in_calibrated_mode(explicit_batch_config):
+async def test_init_rejects_explicit_batch_config_in_calibrated_mode(
+    batch_max_queued_writes: int | None,
+    batch_max_flush_delay_ms: int | None,
+) -> None:
     with pytest.raises(
         ValueError,
         match="batch_max_queued_writes and batch_max_flush_delay_ms cannot be set when batch_tuning='calibrated'",
@@ -94,12 +97,15 @@ async def test_init_rejects_explicit_batch_config_in_calibrated_mode(explicit_ba
             db_path=":memory:",
             logger=InMemoryLogger(),
             batch_tuning="calibrated",
-            **explicit_batch_config,
+            batch_max_queued_writes=batch_max_queued_writes,
+            batch_max_flush_delay_ms=batch_max_flush_delay_ms,
         )
 
 
 @pytest.mark.parametrize("batch_max_queued_writes", [0, 300])
-async def test_init_rejects_out_of_range_batch_max_queued_writes(batch_max_queued_writes):
+async def test_init_rejects_out_of_range_batch_max_queued_writes(
+    batch_max_queued_writes: int,
+) -> None:
     with pytest.raises(ValueError, match="batch_max_queued_writes must be between 1 and 256"):
         SQLiteStateStore(
             db_path=":memory:",
@@ -118,7 +124,9 @@ async def test_init_rejects_invalid_batch_tuning_mode():
 
 
 @pytest.mark.parametrize("batch_max_flush_delay_ms", [4, 50])
-async def test_init_rejects_out_of_range_batch_max_flush_delay_ms(batch_max_flush_delay_ms):
+async def test_init_rejects_out_of_range_batch_max_flush_delay_ms(
+    batch_max_flush_delay_ms: int,
+) -> None:
     with pytest.raises(ValueError, match="batch_max_flush_delay_ms must be between 5 and 40"):
         SQLiteStateStore(
             db_path=":memory:",
@@ -129,9 +137,9 @@ async def test_init_rejects_out_of_range_batch_max_flush_delay_ms(batch_max_flus
 
 async def test_startup_resolves_calibrated_batch_config(
     make_state_store_and_logger: MakeStateStoreAndLogger,
-    monkeypatch,
-):
-    async def _fixed_measurements(self):
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _fixed_measurements(self: SQLiteStateStore) -> StartupMeasurements:
         return StartupMeasurements(
             commit_p50_ms=1.5,
             commit_p95_ms=3.0,
@@ -176,9 +184,9 @@ async def test_derive_calibrated_batch_config_maps_latency_to_profile():
 
 async def test_startup_warns_for_below_recommended_batch_max_queued_writes(
     make_state_store_and_logger: MakeStateStoreAndLogger,
-    monkeypatch,
-):
-    async def _fixed_measurements(self):
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _fixed_measurements(self: SQLiteStateStore) -> StartupMeasurements:
         return StartupMeasurements(
             commit_p50_ms=1.5,
             commit_p95_ms=3.0,
@@ -202,9 +210,9 @@ async def test_startup_warns_for_below_recommended_batch_max_queued_writes(
 
 async def test_startup_does_not_warn_for_immediate_batch_max_queued_writes(
     make_state_store_and_logger: MakeStateStoreAndLogger,
-    monkeypatch,
-):
-    async def _fixed_measurements(self):
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _fixed_measurements(self: SQLiteStateStore) -> StartupMeasurements:
         return StartupMeasurements(
             commit_p50_ms=1.5,
             commit_p95_ms=3.0,

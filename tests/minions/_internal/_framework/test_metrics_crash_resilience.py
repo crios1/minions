@@ -17,7 +17,7 @@ async def test_metrics_create_metric_failure_is_contained():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("operation", ["inc", "set", "observe"])
-async def test_metrics_child_operation_failure_is_contained(operation):
+async def test_metrics_child_operation_failure_is_contained(operation: str) -> None:
     logger = InMemoryLogger()
     metrics = BoomMetrics(logger=logger)
 

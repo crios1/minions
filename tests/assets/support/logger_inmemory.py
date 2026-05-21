@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 import asyncio
+from typing import Any
+
 from minions._internal._framework.logger import DEBUG, INFO
 
 from .logger_spied import SpiedLogger
@@ -8,16 +10,16 @@ from .logger_spied import SpiedLogger
 class Log:
     level: int
     msg: str
-    kwargs: dict
+    kwargs: dict[str, Any]
 
 class InMemoryLogger(SpiedLogger):
     """In-memory implementation of Logger for testing."""
 
-    def __init__(self, level: int = INFO):
+    def __init__(self, level: int = INFO) -> None:
         super().__init__(level)
         self.logs: list[Log] = []
 
-    async def log(self, level: int, msg: str, **kwargs):
+    async def log(self, level: int, msg: str, **kwargs: Any) -> None:
         self.logs.append(Log(level, msg, kwargs))
 
     def has_log(

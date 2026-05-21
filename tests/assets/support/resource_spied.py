@@ -1,8 +1,10 @@
+from typing import Any
+
 from minions._internal._domain.resource import Resource
 from .mixin_spy import SpyMixin
 
 class SpiedResource(Resource, SpyMixin):
     _mn_user_facing = True
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)

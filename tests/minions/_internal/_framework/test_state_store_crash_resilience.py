@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
@@ -13,7 +15,7 @@ from tests.assets.events.counter import CounterEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 
 
-def make_context() -> MinionWorkflowContext:
+def make_context() -> MinionWorkflowContext[CounterEvent, dict[str, Any]]:
     return MinionWorkflowContext(
         minion_composite_key="minion|config|pipeline",
         minion_modpath="tests.assets.crash.minions.good",

@@ -2,6 +2,8 @@ from dataclasses import dataclass
 import os
 import time
 from collections.abc import AsyncGenerator
+from pathlib import Path
+from typing import Any
 
 import msgspec
 import pytest
@@ -12,7 +14,6 @@ from minions._internal._framework.minion_workflow_context_codec import (
     CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION,
     PersistedMinionWorkflowContext,
     deserialize_workflow_context_blob,
-    persist_workflow_context,
     serialize_workflow_context,
 )
 from minions._internal._framework.state_store import StateStore
@@ -47,22 +48,18 @@ def _ck(minion_modpath: str, *, config: str = "cfg", pipeline: str = "app.pipeli
     return f"{minion_modpath}|{config}|{pipeline}"
 
 
-def _blob_for(ctx: MinionWorkflowContext) -> bytes:
-    return serialize(persist_workflow_context(ctx))
-
-
 def mk_ctx(
     workflow_id: str = "wf-0",
     *,
     minion_modpath: str = "app.minion",
     config: str = "cfg",
     pipeline: str = "app.pipeline",
-    event: object | None = None,
-    context: object | None = None,
-    context_cls: type = dict,
+    event: Any | None = None,
+    context: Any | None = None,
+    context_cls: type[Any] = dict,
     next_step_index: int = 0,
     error_msg: str | None = None,
-) -> MinionWorkflowContext:
+) -> MinionWorkflowContext[Any, Any]:
     return MinionWorkflowContext(
         minion_composite_key=_ck(minion_modpath, config=config, pipeline=pipeline),
         minion_modpath=minion_modpath,
@@ -78,12 +75,12 @@ def mk_ctx(
 
 @pytest_asyncio.fixture(params=["inmemory", "sqlite"], ids=["inmemory", "sqlite"])
 async def store_and_logger(
-    request: pytest.FixtureRequest, tmp_path: str
+    request: pytest.FixtureRequest, tmp_path: Path
 ) -> AsyncGenerator[tuple[StateStore, InMemoryLogger], None]:
     logger = InMemoryLogger()
 
     if request.param == "sqlite":
-        db_path = os.path.join(tmp_path, "state.db")
+        db_path = os.path.join(str(tmp_path), "state.db")
         store = SQLiteStateStore(db_path=db_path, logger=logger)
         await logger._mn_startup()
         await store._mn_startup()
@@ -291,10 +288,10 @@ async def test_state_store_get_contexts_for_orchestration_filters_by_identity(
 )
 async def test_state_store_get_contexts_for_orchestration_restores_typed_models(
     store_and_logger: tuple[StateStore, InMemoryLogger],
-    event,
-    context,
-    event_cls,
-    context_cls,
+    event: Any,
+    context: Any,
+    event_cls: type[Any],
+    context_cls: type[Any],
 ):
     store, _ = store_and_logger
     expected = mk_ctx(

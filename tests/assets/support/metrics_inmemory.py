@@ -1,6 +1,6 @@
 import threading
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Literal, Tuple, TypeVar, overload
+from typing import Any, Callable, Literal, TypeVar, overload
 
 from minions._internal._framework.metrics import (
     CounterSample,
@@ -25,7 +25,7 @@ from minions._internal._framework.metrics_constants import METRIC_LABEL_NAMES
 from .metrics_spied import SpiedMetrics
 
 
-LabelKey = Tuple[Tuple[str, str], ...]  # sorted (name, value) pairs for hashing
+LabelKey = tuple[tuple[str, str], ...]  # sorted (name, value) pairs for hashing
 
 
 SampleT = TypeVar("SampleT", CounterSample, GaugeSample, HistogramSample)
@@ -74,7 +74,7 @@ def validate_metric_label_contract(
     )
 
 
-def _normalize_labels(metric_name: str, labels: Dict[str, Any]) -> LabelKey:
+def _normalize_labels(metric_name: str, labels: dict[str, Any]) -> LabelKey:
     """
     Normalize labels to a stable, hashable key:
     - If metric is known in METRIC_LABEL_NAMES, use that order and default missing to "".
@@ -148,7 +148,7 @@ class _InMemoryMetric:
         self.label_names = label_names
         self.kind = kind
         self._record_metric_labels = record_metric_labels
-        self._values: Dict[LabelKey, Any] = {}
+        self._values: dict[LabelKey, Any] = {}
         self._lock = threading.Lock()
 
     def labels(self, **kwargs: str) -> _InMemoryMetricChild:
@@ -165,7 +165,7 @@ class _InMemoryMetric:
                 self._values.setdefault(label_key, 0.0)
         return _InMemoryMetricChild(self, label_key)
 
-    def snapshot_values(self) -> Dict[LabelKey, Any]:
+    def snapshot_values(self) -> dict[LabelKey, Any]:
         with self._lock:
             if self.kind == "histogram":
                 return {k: dict(v) for k, v in self._values.items()}

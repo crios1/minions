@@ -12,7 +12,7 @@ import msgspec
 
 from .constants import SUPPORTED_TYPES_MSG
 
-SERIALIZABLE_PRIMITIVE_TYPES = (str, int, float, bool, type(None))
+SERIALIZABLE_PRIMITIVE_TYPES = (str, int, float, bool, type(None), bytes)
 
 
 def _is_typed_dict_type(tp: Any) -> bool:
@@ -58,7 +58,7 @@ def _mapping_value_type_if_str_key(origin: Any, args: tuple[Any, ...]) -> tuple[
     return True, v
 
 def _is_serializable_leaf_type(tp: Any) -> bool:
-    return tp in (*SERIALIZABLE_PRIMITIVE_TYPES, bytes)
+    return tp in SERIALIZABLE_PRIMITIVE_TYPES
 
 def _is_serializable_field_type(tp: Any) -> bool:
     """Return whether a field type is representable by msgspec msgpack."""
@@ -169,3 +169,12 @@ def require_type_not_primitive(tp: Any, *, owner: str, type_label: str) -> None:
         raise TypeError(
             f"{owner}: {type_label} must be a structured type, not a primitive"
         )
+
+
+def require_type_model(tp: Any, *, owner: str, type_label: str) -> None:
+    """Raise TypeError when a user event/context is not a runtime model type."""
+    if _is_dataclass_type(tp) or _is_msgspec_struct_type(tp):
+        return
+    raise TypeError(
+        f"{owner}: {type_label} must be a dataclass or msgspec Struct type."
+    )

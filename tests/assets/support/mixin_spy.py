@@ -5,10 +5,16 @@ import threading
 import itertools
 from functools import wraps
 from types import FunctionType
-from typing import Any, Iterable, Callable
+from typing import Any, Callable, Iterable
 from weakref import WeakSet
 
 from tests.assets.support.mixin import Mixin
+
+
+def _get_descriptor_func(obj: Any) -> Callable[..., Any]:
+    "Returns the underlying function for descriptor wrappers like classmethod/staticmethod."
+    return getattr(obj, "__func__", obj)
+
 
 class SpyMixin(Mixin):
     """Test mixin for tracking method call counts on a subclass.
@@ -27,37 +33,37 @@ class SpyMixin(Mixin):
     The assert_call_orer method is useful for asserting call order.
     """
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         cls._mspy_enabled = False
         cls._mspy_lock = threading.RLock()
         cls._mspy_wrapped_fns: WeakSet[FunctionType] = WeakSet()
         cls._mspy_counts: dict[str, int] = {}
-        cls._mspy_waiters: dict[str, list[tuple[int, asyncio.Future]]] = {} # (mapping name -> list[(target_count, Future)])
+        cls._mspy_waiters: dict[str, list[tuple[int, asyncio.Future[None]]]] = {} # (mapping name -> list[(target_count, Future)])
         cls._mspy_next_instance_id = itertools.count(1)
         cls._mspy_count_history: list[tuple[str, int, int | None]] = []
         # _mspy_count_history is in chronological order
         # and it's tuples are name, perf_counter_ns timestamp, instance id
         cls._mspy_limit: dict[str, int] | None = None
-        cls._mspy_on_extra: Callable | None = None
+        cls._mspy_on_extra: Callable[[str, int, int | float], object] | None = None
         cls._mspy_fail_on_unlisted: bool = True
 
         # --- Eager-wrap ONLY __init__ as a pure passthrough anchor ---
         orig_init = cls.__dict__.get("__init__", getattr(cls, "__init__", object.__init__))
         @wraps(orig_init)
-        def _mspy_init_anchor(self, *a, **k):
+        def _mspy_init_anchor(self: object, *a: Any, **k: Any) -> Any:
             # no counting here; just preserve a stable __wrapped__ chain
             return orig_init(self, *a, **k)
         setattr(cls, "__init__", _mspy_init_anchor)
 
     @classmethod
-    def _spy_bump(cls, name: str, instance_tag: int | None = None):
+    def _spy_bump(cls, name: str, instance_tag: int | None = None) -> None:
         """increment the counter for `name` and notify waiters
 
         instance_tag is an optional integer identifying the instance that made the call.
         Non-instance or class/static calls will use None.
         """
-        to_notify: list[asyncio.Future] = []
+        to_notify: list[asyncio.Future[None]] = []
 
         with cls._mspy_lock:
             cls._mspy_counts[name] = cls._mspy_counts.get(name, 0) + 1
@@ -68,12 +74,14 @@ class SpyMixin(Mixin):
             if lim is not None:
                 if cls._mspy_fail_on_unlisted and name not in lim:
                     cb = cls._mspy_on_extra
-                    if cb: cb(name, current, 0)
+                    if cb: 
+                        cb(name, current, 0)
                     raise AssertionError(f"{cls.__name__}: unexpected call {name}")
                 allowed = lim.get(name, float("inf"))
                 if current > allowed:
                     cb = cls._mspy_on_extra
-                    if cb: cb(name, current, allowed)
+                    if cb:
+                        cb(name, current, allowed)
                     raise AssertionError(
                         f"{cls.__name__}: call overflow for {name}: {current} > {allowed}"
                     )
@@ -82,7 +90,7 @@ class SpyMixin(Mixin):
             if not waiters:
                 return
 
-            remaining: list[tuple[int, asyncio.Future]] = []
+            remaining: list[tuple[int, asyncio.Future[None]]] = []
             for target, fut in waiters:
                 # A waiter can be cancelled/completed just before wait_for_call()'s finally removes it.
                 # _spy_bump may run from another task/thread; skip stale futures to avoid set_result() on done/cancelled.
@@ -102,6 +110,21 @@ class SpyMixin(Mixin):
             fut.get_loop().call_soon_threadsafe(fut.set_result, None)
 
     @classmethod
+    def _spy_bump_for_owner(
+        cls,
+        owner: object,
+        name: str,
+        instance_tag: int | None,
+    ) -> None:
+        if isinstance(owner, SpyMixin):
+            type(owner)._spy_bump(name, instance_tag)
+            return
+        if isinstance(owner, type) and issubclass(owner, SpyMixin):
+            owner._spy_bump(name, instance_tag)
+            return
+        raise TypeError("SpyMixin wrapper received a non-SpyMixin owner.")
+
+    @classmethod
     def enable_spy(cls) -> None:
         """enables class call spying"""
 
@@ -115,17 +138,27 @@ class SpyMixin(Mixin):
             base_fn = f
             # Walk through any prior wraps (our anchor, dataclass, etc.)
             while hasattr(base_fn, "__wrapped__"):
-                base_fn = base_fn.__wrapped__
+                base_fn = getattr(base_fn, "__wrapped__")
 
             @wraps(base_fn)
-            def _mspy_init_counting(self, *a, __base=base_fn, **k):
+            def _mspy_init_counting(
+                self: object,
+                *a: Any,
+                __base: Callable[..., Any] = base_fn,
+                **k: Any,
+            ) -> Any:
                 # assign a runtime instance tag before running __init__ body
                 if not hasattr(self, "_mspy_instance_tag"):
-                    self._mspy_instance_tag = next(cls._mspy_next_instance_id)
+                    setattr(self, "_mspy_instance_tag", next(cls._mspy_next_instance_id))
                 try:
                     return __base(self, *a, **k)
                 finally:
-                    type(self)._spy_bump("__init__", getattr(self, "_mspy_instance_tag", None))
+                    if isinstance(self, SpyMixin):
+                        type(self)._spy_bump("__init__", getattr(self, "_mspy_instance_tag", None))
+                    else:
+                        raise TypeError(
+                            "SpyMixin __init__ wrapper received a non-SpyMixin instance."
+                        )
 
             setattr(cls, "__init__", _mspy_init_counting)
 
@@ -145,7 +178,7 @@ class SpyMixin(Mixin):
                 return False
             if isinstance(obj, property):
                 return False
-            fn = obj.__func__ if isinstance(obj, (classmethod, staticmethod)) else obj
+            fn = _get_descriptor_func(obj)
             if not isinstance(fn, FunctionType):
                 return False
             if is_marked(fn):
@@ -154,30 +187,32 @@ class SpyMixin(Mixin):
 
         def wrap_callable(name: str, obj: Any) -> Any:
             if isinstance(obj, classmethod):
-                fn, rewrap, is_static = obj.__func__, classmethod, False
+                fn = _get_descriptor_func(obj)
+                rewrap: Any = classmethod
+                is_static = False
             elif isinstance(obj, staticmethod):
-                fn, rewrap, is_static = obj.__func__, staticmethod, True
+                fn = _get_descriptor_func(obj)
+                rewrap, is_static = staticmethod, True
             else:
-                fn, rewrap, is_static = obj, None, False
+                fn = obj
+                rewrap, is_static = None, False
 
             if inspect.iscoroutinefunction(fn):
                 @wraps(fn)
-                async def _async_wrapper(*args, **kwargs):
+                async def _async_wrapper(*args: Any, **kwargs: Any) -> Any:
                     owner = cls if is_static else (args[0] if args else cls)
-                    typ = owner if inspect.isclass(owner) else type(owner)
                     instance_tag = getattr(owner, "_mspy_instance_tag", None)
-                    typ._spy_bump(name, instance_tag)
+                    cls._spy_bump_for_owner(owner, name, instance_tag)
                     return await fn(*args, **kwargs)
 
                 mark(fn)
                 return rewrap(_async_wrapper) if rewrap else _async_wrapper
 
             @wraps(fn)
-            def _sync_wrapper(*args, **kwargs):
+            def _sync_wrapper(*args: Any, **kwargs: Any) -> Any:
                 owner = cls if is_static else (args[0] if args else cls)
-                typ = owner if inspect.isclass(owner) else type(owner)
                 instance_tag = getattr(owner, "_mspy_instance_tag", None)
-                typ._spy_bump(name, instance_tag)
+                cls._spy_bump_for_owner(owner, name, instance_tag)
                 return fn(*args, **kwargs)
 
             mark(fn)
@@ -211,7 +246,7 @@ class SpyMixin(Mixin):
             return list(cls._mspy_count_history)
 
     @classmethod
-    def assert_call_order(cls, sub_seq: Iterable[str]):
+    def assert_call_order(cls, sub_seq: Iterable[str]) -> None:
         """
         Asserts that the provided sequence of call names appears
         as a (possibly non-contiguous) subsequence of the call history,
@@ -237,7 +272,7 @@ class SpyMixin(Mixin):
         if not sub:
             return
 
-        def _seek(it, target):
+        def _seek(it: Iterable[str], target: str) -> bool:
             for x in it:
                 if x == target:
                     return True
@@ -253,7 +288,7 @@ class SpyMixin(Mixin):
         )
 
     @classmethod
-    def assert_call_order_for_instance(cls, instance_tag: int, sub_seq: Iterable[str]):
+    def assert_call_order_for_instance(cls, instance_tag: int, sub_seq: Iterable[str]) -> None:
         """Assert that the provided sequence appears (possibly non-contiguously)
         in the call history for a specific instance tag.
         """
@@ -264,7 +299,7 @@ class SpyMixin(Mixin):
         if not sub:
             return
 
-        def _seek(it, target):
+        def _seek(it: Iterable[str], target: str) -> bool:
             for x in it:
                 if x == target:
                     return True
@@ -313,7 +348,7 @@ class SpyMixin(Mixin):
                     cls._mspy_waiters.pop(name, None)
 
     @classmethod
-    async def wait_for_calls(cls, expected: dict, *, timeout: float = 5.0) -> None:
+    async def wait_for_calls(cls, expected: dict[str, int], *, timeout: float = 5.0) -> None:
         counts = cls.get_call_counts()
         if all(counts.get(name, 0) >= count for name, count in expected.items()):
             return
@@ -328,9 +363,9 @@ class SpyMixin(Mixin):
         expected: dict[str, int],
         *,
         timeout: float = 5.0,
-        on_extra: Callable | None = None,
+        on_extra: Callable[[str, int, int | float], object] | None = None,
         allow_unlisted: bool = False,
-    ) -> Callable:
+    ) -> Callable[[], None]:
         """
         Atomically: (1) set per-method limits so extra/unlisted calls fail,
         (2) await EXACT 'expected' counts, (3) keep limits pinned.

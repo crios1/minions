@@ -45,7 +45,9 @@ async def test_logs_on_timeout_with_label_using_logger():
     assert isinstance(entry.kwargs.get('task_stack'), str) and entry.kwargs.get('task_stack')
 
 @pytest.mark.asyncio
-async def test_prints_on_timeout_without_logger_default_label(capsys):
+async def test_prints_on_timeout_without_logger_default_label(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     async def stubborn():
         try:
             while True:

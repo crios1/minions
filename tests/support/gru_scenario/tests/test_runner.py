@@ -1,5 +1,11 @@
 import asyncio
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
 import pytest
+
+from minions._internal._domain.gru import Gru
 
 from tests.support.gru_scenario.directives import (
     Concurrent,
@@ -16,7 +22,7 @@ from tests.support.gru_scenario.runner import ScenarioRunResult, ScenarioRunner,
 
 
 @pytest.mark.asyncio
-async def test_runner_require_result_invariant_message_is_actionable(gru):
+async def test_runner_require_result_invariant_message_is_actionable(gru: Gru) -> None:
     runner = ScenarioRunner(
         gru,
         ScenarioPlan([], pipeline_event_counts={}),
@@ -30,7 +36,10 @@ async def test_runner_require_result_invariant_message_is_actionable(gru):
 
 
 @pytest.mark.asyncio
-async def test_runner_records_receipts_for_success_and_expected_failure(gru, tests_dir):
+async def test_runner_records_receipts_for_success_and_expected_failure(
+    gru: Gru,
+    tests_dir: Path,
+) -> None:
     config_path = str(tests_dir / "assets" / "config/minions/a.toml")
     pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
 
@@ -65,8 +74,11 @@ async def test_runner_records_receipts_for_success_and_expected_failure(gru, tes
 
 
 @pytest.mark.asyncio
-async def test_runner_concurrent_starts_capture_started_minions_and_instance_tags(gru, tests_dir, reload_wait_for_subs_pipeline
-):
+async def test_runner_concurrent_starts_capture_started_minions_and_instance_tags(
+    gru: Gru,
+    tests_dir: Path,
+    reload_wait_for_subs_pipeline: Callable[..., None],
+) -> None:
     cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
     cfg2 = str(tests_dir / "assets" / "config/minions/b.toml")
     pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
@@ -109,7 +121,10 @@ async def test_runner_concurrent_starts_capture_started_minions_and_instance_tag
 
 
 @pytest.mark.asyncio
-async def test_runner_wait_workflows_subset_handles_mixed_success_and_failure(gru, tests_dir):
+async def test_runner_wait_workflows_subset_handles_mixed_success_and_failure(
+    gru: Gru,
+    tests_dir: Path,
+) -> None:
     config_path = str(tests_dir / "assets" / "config/minions/a.toml")
     pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
 
@@ -139,12 +154,15 @@ async def test_runner_wait_workflows_subset_handles_mixed_success_and_failure(gr
 
 
 @pytest.mark.asyncio
-async def test_wait_minion_tasks_times_out_instead_of_blocking_indefinitely(gru, tests_dir):
+async def test_wait_minion_tasks_times_out_instead_of_blocking_indefinitely(
+    gru: Gru,
+    tests_dir: Path,
+) -> None:
     class _DummyMinion:
-        def __init__(self):
+        def __init__(self) -> None:
             self._mn_tasks_gate = asyncio.Lock()
-            self._mn_service_tasks: set[asyncio.Task] = set()
-            self._mn_workflow_tasks: set[asyncio.Task] = set()
+            self._mn_service_tasks: set[asyncio.Task[None]] = set()
+            self._mn_workflow_tasks: set[asyncio.Task[None]] = set()
 
         async def _mn_wait_until_all_tasks_idle(self, timeout: float = 2.0) -> None:
             deadline = asyncio.get_running_loop().time() + timeout
@@ -183,12 +201,16 @@ async def test_wait_minion_tasks_times_out_instead_of_blocking_indefinitely(gru,
 
 
 @pytest.mark.asyncio
-async def test_wait_minion_tasks_waits_for_minions_concurrently(gru):
+async def test_wait_minion_tasks_waits_for_minions_concurrently(gru: Gru) -> None:
     class _DummyMinion:
-        def __init__(self, started_event: asyncio.Event, peer_started_event: asyncio.Event):
+        def __init__(
+            self,
+            started_event: asyncio.Event,
+            peer_started_event: asyncio.Event,
+        ) -> None:
             self._mn_tasks_gate = asyncio.Lock()
-            self._mn_service_tasks: set[asyncio.Task] = set()
-            self._mn_workflow_tasks: set[asyncio.Task] = set()
+            self._mn_service_tasks: set[asyncio.Task[None]] = set()
+            self._mn_workflow_tasks: set[asyncio.Task[None]] = set()
             self._started_event = started_event
             self._peer_started_event = peer_started_event
 
@@ -214,7 +236,11 @@ async def test_wait_minion_tasks_waits_for_minions_concurrently(gru):
 
 
 @pytest.mark.asyncio
-async def test_wait_workflows_named_lookup_is_scenario_local_only(gru, tests_dir, monkeypatch):
+async def test_wait_workflows_named_lookup_is_scenario_local_only(
+    gru: Gru,
+    tests_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     plan = ScenarioPlan([], pipeline_event_counts={})
     runner = ScenarioRunner(gru, plan, per_verification_timeout=0.1)
     waiter = ScenarioWaiter(
@@ -225,7 +251,7 @@ async def test_wait_workflows_named_lookup_is_scenario_local_only(gru, tests_dir
         result=ScenarioRunResult(),
     )
 
-    def _should_not_be_called(*_args, **_kwargs):
+    def _should_not_be_called(*_args: object, **_kwargs: object) -> Any:
         raise AssertionError("runtime-global lookup must not be used by WaitWorkflowCompletions")
 
     monkeypatch.setattr(waiter._insp, "get_minions_by_name", _should_not_be_called)
@@ -235,7 +261,9 @@ async def test_wait_workflows_named_lookup_is_scenario_local_only(gru, tests_dir
 
 
 @pytest.mark.asyncio
-async def test_runner_wait_workflow_starts_then_rejects_unsupported_wrapped_directive(gru):
+async def test_runner_wait_workflow_starts_then_rejects_unsupported_wrapped_directive(
+    gru: Gru,
+) -> None:
     directives = [
         AfterWorkflowStarts(
             expected={"simple-minion": 1},
@@ -250,7 +278,7 @@ async def test_runner_wait_workflow_starts_then_rejects_unsupported_wrapped_dire
 
 
 @pytest.mark.asyncio
-async def test_runner_wait_workflow_starts_then_rejects_unknown_names(gru):
+async def test_runner_wait_workflow_starts_then_rejects_unknown_names(gru: Gru) -> None:
     directives = [
         AfterWorkflowStarts(
             expected={"missing": 1},
@@ -265,7 +293,10 @@ async def test_runner_wait_workflow_starts_then_rejects_unknown_names(gru):
 
 
 @pytest.mark.asyncio
-async def test_runner_records_checkpoints_for_wait_workflow_completions_and_shutdown(gru, tests_dir):
+async def test_runner_records_checkpoints_for_wait_workflow_completions_and_shutdown(
+    gru: Gru,
+    tests_dir: Path,
+) -> None:
     config_path = str(tests_dir / "assets" / "config/minions/a.toml")
     pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
 
@@ -297,7 +328,7 @@ async def test_runner_records_checkpoints_for_wait_workflow_completions_and_shut
 
 
 @pytest.mark.asyncio
-async def test_runner_records_checkpoint_for_wait_workflow_starts_then(gru):
+async def test_runner_records_checkpoint_for_wait_workflow_starts_then(gru: Gru) -> None:
     directives = [
         MinionStart(
             minion="tests.assets.minions.failure.abort_step",
@@ -324,7 +355,10 @@ async def test_runner_records_checkpoint_for_wait_workflow_starts_then(gru):
 
 
 @pytest.mark.asyncio
-async def test_runner_restart_flow_checkpoints_separate_pre_stop_and_post_restart_windows(gru, tests_dir):
+async def test_runner_restart_flow_checkpoints_separate_pre_stop_and_post_restart_windows(
+    gru: Gru,
+    tests_dir: Path,
+) -> None:
     pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
     minion_modpath = "tests.assets.minions.two_steps.counter.basic"
     cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
@@ -381,7 +415,7 @@ async def test_runner_restart_flow_checkpoints_separate_pre_stop_and_post_restar
 
 
 @pytest.mark.asyncio
-async def test_runner_restart_same_composite_key_after_stop_succeeds(gru):
+async def test_runner_restart_same_composite_key_after_stop_succeeds(gru: Gru) -> None:
     pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
     minion_modpath = "tests.assets.minions.failure.abort_step"
 
@@ -402,7 +436,9 @@ async def test_runner_restart_same_composite_key_after_stop_succeeds(gru):
 
 
 @pytest.mark.asyncio
-async def test_runner_records_expect_runtime_checkpoint_with_persistence_snapshot(gru):
+async def test_runner_records_expect_runtime_checkpoint_with_persistence_snapshot(
+    gru: Gru,
+) -> None:
     directives = [
         MinionStart(
             minion="tests.assets.minions.failure.slow_step",

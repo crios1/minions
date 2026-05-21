@@ -3,16 +3,16 @@ from minions import minion_step
 from tests.assets.crash.resources.boom_method import BoomMethodResource
 from tests.assets.events.counter import CounterEvent
 from tests.assets.support.minion_spied import SpiedMinion
+from tests.assets.contexts.counter import CounterContext
 
 
-class BoomResourceMethodMinion(SpiedMinion[CounterEvent, dict]):
+class BoomResourceMethodMinion(SpiedMinion[CounterEvent, CounterContext]):
     name = "boom-resource-method-minion"
     boom_resource: BoomMethodResource
 
     @minion_step
-    async def step_1(self):
+    async def step_1(self) -> None:
         await self.boom_resource.explode()
 
 
 minion = BoomResourceMethodMinion
-

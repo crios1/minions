@@ -52,7 +52,11 @@ from .._framework.metrics_constants import (
 )
 from .._framework.state_store import PersistenceOperationResult, StateStore
 from .._utils.get_type_from_hint import get_type_from_hint
-from .._utils.serialization import require_type_not_primitive, require_type_serializable
+from .._utils.serialization import (
+    require_type_model,
+    require_type_not_primitive,
+    require_type_serializable,
+)
 from .._utils.get_original_bases import get_original_bases
 
 ExecutionStatus = Literal["undefined", "interrupted", "aborted", "failed", "succeeded"]
@@ -152,6 +156,12 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             type_label="event type",
         )
 
+        require_type_model(
+            cls._mn_event_cls,
+            owner=cls.__name__,
+            type_label="event type",
+        )
+
         require_type_serializable(
             cls._mn_workflow_ctx_cls,
             owner=cls.__name__,
@@ -159,6 +169,12 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         )
 
         require_type_not_primitive(
+            cls._mn_workflow_ctx_cls,
+            owner=cls.__name__,
+            type_label="workflow context type",
+        )
+
+        require_type_model(
             cls._mn_workflow_ctx_cls,
             owner=cls.__name__,
             type_label="workflow context type",

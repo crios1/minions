@@ -1,7 +1,10 @@
 import pytest
+from typing import Any
 
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
+from minions._internal._framework.state_store import StoredWorkflowContext
 from minions._internal._framework.metrics_constants import LABEL_MINION_COMPOSITE_KEY
+from tests.assets.contexts.counter import CounterContext
 from tests.assets.events.counter import CounterEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
@@ -22,6 +25,13 @@ from tests.support.gru_scenario.runner import (
     StartReceipt,
 )
 from tests.support.gru_scenario.verify import ScenarioVerifier
+
+
+def _stub_get_call_counts(counts: dict[str, int]) -> Any:
+    def get_call_counts(cls: type[object]) -> dict[str, int]:
+        return dict(counts)
+
+    return classmethod(get_call_counts)
 
 
 def _mk_verifier(
@@ -65,6 +75,9 @@ def test_assert_metrics_label_contract_reports_recorded_mismatches():
 
     with pytest.raises(pytest.fail.Exception, match="Metrics label contract mismatch"):
         verifier._assert_metrics_label_contract()
+    
+    assert isinstance(verifier._metrics, InMemoryMetrics)
+
     verifier._metrics.clear_metric_label_emissions()
 
 
@@ -176,7 +189,10 @@ def test_build_expected_call_counts_scales_minion_init_with_successful_starts():
 @pytest.mark.asyncio
 async def test_build_expected_call_counts_does_not_require_get_all_for_overridden_context_lookup():
     class IndexedStateStore(InMemoryStateStore):
-        async def get_contexts_for_orchestration(self, orchestration_id: str):
+        async def get_contexts_for_orchestration(
+            self,
+            orchestration_id: str,
+        ) -> list[StoredWorkflowContext]:
             return []
 
     directives = [
@@ -226,7 +242,9 @@ def test_assert_call_order_reports_extra_calls_with_details():
         verifier._assert_call_order(call_counts={})
 
 
-def test_assert_state_store_read_call_bounds_rejects_excess_get_all_calls(monkeypatch):
+def test_assert_state_store_read_call_bounds_rejects_excess_get_all_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     directives = [
         MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
     ]
@@ -246,13 +264,19 @@ def test_assert_state_store_read_call_bounds_rejects_excess_get_all_calls(monkey
     )
     verifier = _mk_verifier(plan, result)
 
-    monkeypatch.setattr(type(verifier._state_store), "get_call_counts", classmethod(lambda cls: {"get_all_contexts": 2}))
+    monkeypatch.setattr(
+        type(verifier._state_store),
+        "get_call_counts",
+        _stub_get_call_counts({"get_all_contexts": 2}),
+    )
 
     with pytest.raises(pytest.fail.Exception, match="get_all_contexts called more times than allowed"):
         verifier._assert_state_store_read_call_bounds()
 
 
-def test_assert_minion_fanout_delivery_proves_pipeline_event_delivery_to_steps(monkeypatch):
+def test_assert_minion_fanout_delivery_proves_pipeline_event_delivery_to_steps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     directives = [
         MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
     ]
@@ -275,13 +299,15 @@ def test_assert_minion_fanout_delivery_proves_pipeline_event_delivery_to_steps(m
     monkeypatch.setattr(
         TwoStepMinion,
         "get_call_counts",
-        classmethod(lambda cls: {"step_1": 2, "step_2": 2}),
+        _stub_get_call_counts({"step_1": 2, "step_2": 2}),
     )
 
     verifier._assert_minion_fanout_delivery()
 
 
-def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnostics(monkeypatch):
+def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     directives = [
         MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
         MinionStart(minion="tests.assets.minions.two_steps.counter.resourced", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
@@ -309,19 +335,21 @@ def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnost
     monkeypatch.setattr(
         TwoStepMinion,
         "get_call_counts",
-        classmethod(lambda cls: {"step_1": 2, "step_2": 2}),
+        _stub_get_call_counts({"step_1": 2, "step_2": 2}),
     )
     monkeypatch.setattr(
         TwoStepResourcedMinion,
         "get_call_counts",
-        classmethod(lambda cls: {"step_1": 1, "step_2": 2}),
+        _stub_get_call_counts({"step_1": 1, "step_2": 2}),
     )
 
     with pytest.raises(pytest.fail.Exception, match="Fanout mismatch for TwoStepResourcedMinion.step_1"):
         verifier._assert_minion_fanout_delivery()
 
 
-def test_assert_minion_fanout_delivery_allows_plus_one_per_start_tolerance(monkeypatch):
+def test_assert_minion_fanout_delivery_allows_plus_one_per_start_tolerance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     directives = [
         MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
     ]
@@ -344,13 +372,15 @@ def test_assert_minion_fanout_delivery_allows_plus_one_per_start_tolerance(monke
     monkeypatch.setattr(
         TwoStepMinion,
         "get_call_counts",
-        classmethod(lambda cls: {"step_1": 3, "step_2": 3}),
+        _stub_get_call_counts({"step_1": 3, "step_2": 3}),
     )
 
     verifier._assert_minion_fanout_delivery()
 
 
-def test_assert_minion_fanout_delivery_rejects_overage_beyond_plus_one_per_start(monkeypatch):
+def test_assert_minion_fanout_delivery_rejects_overage_beyond_plus_one_per_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     directives = [
         MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
     ]
@@ -373,7 +403,7 @@ def test_assert_minion_fanout_delivery_rejects_overage_beyond_plus_one_per_start
     monkeypatch.setattr(
         TwoStepMinion,
         "get_call_counts",
-        classmethod(lambda cls: {"step_1": 4, "step_2": 3}),
+        _stub_get_call_counts({"step_1": 4, "step_2": 3}),
     )
 
     with pytest.raises(
@@ -383,7 +413,9 @@ def test_assert_minion_fanout_delivery_rejects_overage_beyond_plus_one_per_start
         verifier._assert_minion_fanout_delivery()
 
 
-def test_assert_pipeline_events_allows_restarted_pipeline_produce_event_totals(monkeypatch):
+def test_assert_pipeline_events_allows_restarted_pipeline_produce_event_totals(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     directives = [
         MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
         MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
@@ -407,7 +439,7 @@ def test_assert_pipeline_events_allows_restarted_pipeline_produce_event_totals(m
     monkeypatch.setattr(
         Emit1Pipeline,
         "get_call_counts",
-        classmethod(lambda cls: {"__init__": 2, "startup": 2, "run": 2, "produce_event": 3}),
+        _stub_get_call_counts({"__init__": 2, "startup": 2, "run": 2, "produce_event": 3}),
     )
 
     verifier._assert_pipeline_events()
@@ -1291,8 +1323,8 @@ def test_assert_persisted_context_integrity_accepts_matching_snapshot():
                             minion_modpath="tests.assets.minions.two_steps.counter.basic",
                             workflow_id="workflow-1",
                             event=CounterEvent(seq=1),
-                            context={"seen": False},
-                            context_cls=dict,
+                            context=CounterContext(),
+                            context_cls=CounterContext,
                             next_step_index=0,
                         ),
                     )

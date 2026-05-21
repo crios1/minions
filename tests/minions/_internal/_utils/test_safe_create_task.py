@@ -1,20 +1,22 @@
 import asyncio
-import pytest
+from typing import Any
 from unittest.mock import AsyncMock
+
+import pytest
 
 from minions._internal._utils.safe_create_task import safe_create_task
 from minions._internal._framework.logger import ERROR
 from tests.assets.support.logger_inmemory import InMemoryLogger
 
 class FailingLogger(InMemoryLogger):
-    async def log(self, level: int, msg: str, **kwargs):
+    async def log(self, level: int, msg: str, **kwargs: Any) -> None:
         raise RuntimeError("logger backend failed")
 
 @pytest.mark.asyncio
-async def test_safe_create_task_logs_on_exception():
+async def test_safe_create_task_logs_on_exception() -> None:
     logger = InMemoryLogger()
     
-    async def faulty():
+    async def faulty() -> None:
         raise ValueError("test failure")
 
     task = safe_create_task(faulty(), logger, name="test_coro")
@@ -29,10 +31,10 @@ async def test_safe_create_task_logs_on_exception():
     assert "traceback" in log.kwargs
 
 @pytest.mark.asyncio
-async def test_safe_create_task_success_does_not_log():
+async def test_safe_create_task_success_does_not_log() -> None:
     logger = InMemoryLogger()
 
-    async def okay():
+    async def okay() -> int:
         return 42
 
     task = safe_create_task(okay(), logger)
@@ -41,10 +43,10 @@ async def test_safe_create_task_success_does_not_log():
     assert logger.logs == []
 
 @pytest.mark.asyncio
-async def test_safe_create_task_propagates_cancelled_error():
+async def test_safe_create_task_propagates_cancelled_error() -> None:
     logger = InMemoryLogger()
 
-    async def cancellable():
+    async def cancellable() -> None:
         raise asyncio.CancelledError()
 
     task = safe_create_task(cancellable(), logger)
@@ -55,21 +57,21 @@ async def test_safe_create_task_propagates_cancelled_error():
     assert logger.logs == []
 
 @pytest.mark.asyncio
-async def test_safe_create_task_swallows_logger_failures():
+async def test_safe_create_task_swallows_logger_failures() -> None:
     logger = FailingLogger()
 
-    async def faulty():
+    async def faulty() -> None:
         raise ValueError("boom")
 
     task = safe_create_task(faulty(), logger, name="faulty_with_bad_logger")
     await task
 
 @pytest.mark.asyncio
-async def test_safe_create_task_calls_on_failure_for_user_exceptions():
+async def test_safe_create_task_calls_on_failure_for_user_exceptions() -> None:
     logger = InMemoryLogger()
     on_failure = AsyncMock()
 
-    async def faulty():
+    async def faulty() -> None:
         raise ValueError("boom")
 
     task = safe_create_task(faulty(), logger, name="faulty_task", on_failure=on_failure)
@@ -84,11 +86,11 @@ async def test_safe_create_task_calls_on_failure_for_user_exceptions():
     assert task_name == "faulty_task"
 
 @pytest.mark.asyncio
-async def test_safe_create_task_calls_on_failure_for_system_exit():
+async def test_safe_create_task_calls_on_failure_for_system_exit() -> None:
     logger = InMemoryLogger()
     on_failure = AsyncMock()
 
-    async def exits():
+    async def exits() -> None:
         raise SystemExit("bye")
 
     task = safe_create_task(exits(), logger, name="system_exit_task", on_failure=on_failure)
@@ -101,13 +103,15 @@ async def test_safe_create_task_calls_on_failure_for_system_exit():
     assert task_name == "system_exit_task"
 
 @pytest.mark.asyncio
-async def test_safe_create_task_swallows_on_failure_errors():
+async def test_safe_create_task_swallows_on_failure_errors() -> None:
     logger = InMemoryLogger()
 
-    async def bad_failure_hook(*_args, **_kwargs):
+    async def bad_failure_hook(
+        *_args: object, **_kwargs: object
+    ) -> None:
         raise RuntimeError("failure hook crashed")
 
-    async def faulty():
+    async def faulty() -> None:
         raise ValueError("boom")
 
     task = safe_create_task(faulty(), logger, name="faulty_with_bad_hook", on_failure=bad_failure_hook)

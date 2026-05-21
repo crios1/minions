@@ -9,6 +9,7 @@ This module has two related but distinct shapes:
 """
 
 import importlib
+from collections.abc import Mapping
 from dataclasses import fields
 from functools import lru_cache
 from typing import Any, TypeAlias, overload
@@ -348,7 +349,9 @@ def deserialize_workflow_context_blob(
         ) from e
     ctx = hydrate_persisted_workflow_context(persisted, event_cls=event_cls)
 
-    if context_cls is not None and ctx.context_cls is not context_cls:
+    if context_cls is not None:
+        if ctx.context_cls is context_cls:
+            return ctx
         raise WorkflowContextSchemaError(
             "Persisted workflow context_cls mismatch: "
             f"expected {context_cls!r}, got {ctx.context_cls!r}."
@@ -357,7 +360,7 @@ def deserialize_workflow_context_blob(
 
 
 def deserialize_workflow_context(
-    payload: WorkflowContextData,
+    payload: Mapping[str, object],
     *,
     event_cls: Any | None = None,
 ) -> MinionWorkflowContext[Any, Any]:

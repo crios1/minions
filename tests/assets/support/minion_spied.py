@@ -1,3 +1,5 @@
+from typing import Any
+
 from minions._internal._domain.minion import Minion
 from .mixin_spy import SpyMixin
 
@@ -6,5 +8,5 @@ from minions._internal._domain.types import T_Event, T_Ctx
 class SpiedMinion(SpyMixin, Minion[T_Event, T_Ctx], defer_minion_setup=True):
     _mn_user_facing = True
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)

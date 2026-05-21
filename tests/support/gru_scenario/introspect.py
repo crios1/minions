@@ -1,27 +1,34 @@
+from typing import Any
+
 from minions._internal._domain.gru import Gru
 from minions._internal._domain.minion import Minion
+from minions._internal._domain.pipeline import Pipeline
+from minions._internal._domain.resource import Resource
 
 
 class GruIntrospector:
     def __init__(self, gru: Gru):
         self._gru = gru
 
-    def get_minion_class(self, modpath: str) -> type[Minion]:
+    def get_minion_class(self, modpath: str) -> type[Minion[Any, Any]]:
         return self._gru._get_minion_class(modpath)
 
-    def get_pipeline_class(self, modpath: str) -> type:
+    def get_pipeline_class(self, modpath: str) -> type[Pipeline[Any]]:
         return self._gru._get_pipeline_class(modpath)
 
-    def get_all_resource_dependencies(self, cls: type) -> set[type]:
+    def get_all_resource_dependencies(
+        self,
+        cls: type[Minion[Any, Any]] | type[Pipeline[Any]] | type[Resource],
+    ) -> set[type[Resource]]:
         return self._gru._get_all_resource_dependencies(cls)
 
     def make_pipeline_id(self, pipeline_modpath: str) -> str:
         return self._gru._make_pipeline_id(pipeline_modpath)
 
-    def get_minion_instance(self, instance_id: str) -> Minion | None:
+    def get_minion_instance(self, instance_id: str) -> Minion[Any, Any] | None:
         return self._gru._minions_by_id.get(instance_id)
 
-    def get_minions_by_name(self, name: str) -> list[Minion]:
+    def get_minions_by_name(self, name: str) -> list[Minion[Any, Any]]:
         return list(self._gru._minions_by_name.get(name, []))
 
     def get_pipeline_instance(self, pipeline_modpath: str) -> object | None:

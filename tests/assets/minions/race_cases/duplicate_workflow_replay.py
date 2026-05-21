@@ -4,9 +4,10 @@ from minions import minion_step
 
 from tests.assets.events.counter import CounterEvent
 from tests.assets.support.minion_spied import SpiedMinion
+from tests.assets.contexts.counter import CounterContext
 
 
-class DuplicateWorkflowReplayMinion(SpiedMinion[CounterEvent, dict]):
+class DuplicateWorkflowReplayMinion(SpiedMinion[CounterEvent, CounterContext]):
     name = "startup-replay-race-minion"
     _startup_entered: asyncio.Event | None = None
     _step_1_started: asyncio.Event | None = None

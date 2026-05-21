@@ -1,3 +1,7 @@
+import contextlib
+from collections.abc import Callable
+from pathlib import Path
+
 import pytest
 
 from minions._internal._domain.gru import Gru
@@ -31,7 +35,10 @@ class TestValidUsage:
     # Orchestration-valid coverage should be added/updated in `TestValidUsageDSL`
     # and `TestValidUsageUsingNewAssetsDSL`.
     @pytest.mark.asyncio
-    async def test_gru_accepts_none_logger_metrics_state_store(self, gru_factory):
+    async def test_gru_accepts_none_logger_metrics_state_store(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    ) -> None:
         async with gru_factory(
             logger=None,
             state_store=None,
@@ -40,7 +47,10 @@ class TestValidUsage:
             pass
 
     @pytest.mark.asyncio
-    async def test_gru_allows_create_and_immediate_shutdown(self, gru_factory):
+    async def test_gru_allows_create_and_immediate_shutdown(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    ) -> None:
         async with gru_factory(
             state_store=NoOpStateStore(),
             logger=NoOpLogger(),
@@ -55,9 +65,9 @@ class TestValidUsage:
     )
     async def test_gru_accepts_workflow_persistence_failure_policy(
         self,
-        gru_factory,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         policy: WorkflowPersistenceFailurePolicy,
-    ):
+    ) -> None:
         async with gru_factory(
             state_store=NoOpStateStore(),
             logger=NoOpLogger(),
@@ -67,7 +77,10 @@ class TestValidUsage:
             pass
 
     @pytest.mark.asyncio
-    async def test_gru_accepts_workflow_persistence_retry_settings(self, gru_factory):
+    async def test_gru_accepts_workflow_persistence_retry_settings(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    ) -> None:
         async with gru_factory(
             state_store=NoOpStateStore(),
             logger=NoOpLogger(),
@@ -81,7 +94,7 @@ class TestValidUsage:
         ):
             pass
 
-    def test_inline_config_identity_is_stable_hashed_and_content_sensitive(self):
+    def test_inline_config_identity_is_stable_hashed_and_content_sensitive(self) -> None:
         cfg_a = Gru._make_inline_config_identity({"secret": "alpha", "threshold": 3})
         cfg_a_reordered = Gru._make_inline_config_identity({"threshold": 3, "secret": "alpha"})
         cfg_b = Gru._make_inline_config_identity({"secret": "bravo", "threshold": 3})
@@ -101,7 +114,12 @@ class TestValidUsage:
     # Verification ownership: tracked in DSL backlog `tests/support/gru_scenario/VERIFICATION_TODOS.md` (V-001).
 
     @pytest.mark.asyncio
-    async def test_gru_start_stop_minion(self, gru_factory, reload_wait_for_subs_pipeline, tests_dir):
+    async def test_gru_start_stop_minion(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        reload_wait_for_subs_pipeline: Callable[..., None],
+        tests_dir: Path,
+    ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.simple.basic"
         pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
         from tests.assets.minions.two_steps.simple.basic import SimpleMinion
@@ -134,7 +152,11 @@ class TestValidUsage:
             await gru.stop_minion(result.instance_id)
 
     @pytest.mark.asyncio
-    async def test_gru_start_3_minions_3_pipelines_3_resources_no_sharing(self, gru_factory, tests_dir):
+    async def test_gru_start_3_minions_3_pipelines_3_resources_no_sharing(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        tests_dir: Path,
+    ) -> None:
         """
         Start three minions each with their own pipeline and their own Resource type
         so there is no sharing of pipelines or resources between minions.
@@ -191,8 +213,11 @@ class TestValidUsage:
 
     @pytest.mark.asyncio
     async def test_gru_start_3_minions_1_pipeline_1_resource_sharing(
-        self, gru_factory, reload_wait_for_subs_pipeline, tests_dir
-    ):
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        reload_wait_for_subs_pipeline: Callable[..., None],
+        tests_dir: Path,
+    ) -> None:
         """
         Start three minions that share the same pipeline and a single Resource type.
         Verify pipeline and resource are shared and cleaned up after stopping all minions.
@@ -255,7 +280,11 @@ class TestValidUsage:
             assert len(gru._resources) == 0
 
     @pytest.mark.asyncio
-    async def test_gru_start_minion_shutdown_without_stop(self, gru_factory, tests_dir):
+    async def test_gru_start_minion_shutdown_without_stop(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        tests_dir: Path,
+    ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.simple.basic"
         pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
         config_path = str(tests_dir / "assets" / "config/minions/a.toml")
@@ -277,7 +306,11 @@ class TestValidUsage:
             assert result.instance_id in gru._minion_tasks
 
     @pytest.mark.asyncio
-    async def test_gru_loads_minion_config_into_workflow_context(self, gru_factory, tests_dir):
+    async def test_gru_loads_minion_config_into_workflow_context(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        tests_dir: Path,
+    ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.counter.uses_config"
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -304,12 +337,17 @@ class TestValidUsage:
             await ConfigMinion.wait_for_calls(expected={"step_1": 1, "step_2": 1}, timeout=5.0)
 
             minion = gru._minions_by_id[result.instance_id]
+            assert minion.config is not None
             assert minion.config["config"]["name"] == "alpha"
 
             await gru.stop_minion(result.instance_id)
 
     @pytest.mark.asyncio
-    async def test_minion_and_pipeline_share_resource_dependency(self, gru_factory, tests_dir):
+    async def test_minion_and_pipeline_share_resource_dependency(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        tests_dir: Path,
+    ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.simple.resourced_1"
         pipeline_modpath = "tests.assets.pipelines.simple.simple_event.resourced"
         cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
@@ -341,11 +379,6 @@ class TestValidUsageDSL:
         ("minion_modpath", "pipeline_modpath", "minion_name"),
         [
             (
-                "tests.assets.minions.user_guarantees.persisted_dict",
-                "tests.assets.pipelines.user_guarantees.persisted_dict",
-                "dict-persistence-guarantee-minion",
-            ),
-            (
                 "tests.assets.minions.user_guarantees.persisted_dataclass",
                 "tests.assets.pipelines.user_guarantees.persisted_dataclass",
                 "dataclass-persistence-guarantee-minion",
@@ -359,15 +392,15 @@ class TestValidUsageDSL:
     )
     async def test_user_guarantee_persisted_event_and_context_shapes_resume(
         self,
-        gru,
-        logger,
-        metrics,
-        state_store,
-        minion_modpath,
-        pipeline_modpath,
-        minion_name,
-    ):
-        directives = [
+        gru: Gru,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
+        minion_modpath: str,
+        pipeline_modpath: str,
+        minion_name: str,
+    ) -> None:
+        directives: list[Directive] = [
             MinionStart(minion=minion_modpath, pipeline=pipeline_modpath),
             AfterWorkflowStarts(
                 expected={minion_name: 1},
@@ -406,12 +439,17 @@ class TestValidUsageDSL:
 
     @pytest.mark.asyncio
     async def test_gru_start_stop_minion(
-        self, gru, logger, metrics, state_store, tests_dir
-    ):
+        self,
+        gru: Gru,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
+        tests_dir: Path,
+    ) -> None:
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
 
-        directives = [
+        directives: list[Directive] = [
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
                 minion_config_path=config_path,
@@ -440,8 +478,13 @@ class TestValidUsageDSL:
 
     @pytest.mark.asyncio
     async def test_gru_start_3_minions_3_pipelines_3_resources_no_sharing(
-        self, gru, logger, metrics, state_store, tests_dir
-    ):
+        self,
+        gru: Gru,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
+        tests_dir: Path,
+    ) -> None:
         cfg1 = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
         cfg2 = str(tests_dir / "assets" / "config" / "minions" / "b.toml")
         cfg3 = str(tests_dir / "assets" / "config" / "minions" / "c.toml")
@@ -450,7 +493,7 @@ class TestValidUsageDSL:
         pipeline2 = "tests.assets.pipelines.emit1.counter.emit_1_b"
         pipeline3 = "tests.assets.pipelines.emit1.counter.emit_1_c"
 
-        directives = [
+        directives: list[Directive] = [
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.resourced",
                 minion_config_path=cfg1,
@@ -497,14 +540,19 @@ class TestValidUsageDSL:
 
     @pytest.mark.asyncio
     async def test_gru_start_3_minions_1_pipeline_1_resource_sharing(
-        self, gru, logger, metrics, state_store, tests_dir
-    ):
+        self,
+        gru: Gru,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
+        tests_dir: Path,
+    ) -> None:
         cfg1 = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
         cfg2 = str(tests_dir / "assets" / "config" / "minions" / "b.toml")
         cfg3 = str(tests_dir / "assets" / "config" / "minions" / "c.toml")
         pipeline_modpath = "tests.assets.pipelines.sync.counter.sync_3subs_1event"
 
-        directives = [
+        directives: list[Directive] = [
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.resourced",
                 minion_config_path=cfg1,
@@ -547,12 +595,17 @@ class TestValidUsageDSL:
 
     @pytest.mark.asyncio
     async def test_minion_and_pipeline_share_resource_dependency(
-        self, gru, logger, metrics, state_store, tests_dir
-    ):
+        self,
+        gru: Gru,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
+        tests_dir: Path,
+    ) -> None:
         cfg1 = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
         pipeline_modpath = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
 
-        directives = [
+        directives: list[Directive] = [
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.resourced",
                 minion_config_path=cfg1,
@@ -582,8 +635,8 @@ class TestValidUsageDSL:
     @pytest.mark.asyncio
     async def test_minion_and_pipeline_share_resource_without_duplicate_owner_ref(
         self,
-        gru,
-    ):
+        gru: Gru,
+    ) -> None:
         # Exact owner-ref counts are not currently expressible through the scenario DSL.
         first = await gru.start_minion(
             "tests.assets.minions.two_steps.counter.resourced",
@@ -609,12 +662,17 @@ class TestValidUsageDSL:
 
     @pytest.mark.asyncio
     async def test_gru_start_minion_shutdown_without_stop(
-        self, gru, logger, metrics, state_store, tests_dir
-    ):
+        self,
+        gru: Gru,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
+        tests_dir: Path,
+    ) -> None:
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
 
-        directives = [
+        directives: list[Directive] = [
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
                 minion_config_path=config_path,
@@ -642,19 +700,30 @@ class TestValidUsageDSL:
 
 class TestValidUsageUsingNewAssetsDSL:
     @pytest.mark.asyncio
-    async def test_gru_accepts_none_logger_metrics_state_store(self, gru_factory):
+    async def test_gru_accepts_none_logger_metrics_state_store(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    ) -> None:
         async with gru_factory(logger=None, state_store=None, metrics=None):
             pass
 
     @pytest.mark.asyncio
-    async def test_gru_allows_create_and_immediate_shutdown(self, gru_factory):
+    async def test_gru_allows_create_and_immediate_shutdown(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    ) -> None:
         async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()):
             pass
 
     @pytest.mark.asyncio
     async def test_gru_start_stop_minion(
-        self, gru, logger, metrics, state_store, tests_dir
-    ):
+        self,
+        gru: Gru,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
+        tests_dir: Path,
+    ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.counter.basic"
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -688,8 +757,13 @@ class TestValidUsageUsingNewAssetsDSL:
 
     @pytest.mark.asyncio
     async def test_gru_start_minion_shutdown_without_stop(
-        self, gru, logger, metrics, state_store, tests_dir
-    ):
+        self,
+        gru: Gru,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
+        tests_dir: Path,
+    ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.counter.basic"
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -722,8 +796,13 @@ class TestValidUsageUsingNewAssetsDSL:
 
     @pytest.mark.asyncio
     async def test_gru_start_3_minions_3_pipelines_3_resources_no_sharing(
-        self, gru, logger, metrics, state_store, tests_dir
-    ):
+        self,
+        gru: Gru,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
+        tests_dir: Path,
+    ) -> None:
         minion1 = "tests.assets.minions.two_steps.counter.resourced"
         minion2 = "tests.assets.minions.two_steps.counter.resourced_b"
         minion3 = "tests.assets.minions.two_steps.counter.resourced_c"
@@ -760,8 +839,13 @@ class TestValidUsageUsingNewAssetsDSL:
 
     @pytest.mark.asyncio
     async def test_gru_start_3_minions_1_pipeline_1_resource_sharing(
-        self, gru, logger, metrics, state_store, tests_dir
-    ):
+        self,
+        gru: Gru,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
+        tests_dir: Path,
+    ) -> None:
         minion_a = "tests.assets.minions.two_steps.counter.resourced"
         minion_b = "tests.assets.minions.two_steps.counter.resourced_shared_b"
         minion_c = "tests.assets.minions.two_steps.counter.resourced_shared_c"
@@ -793,8 +877,14 @@ class TestValidUsageUsingNewAssetsDSL:
 
     @pytest.mark.asyncio
     async def test_minion_and_pipeline_share_resource_dependency(
-        self, gru, logger, metrics, state_store, reload_pipeline_module, tests_dir
-    ):
+        self,
+        gru: Gru,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
+        reload_pipeline_module: Callable[[str], None],
+        tests_dir: Path,
+    ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.counter.resourced"
         pipeline_modpath = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")

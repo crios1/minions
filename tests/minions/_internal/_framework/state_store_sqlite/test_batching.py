@@ -1,9 +1,11 @@
 import asyncio
 import sqlite3
+from typing import Any
 
 import pytest
 
 from minions._internal._framework.minion_workflow_context_codec import deserialize_workflow_context_blob
+from minions._internal._framework.state_store import StoredWorkflowContext
 from minions._internal._framework.state_store_sqlite import (
     PendingWrite,
     SQL_WORKFLOW_UPSERT,
@@ -101,8 +103,8 @@ async def test_single_write_flushes_on_batch_max_interarrival_delay_ms(
 
 async def test_writes_inside_batch_max_interarrival_delay_ms_batch_together(
     make_state_store_and_logger: MakeStateStoreAndLogger,
-    monkeypatch,
-):
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     s, _ = await make_state_store_and_logger(
         batch_max_queued_writes=100,
         batch_max_flush_delay_ms=40,
@@ -111,12 +113,12 @@ async def test_writes_inside_batch_max_interarrival_delay_ms_batch_together(
     commit_row_counts: list[int] = []
     original_commit_batch_now = s._commit_batch_now
 
-    async def wrapped_commit_batch_now(items):
+    async def wrapped_commit_batch_now(items: list[PendingWrite]) -> float:
         commit_row_counts.append(len(items))
         return await original_commit_batch_now(items)
 
     monkeypatch.setattr(s, "_commit_batch_now", wrapped_commit_batch_now)
-    tasks = []
+    tasks: list[asyncio.Task[None]] = []
     for i in range(3):
         ctx = mk_ctx(i=710 + i, size=16)
         tasks.append(asyncio.create_task(s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx))))
@@ -129,8 +131,8 @@ async def test_writes_inside_batch_max_interarrival_delay_ms_batch_together(
 
 async def test_max_flush_delay_still_applies_during_continuous_arrivals(
     make_state_store_and_logger: MakeStateStoreAndLogger,
-    monkeypatch,
-):
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     s, _ = await make_state_store_and_logger(
         batch_max_queued_writes=100,
         batch_max_flush_delay_ms=30,
@@ -139,12 +141,12 @@ async def test_max_flush_delay_still_applies_during_continuous_arrivals(
     first_commit = asyncio.Event()
     original_commit_batch_now = s._commit_batch_now
 
-    async def wrapped_commit_batch_now(items):
+    async def wrapped_commit_batch_now(items: list[PendingWrite]) -> float:
         first_commit.set()
         return await original_commit_batch_now(items)
 
     monkeypatch.setattr(s, "_commit_batch_now", wrapped_commit_batch_now)
-    tasks = []
+    tasks: list[asyncio.Task[None]] = []
     started = asyncio.get_running_loop().time()
 
     async def produce() -> None:
@@ -184,7 +186,10 @@ async def test_delete_context_batches_but_waits_for_batch_commit(make_state_stor
     assert all(row.workflow_id != ctx.workflow_id for row in rows)
 
 
-async def test_flush_paths_do_not_overlap_transactions(make_state_store_and_logger: MakeStateStoreAndLogger, monkeypatch):
+async def test_flush_paths_do_not_overlap_transactions(
+    make_state_store_and_logger: MakeStateStoreAndLogger,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     s, _ = await make_state_store_and_logger(
         batch_max_queued_writes=100,
         batch_max_flush_delay_ms=5,
@@ -193,9 +198,9 @@ async def test_flush_paths_do_not_overlap_transactions(make_state_store_and_logg
     commit_gate = BlockedCommitBatchNowGate(s, monkeypatch)
     ctx1 = mk_ctx(i=1, size=16)
     ctx2 = mk_ctx(i=2, size=24)
-    save1: asyncio.Task | None = None
-    save2: asyncio.Task | None = None
-    read_all: asyncio.Task | None = None
+    save1: asyncio.Task[None] | None = None
+    save2: asyncio.Task[None] | None = None
+    read_all: asyncio.Task[list[StoredWorkflowContext]] | None = None
 
     try:
         save1 = asyncio.create_task(s.save_context(ctx1.workflow_id, ctx1.minion_composite_key, blob_for(ctx1)))
@@ -224,8 +229,8 @@ async def test_flush_paths_do_not_overlap_transactions(make_state_store_and_logg
 
 async def test_write_arriving_during_scheduled_flush_gets_next_flush_task(
     make_state_store_and_logger: MakeStateStoreAndLogger,
-    monkeypatch,
-):
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     s, _ = await make_state_store_and_logger(
         batch_max_queued_writes=100,
         batch_max_flush_delay_ms=5,
@@ -234,8 +239,8 @@ async def test_write_arriving_during_scheduled_flush_gets_next_flush_task(
     commit_gate = BlockedCommitBatchNowGate(s, monkeypatch)
     ctx1 = mk_ctx(i=601, size=16)
     ctx2 = mk_ctx(i=602, size=24)
-    save1: asyncio.Task | None = None
-    save2: asyncio.Task | None = None
+    save1: asyncio.Task[None] | None = None
+    save2: asyncio.Task[None] | None = None
 
     try:
         save1 = asyncio.create_task(s.save_context(ctx1.workflow_id, ctx1.minion_composite_key, blob_for(ctx1)))
@@ -263,7 +268,7 @@ async def test_flush_on_batch_cap(make_state_store_and_logger: MakeStateStoreAnd
     # prevent timer flush so only the queued-write cap can commit this batch
     s._batch_max_flush_delay_ms = 10_000
 
-    tasks = []
+    tasks: list[asyncio.Task[None]] = []
     for i in range(3):
         ctx = mk_ctx(i=i)
         tasks.append(
@@ -280,8 +285,8 @@ async def test_flush_on_batch_cap(make_state_store_and_logger: MakeStateStoreAnd
 
 async def test_cancelled_cap_triggering_save_does_not_cancel_shared_batch_commit(
     make_state_store_and_logger: MakeStateStoreAndLogger,
-    monkeypatch,
-):
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     s, _ = await make_state_store_and_logger(batch_max_queued_writes=2)
 
     # prevent timer flush so cancellation happens while the cap-triggered commit is shared
@@ -290,8 +295,8 @@ async def test_cancelled_cap_triggering_save_does_not_cancel_shared_batch_commit
     commit_gate = BlockedCommitBatchNowGate(s, monkeypatch)
     c1 = mk_ctx(i=501, size=16)
     c2 = mk_ctx(i=502, size=24)
-    save1: asyncio.Task | None = None
-    save2: asyncio.Task | None = None
+    save1: asyncio.Task[None] | None = None
+    save2: asyncio.Task[None] | None = None
 
     try:
         save1 = asyncio.create_task(s.save_context(c1.workflow_id, c1.minion_composite_key, blob_for(c1)))
@@ -315,8 +320,8 @@ async def test_cancelled_cap_triggering_save_does_not_cancel_shared_batch_commit
 
 async def test_separate_batches_commit_in_fifo_order_for_same_workflow(
     make_state_store_and_logger: MakeStateStoreAndLogger,
-    monkeypatch,
-):
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     s, _ = await make_state_store_and_logger(batch_max_queued_writes=1)
 
     # prevent timer flush so FIFO ordering is driven by explicit cap-triggered batches
@@ -324,8 +329,8 @@ async def test_separate_batches_commit_in_fifo_order_for_same_workflow(
 
     commit_gate = BlockedCommitBatchNowGate(s, monkeypatch)
     ctx = mk_ctx(i=503, size=16)
-    save_task: asyncio.Task | None = None
-    delete_task: asyncio.Task | None = None
+    save_task: asyncio.Task[None] | None = None
+    delete_task: asyncio.Task[None] | None = None
 
     try:
         save_task = asyncio.create_task(s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx)))
@@ -350,8 +355,8 @@ async def test_separate_batches_commit_in_fifo_order_for_same_workflow(
 
 async def test_flush_waits_for_worker_after_commit_batch_is_popped_from_queue(
     make_state_store_and_logger: MakeStateStoreAndLogger,
-    monkeypatch,
-):
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     s, _ = await make_state_store_and_logger(batch_max_queued_writes=1)
 
     # prevent timer flush so _flush must wait on the already active worker commit
@@ -359,8 +364,8 @@ async def test_flush_waits_for_worker_after_commit_batch_is_popped_from_queue(
 
     commit_gate = BlockedCommitBatchNowGate(s, monkeypatch)
     ctx = mk_ctx(i=504, size=16)
-    save_task: asyncio.Task | None = None
-    flush_task: asyncio.Task | None = None
+    save_task: asyncio.Task[None] | None = None
+    flush_task: asyncio.Task[None] | None = None
 
     try:
         save_task = asyncio.create_task(s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx)))
@@ -429,12 +434,12 @@ async def test_same_batch_save_then_delete_removes_row(make_state_store_and_logg
 
 async def test_commit_failure_rolls_back_transaction_and_settles_futures(
     make_state_store_and_logger: MakeStateStoreAndLogger,
-    monkeypatch,
-):
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     s, _ = await make_state_store_and_logger()
     good_ctx = mk_ctx(i=403)
-    first_completion = asyncio.get_running_loop().create_future()
-    failed_completion = asyncio.get_running_loop().create_future()
+    first_completion: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+    failed_completion: asyncio.Future[None] = asyncio.get_running_loop().create_future()
     first_item = PendingWrite(
         good_ctx.workflow_id,
         "upsert",
@@ -448,7 +453,7 @@ async def test_commit_failure_rolls_back_transaction_and_settles_futures(
     original_execute = s._db.execute
     upsert_count = 0
 
-    async def failing_execute(sql, params=None):
+    async def failing_execute(sql: str, params: tuple[Any, ...] | None = None) -> object:
         nonlocal upsert_count
         if sql == SQL_WORKFLOW_UPSERT:
             upsert_count += 1
@@ -483,8 +488,8 @@ async def test_commit_failure_rolls_back_transaction_and_settles_futures(
 
 async def test_shutdown_waits_for_active_scheduled_flush_commit(
     make_state_store_and_logger: MakeStateStoreAndLogger,
-    monkeypatch,
-):
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     s, _ = await make_state_store_and_logger(
         batch_max_queued_writes=100,
         batch_max_flush_delay_ms=5,
@@ -492,8 +497,8 @@ async def test_shutdown_waits_for_active_scheduled_flush_commit(
 
     commit_gate = BlockedCommitBatchNowGate(s, monkeypatch)
     ctx = mk_ctx(i=405)
-    save_task: asyncio.Task | None = None
-    shutdown_task: asyncio.Task | None = None
+    save_task: asyncio.Task[None] | None = None
+    shutdown_task: asyncio.Task[None] | None = None
 
     try:
         save_task = asyncio.create_task(

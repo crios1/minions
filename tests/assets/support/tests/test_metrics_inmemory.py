@@ -6,7 +6,7 @@ from tests.assets.support.metrics_inmemory import InMemoryMetrics
 
 
 class TestInMemoryMetrics:
-    def test_counter_healthy_with_label_ordering(self, monkeypatch):
+    def test_counter_healthy_with_label_ordering(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """
         Counter increments aggregate correctly; labels follow METRIC_LABEL_NAMES order.
         """
@@ -25,7 +25,7 @@ class TestInMemoryMetrics:
         assert list(sample["labels"].keys()) == ["minion", "pipeline"]
         assert sample["value"] == 3.0
 
-    def test_gauge_set_with_missing_label_defaults(self, monkeypatch):
+    def test_gauge_set_with_missing_label_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """
         Gauge .set() overwrites, and missing expected labels default to "".
         """
@@ -41,7 +41,7 @@ class TestInMemoryMetrics:
         assert InMemoryMetrics.find_sample(samples, {"region": ""})["value"] == 10.5
         assert InMemoryMetrics.find_sample(samples, {"region": "us-east"})["value"] == 8.0
 
-    def test_histogram_observe_aggregates(self, monkeypatch):
+    def test_histogram_observe_aggregates(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """
         Histogram aggregates count/sum/min/max for a label set.
         """
@@ -58,7 +58,7 @@ class TestInMemoryMetrics:
         assert stats["count"] == 3.0
         assert abs(stats["sum"] - 0.400) < 1e-9
 
-    def test_unbound_metric_methods_raise(self, monkeypatch):
+    def test_unbound_metric_methods_raise(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """
         Calling .inc/.set/.observe on the unbound metric (without .labels()) should raise TypeError.
         """
@@ -100,7 +100,7 @@ class TestInMemoryMetrics:
         assert list(sample["labels"].keys()) == ["a", "b"]
         assert sample["value"] == 1.0
 
-    def test_counter_multiple_label_sets(self, monkeypatch):
+    def test_counter_multiple_label_sets(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """
         Multiple distinct label sets are tracked independently.
         """
@@ -118,7 +118,7 @@ class TestInMemoryMetrics:
         assert InMemoryMetrics.find_sample(samples, {"queue": "beta", "status": "ok"})["value"] == 1.0
 
     @pytest.mark.asyncio
-    async def test_metrics_async_healthy(self, monkeypatch):
+    async def test_metrics_async_healthy(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """
         Drive the async facade and verify snapshots reflect the updates.
         """
@@ -161,7 +161,7 @@ class TestInMemoryMetrics:
         assert abs(stats["sum"] - 0.50) < 1e-9
 
     @pytest.mark.asyncio
-    async def test_metrics_async_label_defaults_and_ordering(self, monkeypatch):
+    async def test_metrics_async_label_defaults_and_ordering(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """
         Missing expected labels default to "" and ordering follows METRIC_LABEL_NAMES.
         """
@@ -178,14 +178,14 @@ class TestInMemoryMetrics:
         assert InMemoryMetrics.find_sample(gsnap, {"host": "h1", "region": "us-east"})["value"] == 456.0
 
     @pytest.mark.asyncio
-    async def test_metrics_async_concurrent_updates(self, monkeypatch):
+    async def test_metrics_async_concurrent_updates(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """
         Ensure counter updates are safe when awaited concurrently across tasks.
         """
         monkeypatch.setitem(METRIC_LABEL_NAMES, "events_total", ["minion"])
         m = InMemoryMetrics()
 
-        async def bump(n):
+        async def bump(n: int) -> None:
             for _ in range(n):
                 await m._mn_inc("events_total", amount=1, labels={"minion": "m1"})
 
