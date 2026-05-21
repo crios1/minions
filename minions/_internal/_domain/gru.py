@@ -1006,8 +1006,13 @@ class Gru:
                             async with self._runtime_state_lock:
                                 resource = self._resources.get(resource_id, resource)
                                 setattr(pipeline_inst, name, resource)
-                                self._pipeline_resource_map.setdefault(pipeline_id, set()).add(resource_id)
-                                self._resource_refcounts[resource_id] += 1
+                                pipeline_resource_ids = self._pipeline_resource_map.setdefault(
+                                    pipeline_id,
+                                    set(),
+                                )
+                                if resource_id not in pipeline_resource_ids:
+                                    pipeline_resource_ids.add(resource_id)
+                                    self._resource_refcounts[resource_id] += 1
 
                         await self._start_pipeline(pipeline_id, pipeline_inst)
                     else:
@@ -1443,8 +1448,27 @@ class Gru:
 
                     # unsub minion from pipeline
                     async with self._runtime_state_lock:
-                        pipeline_id = self._minion_pipeline_map[minion._mn_minion_instance_id]
-                        pipeline = self._pipelines[pipeline_id]
+                        pipeline_id = self._minion_pipeline_map.get(
+                            minion._mn_minion_instance_id
+                        )
+                        pipeline = (
+                            self._pipelines.get(pipeline_id)
+                            if pipeline_id is not None
+                            else None
+                        )
+                    if pipeline_id is None or pipeline is None:
+                        reason = "Minion is no longer running."
+                        await self._logger._mn_log(
+                            INFO,
+                            "Failed to stop minion",
+                            reason=reason,
+                            minion_name=minion._mn_name,
+                            minion_instance_id=minion._mn_minion_instance_id,
+                        )
+                        return StopMinionResult(
+                            success=False,
+                            reason=reason,
+                        )
                     stop_committed = True
                     await pipeline._mn_unsubscribe(minion)
                     async with self._runtime_state_lock:

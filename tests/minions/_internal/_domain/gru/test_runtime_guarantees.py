@@ -171,6 +171,7 @@ async def test_gru_serializes_concurrent_stops_for_same_minion(
 
         assert len(successes) == 1
         assert len(failures) == 1
+        assert failures[0].reason == "Minion is no longer running."
         assert gru._runtime_state_snapshot() == {}
 
 
@@ -280,6 +281,77 @@ async def test_gru_allows_concurrent_starts_for_different_minions(
         assert result1.success
         assert result2.success
         assert len(gru._minions_by_composite_key) == 2
+
+
+@pytest.mark.asyncio
+async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_minion_starts(
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+) -> None:
+    logger = InMemoryLogger()
+    metrics = InMemoryMetrics()
+    state_store = InMemoryStateStore(logger=logger)
+
+    resourced_pipeline = importlib.import_module(
+        "tests.assets.pipelines.resourced.counter.with_fixed_resource"
+    )
+    resourced_pipeline.ResourcedPipeline.enable_spy()
+    resourced_pipeline.ResourcedPipeline.reset_spy()
+
+    fixed_resource = importlib.import_module("tests.assets.resources.fixed.base")
+    fixed_resource.FixedResource.enable_spy()
+    fixed_resource.FixedResource.reset_spy()
+
+    pipeline_modpath = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
+
+    async with gru_factory(
+        logger=logger,
+        metrics=metrics,
+        state_store=state_store,
+    ) as gru:
+        gru._pipeline_locks = defaultdict(GatedLock)
+        pipeline_gate = gru._pipeline_locks[pipeline_modpath]
+        assert isinstance(pipeline_gate, GatedLock)
+
+        task1 = asyncio.create_task(
+            gru.start_minion(
+                minion="tests.assets.minions.two_steps.counter.basic",
+                minion_config_path="tests/assets/config/minions/a.toml",
+                pipeline=pipeline_modpath,
+            )
+        )
+        task2 = asyncio.create_task(
+            gru.start_minion(
+                minion="tests.assets.minions.two_steps.counter.basic",
+                minion_config_path="tests/assets/config/minions/b.toml",
+                pipeline=pipeline_modpath,
+            )
+        )
+
+        await asyncio.wait_for(pipeline_gate.entered.wait(), timeout=1.0)
+        await asyncio.sleep(0)
+        assert pipeline_gate.enter_count == 1
+        assert not task2.done()
+
+        pipeline_gate.release_gate.set()
+        result1, result2 = await asyncio.gather(task1, task2)
+
+        assert result1.success
+        assert result2.success
+        assert len(gru._pipelines) == 1
+        assert len(gru._resources) == 1
+        assert resourced_pipeline.ResourcedPipeline.get_call_counts()["_mn_startup"] == 1
+        assert fixed_resource.FixedResource.get_call_counts()["_mn_startup"] == 1
+
+        resource_id = gru._make_resource_id(fixed_resource.FixedResource)
+        assert gru._pipeline_resource_map[pipeline_modpath] == {resource_id}
+        assert gru._resource_refcounts[resource_id] == 1
+
+        stop1 = await gru.stop_minion(result1.instance_id or "")
+        stop2 = await gru.stop_minion(result2.instance_id or "")
+
+        assert stop1.success
+        assert stop2.success
+        assert gru._runtime_state_snapshot() == {}
 
 
 @pytest.mark.asyncio
