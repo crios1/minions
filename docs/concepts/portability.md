@@ -96,25 +96,43 @@ This is correct, but not portable. Minions does not restrict you—you can load 
 
 ## Inline config and portability
 
-Class-based “inline config” (using a Python dict) uses a fixed identity:
+Class-based “inline config” (using a dataclass or `msgspec.Struct` instance) uses
+a content-derived identity:
 
 ```
-<inline>
+<inline:digest>
 ```
 
 Example:
 
 ```python
-gru.start_minion(MyMinion, MyPipeline, minion_config={"pair": "ETH/USDC"})
+from dataclasses import dataclass
+
+
+@dataclass
+class MyConfig:
+    my_key: str
+
+
+gru.start_minion(
+    MyMinion,
+    MyPipeline,
+    minion_config=MyConfig(my_key="my_value"),
+)
 ```
+
+The configured Minion declares `config: MyConfig` before its steps access
+`self.config`.
 
 Composite key:
 
 ```
-myapp.minions.MyMinion|<inline>|myapp.pipelines.MyPipeline
+myapp.minions.MyMinion|<inline:digest>|myapp.pipelines.MyPipeline
 ```
 
-Inline deployments are portable, but they occupy a single slot per (minion, pipeline). They’re intended for development, teaching, and exploration. For multiple independent instances, use file-based configs.
+Inline deployments are portable, but their identity is tied to the in-memory
+config value. They’re intended for development, teaching, and exploration. For
+long-lived deployment slots, use file-based configs.
 
 ---
 
@@ -145,7 +163,7 @@ If you follow this structure, Minions gives you a deployment artifact that works
 - Minions uses **module names** (not file paths) to identify minions and pipelines.  
 - Config paths inside the project directory become **portable deployment identities**.  
 - Config paths outside the project directory become **absolute, external identities**.  
-- Inline config is portable but single-instance.  
+- Inline config is portable and identity follows the structured config value.  
 - A Minions project directory is intentionally designed to be a **self-contained system**.
 
 Portability isn’t an accident—it’s a design goal. Minions gives you microservice structure with single-artifact deployment simplicity.

@@ -82,7 +82,7 @@ class TestMinionSubclassingValid:
 
         assert len(m._mn_workflow) == 2
 
-    def test_minion_exposes_loaded_config_through_public_property(self):
+    def test_minion_without_config_does_not_expose_config(self):
         class MyMinion(Minion[MyEvent, MyContext]):
             @minion_step
             async def step_1(self):
@@ -92,25 +92,29 @@ class TestMinionSubclassingValid:
             minion_instance_id="mock",
             minion_composite_key="mock",
             minion_modpath="mock",
-            config_path="mock",
+            config_path=None,
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
             logger=NoOpLogger(),
         )
 
-        assert m.config is None
-        m._mn_config = {"config": {"name": "alpha"}}
-        assert m.config == {"config": {"name": "alpha"}}
+        assert not hasattr(m, "config")
 
     @pytest.mark.asyncio
-    async def test_minion_rejects_non_dict_config_loads(self):
+    async def test_minion_binds_loaded_config_to_declared_attribute(self):
+        @dataclass
+        class MyConfig:
+            name: str
+
         class MyMinion(Minion[MyEvent, MyContext]):
+            config: MyConfig
+
+            async def load_config(self, config_path: str) -> MyConfig:
+                return MyConfig(name=config_path)
+
             @minion_step
             async def step_1(self):
                 ...
-
-            async def load_config(self, config_path: str): # pyright: ignore[reportIncompatibleMethodOverride]
-                return ["not", "a", "dict"]
 
         m = MyMinion(
             minion_instance_id="mock",
@@ -122,8 +126,123 @@ class TestMinionSubclassingValid:
             logger=NoOpLogger(),
         )
 
-        with pytest.raises(TypeError, match="load_config must return a dict, got list"):
+        await m._mn_load_config("alpha")
+        assert m.config == MyConfig(name="alpha")
+
+    @pytest.mark.asyncio
+    async def test_minion_requires_config_attribute_annotation(self):
+        @dataclass
+        class MyConfig:
+            name: str
+
+        class MyMinion(Minion[MyEvent, MyContext]):
+            async def load_config(self, config_path: str) -> MyConfig:
+                return MyConfig(name=config_path)
+            
+            @minion_step
+            async def step_1(self):
+                ...
+
+        m = MyMinion(
+            minion_instance_id="mock",
+            minion_composite_key="mock",
+            minion_modpath="mock",
+            config_path="mock",
+            state_store=NoOpStateStore(),
+            metrics=NoOpMetrics(),
+            logger=NoOpLogger(),
+        )
+
+        with pytest.raises(
+            TypeError,
+            match="MyMinion must declare a `config` type annotation",
+        ):
             await m._mn_load_config("mock")
+
+    @pytest.mark.asyncio
+    async def test_minion_rejects_config_type_mismatch(self):
+        @dataclass
+        class DeclaredConfig:
+            name: str
+
+        @dataclass
+        class LoadedConfig:
+            name: str
+
+        class MyMinion(Minion[MyEvent, MyContext]):
+            config: DeclaredConfig
+
+            async def load_config(self, config_path: str) -> LoadedConfig:
+                return LoadedConfig(name=config_path)
+
+            @minion_step
+            async def step_1(self):
+                ...
+
+        m = MyMinion(
+            minion_instance_id="mock",
+            minion_composite_key="mock",
+            minion_modpath="mock",
+            config_path="mock",
+            state_store=NoOpStateStore(),
+            metrics=NoOpMetrics(),
+            logger=NoOpLogger(),
+        )
+
+        with pytest.raises(
+            TypeError,
+            match="MyMinion.config expects .*DeclaredConfig.* got LoadedConfig",
+        ):
+            await m._mn_load_config("mock")
+
+    @pytest.mark.asyncio
+    async def test_minion_rejects_non_model_config_loads(self):
+        class MyMinion(Minion[MyEvent, MyContext]):
+            async def load_config(self, config_path: str) -> object:
+                return {"name": "alpha"}
+
+            @minion_step
+            async def step_1(self):
+                ...
+
+        m = MyMinion(
+            minion_instance_id="mock",
+            minion_composite_key="mock",
+            minion_modpath="mock",
+            config_path="mock",
+            state_store=NoOpStateStore(),
+            metrics=NoOpMetrics(),
+            logger=NoOpLogger(),
+        )
+
+        with pytest.raises(
+            TypeError,
+            match="MyMinion.load_config: config type must be a dataclass or msgspec Struct type.",
+        ):
+            await m._mn_load_config("mock")
+
+    @pytest.mark.asyncio
+    async def test_minion_requires_file_config_loader_override(self):
+        class MyMinion(Minion[MyEvent, MyContext]):
+            @minion_step
+            async def step_1(self):
+                ...
+
+        m = MyMinion(
+            minion_instance_id="mock",
+            minion_composite_key="mock",
+            minion_modpath="mock",
+            config_path="mock",
+            state_store=NoOpStateStore(),
+            metrics=NoOpMetrics(),
+            logger=NoOpLogger(),
+        )
+
+        with pytest.raises(
+            NotImplementedError,
+            match="MyMinion.load_config must be overridden",
+        ):
+            await m.load_config("mock")
 
 class TestMinionSubclassingInvalid:
     def test_missing_event_and_context_types(self):

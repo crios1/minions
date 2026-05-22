@@ -10,10 +10,7 @@ class ConfigMinion(SpiedMinion[CounterEvent, CounterContext]):
 
     @minion_step
     async def step_1(self) -> None:
-        name = None
-        if self._mn_config:
-            name = self._mn_config.get("config", {}).get("name")
-        self.context.config_name = name
+        self.context.config_name = self.config.name
 
     @minion_step
     async def step_2(self) -> None:

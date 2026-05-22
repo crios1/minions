@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import importlib
-import json
 import psutil
 import uuid
 
@@ -11,7 +10,7 @@ from contextlib import asynccontextmanager
 from collections import defaultdict, deque
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Iterable, Mapping, TypeGuard, get_type_hints, overload
+from typing import Any, Iterable, TypeGuard, get_type_hints, overload
 
 from .minion import Minion, WorkflowPersistenceFailurePolicy
 from .pipeline import Pipeline
@@ -45,6 +44,11 @@ from .._framework.state_store_sqlite import SQLiteStateStore
 from .._utils.safe_cancel_task import safe_cancel_task
 from .._utils.get_type_from_hint import get_type_from_hint
 from .._utils.safe_create_task import safe_create_task
+from .._utils.serialization import (
+    require_type_model,
+    require_type_serializable,
+    serialize,
+)
 
 class _UnsetType: ...
 
@@ -319,14 +323,22 @@ class Gru:
         return uuid.uuid4().hex
 
     @staticmethod
-    def _make_inline_config_identity(minion_config: Mapping[str, Any]) -> str:
-        payload = json.dumps(
-            minion_config,
-            sort_keys=True,
-            separators=(",", ":"),
-            default=repr,
+    def _make_inline_config_identity(minion_config: object) -> str:
+        config_type = type(minion_config)
+        require_type_serializable(
+            config_type,
+            owner="Gru.start_minion",
+            type_label="minion_config type",
         )
-        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+        require_type_model(
+            config_type,
+            owner="Gru.start_minion",
+            type_label="minion_config type",
+        )
+
+        type_id = f"{config_type.__module__}.{config_type.__qualname__}".encode("utf-8")
+        payload = serialize(minion_config, exp_msg_prefix="Gru.start_minion minion_config: ")
+        digest = hashlib.sha256(type_id + b"\0" + payload).hexdigest()[:16]
         return f"<inline:{digest}>"
 
     @staticmethod
@@ -384,7 +396,8 @@ class Gru:
         minion_instance_id: str,
         minion_composite_key: str,
         minion_modpath: str,
-        minion_config_path: str | None
+        minion_config_path: str | None,
+        inline_minion_config: object | None = None,
     ) -> Minion[Any, Any]:
         minion_cls = self._get_minion_class(minion_modpath)
 
@@ -393,6 +406,7 @@ class Gru:
             minion_composite_key=minion_composite_key,
             minion_modpath=minion_modpath,
             config_path=minion_config_path,
+            inline_config=inline_minion_config,
             state_store=self._state_store,
             metrics=self._metrics,
             logger=self._logger,
@@ -779,7 +793,7 @@ class Gru:
         minion: type[Minion[T_Event, T_Ctx]],
         pipeline: type[Pipeline[T_Event]],
         *,
-        minion_config: Mapping[str, Any] | None = None,
+        minion_config: object | None = None,
     ) -> StartMinionResult: ...
     
     @overload
@@ -796,7 +810,7 @@ class Gru:
         minion: object,
         pipeline: object,
         *,
-        minion_config: Mapping[str, Any] | None = None,
+        minion_config: object | None = None,
         minion_config_path: str | None = None,
     ) -> StartMinionResult:
         self._ensure_started()
@@ -844,11 +858,17 @@ class Gru:
                     )
                 minion_modpath = minion.__module__
                 pipeline_modpath = pipeline.__module__
-                minion_config_path = (
-                    self._make_inline_config_identity(minion_config)
-                    if minion_config
-                    else None
-                )
+                try:
+                    minion_config_path = (
+                        self._make_inline_config_identity(minion_config)
+                        if minion_config is not None
+                        else None
+                    )
+                except TypeError as e:
+                    return StartMinionResult(
+                        success=False,
+                        reason=str(e),
+                    )
 
             else:
                 return StartMinionResult(
@@ -904,6 +924,7 @@ class Gru:
                         minion_composite_key=minion_composite_key,
                         minion_modpath=minion_modpath,
                         minion_config_path=minion_config_path,
+                        inline_minion_config=minion_config,
                     )
                     pipeline_id = self._make_pipeline_id(pipeline_modpath)
                     pipeline_inst = self._get_pipeline(pipeline_id, pipeline_modpath)

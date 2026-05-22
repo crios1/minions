@@ -8,9 +8,30 @@ A task-focused checklist to launch a minion with Gru.
 - `minions.py` with a `Minion[T_Event, T_Ctx]` subclass and optional `minion = YourMinion`.
 - `resources.py` for any shared dependencies declared via type hints on your pipeline/minion.
 
-## 2) Add a config file
+## 2) Add a config model and loader
 
-Create a TOML/JSON/YAML file even if it is empty today (e.g., `config/print.toml`). Override `load_config` later for validation.
+File-backed config is optional. When a minion uses it, override `load_config`
+and return a dataclass or `msgspec.Struct` model so invalid config fails before
+workflows start.
+
+```python
+from dataclasses import dataclass
+import json
+from pathlib import Path
+
+
+@dataclass
+class PrintConfig:
+    prefix: str
+
+
+class PrintMinion(Minion[PrintEvent, PrintContext]):
+    config: PrintConfig
+
+    async def load_config(self, config_path: str) -> PrintConfig:
+        raw = json.loads(Path(config_path).read_text())
+        return PrintConfig(prefix=raw["prefix"])
+```
 
 ## 3) Start Gru and the minion
 
@@ -22,8 +43,8 @@ async def main():
     gru = await Gru.create()
     await gru.start_minion(
         "my_app.minions",   # module containing your Minion subclass or `minion`
-        "config/print.toml",
         "my_app.pipelines", # module containing your Pipeline subclass or `pipeline`
+        minion_config_path="config/print.json",
     )
 
     shell = GruShell(gru)

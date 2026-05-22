@@ -104,7 +104,12 @@ For a broader operator view, see {doc}`/guides/operating-with-metrics`.
 
 ## Config loading
 
-Each minion receives a config path when started. The default loader supports TOML, YAML, and JSON, returning a `dict`. Override `Minion.load_config` for custom formats or validation.
+Each file-backed minion receives a config path when started. Override
+`Minion.load_config` to parse that path and return a dataclass or
+`msgspec.Struct` config model. Declare the model as the Minion's typed
+`config` attribute before accessing `self.config` from workflow steps. Minions
+validates the returned config model before workflows start; it does not expose
+raw parsed config dictionaries to step code.
 
 ## Persistence strategy
 

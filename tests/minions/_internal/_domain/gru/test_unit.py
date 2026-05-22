@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import types
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 
 import pytest
 
@@ -48,7 +49,29 @@ def _process_stub(*, rss: int, cpu_percent: int) -> Callable[[], object]:
     return Proc
 
 
+@dataclass
+class InlineIdentityConfig:
+    name: str
+
+
 class TestUnit:
+    def test_inline_config_identity_is_stable_hashed_and_content_sensitive(self) -> None:
+        cfg_a = Gru._make_inline_config_identity(InlineIdentityConfig(name="alpha"))
+        cfg_a_again = Gru._make_inline_config_identity(InlineIdentityConfig(name="alpha"))
+        cfg_b = Gru._make_inline_config_identity(InlineIdentityConfig(name="bravo"))
+
+        assert cfg_a == cfg_a_again
+        assert cfg_a != cfg_b
+        assert cfg_a.startswith("<inline:")
+        assert "alpha" not in cfg_a
+
+        key = Gru._make_minion_composite_key(
+            "tests.assets.Minion",
+            cfg_a,
+            "tests.assets.Pipeline",
+        )
+        assert key == f"tests.assets.Minion|{cfg_a}|tests.assets.Pipeline"
+
     def patch_sleep_cancel_after(self, monkeypatch: pytest.MonkeyPatch, n: int) -> None:
         """
         Replace asyncio.sleep with a version that cancels after N calls.

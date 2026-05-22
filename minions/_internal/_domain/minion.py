@@ -1,7 +1,6 @@
 import asyncio
 import ast
 import contextvars
-import importlib
 import inspect
 import random
 import sys
@@ -11,7 +10,7 @@ import traceback
 import uuid
 from collections.abc import Awaitable
 from pathlib import Path
-from types import ModuleType, TracebackType
+from types import TracebackType
 from typing import (
     Any, Callable, ClassVar,
     Generic, Literal, Type,
@@ -290,6 +289,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         state_store: StateStore,
         metrics: Metrics,
         logger: Logger,
+        inline_config: object | None = None,
         workflow_persistence_failure_policy: WorkflowPersistenceFailurePolicy = "continue-on-failure",
         workflow_persistence_retry_delay_seconds: float = 1.0,
         workflow_persistence_retry_max_delay_seconds: float = 60.0,
@@ -309,7 +309,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         self._mn_minion_composite_key = minion_composite_key
         self._mn_minion_modpath = minion_modpath
         self._mn_config_path = config_path
-        self._mn_config: dict[str, Any] | None = None
+        self._mn_config: object | None = None
+        if inline_config is not None:
+            self._mn_bind_config(inline_config, source="Gru.start_minion minion_config")
         self._mn_config_lock = asyncio.Lock()
         self._mn_state_store = state_store
         self._mn_metrics = metrics
@@ -426,10 +428,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         except LookupError:
             raise RuntimeError("No context is currently bound to this workflow")
 
-    @property
-    def config(self) -> dict[str, Any] | None:
-        return self._mn_config
-
     def _mn_make_workflow(self) -> tuple[Callable[..., Any], ...]:
         "workflow is defined as the subclass's methods tagged as minion steps, in declaration order"
         steps: list[tuple[int, str]] = []
@@ -476,8 +474,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     ) -> None:
         async def _pre():
             self._mn_validate_user_code(self._mn_load_config, type(self).__module__)
-            if self._mn_config_path:
-                self._mn_config = await self._mn_load_config(self._mn_config_path)
+            if self._mn_config_path and self._mn_config is None:
+                await self._mn_load_config(self._mn_config_path)
         
         async def _post():
             contexts = (
@@ -499,103 +497,52 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             post=_post
         )
 
-    async def _mn_load_config(self, config_path: str) -> dict[str, Any]:
+    async def _mn_load_config(self, config_path: str) -> object:
         async with self._mn_config_lock:
             config = await self.load_config(config_path)
-            return self._mn_validate_config_dict(config, source=f"{type(self).__name__}.load_config")
+            self._mn_bind_config(config, source=f"{type(self).__name__}.load_config")
+            return config
 
-    @staticmethod
-    def _mn_validate_config_dict(config: object, *, source: str) -> dict[str, Any]:
-        if not isinstance(config, dict):
-            raise TypeError(f"{source} must return a dict, got {type(config).__name__}")
+    def _mn_bind_config(self, config: object, *, source: str) -> None:
+        config_type = type(config)
+        require_type_serializable(
+            config_type,
+            owner=source,
+            type_label="config type",
+        )
+        require_type_model(
+            config_type,
+            owner=source,
+            type_label="config type",
+        )
 
-        def copy_validated_config_dict(config: Any, *, source: str) -> dict[str, Any]:
-            typed_config: dict[str, Any] = {}
-            for key, value in config.items():
-                if not isinstance(key, str):
-                    raise TypeError(f"{source} must return a dict with str keys, got {type(key).__name__}")
-                typed_config[key] = value
-            return typed_config
-
-        return copy_validated_config_dict(config, source=source)
-
-    async def load_config(self, config_path: str) -> dict[str, Any]:
-        """
-        Default config loader that supports TOML, JSON, and YAML files.
-
-        Override this method to define how your Minion loads its configuration.
-
-        Returns:
-            dict: Parsed configuration contents. This must always be a `dict`,
-                regardless of the config file format or structure.
-
-        Raises:
-            FileNotFoundError: If the config file does not exist.
-            ValueError: If the config format is unsupported or parsing fails.
-        """
-        path = Path(config_path)
-
-        if not path.exists():
-            raise FileNotFoundError(f"Minion config file not found: {path}") # pragma: no cover
-
-        suffix = path.suffix.lower()
-
+        config_hint = get_type_hints(type(self)).get("config")
+        if config_hint is None:
+            raise TypeError(
+                f"{type(self).__name__} must declare a `config` type annotation "
+                "when using minion config."
+            )
         try:
-            contents = await asyncio.to_thread(path.read_text)
+            valid_config = isinstance(config, config_hint)
+        except TypeError as e:
+            raise TypeError(
+                f"{type(self).__name__}.config annotation must support runtime "
+                "config type checks."
+            ) from e
+        if not valid_config:
+            raise TypeError(
+                f"{type(self).__name__}.config expects {config_hint!r}, "
+                f"got {config_type.__name__}."
+            )
 
-            if suffix in (".yaml", ".yml"):
-                try:
-                    yaml_module = importlib.import_module("yaml")
-                except ImportError:
-                    raise RuntimeError(
-                        "YAML support requires 'PyYAML'. Install it or override load_config()."
-                    )
-                safe_load: Callable[[str], object] | None = getattr(yaml_module, "safe_load", None)
-                if safe_load is None:
-                    raise RuntimeError("YAML parser module does not define safe_load().")
-                return self._mn_validate_config_dict(
-                    safe_load(contents),
-                    source=f"config file '{path}'",
-                )
+        self._mn_config = config
+        setattr(self, "config", config)
 
-            elif suffix == ".toml":
-                try:
-                    toml_module: ModuleType
-                    try:
-                        # Python 3.11+
-                        toml_module = importlib.import_module("tomllib")
-                    except ImportError:
-                        # Python < 3.11
-                        toml_module = importlib.import_module("tomli")
-                except ImportError:
-                    raise RuntimeError(
-                        "TOML support requires Python 3.11+ or installing 'tomli'. "
-                        "Install tomli or override load_config()."
-                    )
-                loads: Callable[[str], object] | None = getattr(toml_module, "loads", None)
-                if loads is None:
-                    raise RuntimeError("TOML parser module does not define loads().")
-                return self._mn_validate_config_dict(
-                    loads(contents),
-                    source=f"config file '{path}'",
-                )
-
-            elif suffix == ".json":
-                import json
-                return self._mn_validate_config_dict(
-                    json.loads(contents),
-                    source=f"config file '{path}'",
-                )
-
-            else:
-                raise ValueError(
-                    f"Unsupported config file format: '{suffix}'. "
-                    f"Supported formats: .toml, .json, .yaml. "
-                    f"If you want to support '{suffix}', override your Minion's load_config() method."
-                )
-
-        except Exception as e:
-            raise ValueError(f"Failed to parse config file '{path}': {e}")
+    async def load_config(self, config_path: str) -> object:
+        raise NotImplementedError(
+            f"{type(self).__name__}.load_config must be overridden to load "
+            "file config into a dataclass or msgspec Struct instance."
+        )
 
     async def _mn_run_workflow_persistence_checkpoint(
         self,

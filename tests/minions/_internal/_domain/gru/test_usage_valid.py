@@ -12,6 +12,7 @@ from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_noop import NoOpStateStore
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
+from tests.assets.support.minion_spied import AssetMinionConfig
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.support.gru_scenario import (
     AfterWorkflowStarts,
@@ -94,23 +95,6 @@ class TestValidUsage:
         ):
             pass
 
-    def test_inline_config_identity_is_stable_hashed_and_content_sensitive(self) -> None:
-        cfg_a = Gru._make_inline_config_identity({"secret": "alpha", "threshold": 3})
-        cfg_a_reordered = Gru._make_inline_config_identity({"threshold": 3, "secret": "alpha"})
-        cfg_b = Gru._make_inline_config_identity({"secret": "bravo", "threshold": 3})
-
-        assert cfg_a == cfg_a_reordered
-        assert cfg_a != cfg_b
-        assert cfg_a.startswith("<inline:")
-        assert "alpha" not in cfg_a
-
-        key = Gru._make_minion_composite_key(
-            "tests.assets.Minion",
-            cfg_a,
-            "tests.assets.Pipeline",
-        )
-        assert key == f"tests.assets.Minion|{cfg_a}|tests.assets.Pipeline"
-
     # Verification ownership: tracked in DSL backlog `tests/support/gru_scenario/VERIFICATION_TODOS.md` (V-001).
 
     @pytest.mark.asyncio
@@ -150,6 +134,37 @@ class TestValidUsage:
             )
 
             await gru.stop_minion(result.instance_id)
+
+    @pytest.mark.asyncio
+    async def test_gru_start_stop_minion_from_classes(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        reload_pipeline_module: Callable[[str], None],
+    ) -> None:
+        pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+        reload_pipeline_module(pipeline_modpath)
+
+        from tests.assets.minions.two_steps.counter.basic import TwoStepMinion
+        from tests.assets.pipelines.emit1.counter.emit_1 import Emit1Pipeline
+
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=ConsoleLogger(),
+            metrics=NoOpMetrics(),
+        ) as gru:
+            start_result = await gru.start_minion(
+                minion=TwoStepMinion,
+                pipeline=Emit1Pipeline,
+            )
+
+            assert start_result.success
+            assert start_result.name == "two-step-minion"
+            assert start_result.instance_id in gru._minions_by_id
+            assert start_result.instance_id in gru._minion_tasks
+
+            stop_result = await gru.stop_minion(start_result.instance_id)
+            assert stop_result.success
+
 
     @pytest.mark.asyncio
     async def test_gru_start_3_minions_3_pipelines_3_resources_no_sharing(
@@ -337,10 +352,58 @@ class TestValidUsage:
             await ConfigMinion.wait_for_calls(expected={"step_1": 1, "step_2": 1}, timeout=5.0)
 
             minion = gru._minions_by_id[result.instance_id]
-            assert minion.config is not None
-            assert minion.config["config"]["name"] == "alpha"
+            assert isinstance(minion, ConfigMinion)
+            assert isinstance(minion.config, AssetMinionConfig)
+            assert minion.config.name == "alpha"
 
             await gru.stop_minion(result.instance_id)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "inline_config_kind",
+        ["dataclass", "struct"],
+    )
+    async def test_gru_loads_inline_minion_config_from_classes(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        reload_pipeline_module: Callable[[str], None],
+        inline_config_kind: str,
+    ) -> None:
+        pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+        reload_pipeline_module(pipeline_modpath)
+
+        from tests.assets.minions.two_steps.counter.inline_config import (
+            InlineConfigMinion,
+            InlineDataclassConfig,
+            InlineStructConfig,
+        )
+        from tests.assets.pipelines.emit1.counter.emit_1 import Emit1Pipeline
+
+        inline_config = (
+            InlineDataclassConfig(name="dataclass")
+            if inline_config_kind == "dataclass"
+            else InlineStructConfig(name="struct")
+        )
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=ConsoleLogger(),
+            metrics=NoOpMetrics(),
+        ) as gru:
+            result = await gru.start_minion(
+                minion=InlineConfigMinion,
+                pipeline=Emit1Pipeline,
+                minion_config=inline_config,
+            )
+
+            assert result.success
+            assert result.instance_id is not None
+
+            minion = gru._minions_by_id[result.instance_id]
+            assert isinstance(minion, InlineConfigMinion)
+            assert minion.config is inline_config
+
+            stop = await gru.stop_minion(result.instance_id)
+            assert stop.success
 
     @pytest.mark.asyncio
     async def test_minion_and_pipeline_share_resource_dependency(

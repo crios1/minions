@@ -189,6 +189,30 @@ class TestInvalidUsage:
             assert "Minion already running" in result2.reason
 
     @pytest.mark.asyncio
+    async def test_gru_rejects_dict_inline_minion_config(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    ) -> None:
+        from tests.assets.minions.two_steps.counter.uses_config import ConfigMinion
+        from tests.assets.pipelines.emit1.counter.emit_1 import Emit1Pipeline
+
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=ConsoleLogger(),
+            metrics=NoOpMetrics(),
+        ) as gru:
+            result = await gru.start_minion(
+                minion=ConfigMinion,
+                pipeline=Emit1Pipeline,
+                minion_config={"name": "dict"},
+            )
+
+            assert not result.success
+            assert result.reason == (
+                "Gru.start_minion: minion_config type must be a dataclass or msgspec Struct type."
+            )
+
+    @pytest.mark.asyncio
     async def test_gru_returns_error_when_stopping_nonexistant_minion(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]

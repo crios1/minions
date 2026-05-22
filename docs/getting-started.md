@@ -12,7 +12,8 @@ The library itself is still pre-alpha; expect churn while APIs settle.
 
 ## Define your domain types
 
-Pick a structured event type (dataclasses and TypedDicts are supported) and a workflow context to carry state between steps.
+Pick structured event and workflow context types. Minions supports dataclasses
+and `msgspec.Struct` models for these domain boundaries.
 Use immutable event types when possible (for example, frozen dataclasses) and keep mutable state in `WorkflowCtx`.
 
 ```python
@@ -88,7 +89,7 @@ minion = PrintMinion  # optional, makes discovery unambiguous
 
 ## Run everything with Gru
 
-`Gru` orchestrates lifecycles: starting pipelines/resources, wiring dependencies, subscribing minions, and persisting workflow context. The current API expects module paths for your pipeline/minion classes and a path to a config file (even if it is empty for now).
+`Gru` orchestrates lifecycles: starting pipelines/resources, wiring dependencies, subscribing minions, and persisting workflow context. The current API accepts module paths for your pipeline/minion classes. Pass `minion_config_path` only when that Minion declares a typed `config` attribute, overrides `load_config`, and returns a dataclass or `msgspec.Struct` config model.
 
 ```python
 # run.py
@@ -100,7 +101,6 @@ async def main():
 
     await gru.start_minion(
         "my_app.minions",   # module containing a Minion subclass or `minion` variable
-        "config/print.toml",# path to a config file for your minion (can be empty for now)
         "my_app.pipelines", # module containing a Pipeline subclass or `pipeline` variable
     )
 

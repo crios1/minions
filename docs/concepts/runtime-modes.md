@@ -2,7 +2,7 @@
 
 Minions supports two ways of starting minions:
 
-1. **Inline mode** — pass Minion/Pipeline classes and an optional Python dict config.
+1. **Inline mode** — pass Minion/Pipeline classes and an optional dataclass or `msgspec.Struct` config.
 2. **Deployment mode** — pass module paths and a file-based config.
 
 Both modes are fully supported, but they serve different purposes and have different guarantees.
@@ -14,14 +14,25 @@ Both modes are fully supported, but they serve different purposes and have diffe
 Inline mode is the ergonomic, “local-first” way to start a minion:
 
 ```python
+from dataclasses import dataclass
+
+
+@dataclass
+class MyConfig:
+    my_key: str
+
+
 gru.start_minion(
     MyMinion,
     MyPipeline,
-    minion_config={"pair": "ETH/USDC"},
+    minion_config=MyConfig(my_key="my_value"),
 )
 ```
 
-Use inline mode when you’re exploring, prototyping, or running a single instance. Configs live in memory, and the runtime uses a single placeholder identity (`<inline>`) for the deployment slot: `/abs/path/to/minion.py|<inline>|/abs/path/to/pipeline.py`. Starting the same (minion, pipeline) again replaces the prior inline instance; it’s not intended for multiple distinct instances of the same minion.
+`MyMinion` declares `config: MyConfig` when its steps read
+`self.config`.
+
+Use inline mode when you’re exploring, prototyping, or running a single instance. Configs live in memory, and the runtime derives an inline config identity from the structured config value: `/abs/path/to/minion.py|<inline:digest>|/abs/path/to/pipeline.py`. Starting the same (minion, pipeline, config value) again addresses the same inline instance.
 
 ## Deployment mode (string-based)
 

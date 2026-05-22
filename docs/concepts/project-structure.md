@@ -33,7 +33,7 @@ my-project/
 ## What each folder is for
 
 **configs/**  
-Configuration files for deployable minions. Configs are optional but recommended to separate logic from parameters, deploy multiple instances of the same minion, and keep systems portable (config paths stay relative to the project root). Minions stores relative config paths in the composite key, so copying the project preserves identities.
+Configuration files for deployable minions. Configs are optional but recommended to separate logic from parameters, deploy multiple instances of the same minion, and keep systems portable (config paths stay relative to the project root). A Minion that uses file config declares a typed `config` attribute, overrides `load_config`, and returns a dataclass or `msgspec.Struct` config model; Minions stores relative config paths in the composite key, so copying the project preserves identities.
 
 **minions/**  
 Your long-lived workers. Each file typically exports one Minion subclass, e.g.:

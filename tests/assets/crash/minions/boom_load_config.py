@@ -9,7 +9,7 @@ from tests.assets.contexts.counter import CounterContext
 class BoomLoadConfigMinion(SpiedMinion[CounterEvent, CounterContext]):
     name = "boom-load-config-minion"
 
-    async def load_config(self, config_path: str) -> dict[str, object]: # pyright: ignore[reportReturnType]
+    async def load_config(self, config_path: str):
         boom()
 
     @minion_step
