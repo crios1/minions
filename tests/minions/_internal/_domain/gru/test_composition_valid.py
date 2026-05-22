@@ -1,7 +1,5 @@
 import contextlib
 from collections.abc import Callable
-from pathlib import Path
-
 import pytest
 
 from minions._internal._domain.gru import Gru
@@ -18,12 +16,10 @@ class TestValidComposition:
         async def test_gru_accepts_file_with_multiple_minions_and_explicit_minion(
             self,
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
         ) -> None:
             
             minion_modpath = "tests.assets.entrypoints.valid.two_minions_explicit_minion_simple"
             pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
-            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
                 state_store=NoOpStateStore(),
@@ -32,7 +28,6 @@ class TestValidComposition:
             ) as gru:
                 result = await gru.start_minion(
                     minion=minion_modpath,
-                    minion_config_path=config_path,
                     pipeline=pipeline_modpath
                 )
 
@@ -42,11 +37,9 @@ class TestValidComposition:
         async def test_gru_starts_minion_with_multiple_distinct_resource_dependencies(
             self,
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
         ) -> None:
             minion_modpath = "tests.assets.minions.two_steps.simple.resourced_multi"
             pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
-            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             logger = InMemoryLogger()
             async with gru_factory(
@@ -56,7 +49,6 @@ class TestValidComposition:
             ) as gru:
                 result = await gru.start_minion(
                     minion=minion_modpath,
-                    minion_config_path=config_path,
                     pipeline=pipeline_modpath
                 )
 
@@ -72,11 +64,9 @@ class TestValidComposition:
         async def test_gru_accepts_file_with_single_pipeline_class(
             self,
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
         ) -> None:
             minion_modpath = "tests.assets.minions.two_steps.simple.basic"
             pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
-            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
                 state_store=NoOpStateStore(),
@@ -85,7 +75,6 @@ class TestValidComposition:
             ) as gru:
                 result = await gru.start_minion(
                     minion=minion_modpath,
-                    minion_config_path=config_path,
                     pipeline=pipeline_modpath
                 )
 
@@ -98,11 +87,9 @@ class TestValidCompositionUsingNewAssets:
         async def test_gru_accepts_file_with_multiple_minions_and_explicit_minion(
             self,
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
         ) -> None:
             minion_modpath = "tests.assets.entrypoints.valid.two_minions_explicit_minion"
             pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
-            config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(
                 state_store=NoOpStateStore(),
@@ -111,7 +98,6 @@ class TestValidCompositionUsingNewAssets:
             ) as gru:
                 result = await gru.start_minion(
                     minion=minion_modpath,
-                    minion_config_path=config_path,
                     pipeline=pipeline_modpath,
                 )
                 assert result.success
@@ -120,11 +106,9 @@ class TestValidCompositionUsingNewAssets:
         async def test_gru_starts_minion_with_multiple_distinct_resource_dependencies(
             self,
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
         ) -> None:
             minion_modpath = "tests.assets.minions.two_steps.counter.multi_resources"
             pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
-            config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             logger = InMemoryLogger()
             async with gru_factory(
@@ -134,7 +118,6 @@ class TestValidCompositionUsingNewAssets:
             ) as gru:
                 result = await gru.start_minion(
                     minion=minion_modpath,
-                    minion_config_path=config_path,
                     pipeline=pipeline_modpath,
                 )
 
@@ -149,11 +132,9 @@ class TestValidCompositionUsingNewAssets:
             self,
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
             reload_pipeline_module: Callable[[str], None],
-            tests_dir: Path,
         ) -> None:
             minion_modpath = "tests.assets.minions.two_steps.counter.basic"
             pipeline_modpath = "tests.assets.pipelines.entrypoint.counter.single_class"
-            config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
             reload_pipeline_module(pipeline_modpath)
 
             async with gru_factory(
@@ -163,7 +144,6 @@ class TestValidCompositionUsingNewAssets:
             ) as gru:
                 result = await gru.start_minion(
                     minion=minion_modpath,
-                    minion_config_path=config_path,
                     pipeline=pipeline_modpath,
                 )
                 assert result.success

@@ -1,6 +1,5 @@
 import asyncio
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -38,20 +37,16 @@ async def test_runner_require_result_invariant_message_is_actionable(gru: Gru) -
 @pytest.mark.asyncio
 async def test_runner_records_receipts_for_success_and_expected_failure(
     gru: Gru,
-    tests_dir: Path,
 ) -> None:
-    config_path = str(tests_dir / "assets" / "config/minions/a.toml")
     pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
 
     directives = [
         MinionStart(
             minion="tests.assets.minions.two_steps.simple.basic",
-            minion_config_path=config_path,
             pipeline=pipeline_modpath,
         ),
         MinionStart(
             minion="tests.assets.minions.two_steps.simple.basic",
-            minion_config_path=config_path,
             pipeline=pipeline_modpath,
             expect_success=False,
         ),
@@ -76,11 +71,8 @@ async def test_runner_records_receipts_for_success_and_expected_failure(
 @pytest.mark.asyncio
 async def test_runner_concurrent_starts_capture_started_minions_and_instance_tags(
     gru: Gru,
-    tests_dir: Path,
     reload_wait_for_subs_pipeline: Callable[..., None],
 ) -> None:
-    cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
-    cfg2 = str(tests_dir / "assets" / "config/minions/b.toml")
     pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
     reload_wait_for_subs_pipeline(expected_subs=2)
 
@@ -88,12 +80,10 @@ async def test_runner_concurrent_starts_capture_started_minions_and_instance_tag
         Concurrent(
             MinionStart(
                 minion="tests.assets.minions.two_steps.simple.basic",
-                minion_config_path=cfg1,
                 pipeline=pipeline_modpath,
             ),
             MinionStart(
                 minion="tests.assets.minions.two_steps.simple.resourced_2",
-                minion_config_path=cfg2,
                 pipeline=pipeline_modpath,
             ),
         ),
@@ -123,20 +113,16 @@ async def test_runner_concurrent_starts_capture_started_minions_and_instance_tag
 @pytest.mark.asyncio
 async def test_runner_wait_workflows_subset_handles_mixed_success_and_failure(
     gru: Gru,
-    tests_dir: Path,
 ) -> None:
-    config_path = str(tests_dir / "assets" / "config/minions/a.toml")
     pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
 
     directives = [
         MinionStart(
             minion="tests.assets.minions.two_steps.simple.basic",
-            minion_config_path=config_path,
             pipeline=pipeline_modpath,
         ),
         MinionStart(
             minion="tests.assets.minions.two_steps.simple.basic",
-            minion_config_path=config_path,
             pipeline=pipeline_modpath,
             expect_success=False,
         ),
@@ -156,7 +142,6 @@ async def test_runner_wait_workflows_subset_handles_mixed_success_and_failure(
 @pytest.mark.asyncio
 async def test_wait_minion_tasks_times_out_instead_of_blocking_indefinitely(
     gru: Gru,
-    tests_dir: Path,
 ) -> None:
     class _DummyMinion:
         def __init__(self) -> None:
@@ -238,7 +223,6 @@ async def test_wait_minion_tasks_waits_for_minions_concurrently(gru: Gru) -> Non
 @pytest.mark.asyncio
 async def test_wait_workflows_named_lookup_is_scenario_local_only(
     gru: Gru,
-    tests_dir: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = ScenarioPlan([], pipeline_event_counts={})
@@ -295,15 +279,12 @@ async def test_runner_wait_workflow_starts_then_rejects_unknown_names(gru: Gru) 
 @pytest.mark.asyncio
 async def test_runner_records_checkpoints_for_wait_workflow_completions_and_shutdown(
     gru: Gru,
-    tests_dir: Path,
 ) -> None:
-    config_path = str(tests_dir / "assets" / "config/minions/a.toml")
     pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
 
     directives = [
         MinionStart(
             minion="tests.assets.minions.two_steps.simple.basic",
-            minion_config_path=config_path,
             pipeline=pipeline_modpath,
         ),
         WaitWorkflowCompletions(),
@@ -357,19 +338,16 @@ async def test_runner_records_checkpoint_for_wait_workflow_starts_then(gru: Gru)
 @pytest.mark.asyncio
 async def test_runner_restart_flow_checkpoints_separate_pre_stop_and_post_restart_windows(
     gru: Gru,
-    tests_dir: Path,
 ) -> None:
     pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
     minion_modpath = "tests.assets.minions.two_steps.counter.basic"
-    cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
-
     directives = [
-        MinionStart(minion=minion_modpath, minion_config_path=cfg1, pipeline=pipeline_modpath),
+        MinionStart(minion=minion_modpath, pipeline=pipeline_modpath),
         AfterWorkflowStarts(
             expected={"two-step-minion": 1},
             directive=MinionStop(name_or_instance_id="two-step-minion", expect_success=True),
         ),
-        MinionStart(minion=minion_modpath, minion_config_path=cfg1, pipeline=pipeline_modpath),
+        MinionStart(minion=minion_modpath, pipeline=pipeline_modpath),
         WaitWorkflowCompletions(),
         GruShutdown(expect_success=True),
     ]

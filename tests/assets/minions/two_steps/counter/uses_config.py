@@ -1,11 +1,11 @@
 from minions import minion_step
 
-from tests.assets.support.minion_spied import SpiedMinion
+from tests.assets.support.minion_spied_configed import ConfiguredSpiedMinion
 from tests.assets.contexts.counter import CounterContext
 from tests.assets.events.counter import CounterEvent
 
 
-class ConfigMinion(SpiedMinion[CounterEvent, CounterContext]):
+class ConfigMinion(ConfiguredSpiedMinion[CounterEvent, CounterContext]):
     name = "config-minion"
 
     @minion_step

@@ -241,12 +241,12 @@ async def test_gru_allows_concurrent_starts_for_different_minions(
         gru._minion_locks = defaultdict(GatedLock)
         minion_key_1 = gru._make_minion_composite_key(
             "tests.assets.minions.two_steps.simple.basic",
-            "tests/assets/config/minions/a.toml",
+            None,
             "tests.assets.pipelines.simple.simple_event.single_event_1",
         )
         minion_key_2 = gru._make_minion_composite_key(
             "tests.assets.minions.two_steps.simple.basic",
-            "tests/assets/config/minions/b.toml",
+            None,
             "tests.assets.pipelines.simple.simple_event.single_event_2",
         )
         gate1 = gru._minion_locks[minion_key_1]
@@ -257,14 +257,12 @@ async def test_gru_allows_concurrent_starts_for_different_minions(
         task1 = asyncio.create_task(
             gru.start_minion(
                 minion="tests.assets.minions.two_steps.simple.basic",
-                minion_config_path="tests/assets/config/minions/a.toml",
                 pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
             )
         )
         task2 = asyncio.create_task(
             gru.start_minion(
                 minion="tests.assets.minions.two_steps.simple.basic",
-                minion_config_path="tests/assets/config/minions/b.toml",
                 pipeline="tests.assets.pipelines.simple.simple_event.single_event_2",
             )
         )
@@ -315,13 +313,12 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_minion_s
         task1 = asyncio.create_task(
             gru.start_minion(
                 minion="tests.assets.minions.two_steps.counter.basic",
-                minion_config_path="tests/assets/config/minions/a.toml",
                 pipeline=pipeline_modpath,
             )
         )
         task2 = asyncio.create_task(
             gru.start_minion(
-                minion="tests.assets.minions.two_steps.counter.basic",
+                minion="tests.assets.minions.two_steps.counter.uses_config",
                 minion_config_path="tests/assets/config/minions/b.toml",
                 pipeline=pipeline_modpath,
             )

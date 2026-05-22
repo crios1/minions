@@ -3,7 +3,7 @@ name = "minions"
 version = "0.0.2"
 description = "Async-native orchestration framework — pre-0.1.0 and under active development."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { file = "LICENSE" }
 authors = [
   { name = "Chris" }
@@ -12,6 +12,8 @@ authors = [
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
   "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent"
 ]
@@ -57,7 +59,7 @@ python_paths = ["."]
 
 [tool.pyright]
 typeCheckingMode = "strict"
-pythonVersion = "3.10"
+pythonVersion = "3.11"
 venvPath = "."
 venv = "venv"
 # `_mn_*` is Minions' framework-internal namespace, not class-private.

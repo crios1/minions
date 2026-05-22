@@ -1,7 +1,6 @@
 import asyncio
 import contextlib
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any, cast
 
 import pytest
@@ -143,8 +142,7 @@ class TestInvalidUsage:
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_starting_running_minion(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        tests_dir: Path
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
     ) -> None:
         # TODO:
         # - start 2 minions with the same name (would need to start different minion but give the same name)
@@ -155,7 +153,6 @@ class TestInvalidUsage:
 
         minion_modpath = "tests.assets.minions.two_steps.simple.basic"
         pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
-        config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
         async with gru_factory(
             state_store=NoOpStateStore(),
@@ -164,7 +161,6 @@ class TestInvalidUsage:
         ) as gru:
             result1 = await gru.start_minion(
                 minion=minion_modpath,
-                minion_config_path=config_path,
                 pipeline=pipeline_modpath
             )
 
@@ -178,7 +174,6 @@ class TestInvalidUsage:
 
             result2 = await gru.start_minion(
                 minion=minion_modpath,
-                minion_config_path=config_path,
                 pipeline=pipeline_modpath
             )
 
@@ -233,12 +228,10 @@ class TestInvalidUsage:
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_mismatched_minion_and_pipeline_event_types(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        tests_dir: Path
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
     ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.simple.basic"
         pipeline_modpath = "tests.assets.pipelines.simple.record_event"
-        config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
         async with gru_factory(
             state_store=NoOpStateStore(),
@@ -247,7 +240,6 @@ class TestInvalidUsage:
         ) as gru:
             result = await gru.start_minion(
                 minion=minion_modpath,
-                minion_config_path=config_path,
                 pipeline=pipeline_modpath
             )
 
@@ -278,20 +270,16 @@ class TestInvalidUsageDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-        tests_dir: Path,
     ) -> None:
-        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
 
         directives: list[Directive] = [
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
-                minion_config_path=config_path,
                 pipeline=pipeline_modpath,
             ),
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
-                minion_config_path=config_path,
                 pipeline=pipeline_modpath,
                 expect_success=False,
             ),
@@ -337,14 +325,11 @@ class TestInvalidUsageDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-        tests_dir: Path,
     ) -> None:
-        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
         directives: list[Directive] = [
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
-                minion_config_path=config_path,
                 pipeline="tests.assets.pipelines.types.record_event",
                 expect_success=False,
             ),
@@ -369,20 +354,16 @@ class TestInvalidUsageUsingNewAssetsDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-        tests_dir: Path,
     ) -> None:
-        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
 
         directives: list[Directive] = [
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
-                minion_config_path=config_path,
                 pipeline=pipeline_modpath,
             ),
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
-                minion_config_path=config_path,
                 pipeline=pipeline_modpath,
                 expect_success=False,
             ),
@@ -428,14 +409,11 @@ class TestInvalidUsageUsingNewAssetsDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-        tests_dir: Path,
     ) -> None:
-        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
         directives: list[Directive] = [
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
-                minion_config_path=config_path,
                 pipeline="tests.assets.pipelines.types.record_event",
                 expect_success=False,
             ),
@@ -514,17 +492,14 @@ class TestInvalidUsageUsingNewAssets:
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_starting_running_minion(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        tests_dir: Path
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
     ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.counter.basic"
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
-        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
         async with gru_factory(state_store=NoOpStateStore(), logger=ConsoleLogger(), metrics=NoOpMetrics()) as gru:
             result1 = await gru.start_minion(
                 minion=minion_modpath,
-                minion_config_path=config_path,
                 pipeline=pipeline_modpath,
             )
 
@@ -536,7 +511,6 @@ class TestInvalidUsageUsingNewAssets:
 
             result2 = await gru.start_minion(
                 minion=minion_modpath,
-                minion_config_path=config_path,
                 pipeline=pipeline_modpath,
             )
 
@@ -559,17 +533,14 @@ class TestInvalidUsageUsingNewAssets:
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_mismatched_minion_and_pipeline_event_types(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        tests_dir: Path
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
     ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.counter.basic"
         pipeline_modpath = "tests.assets.pipelines.types.record_event"
-        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
         async with gru_factory(state_store=NoOpStateStore(), logger=ConsoleLogger(), metrics=NoOpMetrics()) as gru:
             result = await gru.start_minion(
                 minion=minion_modpath,
-                minion_config_path=config_path,
                 pipeline=pipeline_modpath,
             )
 

@@ -138,12 +138,10 @@ async def test_stop_resource_cleanup_failure_preserves_shared_runtime_state_for_
         first = await gru.start_minion(
             "tests.assets.minions.two_steps.counter.resourced",
             "tests.assets.pipelines.emit1.counter.emit_1",
-            minion_config_path="tests/assets/config/minions/a.toml",
         )
         second = await gru.start_minion(
             "tests.assets.minions.two_steps.counter.resourced_shared_b",
             "tests.assets.pipelines.emit1.counter.emit_1",
-            minion_config_path="tests/assets/config/minions/b.toml",
         )
         assert first.success
         assert second.success
@@ -175,7 +173,6 @@ async def test_stop_pipeline_resource_cleanup_failure_discards_runtime_state_whe
         result = await gru.start_minion(
             "tests.assets.minions.two_steps.simple.resourced_1",
             "tests.assets.pipelines.simple.simple_event.resourced",
-            minion_config_path="tests/assets/config/minions/a.toml",
         )
         assert result.success
 
@@ -202,7 +199,6 @@ async def test_start_subscribe_failure_preserves_shared_runtime_state_for_live_o
         first = await gru.start_minion(
             "tests.assets.minions.two_steps.counter.resourced",
             "tests.assets.pipelines.emit1.counter.emit_1",
-            minion_config_path="tests/assets/config/minions/a.toml",
         )
         assert first.success
         assert FIXED_RESOURCE_ID in gru._resources
@@ -221,7 +217,6 @@ async def test_start_subscribe_failure_preserves_shared_runtime_state_for_live_o
         second = await gru.start_minion(
             "tests.assets.minions.two_steps.counter.resourced_shared_b",
             "tests.assets.pipelines.emit1.counter.emit_1",
-            minion_config_path="tests/assets/config/minions/b.toml",
         )
 
         assert not second.success

@@ -12,7 +12,7 @@ from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_noop import NoOpStateStore
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
-from tests.assets.support.minion_spied import AssetMinionConfig
+from tests.assets.support.minion_spied_configed import AssetMinionConfig
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.support.gru_scenario import (
     AfterWorkflowStarts,
@@ -102,7 +102,6 @@ class TestValidUsage:
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         reload_wait_for_subs_pipeline: Callable[..., None],
-        tests_dir: Path,
     ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.simple.basic"
         pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
@@ -110,8 +109,6 @@ class TestValidUsage:
         SimpleMinion.enable_spy()
         SimpleMinion.reset_spy()
         reload_wait_for_subs_pipeline(expected_subs=1)
-        config_path = str(tests_dir / "assets" / "config/minions/a.toml")
-
         async with gru_factory(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
@@ -119,7 +116,6 @@ class TestValidUsage:
         ) as gru:
             result = await gru.start_minion(
                 minion=minion_modpath,
-                minion_config_path=config_path,
                 pipeline=pipeline_modpath
             )
 
@@ -170,7 +166,6 @@ class TestValidUsage:
     async def test_gru_start_3_minions_3_pipelines_3_resources_no_sharing(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        tests_dir: Path,
     ) -> None:
         """
         Start three minions each with their own pipeline and their own Resource type
@@ -183,10 +178,6 @@ class TestValidUsage:
         pipeline1 = "tests.assets.pipelines.simple.simple_event.single_event_1"
         pipeline2 = "tests.assets.pipelines.simple.simple_event.single_event_2"
         pipeline3 = "tests.assets.pipelines.simple.simple_event.single_event_3"
-        cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
-        cfg2 = str(tests_dir / "assets" / "config/minions/b.toml")
-        cfg3 = str(tests_dir / "assets" / "config/minions/c.toml")
-
         logger = InMemoryLogger()
         async with gru_factory(
             state_store=InMemoryStateStore(logger=logger),
@@ -200,9 +191,9 @@ class TestValidUsage:
                 cls.enable_spy()
                 cls.reset_spy()
 
-            r1 = await gru.start_minion(minion=minion1, minion_config_path=cfg1, pipeline=pipeline1)
-            r2 = await gru.start_minion(minion=minion2, minion_config_path=cfg2, pipeline=pipeline2)
-            r3 = await gru.start_minion(minion=minion3, minion_config_path=cfg3, pipeline=pipeline3)
+            r1 = await gru.start_minion(minion=minion1, pipeline=pipeline1)
+            r2 = await gru.start_minion(minion=minion2, pipeline=pipeline2)
+            r3 = await gru.start_minion(minion=minion3, pipeline=pipeline3)
 
             assert r1.success and r2.success and r3.success
 
@@ -298,12 +289,9 @@ class TestValidUsage:
     async def test_gru_start_minion_shutdown_without_stop(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        tests_dir: Path,
     ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.simple.basic"
         pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
-        config_path = str(tests_dir / "assets" / "config/minions/a.toml")
-
         async with gru_factory(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
@@ -311,7 +299,6 @@ class TestValidUsage:
         ) as gru:
             result = await gru.start_minion(
                 minion=minion_modpath,
-                minion_config_path=config_path,
                 pipeline=pipeline_modpath
             )
 
@@ -409,19 +396,16 @@ class TestValidUsage:
     async def test_minion_and_pipeline_share_resource_dependency(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        tests_dir: Path,
     ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.simple.resourced_1"
         pipeline_modpath = "tests.assets.pipelines.simple.simple_event.resourced"
-        cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
-
         logger = InMemoryLogger()
         async with gru_factory(
             state_store=InMemoryStateStore(logger=logger),
             logger=logger,
             metrics=InMemoryMetrics()
         ) as gru:
-            r1 = await gru.start_minion(minion=minion_modpath, minion_config_path=cfg1, pipeline=pipeline_modpath)
+            r1 = await gru.start_minion(minion=minion_modpath, pipeline=pipeline_modpath)
 
             assert r1.success
 
@@ -507,15 +491,12 @@ class TestValidUsageDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-        tests_dir: Path,
     ) -> None:
-        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
 
         directives: list[Directive] = [
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
-                minion_config_path=config_path,
                 pipeline=pipeline_modpath,
             ),
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
@@ -546,12 +527,7 @@ class TestValidUsageDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-        tests_dir: Path,
     ) -> None:
-        cfg1 = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
-        cfg2 = str(tests_dir / "assets" / "config" / "minions" / "b.toml")
-        cfg3 = str(tests_dir / "assets" / "config" / "minions" / "c.toml")
-
         pipeline1 = "tests.assets.pipelines.emit1.counter.emit_1_a"
         pipeline2 = "tests.assets.pipelines.emit1.counter.emit_1_b"
         pipeline3 = "tests.assets.pipelines.emit1.counter.emit_1_c"
@@ -559,17 +535,14 @@ class TestValidUsageDSL:
         directives: list[Directive] = [
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.resourced",
-                minion_config_path=cfg1,
                 pipeline=pipeline1,
             ),
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.resourced_b",
-                minion_config_path=cfg2,
                 pipeline=pipeline2,
             ),
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.resourced_c",
-                minion_config_path=cfg3,
                 pipeline=pipeline3,
             ),
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
@@ -608,27 +581,20 @@ class TestValidUsageDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-        tests_dir: Path,
     ) -> None:
-        cfg1 = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
-        cfg2 = str(tests_dir / "assets" / "config" / "minions" / "b.toml")
-        cfg3 = str(tests_dir / "assets" / "config" / "minions" / "c.toml")
         pipeline_modpath = "tests.assets.pipelines.sync.counter.sync_3subs_1event"
 
         directives: list[Directive] = [
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.resourced",
-                minion_config_path=cfg1,
                 pipeline=pipeline_modpath,
             ),
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.resourced_shared_b",
-                minion_config_path=cfg2,
                 pipeline=pipeline_modpath,
             ),
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.resourced_shared_c",
-                minion_config_path=cfg3,
                 pipeline=pipeline_modpath,
             ),
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
@@ -663,15 +629,12 @@ class TestValidUsageDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-        tests_dir: Path,
     ) -> None:
-        cfg1 = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
         pipeline_modpath = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
 
         directives: list[Directive] = [
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.resourced",
-                minion_config_path=cfg1,
                 pipeline=pipeline_modpath,
             ),
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
@@ -704,12 +667,10 @@ class TestValidUsageDSL:
         first = await gru.start_minion(
             "tests.assets.minions.two_steps.counter.resourced",
             "tests.assets.pipelines.resourced.counter.with_fixed_resource",
-            minion_config_path="tests/assets/config/minions/a.toml",
         )
         second = await gru.start_minion(
             "tests.assets.minions.two_steps.counter.resourced_shared_b",
             "tests.assets.pipelines.resourced.counter.with_fixed_resource",
-            minion_config_path="tests/assets/config/minions/b.toml",
         )
         assert first.success
         assert second.success
@@ -730,15 +691,12 @@ class TestValidUsageDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-        tests_dir: Path,
     ) -> None:
-        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
 
         directives: list[Directive] = [
             MinionStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
-                minion_config_path=config_path,
                 pipeline=pipeline_modpath,
             ),
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
@@ -785,16 +743,12 @@ class TestValidUsageUsingNewAssetsDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-        tests_dir: Path,
     ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.counter.basic"
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
-        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
-
         directives: list[Directive] = [
             MinionStart(
                 minion=minion_modpath,
-                minion_config_path=config_path,
                 pipeline=pipeline_modpath,
             ),
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
@@ -825,16 +779,12 @@ class TestValidUsageUsingNewAssetsDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-        tests_dir: Path,
     ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.counter.basic"
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
-        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
-
         directives: list[Directive] = [
             MinionStart(
                 minion=minion_modpath,
-                minion_config_path=config_path,
                 pipeline=pipeline_modpath,
             ),
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
@@ -864,7 +814,6 @@ class TestValidUsageUsingNewAssetsDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-        tests_dir: Path,
     ) -> None:
         minion1 = "tests.assets.minions.two_steps.counter.resourced"
         minion2 = "tests.assets.minions.two_steps.counter.resourced_b"
@@ -874,15 +823,11 @@ class TestValidUsageUsingNewAssetsDSL:
         pipeline2 = "tests.assets.pipelines.emit1.counter.emit_1_b"
         pipeline3 = "tests.assets.pipelines.emit1.counter.emit_1_c"
 
-        cfg1 = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
-        cfg2 = str(tests_dir / "assets" / "config" / "minions" / "b.toml")
-        cfg3 = str(tests_dir / "assets" / "config" / "minions" / "c.toml")
-
         directives: list[Directive] = [
             Concurrent(
-                MinionStart(minion=minion1, minion_config_path=cfg1, pipeline=pipeline1),
-                MinionStart(minion=minion2, minion_config_path=cfg2, pipeline=pipeline2),
-                MinionStart(minion=minion3, minion_config_path=cfg3, pipeline=pipeline3),
+                MinionStart(minion=minion1, pipeline=pipeline1),
+                MinionStart(minion=minion2, pipeline=pipeline2),
+                MinionStart(minion=minion3, pipeline=pipeline3),
             ),
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
             MinionStop(name_or_instance_id="two-step-resourced-minion", expect_success=True),
@@ -907,21 +852,16 @@ class TestValidUsageUsingNewAssetsDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-        tests_dir: Path,
     ) -> None:
         minion_a = "tests.assets.minions.two_steps.counter.resourced"
         minion_b = "tests.assets.minions.two_steps.counter.resourced_shared_b"
         minion_c = "tests.assets.minions.two_steps.counter.resourced_shared_c"
         pipeline_modpath = "tests.assets.pipelines.sync.counter.sync_3subs_1event"
 
-        cfg1 = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
-        cfg2 = str(tests_dir / "assets" / "config" / "minions" / "b.toml")
-        cfg3 = str(tests_dir / "assets" / "config" / "minions" / "c.toml")
-
         directives: list[Directive] = [
-            MinionStart(minion=minion_a, minion_config_path=cfg1, pipeline=pipeline_modpath),
-            MinionStart(minion=minion_b, minion_config_path=cfg2, pipeline=pipeline_modpath),
-            MinionStart(minion=minion_c, minion_config_path=cfg3, pipeline=pipeline_modpath),
+            MinionStart(minion=minion_a, pipeline=pipeline_modpath),
+            MinionStart(minion=minion_b, pipeline=pipeline_modpath),
+            MinionStart(minion=minion_c, pipeline=pipeline_modpath),
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
             MinionStop(name_or_instance_id="two-step-resourced-minion", expect_success=True),
             MinionStop(name_or_instance_id="two-step-resourced-shared-minion-b", expect_success=True),
@@ -946,15 +886,13 @@ class TestValidUsageUsingNewAssetsDSL:
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
         reload_pipeline_module: Callable[[str], None],
-        tests_dir: Path,
     ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.counter.resourced"
         pipeline_modpath = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
-        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
         reload_pipeline_module(pipeline_modpath)
 
         directives: list[Directive] = [
-            MinionStart(minion=minion_modpath, minion_config_path=config_path, pipeline=pipeline_modpath),
+            MinionStart(minion=minion_modpath, pipeline=pipeline_modpath),
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
             GruShutdown(expect_success=True),
         ]
