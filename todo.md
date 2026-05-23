@@ -1,17 +1,8 @@
-<!-- 
-  Complete these todos from top to bottom.
-  Highest Level Todo:
-  - Consolidate (and spec out) my todos to establish a priority between them.
-    First, consolidate codebase TODOs and relevant notes from design conversations into this file.
-    Then, complete the test-suite refactor so future work can be implemented end to end with running tests.
-    Next, deprecate/retire partially finished efforts like GruShell as their replacement designs are clarified.
-    Finally, work through this file end to end with running tests.
--->
+### Priority Refs:
+- ref: "todo: stabilize orchestration lifecycle and identity"
+
 
 ### Test Suite:
-- todo: migrate the local development virtualenv from `venv` to `.venv`
-  - update Pyright config and docs/scripts that assume the current `venv` path
-  - keep Python-version support enforced by CI/test matrix rather than the local venv name
 
 - todo: review the latest StateStore blob-contract refactor
   - review order:
@@ -41,12 +32,11 @@
     - `benchmarks/minion_workflow_context_persistence.py`: review the canonical blob-path benchmark coverage
     - `WORKFLOW_CONTEXT_PERF_PLAN.md`: review the running log and benchmark results for the refactor
 
-- todo:
-  - audit the test suite to align with the default-backend + contract-test strategy
-    - for each system component base class, ensure there is a contract test file
-    - check higher-level/domain tests to ensure they use the in-memory system component by default
-    - only keep non-default backends in a test when the backend-specific choice is intentional and clearly justified
-  - document this test suite design doc with this design info
+- todo: audit the test suite to align with the default-backend + contract-test strategy
+  - for each system component base class, ensure there is a contract test file
+  - check higher-level/domain tests to ensure they use the in-memory system component by default
+  - only keep non-default backends in a test when the backend-specific choice is intentional and clearly justified
+  - document this test suite design in a test suite design doc
 
 - todo: add first-class resume support and resume testing to the Gru scenario DSL
   - current coverage:
@@ -56,6 +46,7 @@
   - gap:
     - scenarios still use coarse orchestration primitives like `AfterWorkflowStarts(..., MinionStop(...))` to create a persisted checkpoint
     - there is no explicit DSL directive for stopping/resuming at a specific workflow checkpoint or step boundary
+    - `MinionStart` scenarios do not yet cover class-based minion starts or inline `minion_config`, so the newer `Gru.start_minion(...)` modes still rely on direct/manual tests
   - possible DSL shape:
     - `AfterWorkflowStepStarts(expected={minion_name: {"step_1": 1}}, directive=MinionStop(...))`
     - `ExpectRuntime(..., expect=RuntimeExpectSpec(replayed_workflow_steps={...}))` only if the existing automatic replay counting is not enough
@@ -74,127 +65,12 @@
     - integrate Gru tests from other files:
       - test_minion_states.py is basically a Gru test where checking for counters should be handled by the reusable testing routine
 
-- todo: add stop modes to gru.stop_minion and map to GruShell redeploy strategies
-  - default mode: pause (current behavior)
-  - modes and behavior:
-    - pause: stop new workflows; persist in-flight workflows for resume on restart
-    - drain: stop new workflows; await in-flight workflows to finish; then stop
-    - cutover: stop new workflows; abort in-flight workflows; then stop
-  - interruptibility:
-    - if drain is in progress and caller requests cutover or pause, override drain immediately
-    - if drain is requested again, treat as idempotent
-    - if minion already stopped, return success with reason
-  - api sketch:
-    - gru.stop_minion(name_or_instance_id, mode="pause"|"drain"|"cutover")
-    - grushell redeploy maps:
-      - redeploy drain -> stop_minion(mode="drain")
-      - redeploy cutover -> stop_minion(mode="cutover")
-  - tests:
-    - add orchestration helper directives for mode="drain"/"cutover"
-    - add runtime tests for in-flight workflow behavior per mode
-  - open questions:
-    - Should `continue-on-failure` track outstanding failed checkpoints instead of only retrying when the workflow reaches the next checkpoint?
-    - Should `WorkflowPersistenceFailurePolicy` remain Gru-level, become Minion-level, or support both global defaults and per-minion overrides?
-    - The desired guarantee is that `Gru.stop_minion(...)` should not lose workflow state in any stop mode unless the process is force-interrupted.
-  - why it matters:
-    - failed checkpoint state affects the exact semantics of `drain` and `cutover`, especially when a workflow has progressed beyond its last durable checkpoint.
-
 - todo: ensure immediate user-facing domain objects (minion, pipeline, resource) and non-immediate user-facing domain objects (like StateStore, logger, metrics)...
   - 1: validate composition at class definition time and raise user friendly exception msg (good onboarding DX)
     - ex: tests/minions/_internal/_domain/test_minion.py
   - 2: validate usage at orchestration time (like in test_gru.py or one of its subdirectories if it got reorganized)
     - ex: tests/minions/_internal/_domain/test_gru.py::TestValidUsage.test_gru_accepts_none_logger_metrics_state_store
   - note: for non-immediate user-facing domain objects, validating composition at class definition time may not always be possible, so it's fine to only validate at orchestration time if that's the case
-
-- todo: add per-entity lifecycle locking to gru for concurrent-safe starts/stops.
-  - guarantees:
-    - no duplicate minion starts for the same composite key; shared pipelines/resources start once; concurrent stops don’t double-cancel.
-  - failure handling:
-    - if an error occurs inside a locked section, undo partial registry inserts before releasing the lock; log skipped work when another op already holds the lock (debug is enough).
-  - tests to add:
-    - concurrent same-key start_minion collapses to one instance; concurrent same-id stop_minion is idempotent; two minions sharing a pipeline/resource don’t double-start it.
-  - note: use the (_minion_locks, _pipeline_locks, _resource_locks) gru attrs
-  - convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/6910f9e9-d76c-8327-92b3-ea4b729b6288
-
-- todo: add Minion `max_inflight_workflows` class attr for bounded lossy workflow admission control
-  - goal:
-    - protect the process from a noisy minion/orchestration creating unbounded workflow tasks
-    - keep the default runtime greedy and backwards-compatible
-    - avoid introducing queueing/event-backlog semantics in this pass
-  - api:
-    - unlimited/default minions do not need to declare anything:
-      - `max_inflight_workflows: int | None = None`
-      - `overflow_policy: Literal["reject"] | None = None`
-    - bounded minions must declare both attrs explicitly:
-      - `max_inflight_workflows = 100`
-      - `overflow_policy = "reject"`
-  - validation:
-    - `max_inflight_workflows is None` means unlimited/current behavior
-    - if `max_inflight_workflows` is set, it must be a positive int
-    - if `max_inflight_workflows` is set, `overflow_policy` is required
-    - if `overflow_policy` is set while `max_inflight_workflows is None`, raise a user-friendly class/usage error
-    - for now, the only valid overflow policy is `"reject"`
-  - behavior:
-    - pipelines keep producing and fanning out normally
-    - each minion enforces its own admission limit independently
-    - if the minion is at/above `max_inflight_workflows`, reject the event for that minion
-    - do not create a workflow context for rejected events
-    - do not persist rejected events
-    - do not queue rejected events
-    - do not treat rejection as a workflow failure, because no workflow started
-    - do not backpressure the pipeline or affect other minions subscribed to the same pipeline
-  - observability:
-    - add a rejected-event/workflow-admission metric, e.g. `minion_workflow_rejected_total`
-    - include minion/orchestration labels consistent with existing minion workflow metrics
-    - emit structured logs for rejected events with the configured cap and current inflight count
-  - docs:
-    - document this as bounded lossy admission control / overload protection
-    - explicitly say it is not fairness, event delivery, backpressure, or durable queueing
-    - explain that resource semaphores still protect dependencies, while this cap protects the runtime from task growth
-  - tests:
-    - unlimited minion preserves current greedy behavior
-    - bounded minion accepts events below the threshold
-    - bounded minion rejects events at threshold without creating/persisting workflow context
-    - rejection increments the metric and logs useful structured context
-    - rejection does not affect another minion subscribed to the same pipeline
-    - invalid class attrs raise clear errors
-  - codex://threads/019ca819-0afe-7591-b59f-53d06718a48b
-
-- todo: add bounded startup concurrency to Gru (`max_concurrent_minion_starts`)
-  - goal:
-    - prevent startup storms (ex: 50+ minions on restart) from overloading event loop / NAS / host I/O
-    - keep startup throughput high but controlled and predictable
-  - api:
-    - add kwarg on `Gru.create(...)` (and ctor path) like:
-      - `max_concurrent_minion_starts: int | None = None`
-    - behavior:
-      - `None` = unbounded (current behavior; preserve backwards compatibility)
-      - `>=1` = bounded concurrent starts via semaphore gate
-      - `<=0` should raise `ValueError`
-  - implementation:
-    - create a startup semaphore on Gru init when bounded:
-      - `_mn_start_minion_sem: asyncio.Semaphore | None`
-    - wrap the full `start_minion(...)` orchestration body in the semaphore scope when enabled
-      - (not just config read) so the whole start lifecycle is bounded consistently
-    - keep `Minion.load_config()` using async read (`await asyncio.to_thread(path.read_text)`)
-      because bounded start concurrency is the global throttle
-    - ensure release on all code paths (`async with`), including failures and early returns
-  - policy:
-    - do not add separate config-read semaphores yet
-    - if needed later, derive read cap from startup cap rather than adding another public knob
-  - tests:
-    - usage test: bounded starts allow at most N in flight (instrument with barrier/gate pipeline/minion assets)
-    - usage test: with cap=1, concurrent start requests serialize deterministically
-    - usage test: failures inside bounded section still release permit (no deadlock/leak)
-    - usage test: `None` keeps current behavior
-    - invalid usage test: cap `0` / negative raises clear error
-  - docs:
-    - document as restart-storm/backpressure control
-    - include guidance:
-      - small local systems: `4-8`
-      - slow NAS / shared hosts: start lower and tune up
-
-- todo: write tests for gru.start_minion to lock in that it works with class and string-based starts
 
 - todo: add "crash testing" to test suite to ensure the Minions runtime preserves its crash guarantees
   - status:
@@ -221,90 +97,8 @@
     - implementation note:
       - audit every user-code invocation site and add tests that would "go boom" immediately if the runtime forgets to use the guarded path
 
-- todo: mature Gru lifecycle failure management
-  - context:
-    - `docs/concepts/gru-lifecycle-failure-management.md` captures the current cleanup model and the boundary between Gru-owned framework state and user-owned process state
-    - the current implementation hardens failed start, stop, and shutdown cleanup, but the API/result surface and long-term diagnostics still need deliberate design
-  - implementation order:
-    - formalize Gru stop commit/fail-closed semantics
-    - refine lifecycle result contracts
-    - design lifecycle leak-check tooling and cookbook
-    - add optional lifecycle diagnostics
-
-  - todo: formalize Gru stop commit/fail-closed semantics
-    - define the point where `stop_minion(...)` becomes committed and cannot be rolled back to a running orchestration
-    - keep tests proving committed stop failures remove active routing and framework-owned runtime state
-    - document which failures are primary operation failures versus secondary cleanup/finalization failures
-    - why it matters:
-      - stop is not transactional once detachment begins, so the code and tests need explicit fail-closed semantics
-
-  - todo: refine lifecycle result contracts
-    - distinguish operation failure from framework cleanup status and possible user-owned process pollution
-    - consider structured fields for cleanup phases, cancelled tasks, degraded cleanup, and restart recommendations
-    - preserve the simple success/failure path while making degraded cleanup machine-readable for operators and callers
-    - apply the result model consistently to `start_minion(...)`, `stop_minion(...)`, and `shutdown()`
-    - why it matters:
-      - current `success=False` results are too coarse for lifecycle failures and make it hard for callers/operators to react correctly
-
-  - todo: design lifecycle leak-check tooling and cookbook
-    - goal:
-      - give users a practical way to find likely lifecycle cleanup leaks in the single-process runtime model without pretending Gru can prove process cleanliness
-    - utility flow:
-      - start an orchestration or component lifecycle
-      - optionally exercise it briefly
-      - stop it
-      - let the event loop settle and force garbage collection
-      - measure process memory, live tasks, and retained component objects
-      - repeat for many iterations
-      - report suspicious monotonic growth or retained runtime objects
-    - layers:
-      - individual component checks that repeatedly exercise minion, pipeline, or resource startup/shutdown with the least framework context needed
-      - minimal orchestration checks that use the smallest valid Gru orchestration containing the target component
-      - scenario checks that repeatedly start, exercise, and stop realistic orchestrations to catch workload-dependent leaks
-    - likely report fields:
-      - iteration count and configured settle/gc behavior
-      - process memory delta and monotonic-growth signal
-      - live asyncio tasks introduced during the run
-      - retained weakref-tracked component instances after stop
-      - top `tracemalloc` allocation deltas when enabled
-      - recommended component/hook areas to inspect
-    - cookbook:
-      - show how to run the check against a resource with a background task
-      - show how to run the check against a full orchestration scenario
-      - explain that this detects likely leaks, not proof of leak freedom
-      - explain when process restart is still the only hard cleanup boundary
-    - tests:
-      - leak-check utility passes for known-good component/orchestration assets
-      - utility flags retained component references
-      - utility flags un-cancelled background tasks
-      - utility flags monotonic memory growth when `tracemalloc`/memory measurement is enabled
-      - utility result remains stable enough for CI without relying on exact byte counts
-    - why it matters:
-      - Minions runs in-process, so users need practical diagnostics for cooperative lifecycle cleanup issues
-
-  - todo: add optional lifecycle diagnostics
-    - consider memory deltas, `tracemalloc` snapshots, live asyncio task inspection, and weakref collectability checks
-    - decide which diagnostics belong in one-off leak-check tooling versus runtime debug logging
-    - keep diagnostics opt-in so normal lifecycle guarantees do not depend on heavyweight inspection
-    - why it matters:
-      - diagnostics help debug user-owned cleanup leaks without changing Gru's core cleanup guarantee
-
-- todo: once the reusable Gru testing routine is ready, fill out coverage for the ways users interact with Gru, especially the file shapes they can pass to it
- - audit each test asset in the suite and ensure it is useful and covered by a reasonable Gru test; otherwise, add the test or delete the asset
 
 ### Features:
-- todo: settle official terminology for orchestration identity vs minion composite key
-  - problem:
-    - the codebase currently uses `minion_composite_key` and `orchestration_id` in closely related or interchangeable ways
-    - persistence rows store `orchestration_id`, while telemetry and runtime labels expose `minion_composite_key`
-    - this creates ambiguity for API docs, metric interpretation, and future migration work
-  - goal:
-    - choose one official concept name for the stable minion/config/pipeline orchestration identity
-    - define whether `minion_composite_key` remains an internal construction detail, becomes the official term, or is renamed to `orchestration_id`
-    - update code, docs, logs, metrics labels, and test helpers consistently once the term is chosen
-  - why it matters:
-    - unclear identity terminology can become a compatibility problem for users who build alerts, dashboards, stored state tools, or operational docs around these names
-
 - todo: decide whether resource method metrics should use method names or stable method identities
   - problem:
     - `resource_method` currently uses method names, so renaming a method creates a new Prometheus series even when the logical operation did not change
@@ -667,103 +461,334 @@
 
 - todo: revisit convo https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/68f6c4f3-888c-8333-964d-be052cd06ea1
 
-- todo: decouple orchestration addressing from stable runtime identity (component_id + instance_id)
-  - context:
-    - current identity spine is “project-root relative path/modpath”
-    - this breaks resumability + Prometheus continuity on directory refactors
-    - long-term guarantee requires stable ids not derived from paths
-  - goals:
-    - preserve current DX: `start_minion()` accepts classes or string refs
-    - make inflight workflow resume + reuse + metrics stable across refactors
-    - avoid forcing users to hand-maintain a full catalog unless they want nicer names
-  - decisions:
-    - introduce canonical stable ids:
-      - `component_id` = stable identity for each domain component class (minion/pipeline/resource)
-      - `instance_id` = stable identity for a running wiring of components + config (minion instance)
-    - refs remain for loading / addressing:
-      - string refs continue to work as “how to import the class”
-      - ids become “how the runtime persists and labels the thing”
-    - ids are immutable; “renames” are aliases, not id mutation
-  - steps:
-    - introduce registry storage under project root:
-      - `component_registry`: maps `component_id -> component_ref` (+ kind, timestamps, optional aliases)
-      - `alias_index`: maps `alias -> component_id` (human ids)
-      - persist in `.minions/` (toml/json/sqlite; pick one and standardize)
-    - define canonical “component ref” format:
-      - `module:qualname` (plus `kind` prefix internally if needed)
-      - store both `component_ref` and `component_id` everywhere you currently store “relpath”
-    - update Gru resolution pipeline:
-      - when `start_minion(minion=<class|ref|id>, pipeline=<class|ref|id>, ...)` is called:
-        - resolve each input to `(component_id, component_ref, cls)`
-        - if unknown component, register and assign `component_id` automatically
-        - if input is alias, resolve via alias_index
-        - if input is component_id, load via registry’s current ref
-      - make reuse keys based on `component_id` (not relpath)
-    - define config identity and instance identity:
-      - treat config as identity input, not a “component class”
-      - `config_id`:
-        - if `minion_config_path` provided: compute a stable hash of normalized config content (and store optional friendly alias)
-        - if `minion_config` mapping provided: compute hash from normalized serialization
-      - `instance_id = hash(minion_component_id + pipeline_component_id + config_id + resource_binding_ids)`
-      - reuse policy:
-        - pipelines reuse on `pipeline_component_id` (unless pipeline itself is config-parameterized; if so, fold pipeline config into its instance identity too)
-        - minion instances are distinct on `instance_id`
-    - update persistence + resume:
-      - change workflow state keys to use `instance_id` + `component_id` (never `component_ref`)
-      - ensure any “resume in-flight” logic loads classes via `component_id -> component_ref -> import`
-      - add migration shim:
-        - if old state keys exist (path-based), attempt best-effort mapping to new ids or mark orphaned with a clear error
-    - update prometheus labeling:
-      - stable labels:
-        - `component_id`, `instance_id`
-      - human/debug labels:
-        - `component_ref`
-        - optional `alias` if user assigned
-        - optional `config_alias` if provided
-      - ensure dashboards can be written against stable labels
-    - define type / class persistence as part of this identity model:
-      - this work also decides how persisted Python `type` references are serialized and resolved
-      - `MinionWorkflowContext.context_cls` is the current concrete example
-      - keep runtime/domain objects Python-native; persistence adaptation belongs at the framework boundary
-      - persisted state must not rely solely on current import path stability
-      - decide whether persisted type references store `component_id`, current `component_ref`, or both
-      - support relink / migration after file moves or refactors without making persisted workflows unusable
-      - UX should remain simple while file structure changes are happening, not only after everything is stable again
-    - add CLI support (minimal but sufficient):
-      - `minions ls` (show component_id, kind, alias(es), current ref)
-      - `minions resolve <alias|id|ref>` (print canonical ids + refs)
-      - `minions alias set <alias> <component_id>` (alias only; never mutate id)
-      - `minions ref set <component_id> <new_ref>` (relink after refactor)
-      - `minions instance ls` (show instance_id composition: minion/pipeline/config)
-    - document the new contract:
-      - “refs can change; ids persist”
-      - “refactors require either a relink (ref set) or alias mapping; inflight workflows remain resumable”
-      - “durable observability requires stable labels; use alias for readable dashboards”
-  - convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/69446e9e-053c-832c-abfb-ba40b5123693
-  - other convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/694725cf-a5c4-8326-bdfc-b95f1b289f14
-  - note: consider how cross env (dev,qa,prod) comparison will work: like with grushell snapshot/redeploy, discussed in "other convo"
-  - note: `minion_composite_key` currently appears to overlap with the runtime meaning of `orchestration_id`; this should be resolved by the terminology todo above
+- todo: stabilize orchestration lifecycle and identity
+  - todo: make orchestration the canonical Gru lifecycle API surface
+    - problem:
+      - `Gru.start_minion(...)` reads as if Gru only starts a minion, but the operation materializes a live orchestration from a pipeline, minion, and minion config
+      - starting that orchestration also validates the declared composition, starts or reuses the required pipeline and resources, subscribes the minion, and lets workflows be produced as events arrive
+      - naming the public lifecycle operation after only the minion hides the runtime unit users need to reason about when they inspect, stop, resume, or operate the system
+    - direction:
+      - make `Gru.start_orchestration(...)` and `Gru.stop_orchestration(...)` the canonical lifecycle verbs
+      - alias `Gru.start(...)` and `Gru.stop(...)` to the canonical orchestration lifecycle operations for convenience
+      - prefer the start shape `pipeline, minion, minion_config` for the orchestration API, with docs using keyword arguments so the relationship is explicit
+      - keep Minion terminology focused on the user-authored workflow factory/behavior definition while orchestration names the live binding Gru owns
+      - desired end state: replace the public `start_minion(...)` / `stop_minion(...)` API with orchestration-named lifecycle methods rather than keeping both concepts indefinitely
+      - implementation choice:
+        - preserve compatibility in the first pass if wrappers materially reduce migration risk while the public surface is updated deliberately
+        - replace `start_minion(...)` / `stop_minion(...)` in one pass instead if the call-site and doc churn is straightforward enough that compatibility wrappers only prolong a misleading API
+    - update together:
+      - README, docs, examples, tests, shell/scenario helpers, result naming, and lifecycle terminology should teach orchestration as the live runtime unit consistently
+      - align this with the orchestration identity terminology cleanup so lifecycle names, ids, logs, metrics, and persistence concepts do not drift
+    - why it matters:
+      - an accurate lifecycle name gives users the right mental model without requiring them to manage component startup details themselves
 
-- todo: optimize SQLiteStateStore orchestration-scoped context reads
-  - shape:
-    - current schema shape:
-      CREATE TABLE workflows(
-          workflow_id TEXT PRIMARY KEY,
-          orchestration_id TEXT NOT NULL,
-          context BLOB NOT NULL
-      )
-      CREATE INDEX idx_workflows_orchestration_id
-      ON workflows(orchestration_id);
-  - dependency:
-    - do this only after the identity migration above is finalized (`component_id` + `instance_id`)
-  - problem:
-    - current path effectively scans all stored workflow contexts, then filters in memory
-    - this is unnecessary read amplification once stable ids are in place
-  - target:
-    - query by minion identity/workflow key directly from sqlite (no full table scan)
-    - keep current public behavior unchanged
+  - todo: settle official terminology for orchestration identity vs minion composite key
+    - problem:
+      - the codebase currently uses `minion_composite_key` and `orchestration_id` in closely related or interchangeable ways
+      - persistence rows store `orchestration_id`, while telemetry and runtime labels expose `minion_composite_key`
+      - this creates ambiguity for API docs, metric interpretation, and future migration work
+    - goal:
+      - choose one official concept name for the stable minion/config/pipeline orchestration identity
+      - define whether `minion_composite_key` remains an internal construction detail, becomes the official term, or is renamed to `orchestration_id`
+      - update code, docs, logs, metrics labels, and test helpers consistently once the term is chosen
+    - why it matters:
+      - unclear identity terminology can become a compatibility problem for users who build alerts, dashboards, stored state tools, or operational docs around these names
+
+  - todo: decouple orchestration addressing from stable runtime identity with source-anchored ids
+    - context:
+      - current identity spine is “project-root relative path/modpath”
+      - this breaks resumability + Prometheus continuity on directory refactors
+      - long-term guarantee requires stable ids not derived from paths
+    - goals:
+      - preserve current DX through the orchestration API: orchestration starts accept component classes or string refs
+      - make inflight workflow resume + reuse + metrics stable across refactors
+      - let normal component/config renames and relocations preserve identity without forcing users to maintain a registry/manifest by hand
+    - decisions:
+      - make durable component identity source-anchored:
+        - `@pipeline_id(...)`, `@minion_id(...)`, and `@resource_id(...)` carry stable ids with user classes across module renames and relocations
+        - a small CLI/source-editing helper can stamp ids so the user pays a one-time explicit cost instead of hand-writing UUIDs
+      - make durable file config identity artifact-anchored:
+        - stable config slot id lives in a reserved `_mn_config_id` entry prepended to the config file
+        - config file moves preserve the slot id because the id moves with the config artifact
+        - `_mn_config_id` must not accidentally leak into the config mapping exposed to user minion code
+          - _mn_config_id is the right config name or should be changed? `minion_config_id` maybe looks less internal?
+      - refs and paths remain for loading / addressing / diagnostics:
+        - string refs continue to work as “how to import the class”
+        - config paths continue to work as “where to load the config file now”
+        - source/config ids become “how the runtime persists and labels the durable thing”
+      - registry/manifest support is secondary, not the primary refactor-survival mechanism:
+        - it may provide aliases, CLI inspection, duplicate-id diagnostics, discovery/indexing, and last-seen refs
+        - durable identity must survive the common move/rename path without requiring a registry relink
+      - keep method-level observability separate from durable component identity:
+        - minion step names and resource method names may remain readable metric labels by default
+        - if dashboard continuity across method renames warrants it, prefer an optional stable semantic metric name over default method-level UUIDs
+    - steps:
+      - define the identity vocabulary before changing persistence/API surfaces:
+        - `component_id` = stable identity for each durable domain component class
+        - `config_slot_id` = stable identity for the durable config slot/artifact, independent of config path or config content revision
+        - `orchestration_id` = stable identity for the current orchestration definition built from stable component/config ids
+        - keep a distinct name for one live process-local minion start (`runtime_instance_id` / `run_id` / final chosen term)
+        - do not overload current `instance_id` terminology with both a durable orchestration identity and a live runtime start identity
+      - add source-level component id metadata:
+        - expose public id decorators for durable component classes (`@pipeline_id(...)`, `@minion_id(...)`, `@resource_id(...)`)
+        - validate id shape and component kind at class definition time
+        - detect duplicate/conflicting loaded ids clearly
+        - keep components without explicit ids available for non-durable/prototyping usage, but do not promise refactor-stable resume identity for them
+      - add config slot id metadata:
+        - define `_mn_config_id` parsing and prepending behavior for supported config file formats
+        - define the identity extraction boundary before normal minion config loading, including how `_mn_config_id` works when users override `Minion.load_config(...)`
+        - define whether id-less file configs are rejected for durable mode, assigned by a CLI helper, or retain only refactor-fragile fallback identity
+        - record a normalized config content digest separately from the stable config slot id
+      - define canonical “component ref” format for addresses and diagnostics:
+        - prefer `module:qualname` (plus `kind` prefix internally if needed)
+        - store refs/paths where needed for loading and debugging, but never make them the durable persistence identity when ids are available
+      - update Gru resolution pipeline:
+        - align this work with the orchestration lifecycle API todo above so `start_orchestration(...)` is the canonical identity entrypoint
+        - when orchestration start receives the current component classes/refs/config again after a restart, resolve current addresses and stable ids from the loaded artifacts
+        - moved source/config artifacts with unchanged ids compute the same durable orchestration identity without registry maintenance
+        - make durable reuse/resume keys use stable ids, not relpaths/modpaths/config paths
+        - decide id behavior for inline `minion_config` mappings: content digest, explicitly non-durable identity, or an explicit config slot id API
+      - define orchestration identity from the current orchestration model:
+        - orchestration is currently the stable wiring of pipeline + minion + minion config slot
+        - `orchestration_id = hash(pipeline_component_id + minion_component_id + config_slot_id)` unless the public model chooses an explicit orchestration id later
+        - add resource binding ids only if/when resource binding choices become orchestration identity inputs
+        - reuse policy:
+          - pipelines reuse on stable pipeline identity unless pipeline configuration later makes that model insufficient
+          - minion orchestration reuse/resume follows the durable `orchestration_id`
+          - live start ids remain distinct from durable orchestration identity
+      - define config revision behavior for Model B before relying on it:
+        - stable `config_slot_id` preserves deployment-slot identity across file moves and content updates
+        - normalized config digest records the content revision
+        - decide whether in-flight workflows resume under the latest config slot contents, require explicit cutover/migration handling, or retain another revision contract
+      - update persistence + resume:
+        - change workflow state keys to use durable ids (never component refs or config paths when stable ids exist)
+        - keep baseline resume semantics aligned with current architecture: recovery occurs when the orchestration is declared/started again with the moved artifacts
+        - decide what extra index/discovery support is required only if Minions later promises auto-resume of persisted workflows before orchestration redeclaration
+        - add migration shim:
+          - if old state keys exist (path-based), attempt best-effort mapping to new ids or mark orphaned with a clear error
+      - update prometheus labeling:
+        - stable labels:
+          - durable `component_id` / `orchestration_id` fields chosen by the terminology cleanup
+        - human/debug labels:
+          - `component_ref`
+          - current readable minion/pipeline/config labels where cardinality and compatibility permit
+        - ensure dashboards can be written against stable labels
+      - define type / class persistence as part of this identity model:
+        - this work also decides how persisted Python `type` references are serialized and resolved
+        - `MinionWorkflowContext.context_cls` is the current concrete example
+        - keep runtime/domain objects Python-native; persistence adaptation belongs at the framework boundary
+        - persisted state must not rely solely on current import path stability
+        - decide whether persisted type references store `component_id`, current `component_ref`, or both
+        - support migration after old path-based persisted state without making persisted workflows unusable
+        - UX should remain simple while file structure changes are happening, not only after everything is stable again
+      - add CLI/tooling support (minimal but sufficient):
+        - stamp missing component/config ids intentionally instead of asking users to hand-write UUIDs
+        - inspect/validate durable ids and show duplicate/conflicting ids
+        - expose optional alias/index/listing support only where it reduces operational friction
+      - document the new contract:
+        - “refs and config paths can change; ids persist with source/config artifacts”
+        - “normal component/config moves keep durable orchestration identity when the same id-bearing artifacts are started again”
+        - “id-less/prototype artifacts do not receive the same refactor-stable durability guarantee”
+        - “durable observability uses stable identity labels; step/resource method labels remain readable operation labels unless an explicit semantic metric name is added”
+    - convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/69446e9e-053c-832c-abfb-ba40b5123693
+    - other convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/694725cf-a5c4-8326-bdfc-b95f1b289f14
+    - note: consider how cross env (dev,qa,prod) comparison will work: like with grushell snapshot/redeploy, discussed in "other convo"
+    - note: `minion_composite_key` currently appears to overlap with the runtime meaning of `orchestration_id`; this should be resolved by the terminology todo above
+
+  - todo: audit the todos in todo.md to align them to the new Gru.start / Gru.stop API (since they refer to the old Gru.start_minion / Gru.stop_minion API)
+  
+  - todo: optimize SQLiteStateStore orchestration-scoped context reads
+    - shape:
+      - current schema shape:
+        CREATE TABLE workflows(
+            workflow_id TEXT PRIMARY KEY,
+            orchestration_id TEXT NOT NULL,
+            context BLOB NOT NULL
+        )
+        CREATE INDEX idx_workflows_orchestration_id
+        ON workflows(orchestration_id);
+    - dependency:
+      - do this only after the stable identity migration above is finalized (`component_id` / `config_slot_id` / `orchestration_id`)
+    - problem:
+      - current path effectively scans all stored workflow contexts, then filters in memory
+      - this is unnecessary read amplification once stable ids are in place
+    - target:
+      - query by minion identity/workflow key directly from sqlite (no full table scan)
+      - keep current public behavior unchanged
+    - tests:
+      - add/adjust tests to prove behavior matches current semantics while using indexed lookup
+
+- todo: mature Gru lifecycle failure management
+  - context:
+    - `docs/concepts/gru-lifecycle-failure-management.md` captures the current cleanup model and the boundary between Gru-owned framework state and user-owned process state
+    - the current implementation hardens failed start, stop, and shutdown cleanup, but the API/result surface and long-term diagnostics still need deliberate design
+  - implementation order:
+    - formalize Gru stop commit/fail-closed semantics
+    - refine lifecycle result contracts
+    - design lifecycle leak-check tooling and cookbook
+    - add optional lifecycle diagnostics
+
+  - todo: formalize Gru stop commit/fail-closed semantics
+    - define the point where `stop_minion(...)` becomes committed and cannot be rolled back to a running orchestration
+    - keep tests proving committed stop failures remove active routing and framework-owned runtime state
+    - document which failures are primary operation failures versus secondary cleanup/finalization failures
+    - why it matters:
+      - stop is not transactional once detachment begins, so the code and tests need explicit fail-closed semantics
+
+  - todo: refine lifecycle result contracts
+    - distinguish operation failure from framework cleanup status and possible user-owned process pollution
+    - consider structured fields for cleanup phases, cancelled tasks, degraded cleanup, and restart recommendations
+    - preserve the simple success/failure path while making degraded cleanup machine-readable for operators and callers
+    - apply the result model consistently to `start_minion(...)`, `stop_minion(...)`, and `shutdown()`
+    - why it matters:
+      - current `success=False` results are too coarse for lifecycle failures and make it hard for callers/operators to react correctly
+
+  - todo: design lifecycle leak-check tooling and cookbook
+    - goal:
+      - give users a practical way to find likely lifecycle cleanup leaks in the single-process runtime model without pretending Gru can prove process cleanliness
+    - utility flow:
+      - start an orchestration or component lifecycle
+      - optionally exercise it briefly
+      - stop it
+      - let the event loop settle and force garbage collection
+      - measure process memory, live tasks, and retained component objects
+      - repeat for many iterations
+      - report suspicious monotonic growth or retained runtime objects
+    - layers:
+      - individual component checks that repeatedly exercise minion, pipeline, or resource startup/shutdown with the least framework context needed
+      - minimal orchestration checks that use the smallest valid Gru orchestration containing the target component
+      - scenario checks that repeatedly start, exercise, and stop realistic orchestrations to catch workload-dependent leaks
+    - likely report fields:
+      - iteration count and configured settle/gc behavior
+      - process memory delta and monotonic-growth signal
+      - live asyncio tasks introduced during the run
+      - retained weakref-tracked component instances after stop
+      - top `tracemalloc` allocation deltas when enabled
+      - recommended component/hook areas to inspect
+    - cookbook:
+      - show how to run the check against a resource with a background task
+      - show how to run the check against a full orchestration scenario
+      - explain that this detects likely leaks, not proof of leak freedom
+      - explain when process restart is still the only hard cleanup boundary
+    - tests:
+      - leak-check utility passes for known-good component/orchestration assets
+      - utility flags retained component references
+      - utility flags un-cancelled background tasks
+      - utility flags monotonic memory growth when `tracemalloc`/memory measurement is enabled
+      - utility result remains stable enough for CI without relying on exact byte counts
+    - why it matters:
+      - Minions runs in-process, so users need practical diagnostics for cooperative lifecycle cleanup issues
+
+  - todo: add optional lifecycle diagnostics
+    - consider memory deltas, `tracemalloc` snapshots, live asyncio task inspection, and weakref collectability checks
+    - decide which diagnostics belong in one-off leak-check tooling versus runtime debug logging
+    - keep diagnostics opt-in so normal lifecycle guarantees do not depend on heavyweight inspection
+    - why it matters:
+      - diagnostics help debug user-owned cleanup leaks without changing Gru's core cleanup guarantee
+
+- todo: add stop modes to gru.stop_minion and map to GruShell redeploy strategies
+  - default mode: pause (current behavior)
+  - modes and behavior:
+    - pause: stop new workflows; persist in-flight workflows for resume on restart
+    - drain: stop new workflows; await in-flight workflows to finish; then stop
+    - cutover: stop new workflows; abort in-flight workflows; then stop
+  - interruptibility:
+    - if drain is in progress and caller requests cutover or pause, override drain immediately
+    - if drain is requested again, treat as idempotent
+    - if minion already stopped, return success with reason
+  - api sketch:
+    - gru.stop_minion(name_or_instance_id, mode="pause"|"drain"|"cutover")
+    - grushell redeploy maps:
+      - redeploy drain -> stop_minion(mode="drain")
+      - redeploy cutover -> stop_minion(mode="cutover")
   - tests:
-    - add/adjust tests to prove behavior matches current semantics while using indexed lookup
+    - add orchestration helper directives for mode="drain"/"cutover"
+    - add runtime tests for in-flight workflow behavior per mode
+  - open questions:
+    - Should `continue-on-failure` track outstanding failed checkpoints instead of only retrying when the workflow reaches the next checkpoint?
+    - Should `WorkflowPersistenceFailurePolicy` remain Gru-level, become Minion-level, or support both global defaults and per-minion overrides?
+    - The desired guarantee is that `Gru.stop_minion(...)` should not lose workflow state in any stop mode unless the process is force-interrupted.
+  - why it matters:
+    - failed checkpoint state affects the exact semantics of `drain` and `cutover`, especially when a workflow has progressed beyond its last durable checkpoint.
+
+- todo: add Minion `max_inflight_workflows` class attr for bounded lossy workflow admission control
+  - goal:
+    - protect the process from a noisy minion/orchestration creating unbounded workflow tasks
+    - keep the default runtime greedy and backwards-compatible
+    - avoid introducing queueing/event-backlog semantics in this pass
+  - api:
+    - unlimited/default minions do not need to declare anything:
+      - `max_inflight_workflows: int | None = None`
+      - `overflow_policy: Literal["reject"] | None = None`
+    - bounded minions must declare both attrs explicitly:
+      - `max_inflight_workflows = 100`
+      - `overflow_policy = "reject"`
+  - validation:
+    - `max_inflight_workflows is None` means unlimited/current behavior
+    - if `max_inflight_workflows` is set, it must be a positive int
+    - if `max_inflight_workflows` is set, `overflow_policy` is required
+    - if `overflow_policy` is set while `max_inflight_workflows is None`, raise a user-friendly class/usage error
+    - for now, the only valid overflow policy is `"reject"`
+  - behavior:
+    - pipelines keep producing and fanning out normally
+    - each minion enforces its own admission limit independently
+    - if the minion is at/above `max_inflight_workflows`, reject the event for that minion
+    - do not create a workflow context for rejected events
+    - do not persist rejected events
+    - do not queue rejected events
+    - do not treat rejection as a workflow failure, because no workflow started
+    - do not backpressure the pipeline or affect other minions subscribed to the same pipeline
+  - observability:
+    - add a rejected-event/workflow-admission metric, e.g. `minion_workflow_rejected_total`
+    - include minion/orchestration labels consistent with existing minion workflow metrics
+    - emit structured logs for rejected events with the configured cap and current inflight count
+  - docs:
+    - document this as bounded lossy admission control / overload protection
+    - explicitly say it is not fairness, event delivery, backpressure, or durable queueing
+    - explain that resource semaphores still protect dependencies, while this cap protects the runtime from task growth
+  - tests:
+    - unlimited minion preserves current greedy behavior
+    - bounded minion accepts events below the threshold
+    - bounded minion rejects events at threshold without creating/persisting workflow context
+    - rejection increments the metric and logs useful structured context
+    - rejection does not affect another minion subscribed to the same pipeline
+    - invalid class attrs raise clear errors
+  - codex://threads/019ca819-0afe-7591-b59f-53d06718a48b
+
+- todo: add bounded start concurrency to Gru (`max_concurrent_starts`)
+  - goal:
+    - prevent starts storms (ex: 50+ concurrent calls to Gru.start_orchestration) from overloading event loop / NAS / host I/O
+    - keep starts throughput high but controlled and predictable
+  - api:
+    - add kwarg on `Gru.create(...)` (and ctor path) like:
+      - `max_concurrent_starts: int | None = None`
+    - behavior:
+      - `None` = unbounded (current behavior; preserve backwards compatibility)
+      - `>=1` = bounded concurrent starts via semaphore gate
+      - `<=0` should raise `ValueError`
+  - implementation:
+    - create a starts semaphore on Gru init when bounded:
+      - `_mn_starts_sem: asyncio.Semaphore | None`
+    - wrap the full `start_orchestration(...)` orchestration body in the semaphore scope when enabled
+      - (not just config read) so the whole start lifecycle is bounded consistently
+    - keep `Minion.load_config()` using async read (`await asyncio.to_thread(path.read_text)`)
+      because bounded start concurrency is the global throttle
+    - ensure release on all code paths (`async with`), including failures and early returns
+  - policy:
+    - do not add separate config-read semaphores yet
+    - if needed later, derive read cap from starts cap rather than adding another public knob
+  - tests:
+    - usage test: bounded starts allow at most N in flight (instrument with barrier/gate pipeline/minion assets)
+    - usage test: with cap=1, concurrent start requests serialize deterministically
+    - usage test: failures inside bounded section still release permit (no deadlock/leak)
+    - usage test: `None` keeps current behavior
+    - invalid usage test: cap `0` / negative raises clear error
+  - docs:
+    - document as start-storm/backpressure control
+    - include guidance:
+      - small local systems: `4-8`
+      - slow NAS / shared hosts: start lower and tune up
+
 
 - todo: add support for resourced pipelines and resourced resources (currently partially implemented)
   - requires implementation, testing, and documentation for each
@@ -907,7 +932,7 @@
     - process-level behavior is reasonable to validate by spawning the shell as a subprocess and asserting exit behavior/log output
 
 - todo: provide uvloop support for better performance on *nix systems (maybe 2-4x more)
-  - design: 
+  - design:
     - user does "pip install minions[perf]" and gets uvloop if not on windows
       - in pyproject.toml add to objs
         ```python
