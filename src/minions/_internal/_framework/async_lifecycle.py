@@ -107,7 +107,7 @@ class AsyncLifecycle(ABC):
                         raise UnsupportedUserCode(
                             f"Unsupported use of `{name}` in `{func.__name__}` ({modpath}). "
                             "If you want to abort an in-flight workflow, raise an AbortWorkflow exception. "
-                            "If you want to stop a minion, run stop_minion."
+                            "If you want to stop an orchestration, run stop_orchestration."
                         )
                     if owner == "object" and f.attr == "__setattr__":
                         if len(node.args) >= 2 and isinstance(node.args[0], ast.Name) and node.args[0].id == "self":
@@ -128,7 +128,7 @@ class AsyncLifecycle(ABC):
                         raise UnsupportedUserCode(
                             f"Unsupported use of `{f.id}` in `{func.__name__}` ({modpath}). "
                             "If you want to abort an in-flight workflow, raise an AbortWorkflow exception. "
-                            "If you want to stop a minion, run stop_minion."
+                            "If you want to stop an orchestration, run stop_orchestration."
                         )
                     if f.id == "setattr" and len(node.args) >= 2:
                         a0, a1 = node.args[0], node.args[1]
@@ -145,13 +145,13 @@ class AsyncLifecycle(ABC):
                     raise UnsupportedUserCode(
                         f"Unsupported use of `raise SystemExit` in `{func.__name__}` ({modpath}). "
                         "If you want to abort an in-flight workflow, raise an AbortWorkflow exception. "
-                        "If you want to stop a minion, run stop_minion."
+                        "If you want to stop an orchestration, run stop_orchestration."
                     )
                 if isinstance(exc, ast.Call) and isinstance(exc.func, ast.Name) and exc.func.id == "SystemExit":
                     raise UnsupportedUserCode(
                         f"Unsupported use of `raise SystemExit(...)` in `{func.__name__}` ({modpath}). "
                         "If you want to abort an in-flight workflow, raise an AbortWorkflow exception. "
-                        "If you want to stop a minion, run stop_minion."
+                        "If you want to stop an orchestration, run stop_orchestration."
                     )
                 raised_name = _expr_name(exc.func if isinstance(exc, ast.Call) else exc)
                 if raised_name in {

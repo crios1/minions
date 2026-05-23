@@ -20,7 +20,7 @@ async def test_large_state_warning(make_state_store_and_logger: MakeStateStoreAn
     # Force a deterministic page-count warning without depending on the host SQLite page size.
     s._sqlite_page_size = 4096
     big = mk_ctx(i=10, size=8192)
-    await s.save_context(big.workflow_id, big.minion_composite_key, blob_for(big))
+    await s.save_context(big.workflow_id, big.orchestration_id, blob_for(big))
     assert await logger.wait_for_log("Large workflow context blob detected"), "expected large-state warning"
 
 
@@ -29,7 +29,7 @@ async def test_large_state_warning_is_disabled_without_page_size(make_state_stor
     # Simulate startup being unable to determine page size; size warnings must stay disabled.
     s._sqlite_page_size = None
     big = mk_ctx(i=11, size=8192)
-    await s.save_context(big.workflow_id, big.minion_composite_key, blob_for(big))
+    await s.save_context(big.workflow_id, big.orchestration_id, blob_for(big))
     assert not await logger.wait_for_log("Large workflow context blob detected", timeout=0.05)
 
 
@@ -37,7 +37,7 @@ async def test_save_context_records_commit_latency_metric(make_state_store_and_l
     s, _ = await make_state_store_and_logger()
     for i in range(5):
         ctx = mk_ctx(i=i)
-        await s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx))
+        await s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx))
 
     assert s._metric_commit_latency_ms_hist, "expected commit timings recorded"
 
@@ -48,7 +48,7 @@ async def _queue_three_writes(s: SQLiteStateStore) -> list[asyncio.Task[None]]:
         ctx = mk_ctx(i=i)
         tasks.append(
             asyncio.create_task(
-                s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx))
+                s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx))
             )
         )
     return tasks
@@ -141,7 +141,7 @@ async def test_queued_writes_warning_counts_batches_waiting_for_commit(
     commit_gate = BlockedCommitBatchNowGate(s, monkeypatch)
     tasks = [
         asyncio.create_task(
-            s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx))
+            s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx))
         )
         for ctx in (mk_ctx(i=i) for i in range(10))
     ]

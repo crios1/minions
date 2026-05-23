@@ -42,7 +42,7 @@ _MsgspecFieldSpec: TypeAlias = (
 class PersistedMinionWorkflowContext(msgspec.Struct, forbid_unknown_fields=True):
     """Versioned StateStore payload for one runtime MinionWorkflowContext."""
 
-    minion_composite_key: str
+    orchestration_id: str
     minion_modpath: str
     workflow_id: str
     event: object
@@ -154,7 +154,7 @@ def persist_workflow_context(
     """Build the versioned StateStore payload object for a runtime context."""
 
     return PersistedMinionWorkflowContext(
-        minion_composite_key=ctx.minion_composite_key,
+        orchestration_id=ctx.orchestration_id,
         minion_modpath=ctx.minion_modpath,
         workflow_id=ctx.workflow_id,
         event=ctx.event,
@@ -196,7 +196,7 @@ def restore_workflow_context_types(
         )
 
     return MinionWorkflowContext(
-        minion_composite_key=ctx.minion_composite_key,
+        orchestration_id=ctx.orchestration_id,
         minion_modpath=ctx.minion_modpath,
         workflow_id=ctx.workflow_id,
         event=event,
@@ -223,7 +223,7 @@ def hydrate_persisted_workflow_context(
         )
     return restore_workflow_context_types(
         MinionWorkflowContext(
-            minion_composite_key=persisted.minion_composite_key,
+            orchestration_id=persisted.orchestration_id,
             minion_modpath=persisted.minion_modpath,
             workflow_id=persisted.workflow_id,
             event=persisted.event,
@@ -243,7 +243,7 @@ def _typed_persisted_workflow_context_decoder(
     context_cls: type,
 ) -> msgspec.msgpack.Decoder[Any]:
     fields: list[_MsgspecFieldSpec] = [
-        ("minion_composite_key", str),
+        ("orchestration_id", str),
         ("minion_modpath", str),
         ("workflow_id", str),
         ("event", event_cls),
@@ -294,7 +294,7 @@ def decode_persisted_workflow_context_typed(
         )
 
     return MinionWorkflowContext(
-        minion_composite_key=persisted.minion_composite_key,
+        orchestration_id=persisted.orchestration_id,
         minion_modpath=persisted.minion_modpath,
         workflow_id=persisted.workflow_id,
         event=persisted.event,
@@ -400,7 +400,7 @@ def deserialize_workflow_context(
             f"{sorted(unknown_keys)!r}."
         )
 
-    minion_composite_key = data.get("minion_composite_key")
+    orchestration_id = data.get("orchestration_id")
     minion_modpath = data.get("minion_modpath")
     workflow_id = data.get("workflow_id")
     context_cls = data.get("context_cls")
@@ -408,8 +408,8 @@ def deserialize_workflow_context(
     error_msg = data.get("error_msg")
     started_at = data.get("started_at")
 
-    if not isinstance(minion_composite_key, str):
-        raise WorkflowContextSchemaError("Invalid workflow context minion_composite_key.")
+    if not isinstance(orchestration_id, str):
+        raise WorkflowContextSchemaError("Invalid workflow context orchestration_id.")
     if not isinstance(minion_modpath, str):
         raise WorkflowContextSchemaError("Invalid workflow context minion_modpath.")
     if not isinstance(workflow_id, str):
@@ -430,7 +430,7 @@ def deserialize_workflow_context(
         started_at = float(started_at)
 
     return MinionWorkflowContext(
-        minion_composite_key=minion_composite_key,
+        orchestration_id=orchestration_id,
         minion_modpath=minion_modpath,
         workflow_id=workflow_id,
         event=data["event"],

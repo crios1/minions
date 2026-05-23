@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import pytest
 
 from minions._internal._domain.gru import Gru
+from minions._internal._domain.gru_result_types import StartResult, StopResult
 from minions._internal._framework.async_component import AsyncComponent
 from minions._internal._framework.logger import CRITICAL, INFO, WARNING
 from minions._internal._framework.metrics_constants import (
@@ -65,12 +66,47 @@ class TestUnit:
         assert cfg_a.startswith("<inline:")
         assert "alpha" not in cfg_a
 
-        key = Gru._make_minion_composite_key(
+        key = Gru._make_orchestration_id(
             "tests.assets.Minion",
             cfg_a,
             "tests.assets.Pipeline",
         )
         assert key == f"tests.assets.Minion|{cfg_a}|tests.assets.Pipeline"
+
+    @pytest.mark.asyncio
+    async def test_start_and_stop_delegate_to_canonical_methods(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        gru = object.__new__(Gru)
+        start_calls: list[tuple[object, object, object | None, object | None]] = []
+        stop_calls: list[str] = []
+
+        async def fake_start_orchestration(
+            self: Gru,
+            pipeline: object,
+            minion: object,
+            *,
+            minion_config: object | None = None,
+            minion_config_path: str | None = None,
+        ) -> StartResult:
+            start_calls.append((pipeline, minion, minion_config, minion_config_path))
+            return StartResult(success=True, orchestration_id="iid")
+
+        async def fake_stop_orchestration(self: Gru, id: str) -> StopResult:
+            stop_calls.append(id)
+            return StopResult(success=True)
+
+        monkeypatch.setattr(Gru, "start_orchestration", fake_start_orchestration)
+        monkeypatch.setattr(Gru, "stop_orchestration", fake_stop_orchestration)
+
+        start_result = await gru.start("pipeline", "minion", minion_config_path="cfg")
+        stop_result = await gru.stop("iid")
+
+        assert start_result.success
+        assert stop_result.success
+        assert start_calls == [("pipeline", "minion", None, "cfg")]
+        assert stop_calls == ["iid"]
 
     def patch_sleep_cancel_after(self, monkeypatch: pytest.MonkeyPatch, n: int) -> None:
         """
@@ -246,9 +282,9 @@ class TestUnit:
             metrics=InMemoryMetrics(),
             state_store=NoOpStateStore(),
         ) as gru:
-            result = await gru.start_minion(
-                "tests.assets.crash.minions.good",
+            result = await gru.start_orchestration(
                 "tests.assets.crash.pipelines.emit_1_then_block",
+                "tests.assets.crash.minions.good",
             )
             assert result.success
 
@@ -274,9 +310,9 @@ class TestUnit:
             metrics=InMemoryMetrics(),
             state_store=NoOpStateStore(),
         ) as gru:
-            result = await gru.start_minion(
-                "tests.assets.crash.minions.good",
+            result = await gru.start_orchestration(
                 "tests.assets.crash.pipelines.emit_1_then_block",
+                "tests.assets.crash.minions.good",
             )
             assert result.success
 
@@ -309,9 +345,9 @@ class TestUnit:
             metrics=InMemoryMetrics(),
             state_store=NoOpStateStore(),
         ) as gru:
-            result = await gru.start_minion(
-                "tests.assets.crash.minions.good",
+            result = await gru.start_orchestration(
                 "tests.assets.crash.pipelines.emit_1_then_block",
+                "tests.assets.crash.minions.good",
             )
             assert result.success
             monitor_task = gru._resource_monitor_task
@@ -346,9 +382,9 @@ class TestUnit:
             metrics=InMemoryMetrics(),
             state_store=NoOpStateStore(),
         ) as gru:
-            result = await gru.start_minion(
-                "tests.assets.crash.minions.good",
+            result = await gru.start_orchestration(
                 "tests.assets.crash.pipelines.emit_1_then_block",
+                "tests.assets.crash.minions.good",
             )
             assert result.success
 

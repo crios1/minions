@@ -26,7 +26,7 @@ class TestValidComposition:
                 logger=ConsoleLogger(),
                 metrics=NoOpMetrics()
             ) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     pipeline=pipeline_modpath
                 )
@@ -47,7 +47,7 @@ class TestValidComposition:
                 logger=logger,
                 metrics=InMemoryMetrics()
             ) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     pipeline=pipeline_modpath
                 )
@@ -57,7 +57,7 @@ class TestValidComposition:
                 assert len(gru._pipelines) >= 1
                 assert len(gru._resources) >= 2
 
-                assert result.instance_id is not None
+                assert result.orchestration_id is not None
 
     class TestPipelineFile: # TODO: consider implementing tests to be in parity with TestMinionFile class
         @pytest.mark.asyncio
@@ -73,7 +73,7 @@ class TestValidComposition:
                 logger=ConsoleLogger(),
                 metrics=NoOpMetrics()
             ) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     pipeline=pipeline_modpath
                 )
@@ -96,7 +96,7 @@ class TestValidCompositionUsingNewAssets:
                 logger=ConsoleLogger(),
                 metrics=NoOpMetrics(),
             ) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     pipeline=pipeline_modpath,
                 )
@@ -116,7 +116,7 @@ class TestValidCompositionUsingNewAssets:
                 logger=logger,
                 metrics=InMemoryMetrics(),
             ) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     pipeline=pipeline_modpath,
                 )
@@ -124,7 +124,7 @@ class TestValidCompositionUsingNewAssets:
                 assert result.success
                 assert len(gru._pipelines) >= 1
                 assert len(gru._resources) >= 2
-                assert result.instance_id is not None
+                assert result.orchestration_id is not None
 
     class TestPipelineFile:
         @pytest.mark.asyncio
@@ -142,7 +142,7 @@ class TestValidCompositionUsingNewAssets:
                 logger=ConsoleLogger(),
                 metrics=NoOpMetrics(),
             ) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     pipeline=pipeline_modpath,
                 )

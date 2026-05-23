@@ -15,7 +15,7 @@ This package provides a light, test-focused DSL for scripting Gru scenarios and 
 ## Scope Boundary
 - This DSL is for orchestration tests: lifecycle sequencing, waits, stop/shutdown behavior, concurrency, and shared-resource runtime behavior.
 - This DSL is not for composition/loader validation tests (for example: module entrypoint resolution, invalid `minion`/`pipeline` declarations, class-subclass/type declaration checks).
-- Keep composition acceptance/rejection coverage in manual `gru.start_minion(...)` tests.
+- Keep composition acceptance/rejection coverage in manual `gru.start_orchestration(...)` tests.
 
 ## Official Contract
 - DSL orchestration tests are deterministic by policy.
@@ -59,14 +59,17 @@ This package provides a light, test-focused DSL for scripting Gru scenarios and 
 
 ## Quick Start
 ```python
+start_1 = OrchestrationStart(...)
+start_2 = OrchestrationStart(...)
+
 directives = [
     Concurrent(
-        MinionStart(...),
-        MinionStart(...),
+        start_1,
+        start_2,
     ),
     WaitWorkflowCompletions(),
-    MinionStop(name_or_instance_id="m1", expect_success=True),
-    MinionStop(name_or_instance_id="m2", expect_success=True),
+    OrchestrationStop(id=start_1, expect_success=True),
+    OrchestrationStop(id=start_2, expect_success=True),
     GruShutdown(expect_success=True),
 ]
 
@@ -81,13 +84,14 @@ await run_gru_scenario(
 ```
 
 ## Directives
-- `MinionStart(...)` starts a minion with a pipeline.
+- `OrchestrationStart(...)` starts an orchestration from a minion, pipeline, and optional minion config.
   - `minion` and `pipeline` are module path strings in the canonical DSL.
-- `MinionStop(...)` stops a minion by name or instance id.
+- `OrchestrationStop(id=...)` stops an orchestration by orchestration ID.
+- `OrchestrationStop(id=<OrchestrationStart>)` stops the orchestration started by that earlier `OrchestrationStart` directive.
 - `Concurrent(...)` runs child directives concurrently.
 - `WaitWorkflowCompletions(...)` waits for workflow completion.
 - `AfterWorkflowStarts(expected, directive)` waits for workflow starts then immediately executes a wrapped directive.
-  - Initial supported wrapped directive: `MinionStop(...)`.
+  - Initial supported wrapped directive: `OrchestrationStop(...)`.
 - `ExpectRuntime(...)` evaluates runtime expectations at the current scenario checkpoint.
   - Initial supported section: `expect=RuntimeExpectSpec(persistence={minion_name: count})`.
   - Supported targets: `at="latest"` (directive checkpoint) or `at=<checkpoint_index>` (0-based).
@@ -96,8 +100,8 @@ await run_gru_scenario(
 ## Directive Effects
 | Directive | Writes Receipts | Affects Waits | Affects Verification Counts |
 |---|---|---|---|
-| `MinionStart` | Yes (`success`, `instance_id`, `resolved_name`, directive index) | Yes (successful starts contribute expected workflow waits) | Yes (minion start counts, workflow-step counts, pipeline attempt/success bounds, state-store totals) |
-| `MinionStop` | No | No | Indirect only (runtime state changes that may affect later call histories) |
+| `OrchestrationStart` | Yes (`success`, `orchestration_id`, `resolved_name`, directive index) | Yes (successful starts contribute expected workflow waits) | Yes (minion start counts, workflow-step counts, pipeline attempt/success bounds, state-store totals) |
+| `OrchestrationStop` | No | No | Indirect only (runtime state changes that may affect later call histories) |
 | `Concurrent` | No (container only) | No (container only) | No (container only) |
 | `WaitWorkflowCompletions` | No | Yes (waits by all started or named subset) | No direct counts; ensures async work is drained before assertions |
 | `AfterWorkflowStarts` | No | Yes (waits for start targets before running wrapped directive) | Indirect only (wrapped directive effects) |
@@ -119,7 +123,7 @@ await run_gru_scenario(
     - if workflow-id evidence exists and workflow-id delta mismatches, that mismatch is reported first,
     - otherwise call-count mismatch is reported with explicit expected range and actual delta.
 - The wait first blocks on workflow-step spy call counts, then drains minion tasks.
-- `AfterWorkflowStarts(expected={...}, directive=MinionStop(...))` is the race-safe primitive for restart/resume stop points.
+- `AfterWorkflowStarts(expected={...}, directive=OrchestrationStop(...))` is the race-safe primitive for restart/resume stop points.
 
 ## Runtime Expectations
 - `ExpectRuntime(at="latest", expect=RuntimeExpectSpec(...))` asserts runtime state at the current checkpoint.
@@ -160,11 +164,13 @@ ExpectRuntime(
   - That bounded tolerance is intentionally scoped to `WaitWorkflowCompletions(workflow_steps_mode="exact")` window checks only.
 - Restart/resume (strict) example:
 ```python
+start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
+start_2 = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
 directives = [
-    MinionStart(minion=minion_modpath, pipeline=pipeline_modpath),
+    start,
     AfterWorkflowStarts(
         expected={"slow-step-minion": 1},
-        directive=MinionStop(name_or_instance_id="slow-step-minion", expect_success=True),
+        directive=OrchestrationStop(id=start, expect_success=True),
     ),
     ExpectRuntime(
         expect=RuntimeExpectSpec(
@@ -173,7 +179,6 @@ directives = [
             workflow_steps_mode="exact",
         ),
     ),
-    MinionStart(minion=minion_modpath, pipeline=pipeline_modpath),
     WaitWorkflowCompletions(),
     ExpectRuntime(
         expect=RuntimeExpectSpec(
@@ -182,11 +187,12 @@ directives = [
             workflow_steps_mode="exact",
         ),
     ),
+    OrchestrationStop(id=start_2, expect_success=True),
 ]
 ```
 
 ## Per-Run Expectations
-Provide `pipeline_event_counts` for exactly the pipelines started by successful `MinionStart(...)` directives:
+Provide `pipeline_event_counts` for exactly the pipelines started by successful `OrchestrationStart(...)` directives:
 ```python
 await run_gru_scenario(
     ...,
@@ -194,7 +200,7 @@ await run_gru_scenario(
 )
 ```
 Expected workflow counts are derived from `pipeline_event_counts`:
-- For each successful `MinionStart`, expected workflows = `pipeline_event_counts[pipeline_modpath]`.
+- For each successful `OrchestrationStart`, expected workflows = `pipeline_event_counts[pipeline_modpath]`.
 - Counts are summed per minion class.
 - These counts drive `WaitWorkflowCompletions`, workflow-step expectations, and state store save/delete totals.
 - Validation is strict:

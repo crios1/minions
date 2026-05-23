@@ -24,7 +24,7 @@ When investigating persistence behavior, start with these labels:
 - `minion_workflow_persistence_retryable`: `true` or `false`
 - `minion_workflow_persistence_policy`: `continue-on-failure` or `idle-until-persisted`
 - `state_store`: backend implementation name
-- `minion_composite_key`: affected minion instance/config/pipeline orchestration
+- `orchestration_id`: affected minion instance/config/pipeline orchestration
 
 Those labels tell you whether you are looking at application data that cannot be persisted, an operational store outage, or a workflow that is already done with user code and is now waiting to resolve checkpoint cleanup.
 
@@ -109,7 +109,7 @@ When an operator sees persistence trouble:
 1. Check whether `minion_workflow_persistence_blocked_gauge` is non-zero.
 2. Split by `minion_workflow_persistence_operation` to see whether the issue is blocking workflow progress or terminal cleanup.
 3. Inspect `minion_workflow_persistence_failures_total` by `minion_workflow_persistence_failure_stage` and `minion_workflow_persistence_retryable`.
-4. Narrow by `state_store` and `minion_composite_key` to see whether the issue is backend-wide or isolated.
+4. Narrow by `state_store` and `orchestration_id` to see whether the issue is backend-wide or isolated.
 5. Use the persistence logs to confirm whether the runtime is retrying, resuming, or hitting a deterministic serialization failure.
 
 For the underlying persistence semantics, see {doc}`/concepts/state-and-persistence`.

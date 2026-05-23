@@ -44,11 +44,11 @@
     - verifier call-count expectations now account for replayed persisted workflow steps after restart
     - user-guarantee scenarios cover dict, dataclass, and msgspec.Struct persistence through stop, restart, and resume
   - gap:
-    - scenarios still use coarse orchestration primitives like `AfterWorkflowStarts(..., MinionStop(...))` to create a persisted checkpoint
+    - scenarios still use coarse orchestration primitives like `AfterWorkflowStarts(..., OrchestrationStop(...))` to create a persisted checkpoint
     - there is no explicit DSL directive for stopping/resuming at a specific workflow checkpoint or step boundary
-    - `MinionStart` scenarios do not yet cover class-based minion starts or inline `minion_config`, so the newer `Gru.start_minion(...)` modes still rely on direct/manual tests
+    - `OrchestrationStart` scenarios do not yet cover class-based orchestration starts or inline `minion_config`, so the newer `Gru.start_orchestration(...)` modes still rely on direct/manual tests
   - possible DSL shape:
-    - `AfterWorkflowStepStarts(expected={minion_name: {"step_1": 1}}, directive=MinionStop(...))`
+    - `AfterWorkflowStepStarts(expected={minion_name: {"step_1": 1}}, directive=OrchestrationStop(...))`
     - `ExpectRuntime(..., expect=RuntimeExpectSpec(replayed_workflow_steps={...}))` only if the existing automatic replay counting is not enough
     - optional checkpoint selectors for asserting before/after restart behavior without relying on checkpoint indexes
   - tests:
@@ -75,10 +75,10 @@
 - todo: add "crash testing" to test suite to ensure the Minions runtime preserves its crash guarantees
   - status:
     - deterministic "boom user code" coverage has been added for the primary in-process user-code surfaces
-    - `Gru.start_minion(...)` failed-start partial registration cleanup has been implemented and tested
+    - `Gru.start_orchestration(...)` failed-start partial registration cleanup has been implemented and tested
   - remaining follow-ups:
-    - add explicit mid-operation invariant tests for remaining public Gru methods, especially `stop_minion(...)` and `shutdown(...)`
-    - decide and document whether pipeline/resource shutdown-hook failures during cancellation should make `stop_minion(...)` fail or remain log-only
+    - add explicit mid-operation invariant tests for remaining public Gru methods, especially `stop_orchestration(...)` and `shutdown(...)`
+    - decide and document whether pipeline/resource shutdown-hook failures during cancellation should make `stop_orchestration(...)` fail or remain log-only
     - add separate subprocess kill/restart tests for process-death resume guarantees; keep this separate from ordinary in-process exception containment
   - todo: add deterministic "boom user code" testing across every user-code runtime surface
     - goal:
@@ -277,20 +277,20 @@
       - workflow checkpoint write behavior is now explicitly operator-configurable via `WorkflowPersistenceFailurePolicy`, but startup/replay behavior still has fixed semantics
       - the remaining design gap is to decide whether startup component availability, persisted-context replay reads, and degraded recovery behavior should live under a separate recovery policy or under a broader persistence/durability policy surface
       - this is correct as a safety baseline, but the broader command semantics are not fully designed:
-        - should `start_minion` fail when persisted resume state cannot be read, or start in a degraded recovery-pending mode?
-        - should `stop_minion` always remain live-process control, or block/warn/require force when persistence health makes durable recovery unsafe?
+        - should `start_orchestration` fail when persisted resume state cannot be read, or start in a degraded recovery-pending mode?
+        - should `stop_orchestration` always remain live-process control, or block/warn/require force when persistence health makes durable recovery unsafe?
       - `WorkflowPersistenceFailurePolicy` currently describes checkpoint/write behavior for live workflows, not recovery reads or command safety
     - design principle:
       - commands can control the live process without the state store, but they must not claim durable recovery safety unless the state store has confirmed it
       - never collapse "state store unavailable" into "no persisted workflows to resume"
       - distinguish command application from durability/recovery guarantees in user-facing results
-    - start_minion design questions:
+    - start_orchestration design questions:
       - current conservative behavior: a resume read failure causes start to fail and Gru cleans up partial runtime state
       - decide whether state-store startup/bootstrap failure should remain unconditionally fatal, or become part of the same operator-facing durability/recovery policy model as persisted replay reads
-      - possible future behavior: start the minion in a degraded state with recovery pending, retry persisted-context reads in the background, and allow new workflows according to `WorkflowPersistenceFailurePolicy`
+      - possible future behavior: start the orchestration in a degraded state with recovery pending, retry persisted-context reads in the background, and allow new workflows according to `WorkflowPersistenceFailurePolicy`
       - if degraded start is supported, add explicit runtime state such as `recovery_pending` / `state_store_unavailable` / `partial_recovery`
       - decide whether new workflow admission should be allowed before persisted recovery completes, and how to avoid duplicate or out-of-order work if recovery later succeeds
-    - stop_minion design questions:
+    - stop_orchestration design questions:
       - make stop modes persistence-aware once `pause` / `drain` / `cutover` exist
       - `drain` can usually proceed with warnings because live in-memory workflows are allowed to finish
       - `pause` / persisted handoff should require durable checkpoint confidence or report degraded persistence risk
@@ -310,7 +310,7 @@
       - add metrics for recovery-pending/degraded starts and stop commands that proceed with persistence risk
       - make GruShell surface warnings before dangerous operations and require explicit confirmation/force for high-risk cutover paths
     - tests:
-      - keep the current regression that read failure during `start_minion` fails closed and cleans up runtime state
+      - keep the current regression that read failure during `start_orchestration` fails closed and cleans up runtime state
       - if degraded start is added, prove start returns applied-with-warning, recovery retries continue, and persisted workflows are not silently abandoned
       - prove stop `drain` / `pause` / `cutover` report different persistence risks when the state store is unavailable
       - prove forced cutover is explicit and observable when persistence risk is present
@@ -387,7 +387,7 @@
       - defaults are intentionally “peg high”:
         - shed late (e.g. 0.94) and resume slightly below (e.g. 0.92) so system naturally stays near the top without bouncing down to 80%
     - actions while in SHED:
-      - reject new `start_minion` requests (return a typed failure / reason = `memory_pressure`)
+      - reject new `start_orchestration` requests (return a typed failure / reason = `memory_pressure`)
       - suspend pipelines from admitting new work (soft suspend: don’t kill in-flight work; just stop new scheduling/emit)
       - log pressure state with rate limiting (avoid spam)
     - container vs host measurement:
@@ -397,12 +397,12 @@
       - `MemoryPressureCfg(shed_ratio, resume_ratio, enter_consecutive, exit_consecutive, cooldown_s, poll_interval_s, enabled=True, mode="auto")`
       - keep defaults aggressive/high-util; users can set conservative ratios if they want more headroom
   - implementation notes:
-    - wire guard state into `Gru.start_minion(...)` admission path
+    - wire guard state into `Gru.start_orchestration(...)` admission path
     - wire guard state into pipeline scheduling / emit admission path (one choke point; no scattered checks)
     - keep all internal fields in `_mn_` attrspace
     - need to log/notify the user when state changes (and what that means) but not too often
   - tests:
-    - test: sustained high memory enters SHED and rejects new `start_minion`
+    - test: sustained high memory enters SHED and rejects new `start_orchestration`
     - test: pipelines stop admitting new work in SHED (no new tasks/events created), but in-flight work continues
     - test: anti-flap works (bouncy samples around shed threshold do not repeatedly enter/exit)
     - test: cooldown is respected (drops below resume_ratio immediately still stays SHED until cooldown elapsed)
@@ -462,9 +462,9 @@
 - todo: revisit convo https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/68f6c4f3-888c-8333-964d-be052cd06ea1
 
 - todo: stabilize orchestration lifecycle and identity
-  - todo: make orchestration the canonical Gru lifecycle API surface
+  - done: make orchestration the canonical Gru lifecycle API surface
     - problem:
-      - `Gru.start_minion(...)` reads as if Gru only starts a minion, but the operation materializes a live orchestration from a pipeline, minion, and minion config
+      - the old minion-named start API read as if Gru only started a minion, but the operation materializes a live orchestration from a pipeline, minion, and minion config
       - starting that orchestration also validates the declared composition, starts or reuses the required pipeline and resources, subscribes the minion, and lets workflows be produced as events arrive
       - naming the public lifecycle operation after only the minion hides the runtime unit users need to reason about when they inspect, stop, resume, or operate the system
     - direction:
@@ -472,25 +472,24 @@
       - alias `Gru.start(...)` and `Gru.stop(...)` to the canonical orchestration lifecycle operations for convenience
       - prefer the start shape `pipeline, minion, minion_config` for the orchestration API, with docs using keyword arguments so the relationship is explicit
       - keep Minion terminology focused on the user-authored workflow factory/behavior definition while orchestration names the live binding Gru owns
-      - desired end state: replace the public `start_minion(...)` / `stop_minion(...)` API with orchestration-named lifecycle methods rather than keeping both concepts indefinitely
+      - done: replaced the public minion-named lifecycle API with orchestration-named lifecycle methods rather than keeping both concepts indefinitely
       - implementation choice:
-        - preserve compatibility in the first pass if wrappers materially reduce migration risk while the public surface is updated deliberately
-        - replace `start_minion(...)` / `stop_minion(...)` in one pass instead if the call-site and doc churn is straightforward enough that compatibility wrappers only prolong a misleading API
+        - done: removed compatibility wrappers in the canonical API pass because call-site and doc churn was straightforward enough that wrappers only prolonged a misleading API
     - update together:
       - README, docs, examples, tests, shell/scenario helpers, result naming, and lifecycle terminology should teach orchestration as the live runtime unit consistently
       - align this with the orchestration identity terminology cleanup so lifecycle names, ids, logs, metrics, and persistence concepts do not drift
     - why it matters:
       - an accurate lifecycle name gives users the right mental model without requiring them to manage component startup details themselves
 
-  - todo: settle official terminology for orchestration identity vs minion composite key
+  - done: settle official terminology for orchestration identity
     - problem:
-      - the codebase currently uses `minion_composite_key` and `orchestration_id` in closely related or interchangeable ways
-      - persistence rows store `orchestration_id`, while telemetry and runtime labels expose `minion_composite_key`
+      - the codebase previously used `minion_composite_key` and `orchestration_id` in closely related or interchangeable ways
+      - persistence rows stored `orchestration_id`, while telemetry and runtime labels exposed `minion_composite_key`
       - this creates ambiguity for API docs, metric interpretation, and future migration work
-    - goal:
-      - choose one official concept name for the stable minion/config/pipeline orchestration identity
-      - define whether `minion_composite_key` remains an internal construction detail, becomes the official term, or is renamed to `orchestration_id`
-      - update code, docs, logs, metrics labels, and test helpers consistently once the term is chosen
+    - decision:
+      - `orchestration_id` is the official concept name for the stable minion/config/pipeline orchestration identity
+      - `minion_composite_key` should not remain a public, persisted, metric, log, or long-lived internal identity term
+      - code, docs, logs, metrics labels, workflow context, persistence blobs, and test helpers have been aligned to `orchestration_id`
     - why it matters:
       - unclear identity terminology can become a compatibility problem for users who build alerts, dashboards, stored state tools, or operational docs around these names
 
@@ -527,6 +526,7 @@
         - `component_id` = stable identity for each durable domain component class
         - `config_slot_id` = stable identity for the durable config slot/artifact, independent of config path or config content revision
         - `orchestration_id` = stable identity for the current orchestration definition built from stable component/config ids
+        - `minion_composite_key` has been replaced by `orchestration_id` in the current runtime terminology
         - keep a distinct name for one live process-local minion start (`runtime_instance_id` / `run_id` / final chosen term)
         - do not overload current `instance_id` terminology with both a durable orchestration identity and a live runtime start identity
       - add source-level component id metadata:
@@ -593,9 +593,9 @@
     - convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/69446e9e-053c-832c-abfb-ba40b5123693
     - other convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/694725cf-a5c4-8326-bdfc-b95f1b289f14
     - note: consider how cross env (dev,qa,prod) comparison will work: like with grushell snapshot/redeploy, discussed in "other convo"
-    - note: `minion_composite_key` currently appears to overlap with the runtime meaning of `orchestration_id`; this should be resolved by the terminology todo above
+    - note: `orchestration_id` is now the current runtime identity term; future durable-id work should preserve this name while changing how the value is derived
 
-  - todo: audit the todos in todo.md to align them to the new Gru.start / Gru.stop API (since they refer to the old Gru.start_minion / Gru.stop_minion API)
+  - done: audit the todos in todo.md to align them to the new Gru.start / Gru.stop API
   
   - todo: optimize SQLiteStateStore orchestration-scoped context reads
     - shape:
@@ -629,7 +629,7 @@
     - add optional lifecycle diagnostics
 
   - todo: formalize Gru stop commit/fail-closed semantics
-    - define the point where `stop_minion(...)` becomes committed and cannot be rolled back to a running orchestration
+    - define the point where `stop_orchestration(...)` becomes committed and cannot be rolled back to a running orchestration
     - keep tests proving committed stop failures remove active routing and framework-owned runtime state
     - document which failures are primary operation failures versus secondary cleanup/finalization failures
     - why it matters:
@@ -639,7 +639,7 @@
     - distinguish operation failure from framework cleanup status and possible user-owned process pollution
     - consider structured fields for cleanup phases, cancelled tasks, degraded cleanup, and restart recommendations
     - preserve the simple success/failure path while making degraded cleanup machine-readable for operators and callers
-    - apply the result model consistently to `start_minion(...)`, `stop_minion(...)`, and `shutdown()`
+    - apply the result model consistently to `start_orchestration(...)`, `stop_orchestration(...)`, and `shutdown()`
     - why it matters:
       - current `success=False` results are too coarse for lifecycle failures and make it hard for callers/operators to react correctly
 
@@ -686,7 +686,7 @@
     - why it matters:
       - diagnostics help debug user-owned cleanup leaks without changing Gru's core cleanup guarantee
 
-- todo: add stop modes to gru.stop_minion and map to GruShell redeploy strategies
+- todo: add stop modes to gru.stop_orchestration and map to GruShell redeploy strategies
   - default mode: pause (current behavior)
   - modes and behavior:
     - pause: stop new workflows; persist in-flight workflows for resume on restart
@@ -695,19 +695,19 @@
   - interruptibility:
     - if drain is in progress and caller requests cutover or pause, override drain immediately
     - if drain is requested again, treat as idempotent
-    - if minion already stopped, return success with reason
+    - if orchestration already stopped, return success with reason
   - api sketch:
-    - gru.stop_minion(name_or_instance_id, mode="pause"|"drain"|"cutover")
+    - gru.stop_orchestration(orchestration_id, mode="pause"|"drain"|"cutover")
     - grushell redeploy maps:
-      - redeploy drain -> stop_minion(mode="drain")
-      - redeploy cutover -> stop_minion(mode="cutover")
+      - redeploy drain -> stop_orchestration(mode="drain")
+      - redeploy cutover -> stop_orchestration(mode="cutover")
   - tests:
     - add orchestration helper directives for mode="drain"/"cutover"
     - add runtime tests for in-flight workflow behavior per mode
   - open questions:
     - Should `continue-on-failure` track outstanding failed checkpoints instead of only retrying when the workflow reaches the next checkpoint?
     - Should `WorkflowPersistenceFailurePolicy` remain Gru-level, become Minion-level, or support both global defaults and per-minion overrides?
-    - The desired guarantee is that `Gru.stop_minion(...)` should not lose workflow state in any stop mode unless the process is force-interrupted.
+    - The desired guarantee is that `Gru.stop_orchestration(...)` should not lose workflow state in any stop mode unless the process is force-interrupted.
   - why it matters:
     - failed checkpoint state affects the exact semantics of `drain` and `cutover`, especially when a workflow has progressed beyond its last durable checkpoint.
 
@@ -888,7 +888,7 @@
     - treat `GruShell` as legacy design material, temporary local demo/helper, and source command semantics to migrate
     - do not expand `cmd.Cmd` behavior
     - transitional stability note:
-      - fixed obvious exported-helper crashes: `wait` no longer references undefined helpers; `start` calls the current `Gru.start_minion(...)` signature; successful starts are tracked by `StartMinionResult.instance_id`
+      - fixed obvious exported-helper crashes: `wait` no longer references undefined helpers; `start` calls the current lifecycle start signature; successful starts are tracked by `StartResult.instance_id`
       - continue fixing obvious `GruShell` crashes only as needed; do not add new product semantics there
       - remove the temporary `pyproject.toml` Pyright exclude for `minions/_internal/_domain/gru_shell*.py` once `GruShell` is phased out
   - suggested implementation order:
@@ -1038,7 +1038,7 @@
 - todo: measure throughput and latency
   - events/sec at steady state
   - end-to-end latency p50/p95/p99
-  - startup latency for `Gru.create` and `start_minion`
+  - startup latency for `Gru.create` and `start_orchestration`
 
 - todo: measure memory footprint and stability over time
   - rss over time (baseline + under load + long soak)

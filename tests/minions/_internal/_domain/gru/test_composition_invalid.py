@@ -31,7 +31,7 @@ class TestInvalidComposition:
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics()
             ) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
                     pipeline=pipeline_modpath
@@ -57,7 +57,7 @@ class TestInvalidComposition:
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics()
             ) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
                     pipeline=pipeline_modpath
@@ -83,7 +83,7 @@ class TestInvalidComposition:
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics()
             ) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
                     pipeline=pipeline_modpath
@@ -108,7 +108,7 @@ class TestInvalidComposition:
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics()
             ) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
                     pipeline=pipeline_modpath
@@ -133,7 +133,7 @@ class TestInvalidComposition:
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics()
             ) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
                     pipeline=pipeline_modpath
@@ -160,7 +160,7 @@ class TestInvalidComposition:
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics()
             ) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
                     pipeline=pipeline_modpath
@@ -186,7 +186,7 @@ class TestInvalidComposition:
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics()
             ) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
                     pipeline=pipeline_modpath
@@ -212,7 +212,7 @@ class TestInvalidComposition:
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics()
             ) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
                     pipeline=pipeline_modpath
@@ -237,7 +237,7 @@ class TestInvalidComposition:
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics()
             ) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
                     pipeline=pipeline_modpath
@@ -265,7 +265,7 @@ class TestInvalidCompositionUsingNewAssets:
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
                     pipeline=pipeline_modpath,
@@ -286,7 +286,7 @@ class TestInvalidCompositionUsingNewAssets:
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
                     pipeline=pipeline_modpath,
@@ -307,7 +307,7 @@ class TestInvalidCompositionUsingNewAssets:
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
                     pipeline=pipeline_modpath,
@@ -328,7 +328,7 @@ class TestInvalidCompositionUsingNewAssets:
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
                     pipeline=pipeline_modpath,
@@ -349,7 +349,7 @@ class TestInvalidCompositionUsingNewAssets:
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
                     pipeline=pipeline_modpath,
@@ -371,7 +371,7 @@ class TestInvalidCompositionUsingNewAssets:
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
                     pipeline=pipeline_modpath,
@@ -392,7 +392,7 @@ class TestInvalidCompositionUsingNewAssets:
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
                     pipeline=pipeline_modpath,
@@ -413,7 +413,7 @@ class TestInvalidCompositionUsingNewAssets:
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
                     pipeline=pipeline_modpath,
@@ -434,7 +434,7 @@ class TestInvalidCompositionUsingNewAssets:
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
-                result = await gru.start_minion(
+                result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
                     pipeline=pipeline_modpath,

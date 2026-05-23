@@ -55,14 +55,14 @@ This is independent of absolute file paths. If your project folder moves, your m
 If you start a minion with:
 
 ```python
-gru.start_minion(
+gru.start_orchestration(
     "myapp.strategies.mean_reversion",
     "myapp.pipelines.pricing",
     minion_config_path="configs/client-a.yaml",
 )
 ```
 
-And `configs/client-a.yaml` lives **inside your project folder**, Minions records it in the composite key as:
+And `configs/client-a.yaml` lives **inside your project folder**, Minions records it in the orchestration identity as:
 
 ```
 myapp.strategies.mean_reversion|configs/client-a.yaml|myapp.pipelines.pricing
@@ -77,14 +77,14 @@ Not an absolute path. This identity is fully portable: works if you zip and move
 If you point Minions at a config file *outside* the project directory:
 
 ```python
-gru.start_minion(
+gru.start_orchestration(
     "myapp.strategies",
     "myapp.pipelines",
     minion_config_path="/etc/minions/client-a.yaml",
 )
 ```
 
-Then the composite key becomes:
+Then the orchestration identity becomes:
 
 ```
 myapp.strategies|/etc/minions/client-a.yaml|myapp.pipelines
@@ -114,7 +114,7 @@ class MyConfig:
     my_key: str
 
 
-gru.start_minion(
+gru.start_orchestration(
     MyMinion,
     MyPipeline,
     minion_config=MyConfig(my_key="my_value"),
@@ -124,7 +124,7 @@ gru.start_minion(
 The configured Minion declares `config: MyConfig` before its steps access
 `self.config`.
 
-Composite key:
+Orchestration identity:
 
 ```
 myapp.minions.MyMinion|<inline:digest>|myapp.pipelines.MyPipeline
@@ -150,7 +150,7 @@ Your SQLite state store, configs, pipelines, and code remain coherent as a unit.
 
 - Place all configs in a dedicated `configs/` folder inside your project.  
 - Ensure your entrypoint (e.g., `python -m yourapp.main`) lives inside the project.  
-- Use relative config paths when calling `gru.start_minion`.  
+- Use relative config paths when calling `gru.start_orchestration`.  
 - Let Minions resolve absolute paths internally for loading.  
 - Keep state stores (SQLite, files, checkpoints) inside the project directory.  
 

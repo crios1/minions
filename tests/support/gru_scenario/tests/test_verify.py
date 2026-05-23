@@ -3,7 +3,7 @@ from typing import Any
 
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.state_store import StoredWorkflowContext
-from minions._internal._framework.metrics_constants import LABEL_MINION_COMPOSITE_KEY
+from minions._internal._framework.metrics_constants import LABEL_ORCHESTRATION_ID
 from tests.assets.contexts.counter import CounterContext
 from tests.assets.events.counter import CounterEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
@@ -14,7 +14,7 @@ from tests.assets.minions.two_steps.counter.resourced import TwoStepResourcedMin
 from tests.assets.pipelines.emit1.counter.emit_1 import Emit1Pipeline
 from tests.support.gru_scenario.directives import (
     ExpectRuntime,
-    MinionStart,
+    OrchestrationStart,
     RuntimeExpectSpec,
 )
 from tests.support.gru_scenario.plan import ScenarioPlan
@@ -22,7 +22,7 @@ from tests.support.gru_scenario.runner import (
     ScenarioCheckpoint,
     ScenarioRunResult,
     SpyRegistry,
-    StartReceipt,
+    OrchestrationStartReceipt,
 )
 from tests.support.gru_scenario.verify import ScenarioVerifier
 
@@ -83,11 +83,11 @@ def test_assert_metrics_label_contract_reports_recorded_mismatches():
 
 def test_compute_minion_expectations_accumulates_starts_from_successful_receipts():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -103,8 +103,8 @@ def test_compute_minion_expectations_accumulates_starts_from_successful_receipts
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-1", "n1", TwoStepMinion, True),
-            StartReceipt(1, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-2", "n2", TwoStepMinion, True),
+            OrchestrationStartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-1", "n1", TwoStepMinion, True),
+            OrchestrationStartReceipt(1, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-2", "n2", TwoStepMinion, True),
         ],
     )
 
@@ -117,8 +117,8 @@ def test_compute_minion_expectations_accumulates_starts_from_successful_receipts
 
 def test_build_expected_call_counts_state_store_formula_for_mixed_success_and_failure():
     directives = [
-        MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
-        MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1", expect_success=False),
+        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1", expect_success=False),
     ]
     plan = ScenarioPlan(
         directives,
@@ -131,8 +131,8 @@ def test_build_expected_call_counts_state_store_formula_for_mixed_success_and_fa
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-ok", "ok", TwoStepMinion, True),
-            StartReceipt(1, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-fail", "fail", TwoStepMinion, False),
+            OrchestrationStartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-ok", "ok", TwoStepMinion, True),
+            OrchestrationStartReceipt(1, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-fail", "fail", TwoStepMinion, False),
         ],
         seen_shutdown=True,
     )
@@ -158,8 +158,8 @@ def test_build_expected_call_counts_state_store_formula_for_mixed_success_and_fa
 
 def test_build_expected_call_counts_scales_minion_init_with_successful_starts():
     directives = [
-        MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
-        MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
     ]
     plan = ScenarioPlan(
         directives,
@@ -172,8 +172,8 @@ def test_build_expected_call_counts_scales_minion_init_with_successful_starts():
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-a", "a", TwoStepMinion, True),
-            StartReceipt(1, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-b", "b", TwoStepMinion, True),
+            OrchestrationStartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-a", "a", TwoStepMinion, True),
+            OrchestrationStartReceipt(1, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-b", "b", TwoStepMinion, True),
         ],
     )
 
@@ -196,7 +196,7 @@ async def test_build_expected_call_counts_does_not_require_get_all_for_overridde
             return []
 
     directives = [
-        MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
     ]
     plan = ScenarioPlan(
         directives,
@@ -209,7 +209,7 @@ async def test_build_expected_call_counts_does_not_require_get_all_for_overridde
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-ok", "ok", TwoStepMinion, True),
+            OrchestrationStartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-ok", "ok", TwoStepMinion, True),
         ],
     )
 
@@ -246,7 +246,7 @@ def test_assert_state_store_read_call_bounds_rejects_excess_get_all_calls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directives = [
-        MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
     ]
     plan = ScenarioPlan(
         directives,
@@ -259,7 +259,7 @@ def test_assert_state_store_read_call_bounds_rejects_excess_get_all_calls(
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-ok", "ok", TwoStepMinion, True),
+            OrchestrationStartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-ok", "ok", TwoStepMinion, True),
         ],
     )
     verifier = _mk_verifier(plan, result)
@@ -278,7 +278,7 @@ def test_assert_minion_fanout_delivery_proves_pipeline_event_delivery_to_steps(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directives = [
-        MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
     ]
     plan = ScenarioPlan(
         directives,
@@ -291,7 +291,7 @@ def test_assert_minion_fanout_delivery_proves_pipeline_event_delivery_to_steps(
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-ok", "ok", TwoStepMinion, True),
+            OrchestrationStartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-ok", "ok", TwoStepMinion, True),
         ],
     )
 
@@ -309,8 +309,8 @@ def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnost
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directives = [
-        MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
-        MinionStart(minion="tests.assets.minions.two_steps.counter.resourced", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.resourced", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
     ]
     plan = ScenarioPlan(
         directives,
@@ -326,8 +326,8 @@ def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnost
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-a", "a", TwoStepMinion, True),
-            StartReceipt(1, "tests.assets.minions.two_steps.counter.resourced", "tests.assets.pipelines.emit1.counter.emit_1", "id-b", "b", TwoStepResourcedMinion, True),
+            OrchestrationStartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-a", "a", TwoStepMinion, True),
+            OrchestrationStartReceipt(1, "tests.assets.minions.two_steps.counter.resourced", "tests.assets.pipelines.emit1.counter.emit_1", "id-b", "b", TwoStepResourcedMinion, True),
         ],
     )
 
@@ -351,7 +351,7 @@ def test_assert_minion_fanout_delivery_allows_plus_one_per_start_tolerance(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directives = [
-        MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
     ]
     plan = ScenarioPlan(
         directives,
@@ -364,7 +364,7 @@ def test_assert_minion_fanout_delivery_allows_plus_one_per_start_tolerance(
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-ok", "ok", TwoStepMinion, True),
+            OrchestrationStartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-ok", "ok", TwoStepMinion, True),
         ],
     )
 
@@ -382,7 +382,7 @@ def test_assert_minion_fanout_delivery_rejects_overage_beyond_plus_one_per_start
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directives = [
-        MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
     ]
     plan = ScenarioPlan(
         directives,
@@ -395,7 +395,7 @@ def test_assert_minion_fanout_delivery_rejects_overage_beyond_plus_one_per_start
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-ok", "ok", TwoStepMinion, True),
+            OrchestrationStartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-ok", "ok", TwoStepMinion, True),
         ],
     )
 
@@ -417,8 +417,8 @@ def test_assert_pipeline_events_allows_restarted_pipeline_produce_event_totals(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directives = [
-        MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
-        MinionStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
     ]
     plan = ScenarioPlan(
         directives,
@@ -431,8 +431,8 @@ def test_assert_pipeline_events_allows_restarted_pipeline_produce_event_totals(
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-a", "a", TwoStepMinion, True),
-            StartReceipt(1, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-b", "b", TwoStepMinion, True),
+            OrchestrationStartReceipt(0, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-a", "a", TwoStepMinion, True),
+            OrchestrationStartReceipt(1, "tests.assets.minions.two_steps.counter.basic", "tests.assets.pipelines.emit1.counter.emit_1", "id-b", "b", TwoStepMinion, True),
         ],
     )
     verifier = _mk_verifier(plan, result)
@@ -447,7 +447,7 @@ def test_assert_pipeline_events_allows_restarted_pipeline_produce_event_totals(
 
 def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_checkpoint():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -463,7 +463,7 @@ def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_ch
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -471,6 +471,7 @@ def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_ch
                 "ok",
                 TwoStepMinion,
                 True,
+                orchestration_id="instance-1",
             ),
         ],
         checkpoints=[
@@ -513,11 +514,11 @@ def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_ch
 
 def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phase_windows():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -533,7 +534,7 @@ def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phas
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -541,8 +542,9 @@ def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phas
                 "two-step-minion",
                 TwoStepMinion,
                 True,
+                orchestration_id="instance-1",
             ),
-            StartReceipt(
+            OrchestrationStartReceipt(
                 1,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -550,6 +552,7 @@ def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phas
                 "two-step-minion",
                 TwoStepMinion,
                 True,
+                orchestration_id="instance-1",
             ),
         ],
         checkpoints=[
@@ -561,7 +564,7 @@ def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phas
                 successful_receipt_count=1,
                 seen_shutdown=False,
                 expected_starts={"two-step-minion": 1},
-                wrapped_directive_type="MinionStop",
+                wrapped_directive_type="OrchestrationStop",
                 spy_call_counts={
                     "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
                         "step_1": 1,
@@ -593,7 +596,7 @@ def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phas
 
 def test_checkpoint_window_workflow_step_progression_exact_fails_on_overage():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -609,7 +612,7 @@ def test_checkpoint_window_workflow_step_progression_exact_fails_on_overage():
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -652,7 +655,7 @@ def test_checkpoint_window_workflow_step_progression_exact_fails_on_overage():
 
 def test_checkpoint_window_workflow_step_progression_rejects_invalid_mode():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -668,7 +671,7 @@ def test_checkpoint_window_workflow_step_progression_rejects_invalid_mode():
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -708,11 +711,11 @@ def test_checkpoint_window_workflow_step_progression_rejects_invalid_mode():
 
 def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_window():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -729,7 +732,7 @@ def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_wi
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -738,7 +741,7 @@ def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_wi
                 TwoStepMinion,
                 True,
             ),
-            StartReceipt(
+            OrchestrationStartReceipt(
                 1,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -801,7 +804,7 @@ def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_wi
 
 def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_allows_call_count_overage():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -818,7 +821,7 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_all
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -859,7 +862,7 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_all
 
 def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_rejects_overage_beyond_start_tolerance():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -876,7 +879,7 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_rej
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -921,11 +924,11 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_rej
 
 def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overlap_passes_with_workflow_id_exactness():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -942,7 +945,7 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -951,7 +954,7 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
                 TwoStepMinion,
                 True,
             ),
-            StartReceipt(
+            OrchestrationStartReceipt(
                 1,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -998,11 +1001,11 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
 
 def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overlap_reports_instance_deltas_on_workflow_id_mismatch():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -1019,7 +1022,7 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -1028,7 +1031,7 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
                 TwoStepMinion,
                 True,
             ),
-            StartReceipt(
+            OrchestrationStartReceipt(
                 1,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -1080,7 +1083,7 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
 
 def test_checkpoint_window_workflow_step_progression_exact_prioritizes_workflow_id_mismatch_when_both_fail():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -1097,7 +1100,7 @@ def test_checkpoint_window_workflow_step_progression_exact_prioritizes_workflow_
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -1174,7 +1177,7 @@ def test_workflow_id_delta_count_computes_new_ids_only():
 
 def test_checkpoint_window_fanout_fails_when_workflow_id_delta_below_expected():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -1190,7 +1193,7 @@ def test_checkpoint_window_fanout_fails_when_workflow_id_delta_below_expected():
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -1232,7 +1235,7 @@ def test_checkpoint_window_fanout_fails_when_workflow_id_delta_below_expected():
 
 def test_assert_runtime_expectations_persistence_at_latest_checkpoint():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -1251,7 +1254,7 @@ def test_assert_runtime_expectations_persistence_at_latest_checkpoint():
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -1281,7 +1284,7 @@ def test_assert_runtime_expectations_persistence_at_latest_checkpoint():
 
 def test_assert_persisted_context_integrity_accepts_matching_snapshot():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -1297,7 +1300,7 @@ def test_assert_persisted_context_integrity_accepts_matching_snapshot():
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -1305,7 +1308,7 @@ def test_assert_persisted_context_integrity_accepts_matching_snapshot():
                 "two-step-minion",
                 TwoStepMinion,
                 True,
-                composite_key="ck",
+                orchestration_id="ck",
             ),
         ],
         checkpoints=[
@@ -1319,7 +1322,7 @@ def test_assert_persisted_context_integrity_accepts_matching_snapshot():
                 persisted_context_snapshots_by_modpath={
                     "tests.assets.minions.two_steps.counter.basic": (
                         MinionWorkflowContext(
-                            minion_composite_key="ck",
+                            orchestration_id="ck",
                             minion_modpath="tests.assets.minions.two_steps.counter.basic",
                             workflow_id="workflow-1",
                             event=CounterEvent(seq=1),
@@ -1338,7 +1341,7 @@ def test_assert_persisted_context_integrity_accepts_matching_snapshot():
 
 def test_assert_runtime_expectations_resolutions_at_latest_checkpoint():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -1359,7 +1362,7 @@ def test_assert_runtime_expectations_resolutions_at_latest_checkpoint():
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -1367,6 +1370,7 @@ def test_assert_runtime_expectations_resolutions_at_latest_checkpoint():
                 "two-step-minion",
                 TwoStepMinion,
                 True,
+                orchestration_id="instance-1",
             ),
         ],
         checkpoints=[
@@ -1379,13 +1383,13 @@ def test_assert_runtime_expectations_resolutions_at_latest_checkpoint():
                 seen_shutdown=False,
                 metrics_counters={
                     "minion_workflow_succeeded_total": [
-                        {"labels": {LABEL_MINION_COMPOSITE_KEY: "instance-1"}, "value": 1}
+                        {"labels": {LABEL_ORCHESTRATION_ID: "instance-1"}, "value": 1}
                     ],
                     "minion_workflow_failed_total": [
-                        {"labels": {LABEL_MINION_COMPOSITE_KEY: "instance-1"}, "value": 0}
+                        {"labels": {LABEL_ORCHESTRATION_ID: "instance-1"}, "value": 0}
                     ],
                     "minion_workflow_aborted_total": [
-                        {"labels": {LABEL_MINION_COMPOSITE_KEY: "instance-1"}, "value": 0}
+                        {"labels": {LABEL_ORCHESTRATION_ID: "instance-1"}, "value": 0}
                     ],
                 },
             ),
@@ -1397,7 +1401,7 @@ def test_assert_runtime_expectations_resolutions_at_latest_checkpoint():
 
 def test_assert_runtime_expectations_workflow_steps_exact_at_latest_checkpoint():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -1420,7 +1424,7 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_latest_checkpoint()
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -1453,7 +1457,7 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_latest_checkpoint()
 
 def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -1476,7 +1480,7 @@ def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage():
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -1508,7 +1512,7 @@ def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage():
 
 def test_assert_runtime_expectations_workflow_steps_rejects_invalid_mode():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -1531,7 +1535,7 @@ def test_assert_runtime_expectations_workflow_steps_rejects_invalid_mode():
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -1565,7 +1569,7 @@ def test_assert_runtime_expectations_workflow_steps_rejects_invalid_mode():
 
 def test_assert_runtime_expectations_persistence_at_checkpoint_index():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -1585,7 +1589,7 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -1626,7 +1630,7 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
 
 def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -1650,7 +1654,7 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",
@@ -1669,7 +1673,7 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
                 successful_receipt_count=1,
                 seen_shutdown=False,
                 expected_starts={"two-step-minion": 1},
-                wrapped_directive_type="MinionStop",
+                wrapped_directive_type="OrchestrationStop",
                 workflow_step_started_ids_by_class={
                     key: {
                         "step_1": ("workflow-1",),
@@ -1699,7 +1703,7 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
 
 def test_assert_runtime_expectations_fails_for_out_of_range_checkpoint_index():
     directives = [
-        MinionStart(
+        OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
@@ -1719,7 +1723,7 @@ def test_assert_runtime_expectations_fails_for_out_of_range_checkpoint_index():
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
-            StartReceipt(
+            OrchestrationStartReceipt(
                 0,
                 "tests.assets.minions.two_steps.counter.basic",
                 "tests.assets.pipelines.emit1.counter.emit_1",

@@ -10,7 +10,7 @@ from minions._internal._framework.metrics_constants import (
     MINION_WORKFLOW_ABORTED_TOTAL,
     MINION_WORKFLOW_FAILED_TOTAL,
     MINION_WORKFLOW_SUCCEEDED_TOTAL,
-    LABEL_MINION_COMPOSITE_KEY,
+    LABEL_ORCHESTRATION_ID,
 )
 
 from tests.assets.support.logger_spied import SpiedLogger
@@ -21,13 +21,13 @@ from tests.assets.support.pipeline_spied import SpiedPipeline
 from tests.assets.support.resource_spied import SpiedResource
 from tests.assets.support.state_store_spied import SpiedStateStore
 
-from .directives import ExpectRuntime, MinionStart
+from .directives import ExpectRuntime, OrchestrationStart
 from .plan import ScenarioPlan
 from .runner import (
     ScenarioCheckpoint,
     ScenarioRunResult,
     SpyRegistry,
-    StartReceipt,
+    OrchestrationStartReceipt,
     _get_minion_event_and_context_types,
 )
 
@@ -251,10 +251,10 @@ class ScenarioVerifier:
 
     def _assert_persisted_context_integrity(self) -> None:
         spies = self._require_spies()
-        receipt_by_composite_key = {
-            r.composite_key: r
+        receipt_by_orchestration_id = {
+            r.orchestration_id: r
             for r in self._result.receipts
-            if r.success and r.composite_key
+            if r.success and r.orchestration_id
         }
 
         for checkpoint in self._result.checkpoints:
@@ -271,12 +271,12 @@ class ScenarioVerifier:
                 workflow_len = len(m_cls._mn_workflow_spec or ())
                 event_cls, context_cls = _get_minion_event_and_context_types(m_cls)
                 for ctx in contexts:
-                    receipt = receipt_by_composite_key.get(ctx.minion_composite_key)
+                    receipt = receipt_by_orchestration_id.get(ctx.orchestration_id)
                     if receipt is None:
                         pytest.fail(
                             "Persisted context has no matching successful start receipt: "
                             f"workflow_id={ctx.workflow_id!r}, "
-                            f"minion_composite_key={ctx.minion_composite_key!r}, "
+                            f"orchestration_id={ctx.orchestration_id!r}, "
                             f"checkpoint={checkpoint.order}."
                         )
                     if ctx.minion_modpath != receipt.minion_modpath:
@@ -334,14 +334,14 @@ class ScenarioVerifier:
     def _compute_minion_expectations_for_receipts(
         self,
         spies: SpyRegistry,
-        receipts: list[StartReceipt],
+        receipts: list[OrchestrationStartReceipt],
     ) -> MinionExpectations:
         minion_start_counts: defaultdict[type[SpiedMinion[Any, Any]], int] = defaultdict(int)
         expected_workflows_by_class: defaultdict[type[SpiedMinion[Any, Any]], int] = defaultdict(int)
 
         for receipt in receipts:
             directive = self._plan.flat_directives[receipt.directive_index]
-            if not isinstance(directive, MinionStart):
+            if not isinstance(directive, OrchestrationStart):
                 continue
 
             m_cls = receipt.minion_cls or spies.minions.get(receipt.minion_modpath)
@@ -616,9 +616,8 @@ class ScenarioVerifier:
                 if not r.success or not r.resolved_name:
                     continue
                 modpaths_by_name[r.resolved_name].add(r.minion_modpath)
-                metric_key = r.composite_key or r.instance_id
-                if metric_key:
-                    metric_keys_by_name[r.resolved_name].add(metric_key)
+                if r.orchestration_id:
+                    metric_keys_by_name[r.resolved_name].add(r.orchestration_id)
 
             if persistence:
                 persisted = target_checkpoint.persisted_contexts_by_modpath
@@ -663,17 +662,17 @@ class ScenarioVerifier:
                         "succeeded": sum(
                             self._counter_sample_value(s)
                             for s in counters.get(MINION_WORKFLOW_SUCCEEDED_TOTAL, [])
-                            if self._counter_sample_label(s, LABEL_MINION_COMPOSITE_KEY) in metric_keys
+                            if self._counter_sample_label(s, LABEL_ORCHESTRATION_ID) in metric_keys
                         ),
                         "failed": sum(
                             self._counter_sample_value(s)
                             for s in counters.get(MINION_WORKFLOW_FAILED_TOTAL, [])
-                            if self._counter_sample_label(s, LABEL_MINION_COMPOSITE_KEY) in metric_keys
+                            if self._counter_sample_label(s, LABEL_ORCHESTRATION_ID) in metric_keys
                         ),
                         "aborted": sum(
                             self._counter_sample_value(s)
                             for s in counters.get(MINION_WORKFLOW_ABORTED_TOTAL, [])
-                            if self._counter_sample_label(s, LABEL_MINION_COMPOSITE_KEY) in metric_keys
+                            if self._counter_sample_label(s, LABEL_ORCHESTRATION_ID) in metric_keys
                         ),
                     }
 

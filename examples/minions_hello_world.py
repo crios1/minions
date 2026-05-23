@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 
-from minions import Minion, Pipeline, Gru, minion_step
+from minions import Gru, Minion, Pipeline, minion_step
 
 # Uncomment to use uvloop:
 # import uvloop
@@ -30,7 +30,7 @@ class MyMinion(Minion[MyEvent, MyContext]):
 
 async def main():
     gru = await Gru.create()
-    await gru.start_minion(MyMinion, MyPipeline)
+    await gru.start_orchestration(MyPipeline, MyMinion)
 
 if __name__ == "__main__":
     asyncio.run(main())

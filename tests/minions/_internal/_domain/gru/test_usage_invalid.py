@@ -16,8 +16,8 @@ from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.support.gru_scenario import (
     Directive,
     GruShutdown,
-    MinionStart,
-    MinionStop,
+    OrchestrationStart,
+    OrchestrationStop,
     WaitWorkflowCompletions,
     run_gru_scenario,
 )
@@ -140,13 +140,13 @@ class TestInvalidUsage:
             )
 
     @pytest.mark.asyncio
-    async def test_gru_returns_error_when_starting_running_minion(
+    async def test_gru_returns_error_when_starting_running_orchestration(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
     ) -> None:
         # TODO:
         # - start 2 minions with the same name (would need to start different minion but give the same name)
-        # - stop minion by name => and get error as a value
+        # - stop minion by id => and get error as a value
         # TODO: but actually runs with events be created and stuff?
 
         print('--------- start problematic test ---------')
@@ -159,7 +159,7 @@ class TestInvalidUsage:
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
         ) as gru:
-            result1 = await gru.start_minion(
+            result1 = await gru.start_orchestration(
                 minion=minion_modpath,
                 pipeline=pipeline_modpath
             )
@@ -168,11 +168,11 @@ class TestInvalidUsage:
 
             assert result1.success
             assert result1.name == "simple-minion"
-            assert result1.instance_id is not None
-            assert result1.instance_id in gru._minions_by_id
-            assert result1.instance_id in gru._minion_tasks
+            assert result1.orchestration_id is not None
+            assert result1.orchestration_id in gru._minions_by_orchestration_id
+            assert gru._minions_by_orchestration_id[result1.orchestration_id]._mn_minion_instance_id in gru._minion_tasks
 
-            result2 = await gru.start_minion(
+            result2 = await gru.start_orchestration(
                 minion=minion_modpath,
                 pipeline=pipeline_modpath
             )
@@ -181,7 +181,7 @@ class TestInvalidUsage:
 
             assert not result2.success
             assert result2.reason
-            assert "Minion already running" in result2.reason
+            assert "Orchestration already running" in result2.reason
 
     @pytest.mark.asyncio
     async def test_gru_rejects_dict_inline_minion_config(
@@ -196,7 +196,7 @@ class TestInvalidUsage:
             logger=ConsoleLogger(),
             metrics=NoOpMetrics(),
         ) as gru:
-            result = await gru.start_minion(
+            result = await gru.start_orchestration(
                 minion=ConfigMinion,
                 pipeline=Emit1Pipeline,
                 minion_config={"name": "dict"},
@@ -204,11 +204,11 @@ class TestInvalidUsage:
 
             assert not result.success
             assert result.reason == (
-                "Gru.start_minion: minion_config type must be a dataclass or msgspec Struct type."
+                "Gru.start_orchestration: minion_config type must be a dataclass or msgspec Struct type."
             )
 
     @pytest.mark.asyncio
-    async def test_gru_returns_error_when_stopping_nonexistant_minion(
+    async def test_gru_returns_error_when_stopping_nonexistant_orchestration(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
     ) -> None:
@@ -217,13 +217,13 @@ class TestInvalidUsage:
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
         ) as gru:
-            result = await gru.stop_minion('mock') 
+            result = await gru.stop_orchestration('mock') 
 
             print(result)
 
             assert not result.success
             assert result.reason
-            assert "No minion found with the given name or instance ID" in result.reason
+            assert "No orchestration found with the given ID" in result.reason
 
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_mismatched_minion_and_pipeline_event_types(
@@ -238,7 +238,7 @@ class TestInvalidUsage:
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
         ) as gru:
-            result = await gru.start_minion(
+            result = await gru.start_orchestration(
                 minion=minion_modpath,
                 pipeline=pipeline_modpath
             )
@@ -264,7 +264,7 @@ class TestInvalidUsage:
 
 class TestInvalidUsageDSL:
     @pytest.mark.asyncio
-    async def test_gru_returns_error_when_starting_running_minion(
+    async def test_gru_returns_error_when_starting_running_orchestration(
         self,
         gru: Gru,
         logger: InMemoryLogger,
@@ -274,11 +274,11 @@ class TestInvalidUsageDSL:
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
 
         directives: list[Directive] = [
-            MinionStart(
+            OrchestrationStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
                 pipeline=pipeline_modpath,
             ),
-            MinionStart(
+            OrchestrationStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
                 pipeline=pipeline_modpath,
                 expect_success=False,
@@ -297,7 +297,7 @@ class TestInvalidUsageDSL:
         )
 
     @pytest.mark.asyncio
-    async def test_gru_returns_error_when_stopping_nonexistant_minion(
+    async def test_gru_returns_error_when_stopping_nonexistant_orchestration(
         self,
         gru: Gru,
         logger: InMemoryLogger,
@@ -305,7 +305,7 @@ class TestInvalidUsageDSL:
         state_store: InMemoryStateStore,
     ) -> None:
         directives: list[Directive] = [
-            MinionStop(name_or_instance_id="mock", expect_success=False),
+            OrchestrationStop(id="mock", expect_success=False),
             GruShutdown(expect_success=True),
         ]
 
@@ -328,7 +328,7 @@ class TestInvalidUsageDSL:
     ) -> None:
 
         directives: list[Directive] = [
-            MinionStart(
+            OrchestrationStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
                 pipeline="tests.assets.pipelines.types.record_event",
                 expect_success=False,
@@ -348,7 +348,7 @@ class TestInvalidUsageDSL:
 
 class TestInvalidUsageUsingNewAssetsDSL:
     @pytest.mark.asyncio
-    async def test_gru_returns_error_when_starting_running_minion(
+    async def test_gru_returns_error_when_starting_running_orchestration(
         self,
         gru: Gru,
         logger: InMemoryLogger,
@@ -358,11 +358,11 @@ class TestInvalidUsageUsingNewAssetsDSL:
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
 
         directives: list[Directive] = [
-            MinionStart(
+            OrchestrationStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
                 pipeline=pipeline_modpath,
             ),
-            MinionStart(
+            OrchestrationStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
                 pipeline=pipeline_modpath,
                 expect_success=False,
@@ -381,7 +381,7 @@ class TestInvalidUsageUsingNewAssetsDSL:
         )
 
     @pytest.mark.asyncio
-    async def test_gru_returns_error_when_stopping_nonexistant_minion(
+    async def test_gru_returns_error_when_stopping_nonexistant_orchestration(
         self,
         gru: Gru,
         logger: InMemoryLogger,
@@ -389,7 +389,7 @@ class TestInvalidUsageUsingNewAssetsDSL:
         state_store: InMemoryStateStore,
     ) -> None:
         directives: list[Directive] = [
-            MinionStop(name_or_instance_id="mock", expect_success=False),
+            OrchestrationStop(id="mock", expect_success=False),
             GruShutdown(expect_success=True),
         ]
 
@@ -412,7 +412,7 @@ class TestInvalidUsageUsingNewAssetsDSL:
     ) -> None:
 
         directives: list[Directive] = [
-            MinionStart(
+            OrchestrationStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
                 pipeline="tests.assets.pipelines.types.record_event",
                 expect_success=False,
@@ -490,7 +490,7 @@ class TestInvalidUsageUsingNewAssets:
             )
 
     @pytest.mark.asyncio
-    async def test_gru_returns_error_when_starting_running_minion(
+    async def test_gru_returns_error_when_starting_running_orchestration(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
     ) -> None:
@@ -498,37 +498,37 @@ class TestInvalidUsageUsingNewAssets:
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
 
         async with gru_factory(state_store=NoOpStateStore(), logger=ConsoleLogger(), metrics=NoOpMetrics()) as gru:
-            result1 = await gru.start_minion(
+            result1 = await gru.start_orchestration(
                 minion=minion_modpath,
                 pipeline=pipeline_modpath,
             )
 
             assert result1.success
             assert result1.name == "two-step-minion"
-            assert result1.instance_id is not None
-            assert result1.instance_id in gru._minions_by_id
-            assert result1.instance_id in gru._minion_tasks
+            assert result1.orchestration_id is not None
+            assert result1.orchestration_id in gru._minions_by_orchestration_id
+            assert gru._minions_by_orchestration_id[result1.orchestration_id]._mn_minion_instance_id in gru._minion_tasks
 
-            result2 = await gru.start_minion(
+            result2 = await gru.start_orchestration(
                 minion=minion_modpath,
                 pipeline=pipeline_modpath,
             )
 
             assert not result2.success
             assert result2.reason
-            assert "Minion already running" in result2.reason
+            assert "Orchestration already running" in result2.reason
 
     @pytest.mark.asyncio
-    async def test_gru_returns_error_when_stopping_nonexistant_minion(
+    async def test_gru_returns_error_when_stopping_nonexistant_orchestration(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
     ) -> None:
         async with gru_factory(state_store=NoOpStateStore(), logger=ConsoleLogger(), metrics=NoOpMetrics()) as gru:
-            result = await gru.stop_minion("mock")
+            result = await gru.stop_orchestration("mock")
 
             assert not result.success
             assert result.reason
-            assert "No minion found" in result.reason
+            assert "No orchestration found" in result.reason
 
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_mismatched_minion_and_pipeline_event_types(
@@ -539,7 +539,7 @@ class TestInvalidUsageUsingNewAssets:
         pipeline_modpath = "tests.assets.pipelines.types.record_event"
 
         async with gru_factory(state_store=NoOpStateStore(), logger=ConsoleLogger(), metrics=NoOpMetrics()) as gru:
-            result = await gru.start_minion(
+            result = await gru.start_orchestration(
                 minion=minion_modpath,
                 pipeline=pipeline_modpath,
             )

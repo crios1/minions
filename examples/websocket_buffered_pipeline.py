@@ -77,7 +77,7 @@ class PrintMinion(Minion[WsEvent, PrintCtx]):
 
 async def main():
     gru = await Gru.create()
-    await gru.start_minion(PrintMinion, BufferedWebsocketPipeline)
+    await gru.start_orchestration(BufferedWebsocketPipeline, PrintMinion)
 
 
 if __name__ == "__main__":

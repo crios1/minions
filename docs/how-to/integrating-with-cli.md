@@ -19,8 +19,8 @@ The shell shares the Gru event loop; commands submit coroutines with `asyncio.ru
 
 - `start MINION_MODULEPATH MINION_CONFIG_PATH PIPELINE_MODULEPATH`
   - Queues a start. Module paths must resolve to a `minion`/`pipeline` variable or a single subclass in the module.
-- `stop NAME_OR_INSTANCE_ID ...`
-  - Stops matching minions. Names map to `Minion.name`; instance IDs come from `start` responses and `status`.
+- `stop ORCHESTRATION_ID ...`
+  - Stops matching orchestrations. Orchestration IDs come from `start` responses and `status`.
 - `status [--await] [--timeout N] [targets...]`
   - Without flags: prints a snapshot of pending/starting/running/stopping counts or specific targets.
   - With `--await`: waits for pending operations to settle.

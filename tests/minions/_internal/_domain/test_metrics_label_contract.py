@@ -34,7 +34,7 @@ async def test_pipeline_runtime_metric_labels_match_contract():
     class FakeMinion:
         _mn_name = "ContractMinion"
         _mn_minion_instance_id = "contract-minion"
-        _mn_minion_composite_key = "contract-minion-key"
+        _mn_orchestration_id = "contract-minion-key"
         _mn_minion_modpath = "tests.metrics_contract.FakeMinion"
 
         def __init__(self) -> None:

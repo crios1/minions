@@ -8,7 +8,7 @@ from pprint import pprint
 from typing import Literal, Optional
 
 from .gru import Gru
-from .gru_result_types import GruResult, StartMinionResult
+from .gru_result_types import GruResult, StartResult
 
 State = Literal[
     "starting","running","stopping",
@@ -145,9 +145,9 @@ class GruShell(cmd.Cmd):
 
         minion_modpath, minion_config_path, pipeline_modpath = argv
         fut = self._submit(
-            self._gru.start_minion(
-                minion_modpath,
-                pipeline_modpath,
+            self._gru.start_orchestration(
+                pipeline=pipeline_modpath,
+                minion=minion_modpath,
                 minion_config_path=minion_config_path,
             )
         )
@@ -162,12 +162,12 @@ class GruShell(cmd.Cmd):
             except Exception:
                 self._start_ops[pending_id] = f  # keep for status to show 'failed'
                 return
-            if not isinstance(result, StartMinionResult) or not result.success or not result.instance_id:
+            if not isinstance(result, StartResult) or not result.success or not result.orchestration_id:
                 self._start_ops[pending_id] = f  # keep for status to show 'failed'
                 return
             self._start_ops.pop(pending_id, None)
-            self._start_ops[result.instance_id] = f
-            self._last_targets = [result.instance_id]
+            self._start_ops[result.orchestration_id] = f
+            self._last_targets = [result.orchestration_id]
 
         fut.add_done_callback(_cb)
 
@@ -179,10 +179,10 @@ class GruShell(cmd.Cmd):
     def do_stop(self, line: str):
         ids = self._to_argv(line)
         if not ids:
-            print("Usage: stop NAME_OR_INSTANCE_ID ...")
+            print("Usage: stop ORCHESTRATION_ID ...")
             return
         for mid in ids:
-            fut = self._submit(self._gru.stop_minion(mid))
+            fut = self._submit(self._gru.stop_orchestration(mid))
             self._stop_ops[mid] = fut
         self._last_targets = ids
         print(f"stop queued for {len(ids)}")

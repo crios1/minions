@@ -2,8 +2,8 @@ from tests.support.gru_scenario.directives import (
     Concurrent,
     ExpectRuntime,
     GruShutdown,
-    MinionStart,
-    MinionStop,
+    OrchestrationStart,
+    OrchestrationStop,
     RuntimeExpectSpec,
     WaitWorkflowCompletions,
     AfterWorkflowStarts,
@@ -12,11 +12,11 @@ from tests.support.gru_scenario.directives import (
 
 
 def test_iter_directives_flattens_concurrent():
-    d1a = MinionStart(minion="m1", pipeline="p1")
-    d1b = MinionStart(minion="m2", pipeline="p2")
+    d1a = OrchestrationStart(minion="m1", pipeline="p1")
+    d1b = OrchestrationStart(minion="m2", pipeline="p2")
     d2 = WaitWorkflowCompletions()
-    d3a = MinionStop(name_or_instance_id="m1", expect_success=True)
-    d3b = MinionStop(name_or_instance_id="m2", expect_success=True)
+    d3a = OrchestrationStop(id=d1a, expect_success=True)
+    d3b = OrchestrationStop(id=d1b, expect_success=True)
     d4 = GruShutdown()
 
     directives = [Concurrent(d1a, d1b), d2, Concurrent(d3a, d3b), d4]
@@ -32,8 +32,8 @@ def test_wait_workflow_completions_accepts_minion_names_and_mode():
 
 
 def test_iter_directives_flattens_wait_workflow_starts_then_wrapped_directive():
-    d1 = MinionStart(minion="m1", pipeline="p1")
-    d2 = MinionStop(name_or_instance_id="m1", expect_success=True)
+    d1 = OrchestrationStart(minion="m1", pipeline="p1")
+    d2 = OrchestrationStop(id=d1, expect_success=True)
     wrapped = AfterWorkflowStarts(expected={"m1": 1}, directive=d2)
     d3 = GruShutdown()
 

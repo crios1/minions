@@ -24,8 +24,8 @@ from .directives import (
     Directive,
     ExpectRuntime,
     GruShutdown,
-    MinionStart,
-    MinionStop,
+    OrchestrationStart,
+    OrchestrationStop,
     WaitWorkflowCompletions,
     AfterWorkflowStarts,
     iter_directives_flat,
@@ -64,7 +64,7 @@ class SpyRegistry:
 
 
 @dataclass(frozen=True)
-class StartReceipt:
+class OrchestrationStartReceipt:
     directive_index: int
     minion_modpath: str
     pipeline_modpath: str
@@ -72,7 +72,7 @@ class StartReceipt:
     resolved_name: str | None
     minion_cls: type[SpiedMinion[Any, Any]] | None
     success: bool
-    composite_key: str | None = None
+    orchestration_id: str | None = None
 
 
 @dataclass
@@ -82,7 +82,7 @@ class ScenarioRunResult:
     started_minions: set[SpiedMinion[Any, Any]] = field(default_factory=lambda: set())
     instance_tags: defaultdict[type[SpyMixin], set[int]] = field(default_factory=lambda: defaultdict(set))
     extra_calls: list[tuple[type[SpyMixin], tuple[object, ...], dict[str, object]]] = field(default_factory=lambda: list())
-    receipts: list[StartReceipt] = field(default_factory=lambda: list())
+    receipts: list[OrchestrationStartReceipt] = field(default_factory=lambda: list())
     checkpoints: list["ScenarioCheckpoint"] = field(default_factory=lambda: list())
 
 
@@ -120,6 +120,7 @@ class ScenarioRunner:
         self._timeout = per_verification_timeout
         self._spies = SpyRegistry()
         self._result: ScenarioRunResult | None = None
+        self._orchestration_start_receipts_by_directive_id: dict[int, OrchestrationStartReceipt] = {}
 
     async def run(self) -> ScenarioRunResult:
         self._discover_spies()
@@ -132,7 +133,7 @@ class ScenarioRunner:
 
     def _discover_spies(self) -> None:
         for d in iter_directives_flat(self._plan.directives):
-            if not isinstance(d, MinionStart):
+            if not isinstance(d, OrchestrationStart):
                 continue
 
             self._spies.pipeline_start_attempt_counts[d.pipeline] += 1
@@ -141,7 +142,7 @@ class ScenarioRunner:
                 m_cls = self._insp.get_minion_class(d.minion)
                 if not issubclass(m_cls, SpiedMinion):
                     pytest.fail(
-                        "MinionStart minion must resolve to a spy-enabled minion subclass; "
+                        "OrchestrationStart minion must resolve to a spy-enabled minion subclass; "
                         f"got {m_cls!r} for '{d.minion}'"
                     )
                 self._spies.minions[d.minion] = m_cls
@@ -158,7 +159,7 @@ class ScenarioRunner:
                 p_cls = self._insp.get_pipeline_class(d.pipeline)
                 if not issubclass(p_cls, SpiedPipeline):
                     pytest.fail(
-                        "MinionStart pipeline must resolve to a spy-enabled pipeline subclass; "
+                        "OrchestrationStart pipeline must resolve to a spy-enabled pipeline subclass; "
                         f"got {p_cls!r} for '{d.pipeline}'"
                     )
                 self._spies.pipelines[d.pipeline] = p_cls
@@ -175,10 +176,10 @@ class ScenarioRunner:
         if isinstance(d, Concurrent):
             await asyncio.gather(*[self._execute(child) for child in d.directives])
 
-        elif isinstance(d, MinionStart):
+        elif isinstance(d, OrchestrationStart):
             await self._run_start(d)
 
-        elif isinstance(d, MinionStop):
+        elif isinstance(d, OrchestrationStop):
             await self._run_stop(d)
 
         elif isinstance(d, WaitWorkflowCompletions):
@@ -196,58 +197,74 @@ class ScenarioRunner:
         else:
             pytest.fail(f"Unknown directive: {d!r}")
 
-    async def _run_start(self, d: MinionStart) -> None:
+    async def _run_start(self, d: OrchestrationStart) -> None:
         result = self._require_result()
-        r = await self._gru.start_minion(
-            minion=d.minion,
+        r = await self._gru.start_orchestration(
             pipeline=d.pipeline,
+            minion=d.minion,
             minion_config_path=d.minion_config_path,
         )
         if r.success != d.expect_success:
-            pytest.fail(f"start_minion mismatch: {d} -> {r}")
+            pytest.fail(f"start_orchestration mismatch: {d} -> {r}")
 
-        receipt = StartReceipt(
+        receipt = OrchestrationStartReceipt(
             directive_index=self._plan.directive_index(d),
             minion_modpath=d.minion,
             pipeline_modpath=d.pipeline,
-            instance_id=getattr(r, "instance_id", None),
+            instance_id=None,
             resolved_name=getattr(r, "name", None),
             minion_cls=None,
             success=r.success,
+            orchestration_id=getattr(r, "orchestration_id", None),
         )
 
         if not r.success:
             result.receipts.append(receipt)
+            self._orchestration_start_receipts_by_directive_id[id(d)] = receipt
             return
 
         minion_inst = None
-        if receipt.instance_id:
-            minion_inst = self._insp.get_minion_instance(receipt.instance_id)
+        if receipt.orchestration_id:
+            minion_inst = self._insp.get_minion_by_orchestration_id(receipt.orchestration_id)
 
         if minion_inst is not None:
+            instance_id = getattr(minion_inst, "_mn_minion_instance_id", None)
             resolved_name = getattr(minion_inst, "_mn_name", receipt.resolved_name)
             m_cls = type(minion_inst)
             minion_cls = m_cls if issubclass(m_cls, SpiedMinion) else None
-            receipt = StartReceipt(
+            receipt = OrchestrationStartReceipt(
                 directive_index=receipt.directive_index,
                 minion_modpath=receipt.minion_modpath,
                 pipeline_modpath=receipt.pipeline_modpath,
-                instance_id=receipt.instance_id,
+                instance_id=instance_id,
                 resolved_name=resolved_name,
                 minion_cls=minion_cls,
                 success=receipt.success,
-                composite_key=getattr(minion_inst, "_mn_minion_composite_key", None),
+                orchestration_id=receipt.orchestration_id,
             )
             if isinstance(minion_inst, SpiedMinion):
                 result.started_minions.add(minion_inst)
 
         result.receipts.append(receipt)
+        self._orchestration_start_receipts_by_directive_id[id(d)] = receipt
         self._record_instance_tags(minion_inst, d.pipeline, receipt.instance_id)
 
-    async def _run_stop(self, d: MinionStop) -> None:
-        r = await self._gru.stop_minion(name_or_instance_id=d.name_or_instance_id)
+    async def _run_stop(self, d: OrchestrationStop) -> None:
+        target_id = self._resolve_stop_target_id(d.id)
+        if target_id is None:
+            pytest.fail(f"stop target could not be resolved from {d.id!r}")
+        r = await self._gru.stop_orchestration(orchestration_id=target_id)
         if r.success != d.expect_success:
-            pytest.fail(f"stop_minion mismatch: {d} -> {r}")
+            pytest.fail(f"stop_orchestration mismatch: {d} -> {r}")
+
+    def _resolve_stop_target_id(self, target: str | OrchestrationStart) -> str | None:
+        if isinstance(target, str):
+            return target
+
+        receipt = self._orchestration_start_receipts_by_directive_id.get(id(target))
+        if receipt is None or not receipt.success or receipt.orchestration_id is None:
+            return None
+        return receipt.orchestration_id
 
     async def _run_shutdown(self, d: GruShutdown) -> None:
         result = self._require_result()
@@ -274,9 +291,9 @@ class ScenarioRunner:
         )
 
     async def _wait_workflow_starts_then(self, d: AfterWorkflowStarts) -> None:
-        if not isinstance(d.directive, MinionStop):
+        if not isinstance(d.directive, OrchestrationStop):
             pytest.fail(
-                "AfterWorkflowStarts currently supports wrapping MinionStop only; "
+                "AfterWorkflowStarts currently supports wrapping OrchestrationStop only; "
                 f"got {type(d.directive).__name__}"
             )
         waiter = ScenarioWaiter(
@@ -470,15 +487,15 @@ class ScenarioRunner:
         except Exception:
             return None
 
-        receipts_by_composite_key = {
-            r.composite_key: r
+        receipts_by_orchestration_id = {
+            r.orchestration_id: r
             for r in self._require_result().receipts
-            if r.success and r.composite_key and r.minion_cls is not None
+            if r.success and r.orchestration_id and r.minion_cls is not None
         }
         contexts_by_modpath: defaultdict[str, list[MinionWorkflowContext[Any, Any]]] = defaultdict(list)
         try:
             for stored_context in stored_contexts:
-                receipt = receipts_by_composite_key.get(stored_context.orchestration_id)
+                receipt = receipts_by_orchestration_id.get(stored_context.orchestration_id)
                 ctx: MinionWorkflowContext[Any, Any]
                 if receipt is not None and receipt.minion_cls is not None:
                     event_cls, context_cls = _get_minion_event_and_context_types(receipt.minion_cls)
@@ -629,7 +646,7 @@ class ScenarioWaiter:
     def _add_expected_for_receipts(
         self,
         expected_per_class: defaultdict[type[SpiedMinion[Any, Any]], int],
-        receipts: list[StartReceipt],
+        receipts: list[OrchestrationStartReceipt],
     ) -> None:
         for receipt in receipts:
             if not receipt.success:

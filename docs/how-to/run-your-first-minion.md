@@ -41,7 +41,7 @@ from minions import Gru, GruShell
 
 async def main():
     gru = await Gru.create()
-    await gru.start_minion(
+    await gru.start_orchestration(
         "my_app.minions",   # module containing your Minion subclass or `minion`
         "my_app.pipelines", # module containing your Pipeline subclass or `pipeline`
         minion_config_path="config/print.json",
@@ -62,8 +62,8 @@ asyncio.run(main())
 
 Inside the shell:
 
-- `start MINION_MODULEPATH CONFIG_PATH PIPELINE_MODULEPATH` — start additional minions.
-- `stop NAME_OR_INSTANCE_ID ...` — stop by instance ID or minion name.
+- `start MINION_MODULEPATH CONFIG_PATH PIPELINE_MODULEPATH` — start additional orchestrations.
+- `stop ORCHESTRATION_ID ...` — stop by orchestration ID.
 - `status [--await] [--timeout N] [ids...]` — snapshot or wait for orchestration to settle.
 - `shutdown` — gracefully stop everything.
 

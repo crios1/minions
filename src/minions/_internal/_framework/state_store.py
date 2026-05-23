@@ -133,7 +133,7 @@ class StateStore(AsyncComponent):
         ctx: MinionWorkflowContext[Any, Any],
     ) -> PersistenceOperationResult:
         workflow_id = ctx.workflow_id
-        orchestration_id = ctx.minion_composite_key
+        orchestration_id = ctx.orchestration_id
 
         try:
             serialized_context = serialize_persisted_workflow_context(ctx)

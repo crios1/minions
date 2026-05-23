@@ -116,7 +116,7 @@ class MyMinion(Minion[MyEvent, MyContext]):
 
 async def main():
     gru = await Gru.create()
-    await gru.start_minion(MyMinion, MyPipeline)
+    await gru.start_orchestration(MyPipeline, MyMinion)
 
 if __name__ == "__main__":
     asyncio.run(main())

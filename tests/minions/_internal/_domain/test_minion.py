@@ -90,7 +90,7 @@ class TestMinionSubclassingValid:
 
         m = MyMinion(
             minion_instance_id="mock",
-            minion_composite_key="mock",
+            orchestration_id="mock",
             minion_modpath="mock",
             config_path=None,
             state_store=NoOpStateStore(),
@@ -118,7 +118,7 @@ class TestMinionSubclassingValid:
 
         m = MyMinion(
             minion_instance_id="mock",
-            minion_composite_key="mock",
+            orchestration_id="mock",
             minion_modpath="mock",
             config_path="mock",
             state_store=NoOpStateStore(),
@@ -145,7 +145,7 @@ class TestMinionSubclassingValid:
 
         m = MyMinion(
             minion_instance_id="mock",
-            minion_composite_key="mock",
+            orchestration_id="mock",
             minion_modpath="mock",
             config_path="mock",
             state_store=NoOpStateStore(),
@@ -181,7 +181,7 @@ class TestMinionSubclassingValid:
 
         m = MyMinion(
             minion_instance_id="mock",
-            minion_composite_key="mock",
+            orchestration_id="mock",
             minion_modpath="mock",
             config_path="mock",
             state_store=NoOpStateStore(),
@@ -207,7 +207,7 @@ class TestMinionSubclassingValid:
 
         m = MyMinion(
             minion_instance_id="mock",
-            minion_composite_key="mock",
+            orchestration_id="mock",
             minion_modpath="mock",
             config_path="mock",
             state_store=NoOpStateStore(),
@@ -230,7 +230,7 @@ class TestMinionSubclassingValid:
 
         m = MyMinion(
             minion_instance_id="mock",
-            minion_composite_key="mock",
+            orchestration_id="mock",
             minion_modpath="mock",
             config_path="mock",
             state_store=NoOpStateStore(),
@@ -329,7 +329,7 @@ class TestMinionSubclassingInvalid:
                 name = set('invalid_name') # only kebab-case is valid
             MyMinion(
                 minion_instance_id="mock",
-                minion_composite_key="mock",
+                orchestration_id="mock",
                 minion_modpath="mock",
                 config_path="mock",
                 state_store=NoOpStateStore(),

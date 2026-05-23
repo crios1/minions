@@ -1,6 +1,7 @@
 # type: ignore
 
 import asyncio
+
 from minions import Gru, GruShell
 
 MINION_SPECS = [
@@ -10,7 +11,7 @@ MINION_SPECS = [
 ]
 
 async def _start_initial_minions(gru: Gru):
-    coros = [gru.start_minion(*spec) for spec in MINION_SPECS]
+    coros = [gru.start_orchestration(*spec) for spec in MINION_SPECS]
     results = await asyncio.gather(*coros, return_exceptions=True)
     failures = [r for r in results if isinstance(r, Exception)]
     if failures:

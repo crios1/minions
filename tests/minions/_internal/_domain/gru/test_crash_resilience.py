@@ -7,7 +7,7 @@ import pytest
 from minions._internal._domain.gru import Gru
 from minions._internal._framework.metrics_constants import (
     LABEL_ERROR_TYPE,
-    LABEL_MINION_COMPOSITE_KEY,
+    LABEL_ORCHESTRATION_ID,
     LABEL_MINION_WORKFLOW_STEP,
     LABEL_PIPELINE,
     LABEL_RESOURCE,
@@ -30,17 +30,17 @@ GOOD_MINION = "tests.assets.crash.minions.good"
 GOOD_PIPELINE = "tests.assets.crash.pipelines.emit_1_then_block"
 
 
-def composite_key(minion_modpath: str, pipeline_modpath: str, config: str = "") -> str:
+def orchestration_id(minion_modpath: str, pipeline_modpath: str, config: str = "") -> str:
     return f"{minion_modpath}|{config}|{pipeline_modpath}"
 
 
 async def assert_gru_can_start_and_stop_known_good_minion(gru: Gru) -> None:
-    result = await gru.start_minion(GOOD_MINION, GOOD_PIPELINE)
+    result = await gru.start_orchestration(GOOD_PIPELINE, GOOD_MINION)
     assert result.success
-    assert result.instance_id is not None
+    assert result.orchestration_id is not None
     assert isinstance(gru._logger, InMemoryLogger)
     assert await gru._logger.wait_for_log("Workflow succeeded", timeout=1.0, poll_interval=0.01)
-    stop = await gru.stop_minion(result.instance_id)
+    stop = await gru.stop_orchestration(result.orchestration_id)
     assert stop.success
     assert gru._runtime_state_snapshot() == {}
 
@@ -51,7 +51,7 @@ def assert_counter(metrics: InMemoryMetrics, metric_name: str, labels: dict[str,
 
 
 @pytest.mark.asyncio
-async def test_start_minion_contains_state_store_resume_read_failure(
+async def test_start_orchestration_contains_state_store_resume_read_failure(
     gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
@@ -59,7 +59,7 @@ async def test_start_minion_contains_state_store_resume_read_failure(
     state_store = BoomGetContextsForOrchestrationStateStore(logger=logger)
 
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        result = await gru.start_minion(GOOD_MINION, GOOD_PIPELINE)
+        result = await gru.start_orchestration(GOOD_PIPELINE, GOOD_MINION)
 
         assert not result.success
         assert result.reason == "GoodMinion.startup failed (tests/assets/crash/minions/good.py)"
@@ -67,7 +67,7 @@ async def test_start_minion_contains_state_store_resume_read_failure(
             "BoomGetContextsForOrchestrationStateStore.get_contexts_for_orchestration failed",
             log_kwargs={"error_type": "BoomError"},
         )
-        assert logger.has_log("Failed to start minion", log_kwargs={"error_message": BOOM_MESSAGE})
+        assert logger.has_log("Failed to start orchestration", log_kwargs={"error_message": BOOM_MESSAGE})
         assert gru._runtime_state_snapshot() == {}
 
 
@@ -81,7 +81,7 @@ async def test_start_minion_contains_state_store_resume_read_failure(
         ("tests.assets.crash.minions.depends_on_boom_startup_resource", GOOD_PIPELINE),
     ],
 )
-async def test_start_minion_contains_user_code_startup_failures(
+async def test_start_orchestration_contains_user_code_startup_failures(
     gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
@@ -92,14 +92,14 @@ async def test_start_minion_contains_user_code_startup_failures(
 ) -> None:
     config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        result = await gru.start_minion(
+        result = await gru.start_orchestration(
             minion=minion_modpath,
             pipeline=pipeline_modpath,
             minion_config_path=config_path if "boom_load_config" in minion_modpath else None,
         )
 
         assert not result.success
-        assert logger.has_log("Failed to start minion", log_kwargs={"error_message": BOOM_MESSAGE})
+        assert logger.has_log("Failed to start orchestration", log_kwargs={"error_message": BOOM_MESSAGE})
         assert gru._runtime_state_snapshot() == {}
         await assert_gru_can_start_and_stop_known_good_minion(gru)
 
@@ -112,7 +112,7 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
     state_store: InMemoryStateStore,
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        result = await gru.start_minion("tests.assets.crash.minions.boom_step", GOOD_PIPELINE)
+        result = await gru.start_orchestration(GOOD_PIPELINE, "tests.assets.crash.minions.boom_step")
         assert result.success
 
         assert await logger.wait_for_log(
@@ -125,7 +125,7 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
             metrics,
             MINION_WORKFLOW_STEP_FAILED_TOTAL,
             {
-                LABEL_MINION_COMPOSITE_KEY: composite_key(
+                LABEL_ORCHESTRATION_ID: orchestration_id(
                     "tests.assets.crash.minions.boom_step",
                     "tests.assets.crash.pipelines.emit_1_then_block",
                 ),
@@ -137,14 +137,14 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
             metrics,
             MINION_WORKFLOW_FAILED_TOTAL,
             {
-                LABEL_MINION_COMPOSITE_KEY: composite_key(
+                LABEL_ORCHESTRATION_ID: orchestration_id(
                     "tests.assets.crash.minions.boom_step",
                     "tests.assets.crash.pipelines.emit_1_then_block",
                 ),
                 LABEL_ERROR_TYPE: "BoomError",
             },
         )
-        stop = await gru.stop_minion(result.instance_id or "")
+        stop = await gru.stop_orchestration(result.orchestration_id or "")
         assert stop.success
         assert gru._runtime_state_snapshot() == {}
 
@@ -157,7 +157,7 @@ async def test_pipeline_produce_event_failure_is_logged_measured_and_shutdown_is
     state_store: InMemoryStateStore,
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        result = await gru.start_minion(GOOD_MINION, "tests.assets.crash.pipelines.boom_produce_event")
+        result = await gru.start_orchestration("tests.assets.crash.pipelines.boom_produce_event", GOOD_MINION)
         assert result.success
 
         assert await logger.wait_for_log(
@@ -186,7 +186,7 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
     state_store: InMemoryStateStore,
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        result = await gru.start_minion("tests.assets.crash.minions.boom_resource_method", GOOD_PIPELINE)
+        result = await gru.start_orchestration(GOOD_PIPELINE, "tests.assets.crash.minions.boom_resource_method")
         assert result.success
 
         assert await logger.wait_for_log(
@@ -205,7 +205,7 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
                 LABEL_ERROR_TYPE: "BoomError",
             },
         )
-        stop = await gru.stop_minion(result.instance_id or "")
+        stop = await gru.stop_orchestration(result.orchestration_id or "")
         assert stop.success
         assert gru._runtime_state_snapshot() == {}
 
@@ -228,13 +228,13 @@ async def test_shutdown_failures_are_reported_and_singleton_is_released(
     pipeline_modpath: str,
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        result = await gru.start_minion(minion_modpath, pipeline_modpath)
+        result = await gru.start_orchestration(pipeline_modpath, minion_modpath)
         assert result.success
-        stop = await gru.stop_minion(result.instance_id or "")
+        stop = await gru.stop_orchestration(result.orchestration_id or "")
 
         if minion_modpath.endswith(".boom_shutdown"):
             assert not stop.success
-            assert logger.has_log("Failed to stop minion")
+            assert logger.has_log("Failed to stop orchestration")
             assert gru._runtime_state_snapshot() == {}
         else:
             assert stop.success

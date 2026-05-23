@@ -5,8 +5,8 @@ from typing import Iterable, Iterator
 from minions._internal._domain.gru import Gru
 
 
-_MINION_START_PARAMS = set(inspect.signature(Gru.start_minion).parameters)
-_MINION_STOP_PARAMS = set(inspect.signature(Gru.stop_minion).parameters)
+_ORCHESTRATION_START_PARAMS = set(inspect.signature(Gru.start_orchestration).parameters)
+_ORCHESTRATION_STOP_PARAMS = set(inspect.signature(Gru.stop_orchestration).parameters)
 
 
 class Directive:
@@ -22,23 +22,23 @@ class RuntimeExpectSpec:
 
 
 @dataclass(frozen=True)
-class MinionStart(Directive):
+class OrchestrationStart(Directive):
     minion: str
     pipeline: str
     minion_config_path: str | None = None
     expect_success: bool = True
 
     def as_kwargs(self) -> dict[str, object]:
-        return {k: v for k, v in self.__dict__.items() if k in _MINION_START_PARAMS}
+        return {k: v for k, v in self.__dict__.items() if k in _ORCHESTRATION_START_PARAMS}
 
 
 @dataclass(frozen=True)
-class MinionStop(Directive):
-    name_or_instance_id: str
+class OrchestrationStop(Directive):
+    id: str | OrchestrationStart
     expect_success: bool
 
     def as_kwargs(self) -> dict[str, object]:
-        return {k: v for k, v in self.__dict__.items() if k in _MINION_STOP_PARAMS}
+        return {k: v for k, v in self.__dict__.items() if k in _ORCHESTRATION_STOP_PARAMS}
 
 
 @dataclass(frozen=True)

@@ -20,8 +20,8 @@ from tests.support.gru_scenario import (
     Directive,
     ExpectRuntime,
     GruShutdown,
-    MinionStart,
-    MinionStop,
+    OrchestrationStart,
+    OrchestrationStop,
     RuntimeExpectSpec,
     WaitWorkflowCompletions,
     run_gru_scenario,
@@ -98,7 +98,7 @@ class TestValidUsage:
     # Verification ownership: tracked in DSL backlog `tests/support/gru_scenario/VERIFICATION_TODOS.md` (V-001).
 
     @pytest.mark.asyncio
-    async def test_gru_start_stop_minion(
+    async def test_gru_start_stop_orchestration(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         reload_wait_for_subs_pipeline: Callable[..., None],
@@ -114,25 +114,25 @@ class TestValidUsage:
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
         ) as gru:
-            result = await gru.start_minion(
+            result = await gru.start_orchestration(
                 minion=minion_modpath,
                 pipeline=pipeline_modpath
             )
 
             assert result.success
             assert result.name == "simple-minion"
-            assert result.instance_id in gru._minions_by_id
-            assert result.instance_id in gru._minion_tasks
+            assert result.orchestration_id in gru._minions_by_orchestration_id
+            assert gru._minions_by_orchestration_id[result.orchestration_id]._mn_minion_instance_id in gru._minion_tasks
 
             await SimpleMinion.wait_for_calls(
                 expected={"step_1": 1, "step_2": 1},
                 timeout=5.0,
             )
 
-            await gru.stop_minion(result.instance_id)
+            await gru.stop_orchestration(result.orchestration_id)
 
     @pytest.mark.asyncio
-    async def test_gru_start_stop_minion_from_classes(
+    async def test_gru_start_stop_orchestration_from_classes(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         reload_pipeline_module: Callable[[str], None],
@@ -148,17 +148,21 @@ class TestValidUsage:
             logger=ConsoleLogger(),
             metrics=NoOpMetrics(),
         ) as gru:
-            start_result = await gru.start_minion(
-                minion=TwoStepMinion,
+            start_result = await gru.start_orchestration(
                 pipeline=Emit1Pipeline,
+                minion=TwoStepMinion,
             )
 
             assert start_result.success
             assert start_result.name == "two-step-minion"
-            assert start_result.instance_id in gru._minions_by_id
-            assert start_result.instance_id in gru._minion_tasks
+            assert start_result.orchestration_id in gru._minions_by_orchestration_id
+            assert (
+                gru._minions_by_orchestration_id[start_result.orchestration_id]
+                ._mn_minion_instance_id
+                in gru._minion_tasks
+            )
 
-            stop_result = await gru.stop_minion(start_result.instance_id)
+            stop_result = await gru.stop_orchestration(start_result.orchestration_id)
             assert stop_result.success
 
 
@@ -191,9 +195,9 @@ class TestValidUsage:
                 cls.enable_spy()
                 cls.reset_spy()
 
-            r1 = await gru.start_minion(minion=minion1, pipeline=pipeline1)
-            r2 = await gru.start_minion(minion=minion2, pipeline=pipeline2)
-            r3 = await gru.start_minion(minion=minion3, pipeline=pipeline3)
+            r1 = await gru.start_orchestration(minion=minion1, pipeline=pipeline1)
+            r2 = await gru.start_orchestration(minion=minion2, pipeline=pipeline2)
+            r3 = await gru.start_orchestration(minion=minion3, pipeline=pipeline3)
 
             assert r1.success and r2.success and r3.success
 
@@ -208,12 +212,12 @@ class TestValidUsage:
             await SimpleResourcedMinion3.wait_for_calls(expected={"step_1": 1, "step_2": 1}, timeout=5.0)
 
             # stop them
-            assert r1.instance_id is not None
-            await gru.stop_minion(r1.instance_id)
-            assert r2.instance_id is not None
-            await gru.stop_minion(r2.instance_id)
-            assert r3.instance_id is not None
-            await gru.stop_minion(r3.instance_id)
+            assert r1.orchestration_id is not None
+            await gru.stop_orchestration(r1.orchestration_id)
+            assert r2.orchestration_id is not None
+            await gru.stop_orchestration(r2.orchestration_id)
+            assert r3.orchestration_id is not None
+            await gru.stop_orchestration(r3.orchestration_id)
 
     # Verification ownership: tracked in DSL backlog `tests/support/gru_scenario/VERIFICATION_TODOS.md` (V-002).
 
@@ -254,9 +258,9 @@ class TestValidUsage:
             logger=logger,
             metrics=InMemoryMetrics()
         ) as gru:
-            r1 = await gru.start_minion(minion=minion_modpath, minion_config_path=cfg1, pipeline=pipeline_modpath)
-            r2 = await gru.start_minion(minion=minion_modpath, minion_config_path=cfg2, pipeline=pipeline_modpath)
-            r3 = await gru.start_minion(minion=minion_modpath, minion_config_path=cfg3, pipeline=pipeline_modpath)
+            r1 = await gru.start_orchestration(minion=minion_modpath, minion_config_path=cfg1, pipeline=pipeline_modpath)
+            r2 = await gru.start_orchestration(minion=minion_modpath, minion_config_path=cfg2, pipeline=pipeline_modpath)
+            r3 = await gru.start_orchestration(minion=minion_modpath, minion_config_path=cfg3, pipeline=pipeline_modpath)
 
             assert r1.success and r2.success and r3.success
 
@@ -272,21 +276,21 @@ class TestValidUsage:
             )
 
             # stop minions and assert cleanup
-            assert r1.instance_id is not None
-            await gru.stop_minion(r1.instance_id)
+            assert r1.orchestration_id is not None
+            await gru.stop_orchestration(r1.orchestration_id)
             assert len(gru._pipelines) == 1
-            assert r2.instance_id is not None
-            await gru.stop_minion(r2.instance_id)
+            assert r2.orchestration_id is not None
+            await gru.stop_orchestration(r2.orchestration_id)
             assert len(gru._pipelines) == 1
-            assert r3.instance_id is not None
-            await gru.stop_minion(r3.instance_id)
+            assert r3.orchestration_id is not None
+            await gru.stop_orchestration(r3.orchestration_id)
 
             # after all stopped, pipeline and resources cleaned
             assert len(gru._pipelines) == 0
             assert len(gru._resources) == 0
 
     @pytest.mark.asyncio
-    async def test_gru_start_minion_shutdown_without_stop(
+    async def test_gru_start_orchestration_shutdown_without_stop(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ) -> None:
@@ -297,15 +301,15 @@ class TestValidUsage:
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
         ) as gru:
-            result = await gru.start_minion(
+            result = await gru.start_orchestration(
                 minion=minion_modpath,
                 pipeline=pipeline_modpath
             )
 
             assert result.success
             assert result.name == "simple-minion"
-            assert result.instance_id in gru._minions_by_id
-            assert result.instance_id in gru._minion_tasks
+            assert result.orchestration_id in gru._minions_by_orchestration_id
+            assert gru._minions_by_orchestration_id[result.orchestration_id]._mn_minion_instance_id in gru._minion_tasks
 
     @pytest.mark.asyncio
     async def test_gru_loads_minion_config_into_workflow_context(
@@ -327,23 +331,23 @@ class TestValidUsage:
             logger=logger,
             metrics=InMemoryMetrics(),
         ) as gru:
-            result = await gru.start_minion(
+            result = await gru.start_orchestration(
                 minion=minion_modpath,
                 minion_config_path=config_path,
                 pipeline=pipeline_modpath,
             )
 
             assert result.success
-            assert result.instance_id is not None
+            assert result.orchestration_id is not None
 
             await ConfigMinion.wait_for_calls(expected={"step_1": 1, "step_2": 1}, timeout=5.0)
 
-            minion = gru._minions_by_id[result.instance_id]
+            minion = gru._minions_by_orchestration_id[result.orchestration_id]
             assert isinstance(minion, ConfigMinion)
             assert isinstance(minion.config, AssetMinionConfig)
             assert minion.config.name == "alpha"
 
-            await gru.stop_minion(result.instance_id)
+            await gru.stop_orchestration(result.orchestration_id)
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -376,20 +380,20 @@ class TestValidUsage:
             logger=ConsoleLogger(),
             metrics=NoOpMetrics(),
         ) as gru:
-            result = await gru.start_minion(
+            result = await gru.start_orchestration(
                 minion=InlineConfigMinion,
                 pipeline=Emit1Pipeline,
                 minion_config=inline_config,
             )
 
             assert result.success
-            assert result.instance_id is not None
+            assert result.orchestration_id is not None
 
-            minion = gru._minions_by_id[result.instance_id]
+            minion = gru._minions_by_orchestration_id[result.orchestration_id]
             assert isinstance(minion, InlineConfigMinion)
             assert minion.config is inline_config
 
-            stop = await gru.stop_minion(result.instance_id)
+            stop = await gru.stop_orchestration(result.orchestration_id)
             assert stop.success
 
     @pytest.mark.asyncio
@@ -405,15 +409,15 @@ class TestValidUsage:
             logger=logger,
             metrics=InMemoryMetrics()
         ) as gru:
-            r1 = await gru.start_minion(minion=minion_modpath, pipeline=pipeline_modpath)
+            r1 = await gru.start_orchestration(minion=minion_modpath, pipeline=pipeline_modpath)
 
             assert r1.success
 
             assert len(gru._pipelines) == 1
             assert len(gru._resources) == 1
 
-            assert isinstance(r1.instance_id, str)
-            await gru.stop_minion(r1.instance_id)
+            assert isinstance(r1.orchestration_id, str)
+            await gru.stop_orchestration(r1.orchestration_id)
 
             assert len(gru._pipelines) == 0
             assert len(gru._resources) == 0
@@ -447,11 +451,13 @@ class TestValidUsageDSL:
         pipeline_modpath: str,
         minion_name: str,
     ) -> None:
+        start_1 = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
+        start_2 = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
         directives: list[Directive] = [
-            MinionStart(minion=minion_modpath, pipeline=pipeline_modpath),
+            start_1,
             AfterWorkflowStarts(
                 expected={minion_name: 1},
-                directive=MinionStop(name_or_instance_id=minion_name, expect_success=True),
+                directive=OrchestrationStop(id=start_1, expect_success=True),
             ),
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
@@ -460,7 +466,7 @@ class TestValidUsageDSL:
                     workflow_steps_mode="exact",
                 ),
             ),
-            MinionStart(minion=minion_modpath, pipeline=pipeline_modpath),
+            start_2,
             WaitWorkflowCompletions(),
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
@@ -471,7 +477,7 @@ class TestValidUsageDSL:
                     workflow_steps_mode="exact",
                 ),
             ),
-            MinionStop(name_or_instance_id=minion_name, expect_success=True),
+            OrchestrationStop(id=start_2, expect_success=True),
             GruShutdown(expect_success=True),
         ]
 
@@ -485,7 +491,7 @@ class TestValidUsageDSL:
         )
 
     @pytest.mark.asyncio
-    async def test_gru_start_stop_minion(
+    async def test_gru_start_stop_orchestration(
         self,
         gru: Gru,
         logger: InMemoryLogger,
@@ -493,12 +499,13 @@ class TestValidUsageDSL:
         state_store: InMemoryStateStore,
     ) -> None:
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+        start = OrchestrationStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline=pipeline_modpath,
+        )
 
         directives: list[Directive] = [
-            MinionStart(
-                minion="tests.assets.minions.two_steps.counter.basic",
-                pipeline=pipeline_modpath,
-            ),
+            start,
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
@@ -507,7 +514,7 @@ class TestValidUsageDSL:
                     }
                 ),
             ),
-            MinionStop(name_or_instance_id="two-step-minion", expect_success=True),
+            OrchestrationStop(id=start, expect_success=True),
             GruShutdown(expect_success=True),
         ]
 
@@ -531,20 +538,23 @@ class TestValidUsageDSL:
         pipeline1 = "tests.assets.pipelines.emit1.counter.emit_1_a"
         pipeline2 = "tests.assets.pipelines.emit1.counter.emit_1_b"
         pipeline3 = "tests.assets.pipelines.emit1.counter.emit_1_c"
+        start_1 = OrchestrationStart(
+            minion="tests.assets.minions.two_steps.counter.resourced",
+            pipeline=pipeline1,
+        )
+        start_2 = OrchestrationStart(
+            minion="tests.assets.minions.two_steps.counter.resourced_b",
+            pipeline=pipeline2,
+        )
+        start_3 = OrchestrationStart(
+            minion="tests.assets.minions.two_steps.counter.resourced_c",
+            pipeline=pipeline3,
+        )
 
         directives: list[Directive] = [
-            MinionStart(
-                minion="tests.assets.minions.two_steps.counter.resourced",
-                pipeline=pipeline1,
-            ),
-            MinionStart(
-                minion="tests.assets.minions.two_steps.counter.resourced_b",
-                pipeline=pipeline2,
-            ),
-            MinionStart(
-                minion="tests.assets.minions.two_steps.counter.resourced_c",
-                pipeline=pipeline3,
-            ),
+            start_1,
+            start_2,
+            start_3,
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
@@ -555,9 +565,9 @@ class TestValidUsageDSL:
                     }
                 ),
             ),
-            MinionStop(name_or_instance_id="two-step-resourced-minion", expect_success=True),
-            MinionStop(name_or_instance_id="two-step-resourced-minion-b", expect_success=True),
-            MinionStop(name_or_instance_id="two-step-resourced-minion-c", expect_success=True),
+            OrchestrationStop(id=start_1, expect_success=True),
+            OrchestrationStop(id=start_2, expect_success=True),
+            OrchestrationStop(id=start_3, expect_success=True),
             GruShutdown(expect_success=True),
         ]
 
@@ -583,20 +593,23 @@ class TestValidUsageDSL:
         state_store: InMemoryStateStore,
     ) -> None:
         pipeline_modpath = "tests.assets.pipelines.sync.counter.sync_3subs_1event"
+        start_1 = OrchestrationStart(
+            minion="tests.assets.minions.two_steps.counter.resourced",
+            pipeline=pipeline_modpath,
+        )
+        start_2 = OrchestrationStart(
+            minion="tests.assets.minions.two_steps.counter.resourced_shared_b",
+            pipeline=pipeline_modpath,
+        )
+        start_3 = OrchestrationStart(
+            minion="tests.assets.minions.two_steps.counter.resourced_shared_c",
+            pipeline=pipeline_modpath,
+        )
 
         directives: list[Directive] = [
-            MinionStart(
-                minion="tests.assets.minions.two_steps.counter.resourced",
-                pipeline=pipeline_modpath,
-            ),
-            MinionStart(
-                minion="tests.assets.minions.two_steps.counter.resourced_shared_b",
-                pipeline=pipeline_modpath,
-            ),
-            MinionStart(
-                minion="tests.assets.minions.two_steps.counter.resourced_shared_c",
-                pipeline=pipeline_modpath,
-            ),
+            start_1,
+            start_2,
+            start_3,
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
@@ -607,9 +620,9 @@ class TestValidUsageDSL:
                     }
                 ),
             ),
-            MinionStop(name_or_instance_id="two-step-resourced-minion", expect_success=True),
-            MinionStop(name_or_instance_id="two-step-resourced-shared-minion-b", expect_success=True),
-            MinionStop(name_or_instance_id="two-step-resourced-shared-minion-c", expect_success=True),
+            OrchestrationStop(id=start_1, expect_success=True),
+            OrchestrationStop(id=start_2, expect_success=True),
+            OrchestrationStop(id=start_3, expect_success=True),
             GruShutdown(expect_success=True),
         ]
 
@@ -631,12 +644,13 @@ class TestValidUsageDSL:
         state_store: InMemoryStateStore,
     ) -> None:
         pipeline_modpath = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
+        start = OrchestrationStart(
+            minion="tests.assets.minions.two_steps.counter.resourced",
+            pipeline=pipeline_modpath,
+        )
 
         directives: list[Directive] = [
-            MinionStart(
-                minion="tests.assets.minions.two_steps.counter.resourced",
-                pipeline=pipeline_modpath,
-            ),
+            start,
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
@@ -645,7 +659,7 @@ class TestValidUsageDSL:
                     }
                 ),
             ),
-            MinionStop(name_or_instance_id="two-step-resourced-minion", expect_success=True),
+            OrchestrationStop(id=start, expect_success=True),
             GruShutdown(expect_success=True),
         ]
 
@@ -664,28 +678,28 @@ class TestValidUsageDSL:
         gru: Gru,
     ) -> None:
         # Exact owner-ref counts are not currently expressible through the scenario DSL.
-        first = await gru.start_minion(
+        first = await gru.start_orchestration(
+            "tests.assets.pipelines.resourced.counter.with_fixed_resource",
             "tests.assets.minions.two_steps.counter.resourced",
-            "tests.assets.pipelines.resourced.counter.with_fixed_resource",
         )
-        second = await gru.start_minion(
-            "tests.assets.minions.two_steps.counter.resourced_shared_b",
+        second = await gru.start_orchestration(
             "tests.assets.pipelines.resourced.counter.with_fixed_resource",
+            "tests.assets.minions.two_steps.counter.resourced_shared_b",
         )
         assert first.success
         assert second.success
         assert gru._resource_refcounts[FIXED_RESOURCE_ID] == 3
 
-        first_stop = await gru.stop_minion(first.instance_id or "")
+        first_stop = await gru.stop_orchestration(first.orchestration_id or "")
         assert first_stop.success
         assert gru._resource_refcounts[FIXED_RESOURCE_ID] == 2
 
-        second_stop = await gru.stop_minion(second.instance_id or "")
+        second_stop = await gru.stop_orchestration(second.orchestration_id or "")
         assert second_stop.success
         assert gru._runtime_state_snapshot() == {}
 
     @pytest.mark.asyncio
-    async def test_gru_start_minion_shutdown_without_stop(
+    async def test_gru_start_orchestration_shutdown_without_stop(
         self,
         gru: Gru,
         logger: InMemoryLogger,
@@ -695,7 +709,7 @@ class TestValidUsageDSL:
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
 
         directives: list[Directive] = [
-            MinionStart(
+            OrchestrationStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
                 pipeline=pipeline_modpath,
             ),
@@ -737,7 +751,7 @@ class TestValidUsageUsingNewAssetsDSL:
             pass
 
     @pytest.mark.asyncio
-    async def test_gru_start_stop_minion(
+    async def test_gru_start_stop_orchestration(
         self,
         gru: Gru,
         logger: InMemoryLogger,
@@ -746,11 +760,9 @@ class TestValidUsageUsingNewAssetsDSL:
     ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.counter.basic"
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+        start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
         directives: list[Directive] = [
-            MinionStart(
-                minion=minion_modpath,
-                pipeline=pipeline_modpath,
-            ),
+            start,
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
@@ -759,7 +771,7 @@ class TestValidUsageUsingNewAssetsDSL:
                     }
                 ),
             ),
-            MinionStop(name_or_instance_id="two-step-minion", expect_success=True),
+            OrchestrationStop(id=start, expect_success=True),
             GruShutdown(expect_success=True),
         ]
 
@@ -773,7 +785,7 @@ class TestValidUsageUsingNewAssetsDSL:
             )
 
     @pytest.mark.asyncio
-    async def test_gru_start_minion_shutdown_without_stop(
+    async def test_gru_start_orchestration_shutdown_without_stop(
         self,
         gru: Gru,
         logger: InMemoryLogger,
@@ -783,7 +795,7 @@ class TestValidUsageUsingNewAssetsDSL:
         minion_modpath = "tests.assets.minions.two_steps.counter.basic"
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
         directives: list[Directive] = [
-            MinionStart(
+            OrchestrationStart(
                 minion=minion_modpath,
                 pipeline=pipeline_modpath,
             ),
@@ -822,17 +834,16 @@ class TestValidUsageUsingNewAssetsDSL:
         pipeline1 = "tests.assets.pipelines.emit1.counter.emit_1_a"
         pipeline2 = "tests.assets.pipelines.emit1.counter.emit_1_b"
         pipeline3 = "tests.assets.pipelines.emit1.counter.emit_1_c"
+        start_1 = OrchestrationStart(minion=minion1, pipeline=pipeline1)
+        start_2 = OrchestrationStart(minion=minion2, pipeline=pipeline2)
+        start_3 = OrchestrationStart(minion=minion3, pipeline=pipeline3)
 
         directives: list[Directive] = [
-            Concurrent(
-                MinionStart(minion=minion1, pipeline=pipeline1),
-                MinionStart(minion=minion2, pipeline=pipeline2),
-                MinionStart(minion=minion3, pipeline=pipeline3),
-            ),
+            Concurrent(start_1, start_2, start_3),
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
-            MinionStop(name_or_instance_id="two-step-resourced-minion", expect_success=True),
-            MinionStop(name_or_instance_id="two-step-resourced-minion-b", expect_success=True),
-            MinionStop(name_or_instance_id="two-step-resourced-minion-c", expect_success=True),
+            OrchestrationStop(id=start_1, expect_success=True),
+            OrchestrationStop(id=start_2, expect_success=True),
+            OrchestrationStop(id=start_3, expect_success=True),
             GruShutdown(expect_success=True),
         ]
 
@@ -857,15 +868,18 @@ class TestValidUsageUsingNewAssetsDSL:
         minion_b = "tests.assets.minions.two_steps.counter.resourced_shared_b"
         minion_c = "tests.assets.minions.two_steps.counter.resourced_shared_c"
         pipeline_modpath = "tests.assets.pipelines.sync.counter.sync_3subs_1event"
+        start_1 = OrchestrationStart(minion=minion_a, pipeline=pipeline_modpath)
+        start_2 = OrchestrationStart(minion=minion_b, pipeline=pipeline_modpath)
+        start_3 = OrchestrationStart(minion=minion_c, pipeline=pipeline_modpath)
 
         directives: list[Directive] = [
-            MinionStart(minion=minion_a, pipeline=pipeline_modpath),
-            MinionStart(minion=minion_b, pipeline=pipeline_modpath),
-            MinionStart(minion=minion_c, pipeline=pipeline_modpath),
+            start_1,
+            start_2,
+            start_3,
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
-            MinionStop(name_or_instance_id="two-step-resourced-minion", expect_success=True),
-            MinionStop(name_or_instance_id="two-step-resourced-shared-minion-b", expect_success=True),
-            MinionStop(name_or_instance_id="two-step-resourced-shared-minion-c", expect_success=True),
+            OrchestrationStop(id=start_1, expect_success=True),
+            OrchestrationStop(id=start_2, expect_success=True),
+            OrchestrationStop(id=start_3, expect_success=True),
             GruShutdown(expect_success=True),
         ]
 
@@ -890,9 +904,10 @@ class TestValidUsageUsingNewAssetsDSL:
         minion_modpath = "tests.assets.minions.two_steps.counter.resourced"
         pipeline_modpath = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
         reload_pipeline_module(pipeline_modpath)
+        start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
 
         directives: list[Directive] = [
-            MinionStart(minion=minion_modpath, pipeline=pipeline_modpath),
+            start,
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
             GruShutdown(expect_success=True),
         ]

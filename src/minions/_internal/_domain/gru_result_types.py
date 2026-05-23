@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 
-
 # === Supporting Types ===
 
 @dataclass
@@ -31,23 +30,23 @@ class GruResult:
     #         raise ValueError("`reason` must be set if `success` is False")
 
 @dataclass
-class StopMinionResult(GruResult):
+class StopResult(GruResult):
     conflicts: list[ConflictingMinion] = field(default_factory=list[ConflictingMinion])
 
 @dataclass
-class StartMinionResult(GruResult):
+class StartResult(GruResult):
     name: str | None = None
-    instance_id: str | None = None
+    orchestration_id: str | None = None
 
 @dataclass
-class ShutdownGruResult(GruResult):
+class ShutdownResult(GruResult):
     errors: list[ShutdownError] = field(default_factory=list[ShutdownError])
 
 @dataclass
 class MinionStatusResult(GruResult):
     name: str | None = None
     instance_id: str | None = None
-    composite_key: str | None = None
+    orchestration_id: str | None = None
 
     status: str | None = None  # e.g. "running", "stopped", "cancelled", "error"
 

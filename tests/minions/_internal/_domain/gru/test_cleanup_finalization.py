@@ -25,14 +25,14 @@ async def test_stop_committed_minion_shutdown_failure_discards_runtime_state_whe
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        result = await gru.start_minion("tests.assets.crash.minions.boom_shutdown", GOOD_PIPELINE)
+        result = await gru.start_orchestration(GOOD_PIPELINE, "tests.assets.crash.minions.boom_shutdown")
         assert result.success
 
-        async def failing_stop_minion_best_effort(_minion: Minion[Any, Any]) -> None:
+        async def failing_stop_orchestration_best_effort(_minion: Minion[Any, Any]) -> None:
             raise RuntimeError("cleanup helper boom")
 
-        monkeypatch.setattr(gru, "_stop_minion_best_effort", failing_stop_minion_best_effort)
-        stop = await gru.stop_minion(result.instance_id or "")
+        monkeypatch.setattr(gru, "_stop_orchestration_best_effort", failing_stop_orchestration_best_effort)
+        stop = await gru.stop_orchestration(result.orchestration_id or "")
 
         assert not stop.success
         assert stop.reason == "BoomShutdownMinion.shutdown failed (tests/assets/crash/minions/boom_shutdown.py)"
@@ -48,10 +48,10 @@ async def test_stop_unsubscribe_failure_discards_runtime_state_after_subscriptio
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        result = await gru.start_minion(GOOD_MINION, GOOD_PIPELINE)
+        result = await gru.start_orchestration(GOOD_PIPELINE, GOOD_MINION)
         assert result.success
-        assert result.instance_id is not None
-        minion = gru._minions_by_id[result.instance_id]
+        assert result.orchestration_id is not None
+        minion = gru._minions_by_orchestration_id[result.orchestration_id]
         pipeline = gru._pipelines[GOOD_PIPELINE]
 
         async def failing_unsubscribe(detached_minion: Minion[Any, Any]) -> None:
@@ -60,7 +60,7 @@ async def test_stop_unsubscribe_failure_discards_runtime_state_after_subscriptio
             raise RuntimeError("unsubscribe boom")
 
         monkeypatch.setattr(pipeline, "_mn_unsubscribe", failing_unsubscribe)
-        stop = await gru.stop_minion(result.instance_id or "")
+        stop = await gru.stop_orchestration(result.orchestration_id or "")
 
         assert not stop.success
         assert stop.reason == "unsubscribe boom"
@@ -90,9 +90,9 @@ async def test_start_resource_startup_failure_discards_runtime_state_when_cleanu
         monkeypatch.setattr(gru, "_cleanup_resources", failing_cleanup_resources)
         monkeypatch.setattr(gru._logger, "_mn_log", failing_cleanup_log)
 
-        result = await gru.start_minion(
-            "tests.assets.crash.minions.depends_on_boom_startup_resource",
+        result = await gru.start_orchestration(
             GOOD_PIPELINE,
+            "tests.assets.crash.minions.depends_on_boom_startup_resource",
         )
 
         assert not result.success
@@ -109,9 +109,9 @@ async def test_stop_resource_cleanup_failure_discards_runtime_state_when_no_shar
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        result = await gru.start_minion(
-            "tests.assets.crash.minions.depends_on_boom_shutdown_resource",
+        result = await gru.start_orchestration(
             GOOD_PIPELINE,
+            "tests.assets.crash.minions.depends_on_boom_shutdown_resource",
         )
         assert result.success
 
@@ -119,7 +119,7 @@ async def test_stop_resource_cleanup_failure_discards_runtime_state_when_no_shar
             raise RuntimeError("resource cleanup boom")
 
         monkeypatch.setattr(gru, "_cleanup_resources", failing_cleanup_resources)
-        stop = await gru.stop_minion(result.instance_id or "")
+        stop = await gru.stop_orchestration(result.orchestration_id or "")
 
         assert not stop.success
         assert stop.reason == "resource cleanup boom"
@@ -135,13 +135,13 @@ async def test_stop_resource_cleanup_failure_preserves_shared_runtime_state_for_
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        first = await gru.start_minion(
+        first = await gru.start_orchestration(
+            "tests.assets.pipelines.emit1.counter.emit_1",
             "tests.assets.minions.two_steps.counter.resourced",
-            "tests.assets.pipelines.emit1.counter.emit_1",
         )
-        second = await gru.start_minion(
-            "tests.assets.minions.two_steps.counter.resourced_shared_b",
+        second = await gru.start_orchestration(
             "tests.assets.pipelines.emit1.counter.emit_1",
+            "tests.assets.minions.two_steps.counter.resourced_shared_b",
         )
         assert first.success
         assert second.success
@@ -151,14 +151,14 @@ async def test_stop_resource_cleanup_failure_preserves_shared_runtime_state_for_
             raise RuntimeError("resource cleanup boom")
 
         monkeypatch.setattr(gru, "_cleanup_resources", failing_cleanup_resources)
-        stop = await gru.stop_minion(first.instance_id or "")
+        stop = await gru.stop_orchestration(first.orchestration_id or "")
 
         assert not stop.success
         assert stop.reason == "resource cleanup boom"
         assert FIXED_RESOURCE_ID in gru._resources
         assert gru._resource_refcounts[FIXED_RESOURCE_ID] == 1
         assert len(gru._minions_by_id) == 1
-        assert second.instance_id in gru._minions_by_id
+        assert second.orchestration_id in gru._minions_by_orchestration_id
 
 
 @pytest.mark.asyncio
@@ -170,9 +170,9 @@ async def test_stop_pipeline_resource_cleanup_failure_discards_runtime_state_whe
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        result = await gru.start_minion(
-            "tests.assets.minions.two_steps.simple.resourced_1",
+        result = await gru.start_orchestration(
             "tests.assets.pipelines.simple.simple_event.resourced",
+            "tests.assets.minions.two_steps.simple.resourced_1",
         )
         assert result.success
 
@@ -180,7 +180,7 @@ async def test_stop_pipeline_resource_cleanup_failure_discards_runtime_state_whe
             raise RuntimeError("resource cleanup boom")
 
         monkeypatch.setattr(gru, "_cleanup_resources", failing_cleanup_resources)
-        stop = await gru.stop_minion(result.instance_id or "")
+        stop = await gru.stop_orchestration(result.orchestration_id or "")
 
         assert not stop.success
         assert stop.reason == "resource cleanup boom"
@@ -196,9 +196,9 @@ async def test_start_subscribe_failure_preserves_shared_runtime_state_for_live_o
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        first = await gru.start_minion(
-            "tests.assets.minions.two_steps.counter.resourced",
+        first = await gru.start_orchestration(
             "tests.assets.pipelines.emit1.counter.emit_1",
+            "tests.assets.minions.two_steps.counter.resourced",
         )
         assert first.success
         assert FIXED_RESOURCE_ID in gru._resources
@@ -214,9 +214,9 @@ async def test_start_subscribe_failure_preserves_shared_runtime_state_for_live_o
 
         monkeypatch.setattr(pipeline, "_mn_subscribe", failing_subscribe)
         monkeypatch.setattr(gru, "_cleanup_resources", failing_cleanup_resources)
-        second = await gru.start_minion(
-            "tests.assets.minions.two_steps.counter.resourced_shared_b",
+        second = await gru.start_orchestration(
             "tests.assets.pipelines.emit1.counter.emit_1",
+            "tests.assets.minions.two_steps.counter.resourced_shared_b",
         )
 
         assert not second.success
@@ -224,7 +224,7 @@ async def test_start_subscribe_failure_preserves_shared_runtime_state_for_live_o
         assert FIXED_RESOURCE_ID in gru._resources
         assert gru._resource_refcounts[FIXED_RESOURCE_ID] == 1
         assert len(gru._minions_by_id) == 1
-        assert first.instance_id in gru._minions_by_id
+        assert first.orchestration_id in gru._minions_by_orchestration_id
 
 
 @pytest.mark.asyncio

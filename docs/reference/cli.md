@@ -62,9 +62,9 @@ previous durable checkpoint.
 ## Command details
 
 - `start MINION_MODULEPATH MINION_CONFIG_PATH PIPELINE_MODULEPATH`
-  - Starts a minion if one with the same composite key is not already running. Returns a `StartMinionResult` with `instance_id` and `name`.
-- `stop NAME_OR_INSTANCE_ID ...`
-  - Stops matching minions and cleans up resources/pipelines that are no longer referenced. May return conflict info when multiple minions share a name.
+  - Starts an orchestration if one with the same orchestration identity is not already running. Returns a `StartResult` with `orchestration_id` and `name`.
+- `stop ORCHESTRATION_ID ...`
+  - Stops matching orchestrations and cleans up resources/pipelines that are no longer referenced.
 - `status [--await] [--timeout N] [targets...]`
   - Without arguments, prints a summary of pending/starting/running/stopping counts.
   - With targets, shows state for specific IDs or pending start handles (`pending:<id>`).

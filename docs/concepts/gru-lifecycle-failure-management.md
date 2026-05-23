@@ -1,6 +1,6 @@
 # Gru Lifecycle Failure Management
 
-This note captures the design deliberation around failed lifecycle operations in Gru, especially failed `start_minion`, `stop_minion`, and eventual start/stop-orchestration semantics.
+This note captures the design deliberation around failed lifecycle operations in Gru, especially failed `start_orchestration` and `stop_orchestration` semantics.
 
 ## Core Runtime Constraint
 

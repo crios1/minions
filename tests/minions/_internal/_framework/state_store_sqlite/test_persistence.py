@@ -17,7 +17,7 @@ async def test_save_context_persists_before_returning(make_state_store_and_logge
     ctx = mk_ctx(i=1, size=16)
     expected_blob = blob_for(ctx)
 
-    await s.save_context(ctx.workflow_id, ctx.minion_composite_key, expected_blob)
+    await s.save_context(ctx.workflow_id, ctx.orchestration_id, expected_blob)
 
     with sqlite3.connect(s.db_path) as conn:
         row = conn.execute(
@@ -25,7 +25,7 @@ async def test_save_context_persists_before_returning(make_state_store_and_logge
             (ctx.workflow_id,),
         ).fetchone()
 
-    assert row == (ctx.minion_composite_key, expected_blob)
+    assert row == (ctx.orchestration_id, expected_blob)
 
 
 async def test_framework_serialized_context_remains_hydratable(make_state_store_and_logger: MakeStateStoreAndLogger):
@@ -40,7 +40,7 @@ async def test_framework_serialized_context_remains_hydratable(make_state_store_
     assert result.error is None
     assert not result.retryable
     row = next(r for r in rows if r.workflow_id == ctx.workflow_id)
-    assert row.orchestration_id == ctx.minion_composite_key
+    assert row.orchestration_id == ctx.orchestration_id
     assert deserialize_workflow_context_blob(row.context) == ctx
 
 

@@ -7,7 +7,7 @@ from .types import T_Event, T_Ctx
 class MinionWorkflowContext(Generic[T_Event, T_Ctx]):
     """If you change this dataclass, review minion_workflow_context_codec.py and add any needed codec updates or migration."""
 
-    minion_composite_key: str
+    orchestration_id: str
     minion_modpath: str
     workflow_id: str
     event: T_Event
@@ -20,7 +20,7 @@ class MinionWorkflowContext(Generic[T_Event, T_Ctx]):
     def as_dict(self) -> dict[str, object]:
         # explicit field assembly is much faster than dataclasses.asdict(...) here
         return {
-            "minion_composite_key": self.minion_composite_key,
+            "orchestration_id": self.orchestration_id,
             "minion_modpath": self.minion_modpath,
             "workflow_id": self.workflow_id,
             "event": self.event,

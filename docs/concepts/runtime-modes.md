@@ -22,7 +22,7 @@ class MyConfig:
     my_key: str
 
 
-gru.start_minion(
+gru.start_orchestration(
     MyMinion,
     MyPipeline,
     minion_config=MyConfig(my_key="my_value"),
@@ -39,7 +39,7 @@ Use inline mode when you’re exploring, prototyping, or running a single instan
 Deployment mode is the production path—module strings plus a real config file:
 
 ```python
-gru.start_minion(
+gru.start_orchestration(
     "minions.examples.strategy:MyMinion",
     "minions.examples.pipeline:MyPipeline",
     minion_config_path="configs/strategy-client-a.yaml",

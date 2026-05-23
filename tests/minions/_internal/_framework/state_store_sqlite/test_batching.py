@@ -32,11 +32,11 @@ async def test_save_context_batches_but_waits_for_batch_commit(make_state_store_
     c1 = mk_ctx(i=1, size=16)
     c2 = mk_ctx(i=2, size=24)
 
-    t1 = asyncio.create_task(s.save_context(c1.workflow_id, c1.minion_composite_key, blob_for(c1)))
+    t1 = asyncio.create_task(s.save_context(c1.workflow_id, c1.orchestration_id, blob_for(c1)))
     await asyncio.sleep(0)
     assert not t1.done()
 
-    t2 = asyncio.create_task(s.save_context(c2.workflow_id, c2.minion_composite_key, blob_for(c2)))
+    t2 = asyncio.create_task(s.save_context(c2.workflow_id, c2.orchestration_id, blob_for(c2)))
 
     await asyncio.gather(t1, t2)
     rows = await s.get_all_contexts()
@@ -54,7 +54,7 @@ async def test_immediate_batch_mode_commits_without_scheduling_flush_timer(
     )
     ctx = mk_ctx(i=302, size=16)
 
-    await s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx))
+    await s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx))
 
     assert len(s._batch_buffer) == 0
     assert s._batch_buffer_flush_task is None
@@ -71,7 +71,7 @@ async def test_batch_max_interarrival_delay_ms_none_preserves_scheduled_flush_be
         batch_max_interarrival_delay_ms=None,
     )
     ctx = mk_ctx(i=701, size=16)
-    save_task = asyncio.create_task(s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx)))
+    save_task = asyncio.create_task(s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx)))
 
     await asyncio.sleep(0.01)
 
@@ -92,7 +92,7 @@ async def test_single_write_flushes_on_batch_max_interarrival_delay_ms(
     started = asyncio.get_running_loop().time()
 
     await asyncio.wait_for(
-        s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx)),
+        s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx)),
         timeout=0.1,
     )
 
@@ -121,7 +121,7 @@ async def test_writes_inside_batch_max_interarrival_delay_ms_batch_together(
     tasks: list[asyncio.Task[None]] = []
     for i in range(3):
         ctx = mk_ctx(i=710 + i, size=16)
-        tasks.append(asyncio.create_task(s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx))))
+        tasks.append(asyncio.create_task(s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx))))
         await asyncio.sleep(0.005)
 
     await asyncio.wait_for(asyncio.gather(*tasks), timeout=1.0)
@@ -152,7 +152,7 @@ async def test_max_flush_delay_still_applies_during_continuous_arrivals(
     async def produce() -> None:
         for i in range(10):
             ctx = mk_ctx(i=720 + i, size=16)
-            tasks.append(asyncio.create_task(s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx))))
+            tasks.append(asyncio.create_task(s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx))))
             await asyncio.sleep(0.005)
 
     producer = asyncio.create_task(produce())
@@ -168,7 +168,7 @@ async def test_delete_context_batches_but_waits_for_batch_commit(make_state_stor
     ctx = mk_ctx(i=301, size=16)
     # Persist the setup row immediately before switching into batched delete mode.
     s._batch_max_queued_writes = 1
-    await s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx))
+    await s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx))
 
     # Keep the first delete buffered until the second delete reaches the batch cap.
     s._batch_max_queued_writes = 2
@@ -203,10 +203,10 @@ async def test_flush_paths_do_not_overlap_transactions(
     read_all: asyncio.Task[list[StoredWorkflowContext]] | None = None
 
     try:
-        save1 = asyncio.create_task(s.save_context(ctx1.workflow_id, ctx1.minion_composite_key, blob_for(ctx1)))
+        save1 = asyncio.create_task(s.save_context(ctx1.workflow_id, ctx1.orchestration_id, blob_for(ctx1)))
         await commit_gate.wait_until_entered()
 
-        save2 = asyncio.create_task(s.save_context(ctx2.workflow_id, ctx2.minion_composite_key, blob_for(ctx2)))
+        save2 = asyncio.create_task(s.save_context(ctx2.workflow_id, ctx2.orchestration_id, blob_for(ctx2)))
         await asyncio.sleep(0)
         read_all = asyncio.create_task(s.get_all_contexts())
         await asyncio.sleep(0)
@@ -243,10 +243,10 @@ async def test_write_arriving_during_scheduled_flush_gets_next_flush_task(
     save2: asyncio.Task[None] | None = None
 
     try:
-        save1 = asyncio.create_task(s.save_context(ctx1.workflow_id, ctx1.minion_composite_key, blob_for(ctx1)))
+        save1 = asyncio.create_task(s.save_context(ctx1.workflow_id, ctx1.orchestration_id, blob_for(ctx1)))
         await commit_gate.wait_until_entered()
 
-        save2 = asyncio.create_task(s.save_context(ctx2.workflow_id, ctx2.minion_composite_key, blob_for(ctx2)))
+        save2 = asyncio.create_task(s.save_context(ctx2.workflow_id, ctx2.orchestration_id, blob_for(ctx2)))
         await asyncio.sleep(0)
         assert not save2.done()
 
@@ -273,7 +273,7 @@ async def test_flush_on_batch_cap(make_state_store_and_logger: MakeStateStoreAnd
         ctx = mk_ctx(i=i)
         tasks.append(
             asyncio.create_task(
-                s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx))
+                s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx))
             )
         )
     await asyncio.gather(*tasks)
@@ -299,9 +299,9 @@ async def test_cancelled_cap_triggering_save_does_not_cancel_shared_batch_commit
     save2: asyncio.Task[None] | None = None
 
     try:
-        save1 = asyncio.create_task(s.save_context(c1.workflow_id, c1.minion_composite_key, blob_for(c1)))
+        save1 = asyncio.create_task(s.save_context(c1.workflow_id, c1.orchestration_id, blob_for(c1)))
         await asyncio.sleep(0)
-        save2 = asyncio.create_task(s.save_context(c2.workflow_id, c2.minion_composite_key, blob_for(c2)))
+        save2 = asyncio.create_task(s.save_context(c2.workflow_id, c2.orchestration_id, blob_for(c2)))
         await commit_gate.wait_until_entered()
 
         save2.cancel()
@@ -333,7 +333,7 @@ async def test_separate_batches_commit_in_fifo_order_for_same_workflow(
     delete_task: asyncio.Task[None] | None = None
 
     try:
-        save_task = asyncio.create_task(s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx)))
+        save_task = asyncio.create_task(s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx)))
         await commit_gate.wait_until_entered()
 
         delete_task = asyncio.create_task(s.delete_context(ctx.workflow_id))
@@ -368,7 +368,7 @@ async def test_flush_waits_for_worker_after_commit_batch_is_popped_from_queue(
     flush_task: asyncio.Task[None] | None = None
 
     try:
-        save_task = asyncio.create_task(s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx)))
+        save_task = asyncio.create_task(s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx)))
         await commit_gate.wait_until_entered()
         assert not s._batch_commit_queue
         assert s._batch_commit_queue_pending_writes == 1
@@ -392,7 +392,7 @@ async def test_same_batch_delete_then_save_keeps_row(make_state_store_and_logger
     original_ctx = mk_ctx(i=406, size=16)
     # Persist the original row immediately before testing same-batch coalescing.
     s._batch_max_queued_writes = 1
-    await s.save_context(original_ctx.workflow_id, original_ctx.minion_composite_key, blob_for(original_ctx))
+    await s.save_context(original_ctx.workflow_id, original_ctx.orchestration_id, blob_for(original_ctx))
 
     # Keep the delete and replacement save in one batch.
     s._batch_max_queued_writes = 2
@@ -402,7 +402,7 @@ async def test_same_batch_delete_then_save_keeps_row(make_state_store_and_logger
     delete_task = asyncio.create_task(s.delete_context(original_ctx.workflow_id))
     await asyncio.sleep(0)
     save_task = asyncio.create_task(
-        s.save_context(updated_ctx.workflow_id, updated_ctx.minion_composite_key, blob_for(updated_ctx))
+        s.save_context(updated_ctx.workflow_id, updated_ctx.orchestration_id, blob_for(updated_ctx))
     )
 
     await asyncio.gather(delete_task, save_task)
@@ -421,7 +421,7 @@ async def test_same_batch_save_then_delete_removes_row(make_state_store_and_logg
 
     ctx = mk_ctx(i=407, size=16)
     save_task = asyncio.create_task(
-        s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx))
+        s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx))
     )
     await asyncio.sleep(0)
     delete_task = asyncio.create_task(s.delete_context(ctx.workflow_id))
@@ -443,7 +443,7 @@ async def test_commit_failure_rolls_back_transaction_and_settles_futures(
     first_item = PendingWrite(
         good_ctx.workflow_id,
         "upsert",
-        good_ctx.minion_composite_key,
+        good_ctx.orchestration_id,
         blob_for(good_ctx),
         first_completion,
     )
@@ -481,7 +481,7 @@ async def test_commit_failure_rolls_back_transaction_and_settles_futures(
     assert all(row.workflow_id != good_ctx.workflow_id for row in rows)
 
     ctx = mk_ctx(i=404)
-    await s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx))
+    await s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx))
     rows = await s.get_all_contexts()
     assert any(row.workflow_id == ctx.workflow_id for row in rows)
 
@@ -502,7 +502,7 @@ async def test_shutdown_waits_for_active_scheduled_flush_commit(
 
     try:
         save_task = asyncio.create_task(
-            s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx))
+            s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx))
         )
         await commit_gate.wait_until_entered()
 
@@ -523,7 +523,7 @@ async def test_shutdown_flushes_pending_batch_buffer(make_state_store_and_logger
     s._batch_max_flush_delay_ms = 10_000
     ctx = mk_ctx(i=42)
     save_task = asyncio.create_task(
-        s.save_context(ctx.workflow_id, ctx.minion_composite_key, blob_for(ctx))
+        s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx))
     )
     await asyncio.sleep(0)
     assert s._batch_buffer

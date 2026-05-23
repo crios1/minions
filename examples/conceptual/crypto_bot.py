@@ -2,7 +2,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any
 
-from minions import Minion, Pipeline, Resource, Gru, minion_step
+from minions import Gru, Minion, Pipeline, Resource, minion_step
 
 
 @dataclass
@@ -38,7 +38,7 @@ class MockStrategy(Minion[NewTokenEvent, MyContext]):
 
 async def main():
     gru = await Gru.create()
-    await gru.start_minion(MockStrategy, NewTokensPipeline)
+    await gru.start_orchestration(NewTokensPipeline, MockStrategy)
 
 
 if __name__ == "__main__":

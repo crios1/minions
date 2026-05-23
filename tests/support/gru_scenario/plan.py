@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from collections.abc import Mapping, Sequence
-from .directives import Directive, MinionStart, iter_directives_flat
+from .directives import Directive, OrchestrationStart, iter_directives_flat
 
 
 @dataclass
@@ -40,7 +40,7 @@ class ScenarioPlan:
         started_pipelines = {
             d.pipeline
             for d in self.flat_directives
-            if isinstance(d, MinionStart) and d.expect_success
+            if isinstance(d, OrchestrationStart) and d.expect_success
         }
 
         missing = sorted(started_pipelines - set(self.pipeline_event_targets))

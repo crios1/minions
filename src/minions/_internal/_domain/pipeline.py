@@ -10,7 +10,7 @@ from .._framework.async_service import AsyncService
 from .._framework.logger import Logger, DEBUG
 from .._framework.metrics import Metrics
 from .._framework.metrics_constants import (
-    LABEL_ERROR_TYPE, LABEL_MINION_COMPOSITE_KEY, LABEL_PIPELINE,
+    LABEL_ERROR_TYPE, LABEL_ORCHESTRATION_ID, LABEL_PIPELINE,
     PIPELINE_ERROR_TOTAL, PIPELINE_EVENT_PRODUCED_TOTAL,
     PIPELINE_EVENT_FANOUT_TOTAL
 )
@@ -176,7 +176,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
                         metric_name=PIPELINE_EVENT_FANOUT_TOTAL,
                         labels={
                             LABEL_PIPELINE: self._mn_pipeline_id,
-                            LABEL_MINION_COMPOSITE_KEY: minion._mn_minion_composite_key,
+                            LABEL_ORCHESTRATION_ID: minion._mn_orchestration_id,
                         },
                     )
                 await asyncio.gather(*[
@@ -186,7 +186,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
                         pipeline_id=self._mn_pipeline_id,
                         minion_name=minion._mn_name,
                         minion_instance_id=minion._mn_minion_instance_id,
-                        minion_composite_key=minion._mn_minion_composite_key,
+                        orchestration_id=minion._mn_orchestration_id,
                         minion_modpath=minion._mn_minion_modpath,
                     )
                     for minion in subs

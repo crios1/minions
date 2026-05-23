@@ -10,7 +10,7 @@ from minions._internal._framework.logger_noop import NoOpLogger
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from minions._internal._framework.metrics_constants import (
     LABEL_MINION,
-    LABEL_MINION_COMPOSITE_KEY,
+    LABEL_ORCHESTRATION_ID,
     LABEL_MINION_WORKFLOW_STEP,
     MINION_WORKFLOW_STARTED_TOTAL,
     SYSTEM_MEMORY_USED_PERCENT,
@@ -70,14 +70,14 @@ async def test_counter_exposed_on_http():
     metrics = PrometheusMetrics(logger=NoOpLogger(), port=port, registry=registry)
     await metrics.startup()
 
-    counter = metrics.create_metric(MINION_WORKFLOW_STARTED_TOTAL, [LABEL_MINION_COMPOSITE_KEY], "counter")
-    counter.labels(**{LABEL_MINION_COMPOSITE_KEY: "minion|config|pipeline"}).inc()
+    counter = metrics.create_metric(MINION_WORKFLOW_STARTED_TOTAL, [LABEL_ORCHESTRATION_ID], "counter")
+    counter.labels(**{LABEL_ORCHESTRATION_ID: "minion|config|pipeline"}).inc()
 
     page = await poll_read_metrics_from_http(port)
     value = extract_metric_value(
         page,
         MINION_WORKFLOW_STARTED_TOTAL,
-        {LABEL_MINION_COMPOSITE_KEY: "minion|config|pipeline"},
+        {LABEL_ORCHESTRATION_ID: "minion|config|pipeline"},
     )
     assert value == 1.0
 

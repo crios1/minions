@@ -23,7 +23,7 @@ Guidelines from the runtime:
 - Use string-key map types for event dictionaries: `dict[str, V]` and `Mapping[str, V]` are accepted when `V` is serializable. Bare `dict` is useful for prototypes, but explicit event schemas are preferred for durable systems.
 - Implement `produce_event`, an infinite (or very long-lived) async producer.
 - Optionally implement `startup`, `run`, and `shutdown` hooks inherited from `AsyncService`.
-- Expose a module-level `pipeline` variable or a single `Pipeline` subclass so Gru can resolve it from the module path you pass to `start_minion`.
+- Expose a module-level `pipeline` variable or a single `Pipeline` subclass so Gru can resolve it from the module path you pass to `start_orchestration`.
 
 ## Resources and fanout
 

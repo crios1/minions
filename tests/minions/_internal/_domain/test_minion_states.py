@@ -16,7 +16,7 @@ from minions._internal._framework.metrics_constants import (
     MINION_WORKFLOW_SUCCEEDED_TOTAL,
     MINION_WORKFLOW_STEP_DURATION_SECONDS,
     MINION_WORKFLOW_STEP_FAILED_TOTAL,
-    LABEL_MINION_COMPOSITE_KEY,
+    LABEL_ORCHESTRATION_ID,
     LABEL_MINION_WORKFLOW_STEP,
     LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE,
     LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE,
@@ -297,14 +297,14 @@ async def test_workflow_failed_increments_failed_counter():
     workflow_duration_sample = InMemoryMetrics.find_sample(
         metrics.snapshot_histograms()[MINION_WORKFLOW_DURATION_SECONDS],
         {
-            LABEL_MINION_COMPOSITE_KEY: "ck",
+            LABEL_ORCHESTRATION_ID: "ck",
             LABEL_STATUS: "failed",
         },
     )
     step_duration_sample = InMemoryMetrics.find_sample(
         metrics.snapshot_histograms()[MINION_WORKFLOW_STEP_DURATION_SECONDS],
         {
-            LABEL_MINION_COMPOSITE_KEY: "ck",
+            LABEL_ORCHESTRATION_ID: "ck",
             LABEL_MINION_WORKFLOW_STEP: "step_1",
             LABEL_STATUS: "failed",
         },
@@ -345,14 +345,14 @@ async def test_workflow_cancellation_records_interrupted_duration_status_and_kee
     workflow_duration_sample = InMemoryMetrics.find_sample(
         metrics.snapshot_histograms()[MINION_WORKFLOW_DURATION_SECONDS],
         {
-            LABEL_MINION_COMPOSITE_KEY: "ck",
+            LABEL_ORCHESTRATION_ID: "ck",
             LABEL_STATUS: "interrupted",
         },
     )
     step_duration_sample = InMemoryMetrics.find_sample(
         metrics.snapshot_histograms()[MINION_WORKFLOW_STEP_DURATION_SECONDS],
         {
-            LABEL_MINION_COMPOSITE_KEY: "ck",
+            LABEL_ORCHESTRATION_ID: "ck",
             LABEL_MINION_WORKFLOW_STEP: "step_1",
             LABEL_STATUS: "interrupted",
         },
@@ -387,7 +387,7 @@ async def test_workflow_persistence_continue_on_failure_advances_and_retries_at_
     store = FlakyPersistenceStateStore(logger=logger, fail_attempts={3})
     m = ContinueOnFailureMinion(
         minion_instance_id="iid",
-        minion_composite_key="ck",
+        orchestration_id="ck",
         minion_modpath="tests.assets.continue_persistence_minion",
         config_path="cfg",
         state_store=store,
@@ -444,7 +444,7 @@ async def test_workflow_persistence_idle_until_persisted_blocks_next_step_until_
     store = FlakyPersistenceStateStore(logger=logger, fail_attempts={3, 4})
     m = IdleUntilPersistedMinion(
         minion_instance_id="iid",
-        minion_composite_key="ck",
+        orchestration_id="ck",
         minion_modpath="tests.assets.idle_persistence_minion",
         config_path="cfg",
         state_store=store,
@@ -475,7 +475,7 @@ async def test_workflow_persistence_idle_until_persisted_blocks_next_step_until_
     blocked_sample = _persistence_blocked_sample(
         metrics,
         {
-            LABEL_MINION_COMPOSITE_KEY: "ck",
+            LABEL_ORCHESTRATION_ID: "ck",
             LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "before_step",
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
             LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "save",
@@ -503,7 +503,7 @@ async def test_workflow_persistence_blocked_gauge_counts_concurrent_workflows_fo
     store = FlakyPersistenceStateStore(logger=logger, fail_attempts=set(range(3, 100)))
     m = ConcurrentIdleUntilPersistedMinion(
         minion_instance_id="iid",
-        minion_composite_key="ck",
+        orchestration_id="ck",
         minion_modpath="tests.assets.concurrent_idle_persistence_minion",
         config_path="cfg",
         state_store=store,
@@ -519,7 +519,7 @@ async def test_workflow_persistence_blocked_gauge_counts_concurrent_workflows_fo
     await _wait_until(lambda: store.save_attempt_count >= 4, timeout=1.0)
 
     labels = {
-        LABEL_MINION_COMPOSITE_KEY: "ck",
+        LABEL_ORCHESTRATION_ID: "ck",
         LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "before_step",
         LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
         LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "save",
@@ -557,7 +557,7 @@ async def test_workflow_persistence_idle_until_persisted_relogs_and_escalates_su
     store = FlakyPersistenceStateStore(logger=logger, fail_attempts=set(range(3, 100)))
     m = SustainedIdleMinion(
         minion_instance_id="iid",
-        minion_composite_key="ck",
+        orchestration_id="ck",
         minion_modpath="tests.assets.sustained_idle_persistence_minion",
         config_path="cfg",
         state_store=store,
@@ -607,7 +607,7 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds():
     store = FlakyDeletePersistenceStateStore(logger=logger, fail_attempts={1, 2})
     m = DeleteBlockingSuccessMinion(
         minion_instance_id="iid",
-        minion_composite_key="ck",
+        orchestration_id="ck",
         minion_modpath="tests.assets.delete_blocking_success_minion",
         config_path="cfg",
         state_store=store,
@@ -632,7 +632,7 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds():
     blocked_sample = _persistence_blocked_sample(
         metrics,
         {
-            LABEL_MINION_COMPOSITE_KEY: "ck",
+            LABEL_ORCHESTRATION_ID: "ck",
             LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "workflow_resolve",
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "delete",
             LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "delete",
@@ -655,7 +655,7 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds():
     blocked_sample = _persistence_blocked_sample(
         metrics,
         {
-            LABEL_MINION_COMPOSITE_KEY: "ck",
+            LABEL_ORCHESTRATION_ID: "ck",
             LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "workflow_resolve",
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "delete",
             LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "delete",
@@ -690,7 +690,7 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
     store = InMemoryStateStore(logger=logger)
     m = NonRetryablePersistenceMinion(
         minion_instance_id="iid",
-        minion_composite_key="ck",
+        orchestration_id="ck",
         minion_modpath="tests.assets.non_retryable_persistence_minion",
         config_path="cfg",
         state_store=store,
@@ -722,7 +722,7 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
     failure_sample = InMemoryMetrics.find_sample(
         failure_samples,
         {
-            LABEL_MINION_COMPOSITE_KEY: "ck",
+            LABEL_ORCHESTRATION_ID: "ck",
             LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "before_step",
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
             LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "serialize",
@@ -747,12 +747,12 @@ async def test_minion_startup_replays_only_own_contexts():
     metrics = InMemoryMetrics()
     store = InMemoryStateStore(logger=logger)
     minion_modpath = "mock.modpath.minion_replay_shared"
-    own_composite_key = f"{minion_modpath}|cfg-own|tests.assets.pipelines.shared"
-    other_composite_key = f"{minion_modpath}|cfg-other|tests.assets.pipelines.shared"
+    own_orchestration_id = f"{minion_modpath}|cfg-own|tests.assets.pipelines.shared"
+    other_orchestration_id = f"{minion_modpath}|cfg-other|tests.assets.pipelines.shared"
 
     await store._mn_serialize_and_save_context(
         MinionWorkflowContext(
-            minion_composite_key=own_composite_key,
+            orchestration_id=own_orchestration_id,
             minion_modpath=minion_modpath,
             workflow_id="wf-own",
             event=DictEvent(),
@@ -762,7 +762,7 @@ async def test_minion_startup_replays_only_own_contexts():
     )
     await store._mn_serialize_and_save_context(
         MinionWorkflowContext(
-            minion_composite_key=other_composite_key,
+            orchestration_id=other_orchestration_id,
             minion_modpath=minion_modpath,
             workflow_id="wf-other",
             event=DictEvent(),
@@ -773,7 +773,7 @@ async def test_minion_startup_replays_only_own_contexts():
 
     m = ReplayMinion(
         "iid",
-        own_composite_key,
+        own_orchestration_id,
         minion_modpath,
         None,
         store,
@@ -817,7 +817,7 @@ async def test_minion_startup_replays_typed_msgspec_event_and_context():
 
     await store._mn_serialize_and_save_context(
         MinionWorkflowContext(
-            minion_composite_key="mock.modpath.minion_replay_typed|cfg|tests.assets.pipelines.shared",
+            orchestration_id="mock.modpath.minion_replay_typed|cfg|tests.assets.pipelines.shared",
             minion_modpath="mock.modpath.minion_replay_typed",
             workflow_id="wf-typed",
             event=ReplayEvent(7),
@@ -977,7 +977,7 @@ async def test_resumed_workflow_step_can_access_event_and_context_from_state_sto
 
     await store._mn_serialize_and_save_context(
         MinionWorkflowContext(
-            minion_composite_key="tests.assets.resume_access_minion|cfg|tests.assets.pipelines.resume",
+            orchestration_id="tests.assets.resume_access_minion|cfg|tests.assets.pipelines.resume",
             minion_modpath="tests.assets.resume_access_minion",
             workflow_id="wf-resume",
             event=DictEvent(value=7),
@@ -1020,7 +1020,7 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
     minion_modpath = "tests.assets.replay_with_invalid_context_minion"
 
     valid_context: MinionWorkflowContext[DictEvent, DictContext] = MinionWorkflowContext(
-        minion_composite_key=f"{minion_modpath}|cfg|tests.assets.pipelines.invalid",
+        orchestration_id=f"{minion_modpath}|cfg|tests.assets.pipelines.invalid",
         minion_modpath=minion_modpath,
         workflow_id="wf-valid",
         event=DictEvent(value=123),
@@ -1031,7 +1031,7 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
         error_msg=None,
     )
     invalid_context: MinionWorkflowContext[DictEvent, DictContext] = MinionWorkflowContext(
-        minion_composite_key=f"{minion_modpath}|cfg|tests.assets.pipelines.invalid",
+        orchestration_id=f"{minion_modpath}|cfg|tests.assets.pipelines.invalid",
         minion_modpath=minion_modpath,
         workflow_id="wf-invalid",
         event=DictEvent(value=456),
@@ -1042,7 +1042,7 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
         error_msg=None,
     )
     invalid_payload = PersistedMinionWorkflowContext(
-        minion_composite_key=invalid_context.minion_composite_key,
+        orchestration_id=invalid_context.orchestration_id,
         minion_modpath=invalid_context.minion_modpath,
         workflow_id=invalid_context.workflow_id,
         event=invalid_context.event,

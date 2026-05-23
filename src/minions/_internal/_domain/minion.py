@@ -39,7 +39,7 @@ from .._framework.metrics_constants import (
     MINION_WORKFLOW_STEP_ABORTED_TOTAL, MINION_WORKFLOW_STEP_FAILED_TOTAL,
     MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
     MINION_WORKFLOW_STEP_DURATION_SECONDS,
-    LABEL_MINION_COMPOSITE_KEY, LABEL_MINION_WORKFLOW_STEP,
+    LABEL_ORCHESTRATION_ID, LABEL_MINION_WORKFLOW_STEP,
     LABEL_ERROR_TYPE,
     LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE,
     LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE,
@@ -283,7 +283,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     def __init__(
         self,
         minion_instance_id: str,
-        minion_composite_key: str,
+        orchestration_id: str,
         minion_modpath: str,
         config_path: str | None,
         state_store: StateStore,
@@ -306,12 +306,12 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         self._mn_name = name
 
         self._mn_minion_instance_id = minion_instance_id
-        self._mn_minion_composite_key = minion_composite_key
+        self._mn_orchestration_id = orchestration_id
         self._mn_minion_modpath = minion_modpath
         self._mn_config_path = config_path
         self._mn_config: object | None = None
         if inline_config is not None:
-            self._mn_bind_config(inline_config, source="Gru.start_minion minion_config")
+            self._mn_bind_config(inline_config, source="Gru.start_orchestration minion_config")
         self._mn_config_lock = asyncio.Lock()
         self._mn_state_store = state_store
         self._mn_metrics = metrics
@@ -480,7 +480,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         async def _post():
             contexts = (
                 await self._mn_state_store._mn_get_decoded_contexts_for_orchestration(
-                    self._mn_minion_composite_key,
+                    self._mn_orchestration_id,
                     event_cls=type(self)._mn_event_cls,
                     context_cls=type(self)._mn_workflow_ctx_cls,
                 )
@@ -603,7 +603,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             persistence_retryable=True,
                             minion_name=self._mn_name,
                             minion_instance_id=self._mn_minion_instance_id,
-                            minion_composite_key=self._mn_minion_composite_key,
+                            orchestration_id=self._mn_orchestration_id,
                             minion_modpath=self._mn_minion_modpath,
                         )
                     return True
@@ -728,7 +728,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             "context_type": getattr(ctx.context_cls, "__name__", type(ctx.context).__name__),
             "minion_name": self._mn_name,
             "minion_instance_id": self._mn_minion_instance_id,
-            "minion_composite_key": self._mn_minion_composite_key,
+            "orchestration_id": self._mn_orchestration_id,
             "minion_modpath": self._mn_minion_modpath,
         }
         if error is not None:
@@ -744,7 +744,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     ) -> dict[str, str]:
         checkpoint_type, _ = self._mn_workflow_persistence_checkpoint_metric_parts(checkpoint)
         return {
-            LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
+            LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
             LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: checkpoint_type,
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: operation,
             LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: self._mn_workflow_persistence_failure_policy,
@@ -773,7 +773,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     ) -> dict[str, str]:
         checkpoint_type, _ = self._mn_workflow_persistence_checkpoint_metric_parts(checkpoint)
         return {
-            LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
+            LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
             LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: checkpoint_type,
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: operation,
             LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: result.failure_stage or "none",
@@ -889,12 +889,12 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             workflow_id=ctx.workflow_id,
                             minion_name=self._mn_name,
                             minion_instance_id=self._mn_minion_instance_id,
-                            minion_composite_key=self._mn_minion_composite_key,
+                            orchestration_id=self._mn_orchestration_id,
                             minion_modpath=self._mn_minion_modpath
                         ),
                         self._mn_metrics._mn_inc(
                             metric_name=MINION_WORKFLOW_STARTED_TOTAL,
-                            labels={LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key},
+                            labels={LABEL_ORCHESTRATION_ID: self._mn_orchestration_id},
                         )
                     ])
                 else:
@@ -904,7 +904,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         workflow_id=ctx.workflow_id,
                         minion_name=self._mn_name,
                         minion_instance_id=self._mn_minion_instance_id,
-                        minion_composite_key=self._mn_minion_composite_key,
+                        orchestration_id=self._mn_orchestration_id,
                         minion_modpath=self._mn_minion_modpath
                     )
 
@@ -929,13 +929,13 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             step_index=i,
                             minion_name=self._mn_name,
                             minion_instance_id=self._mn_minion_instance_id,
-                            minion_composite_key=self._mn_minion_composite_key,
+                            orchestration_id=self._mn_orchestration_id,
                             minion_modpath=self._mn_minion_modpath
                         ),
                         self._mn_metrics._mn_inc(
                             metric_name=MINION_WORKFLOW_STEP_STARTED_TOTAL,
                             labels={
-                                LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
+                                LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
                                 LABEL_MINION_WORKFLOW_STEP: step_name,
                             },
                         )
@@ -961,13 +961,13 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 step_index=i,
                                 minion_name=self._mn_name,
                                 minion_instance_id=self._mn_minion_instance_id,
-                                minion_composite_key=self._mn_minion_composite_key,
+                                orchestration_id=self._mn_orchestration_id,
                                 minion_modpath=self._mn_minion_modpath
                             ),
                             self._mn_metrics._mn_inc(
                                 metric_name=MINION_WORKFLOW_STEP_ABORTED_TOTAL,
                                 labels={
-                                    LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
+                                    LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
                                     LABEL_MINION_WORKFLOW_STEP: step_name,
                                 },
                             )
@@ -981,7 +981,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             "step_index": i,
                             "minion_name": self._mn_name,
                             "minion_instance_id": self._mn_minion_instance_id,
-                            "minion_composite_key": self._mn_minion_composite_key,
+                            "orchestration_id": self._mn_orchestration_id,
                             "minion_modpath": self._mn_minion_modpath
                         }
                         tb = sys.exc_info()[2]
@@ -1002,7 +1002,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             self._mn_metrics._mn_inc(
                                 metric_name=MINION_WORKFLOW_STEP_FAILED_TOTAL,
                                 labels={
-                                    LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
+                                    LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
                                     LABEL_MINION_WORKFLOW_STEP: step_name,
                                     LABEL_ERROR_TYPE: type(e).__name__,
                                 },
@@ -1020,13 +1020,13 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 step_index=i,
                                 minion_name=self._mn_name,
                                 minion_instance_id=self._mn_minion_instance_id,
-                                minion_composite_key=self._mn_minion_composite_key,
+                                orchestration_id=self._mn_orchestration_id,
                                 minion_modpath=self._mn_minion_modpath
                             ),
                             self._mn_metrics._mn_inc(
                                 metric_name=MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
                                 labels={
-                                    LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
+                                    LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
                                     LABEL_MINION_WORKFLOW_STEP: step_name,
                                 },
                             )
@@ -1044,7 +1044,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             metric_name=MINION_WORKFLOW_STEP_DURATION_SECONDS,
                             value=duration,
                             labels={
-                                LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
+                                LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
                                 LABEL_MINION_WORKFLOW_STEP: step_name,
                                 LABEL_STATUS: step_status,
                             },
@@ -1091,12 +1091,12 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             workflow_id=ctx.workflow_id,
                             minion_name=self._mn_name,
                             minion_instance_id=self._mn_minion_instance_id,
-                            minion_composite_key=self._mn_minion_composite_key,
+                            orchestration_id=self._mn_orchestration_id,
                             minion_modpath=self._mn_minion_modpath
                         ),
                         self._mn_metrics._mn_inc(
                             metric_name=MINION_WORKFLOW_ABORTED_TOTAL,
-                            labels={LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key},
+                            labels={LABEL_ORCHESTRATION_ID: self._mn_orchestration_id},
                         )
                     ])
                 elif workflow_status == "failed" and terminal_workflow_log_message is not None:
@@ -1111,13 +1111,13 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             workflow_id=ctx.workflow_id,
                             minion_name=self._mn_name,
                             minion_instance_id=self._mn_minion_instance_id,
-                            minion_composite_key=self._mn_minion_composite_key,
+                            orchestration_id=self._mn_orchestration_id,
                             minion_modpath=self._mn_minion_modpath,
                         ),
                         self._mn_metrics._mn_inc(
                             metric_name=MINION_WORKFLOW_FAILED_TOTAL,
                             labels={
-                                LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
+                                LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
                                 LABEL_ERROR_TYPE: type(failure_error).__name__,
                             },
                         )
@@ -1130,12 +1130,12 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             workflow_id=ctx.workflow_id,
                             minion_name=self._mn_name,
                             minion_instance_id=self._mn_minion_instance_id,
-                            minion_composite_key=self._mn_minion_composite_key,
+                            orchestration_id=self._mn_orchestration_id,
                             minion_modpath=self._mn_minion_modpath
                         ),
                         self._mn_metrics._mn_inc(
                             metric_name=MINION_WORKFLOW_SUCCEEDED_TOTAL,
-                            labels={LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key},
+                            labels={LABEL_ORCHESTRATION_ID: self._mn_orchestration_id},
                         )
                     ])
 
@@ -1150,7 +1150,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     metric_name=MINION_WORKFLOW_DURATION_SECONDS,
                     value=duration,
                     labels={
-                        LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key,
+                        LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
                         LABEL_STATUS: workflow_status,
                     },
                 )
@@ -1164,7 +1164,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         await self._mn_metrics._mn_set(
                             metric_name=MINION_WORKFLOW_INFLIGHT_GAUGE,
                             value=inflight,
-                            labels={LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key},
+                            labels={LABEL_ORCHESTRATION_ID: self._mn_orchestration_id},
                         )
                 self._mn_event_var.reset(event_token)
                 self._mn_context_var.reset(context_token)
@@ -1226,7 +1226,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         workflow_id = uuid.uuid4().hex
 
         ctx: MinionWorkflowContext[T_Event, T_Ctx] = MinionWorkflowContext(
-            minion_composite_key=self._mn_minion_composite_key,
+            orchestration_id=self._mn_orchestration_id,
             minion_modpath=self._mn_minion_modpath,
             workflow_id=workflow_id,
             event=t_event,
@@ -1245,7 +1245,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         await self._mn_metrics._mn_set(
             metric_name=MINION_WORKFLOW_INFLIGHT_GAUGE,
             value=inflight,
-            labels={LABEL_MINION_COMPOSITE_KEY: self._mn_minion_composite_key},
+            labels={LABEL_ORCHESTRATION_ID: self._mn_orchestration_id},
         )
 
     async def _mn_wait_until_tasks_idle(
