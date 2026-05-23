@@ -33,6 +33,21 @@ If a change adds complexity without clear benefit, it is unlikely to be accepted
 * Avoid over-engineering
 * Tests (where applicable) should pass
 
+## Local Setup
+
+For development, use a fresh virtual environment and install Minions in editable mode so
+`python -m minions` and the test suite resolve the package from `src/`:
+
+```bash
+python3.12 -m venv .venv
+./.venv/bin/python -m pip install -U pip setuptools wheel
+./.venv/bin/python -m pip install -e ".[dev]"
+./.venv/bin/python -m pytest
+```
+
+Run `pytest` from the repository root. The test suite relies on shared fixtures under
+`tests/assets`, so the repo root must be on the import path during test runs.
+
 There is no strict style guide beyond consistency with the existing codebase.
 
 ## Process

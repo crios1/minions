@@ -121,7 +121,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--pytest-bin",
         default=None,
-        help="Explicit pytest executable to use. Defaults to repo `venv/bin/pytest` if present.",
+        help="Explicit pytest executable to use. Defaults to repo `.venv/bin/pytest` if present.",
     )
     parser.add_argument(
         "--artifacts-dir",
@@ -168,7 +168,7 @@ def resolve_pytest_bin(repo_root: Path, explicit: str | None) -> str:
     if explicit:
         return explicit
 
-    venv_pytest = repo_root / "venv" / "bin" / "pytest"
+    venv_pytest = repo_root / ".venv" / "bin" / "pytest"
     if venv_pytest.exists():
         return str(venv_pytest)
 

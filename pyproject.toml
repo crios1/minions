@@ -30,6 +30,7 @@ dev = [
   "pyright[nodejs]>=1.1,<2.0",
   "pytest>=8.4,<9.0",
   "pytest-asyncio>=1.0,<2.0",
+  "ruff>=0.6,<1.0",
   "sphinx>=7,<8",
   "myst-parser>=3,<4",
   "sphinx-book-theme>=1.1,<2.0",
@@ -51,23 +52,38 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
 include = ["minions*"]
 
+[tool.setuptools.package-dir]
+"" = "src"
+
 [tool.pytest.ini_options]
-python_paths = ["."]
+testpaths = ["tests"]
+pythonpath = [".", "src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "F",
+  "I",
+]
 
 [tool.pyright]
 typeCheckingMode = "strict"
 pythonVersion = "3.11"
 venvPath = "."
-venv = "venv"
+venv = ".venv"
 # `_mn_*` is Minions' framework-internal namespace, not class-private.
 # Runtime validation blocks user code from defining or mutating it.
 reportPrivateUsage = "none"
 
 include = [
-  "minions",
+  "src/minions",
   "tests",
 ]
 
@@ -78,5 +94,5 @@ exclude = [
   "**/__pycache__",
   "venv",
   ".venv",
-  "minions/_internal/_domain/gru_shell*.py",
+  "src/minions/_internal/_domain/gru_shell*.py",
 ]
