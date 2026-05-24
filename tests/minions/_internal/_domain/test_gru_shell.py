@@ -15,7 +15,7 @@ from minions._internal._domain.gru_shell import GruShell
 class FakeGru:
     def __init__(self) -> None:
         self._loop = asyncio.new_event_loop()
-        self._minions_by_id = {}
+        self._minions_by_instance_id = {}
         self._minions_by_name = {}
         self.start_calls: list[tuple[str, str, str | None]] = []
 

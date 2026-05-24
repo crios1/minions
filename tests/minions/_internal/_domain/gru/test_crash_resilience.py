@@ -31,7 +31,11 @@ GOOD_PIPELINE = "tests.assets.crash.pipelines.emit_1_then_block"
 
 
 def orchestration_id(minion_modpath: str, pipeline_modpath: str, config: str = "") -> str:
-    return f"{minion_modpath}|{config}|{pipeline_modpath}"
+    return Gru._make_orchestration_id(
+        minion_id=minion_modpath,
+        minion_config_id=config,
+        pipeline_id=pipeline_modpath,
+    )
 
 
 async def assert_gru_can_start_and_stop_known_good_minion(gru: Gru) -> None:

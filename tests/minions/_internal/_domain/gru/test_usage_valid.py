@@ -1,11 +1,16 @@
+import asyncio
 import contextlib
+import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import Protocol, cast
 
 import pytest
 
+from minions import Minion, Pipeline, minion_id, minion_step, pipeline_id
 from minions._internal._domain.gru import Gru
 from minions._internal._domain.minion import WorkflowPersistenceFailurePolicy
+from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.logger_console import ConsoleLogger
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_noop import NoOpMetrics
@@ -14,6 +19,8 @@ from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.minion_spied_configed import AssetMinionConfig
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
+from tests.assets.contexts.simple import SimpleContext
+from tests.assets.events.simple import SimpleEvent
 from tests.support.gru_scenario import (
     AfterWorkflowStarts,
     Concurrent,
@@ -29,6 +36,17 @@ from tests.support.gru_scenario import (
 
 
 FIXED_RESOURCE_ID = "tests.assets.resources.fixed.base.FixedResource"
+MINION_COMPONENT_ID = "77777777-7777-4777-8777-77777777777a"
+PIPELINE_COMPONENT_ID = "88888888-8888-4888-8888-88888888888b"
+CONFIG_ID = "99999999-9999-4999-8999-99999999999c"
+
+
+class _LoadedConfig(Protocol):
+    name: str
+
+
+class _ConfigurableMinion(Protocol):
+    config: _LoadedConfig
 
 
 class TestValidUsage:
@@ -165,6 +183,272 @@ class TestValidUsage:
             stop_result = await gru.stop_orchestration(start_result.orchestration_id)
             assert stop_result.success
 
+    @pytest.mark.asyncio
+    async def test_gru_start_orchestration_uses_attached_component_ids(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    ) -> None:
+        @pipeline_id(PIPELINE_COMPONENT_ID)
+        class LifecyclePipeline(Pipeline[SimpleEvent]):
+            async def produce_event(self) -> SimpleEvent:
+                await asyncio.sleep(3600)
+                return SimpleEvent(timestamp=0)
+
+        @minion_id(MINION_COMPONENT_ID)
+        class LifecycleMinion(Minion[SimpleEvent, SimpleContext]):
+            name = "attached-id-lifecycle-minion"
+
+            @minion_step
+            async def step_1(self) -> None:
+                self.context.step1 = "step1"
+
+        logger = InMemoryLogger()
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=logger,
+            metrics=NoOpMetrics(),
+        ) as gru:
+            start_result = await gru.start_orchestration(
+                pipeline=LifecyclePipeline,
+                minion=LifecycleMinion,
+            )
+
+            assert start_result.success
+            assert start_result.orchestration_id is not None
+            assert len(start_result.orchestration_id) == 44
+            assert start_result.orchestration_id in gru._minions_by_orchestration_id
+            assert PIPELINE_COMPONENT_ID in gru._pipelines
+            assert logger.has_log(
+                "Orchestration started",
+                log_kwargs={
+                    "orchestration_id": start_result.orchestration_id,
+                    "minion_id": MINION_COMPONENT_ID,
+                    "pipeline_id": PIPELINE_COMPONENT_ID,
+                    "minion_config_id": "",
+                },
+            )
+
+            stop_result = await gru.stop_orchestration(start_result.orchestration_id)
+            assert stop_result.success
+
+    @pytest.mark.asyncio
+    async def test_gru_start_orchestration_uses_attached_component_and_config_ids(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        package_dir = tmp_path / "durable_app"
+        package_dir.mkdir()
+        (package_dir / "__init__.py").write_text("")
+        (package_dir / "pipeline.py").write_text(
+            "\n".join(
+                [
+                    "import asyncio",
+                    "from minions import Pipeline, pipeline_id",
+                    "from tests.assets.events.simple import SimpleEvent",
+                    f"@pipeline_id({PIPELINE_COMPONENT_ID!r})",
+                    "class DurablePipeline(Pipeline[SimpleEvent]):",
+                    "    async def produce_event(self) -> SimpleEvent:",
+                    "        await asyncio.sleep(3600)",
+                    "        return SimpleEvent(timestamp=0)",
+                    "",
+                ]
+            )
+        )
+        (package_dir / "minion.py").write_text(
+            "\n".join(
+                [
+                    "import tomllib",
+                    "from dataclasses import dataclass",
+                    "from pathlib import Path",
+                    "from minions import Minion, minion_id, minion_step",
+                    "from tests.assets.contexts.simple import SimpleContext",
+                    "from tests.assets.events.simple import SimpleEvent",
+                    "@dataclass",
+                    "class DurableConfig:",
+                    "    name: str",
+                    f"@minion_id({MINION_COMPONENT_ID!r})",
+                    "class DurableMinion(Minion[SimpleEvent, SimpleContext]):",
+                    "    name = 'attached-id-config-lifecycle-minion'",
+                    "    config: DurableConfig",
+                    "    async def load_config(self, config_path: str) -> DurableConfig:",
+                    "        parsed = tomllib.loads(Path(config_path).read_text())",
+                    "        return DurableConfig(name=parsed['config']['name'])",
+                    "    @minion_step",
+                    "    async def step_1(self) -> None:",
+                    "        self.context.step1 = self.config.name",
+                    "",
+                ]
+            )
+        )
+        config_path = tmp_path / "minion.toml"
+        config_path.write_text(
+            f'_minions_config_id = "{CONFIG_ID}"\n\n'
+            '[config]\nname = "alpha"\n'
+        )
+        monkeypatch.setattr(sys, "path", [str(tmp_path), *sys.path])
+        for module_name in ("durable_app.minion", "durable_app.pipeline"):
+            sys.modules.pop(module_name, None)
+
+        logger = InMemoryLogger()
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=logger,
+            metrics=NoOpMetrics(),
+        ) as gru:
+            start_result = await gru.start_orchestration(
+                pipeline="durable_app.pipeline",
+                minion="durable_app.minion",
+                minion_config_path=str(config_path),
+            )
+
+            assert start_result.success
+            assert start_result.orchestration_id is not None
+            orchestration_id = start_result.orchestration_id
+            assert len(orchestration_id) == 44
+            assert orchestration_id in gru._minions_by_orchestration_id
+            minion = cast(_ConfigurableMinion, gru._minions_by_orchestration_id[orchestration_id])
+            assert minion.config.name == "alpha"
+            assert logger.has_log(
+                "Orchestration started",
+                log_kwargs={
+                    "orchestration_id": orchestration_id,
+                    "minion_id": MINION_COMPONENT_ID,
+                    "pipeline_id": PIPELINE_COMPONENT_ID,
+                    "minion_config_id": CONFIG_ID,
+                },
+            )
+
+            stop_result = await gru.stop_orchestration(orchestration_id)
+            assert stop_result.success
+
+    @pytest.mark.asyncio
+    async def test_gru_resumes_moved_id_bearing_source_and_config_artifacts(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        moved_package_dir = tmp_path / "moved_app"
+        moved_package_dir.mkdir()
+        (moved_package_dir / "__init__.py").write_text("")
+        (moved_package_dir / "pipeline.py").write_text(
+            "\n".join(
+                [
+                    "import asyncio",
+                    "from minions import Pipeline, pipeline_id",
+                    "from tests.assets.events.simple import SimpleEvent",
+                    f"@pipeline_id({PIPELINE_COMPONENT_ID!r})",
+                    "class MovedPipeline(Pipeline[SimpleEvent]):",
+                    "    async def produce_event(self) -> SimpleEvent:",
+                    "        await asyncio.sleep(3600)",
+                    "        return SimpleEvent(timestamp=0)",
+                    "",
+                ]
+            )
+        )
+        (moved_package_dir / "minion.py").write_text(
+            "\n".join(
+                [
+                    "import tomllib",
+                    "from dataclasses import dataclass",
+                    "from pathlib import Path",
+                    "from minions import Minion, minion_id, minion_step",
+                    "from tests.assets.contexts.simple import SimpleContext",
+                    "from tests.assets.events.simple import SimpleEvent",
+                    "@dataclass",
+                    "class MovedConfig:",
+                    "    name: str",
+                    f"@minion_id({MINION_COMPONENT_ID!r})",
+                    "class MovedMinion(Minion[SimpleEvent, SimpleContext]):",
+                    "    name = 'moved-resume-minion'",
+                    "    config: MovedConfig",
+                    "    async def load_config(self, config_path: str) -> MovedConfig:",
+                    "        parsed = tomllib.loads(Path(config_path).read_text())",
+                    "        return MovedConfig(name=parsed['config']['name'])",
+                    "    @minion_step",
+                    "    async def step_1(self) -> None:",
+                    "        raise AssertionError('step_1 should not replay after resume')",
+                    "    @minion_step",
+                    "    async def step_2(self) -> None:",
+                    "        self.context.step2 = self.config.name",
+                    "",
+                ]
+            )
+        )
+        moved_config_path = tmp_path / "renamed" / "minion.toml"
+        moved_config_path.parent.mkdir()
+        moved_config_path.write_text(
+            f'_minions_config_id = "{CONFIG_ID}"\n\n'
+            '[config]\nname = "moved-alpha"\n'
+        )
+        monkeypatch.setattr(sys, "path", [str(tmp_path), *sys.path])
+        for module_name in ("moved_app.minion", "moved_app.pipeline"):
+            sys.modules.pop(module_name, None)
+
+        expected_orchestration_id = Gru._make_orchestration_id(
+            minion_id=MINION_COMPONENT_ID,
+            minion_config_id=CONFIG_ID,
+            pipeline_id=PIPELINE_COMPONENT_ID,
+        )
+        logger = InMemoryLogger()
+        state_store = InMemoryStateStore(logger=logger)
+        await state_store._mn_serialize_and_save_context(
+            MinionWorkflowContext(
+                orchestration_id=expected_orchestration_id,
+                minion_modpath="original_app.minion",
+                workflow_id="wf-moved-resume",
+                event=SimpleEvent(timestamp=123),
+                context=SimpleContext(step1="already-complete"),
+                context_cls=SimpleContext,
+                next_step_index=1,
+            )
+        )
+
+        async with gru_factory(
+            state_store=state_store,
+            logger=logger,
+            metrics=NoOpMetrics(),
+        ) as gru:
+            start_result = await gru.start_orchestration(
+                pipeline="moved_app.pipeline",
+                minion="moved_app.minion",
+                minion_config_path=str(moved_config_path),
+            )
+
+            assert start_result.success
+            assert start_result.orchestration_id == expected_orchestration_id
+            orchestration_id = start_result.orchestration_id
+            assert orchestration_id is not None
+            assert await logger.wait_for_log(
+                "Workflow resumed",
+                log_kwargs={
+                    "workflow_id": "wf-moved-resume",
+                    "orchestration_id": expected_orchestration_id,
+                    "minion_id": MINION_COMPONENT_ID,
+                    "pipeline_id": PIPELINE_COMPONENT_ID,
+                    "minion_config_id": CONFIG_ID,
+                },
+                timeout=1.0,
+                poll_interval=0.01,
+            )
+            assert await logger.wait_for_log(
+                "Workflow succeeded",
+                log_kwargs={
+                    "workflow_id": "wf-moved-resume",
+                    "orchestration_id": expected_orchestration_id,
+                    "minion_id": MINION_COMPONENT_ID,
+                    "pipeline_id": PIPELINE_COMPONENT_ID,
+                    "minion_config_id": CONFIG_ID,
+                },
+                timeout=1.0,
+                poll_interval=0.01,
+            )
+            assert await state_store.get_contexts_for_orchestration(expected_orchestration_id) == []
+
+            stop_result = await gru.stop_orchestration(orchestration_id)
+            assert stop_result.success
 
     @pytest.mark.asyncio
     async def test_gru_start_3_minions_3_pipelines_3_resources_no_sharing(

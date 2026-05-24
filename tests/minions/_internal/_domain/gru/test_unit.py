@@ -1,12 +1,16 @@
 import asyncio
 import contextlib
+import hashlib
+import json
 import types
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
-from minions._internal._domain.gru import Gru
+from minions import Minion, Pipeline, Resource, minion_id, minion_step, pipeline_id, resource_id
+from minions._internal._domain.gru import ORCHESTRATION_ID_VERSION, Gru
 from minions._internal._domain.gru_result_types import StartResult, StopResult
 from minions._internal._framework.async_component import AsyncComponent
 from minions._internal._framework.logger import CRITICAL, INFO, WARNING
@@ -17,6 +21,9 @@ from minions._internal._framework.metrics_constants import (
     SYSTEM_MEMORY_USED_PERCENT,
 )
 from minions._internal._framework.state_store_noop import NoOpStateStore
+from minions._internal._utils.base62_encode import base62_encode
+from tests.assets.contexts.simple import SimpleContext
+from tests.assets.events.simple import SimpleEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 
@@ -55,7 +62,103 @@ class InlineIdentityConfig:
     name: str
 
 
+MINION_COMPONENT_ID = "11111111-1111-4111-8111-11111111111a"
+PIPELINE_COMPONENT_ID = "22222222-2222-4222-8222-22222222222b"
+RESOURCE_COMPONENT_ID = "33333333-3333-4333-8333-33333333333c"
+CONFIG_ID = "44444444-4444-4444-8444-44444444444f"
+
+
 class TestUnit:
+    def _expected_orchestration_id(
+        self,
+        *,
+        minion_id: str,
+        minion_config_id: str,
+        pipeline_id: str,
+    ) -> str:
+        payload = {
+            "version": ORCHESTRATION_ID_VERSION,
+            "minion_id": minion_id,
+            "minion_config_id": minion_config_id,
+            "pipeline_id": pipeline_id,
+        }
+        serialized = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        # Base62 makes the SHA-256-backed ID prettier: alphanumeric and shorter than hex.
+        # Left-padding keeps the ID consistently 44 characters long.
+        return base62_encode(hashlib.sha256(serialized).digest()).rjust(44, "0")
+
+
+    def test_attached_component_ids_are_stable_identities(self) -> None:
+        @minion_id(MINION_COMPONENT_ID)
+        class StableIdMinion(Minion[SimpleEvent, SimpleContext]):
+            @minion_step
+            async def step(self) -> None:
+                return None
+
+        @pipeline_id(PIPELINE_COMPONENT_ID)
+        class StableIdPipeline(Pipeline[SimpleEvent]):
+            async def produce_event(self) -> SimpleEvent:
+                return SimpleEvent(timestamp=0)
+
+        @resource_id(RESOURCE_COMPONENT_ID)
+        class StableIdResource(Resource):
+            pass
+
+        assert Gru._get_component_identity(StableIdMinion, "fallback.minion") == MINION_COMPONENT_ID
+        assert Gru._get_component_identity(StableIdPipeline, "fallback.pipeline") == PIPELINE_COMPONENT_ID
+        assert Gru._get_component_identity(StableIdResource, "fallback.resource") == RESOURCE_COMPONENT_ID
+
+    def test_component_id_decorators_validate_component_kind(self) -> None:
+        with pytest.raises(TypeError, match="@minion_id"):
+            minion_id(MINION_COMPONENT_ID)(Resource)
+
+        with pytest.raises(TypeError, match="@pipeline_id"):
+            pipeline_id(PIPELINE_COMPONENT_ID)(Resource)
+
+        with pytest.raises(TypeError, match="@resource_id"):
+            resource_id(RESOURCE_COMPONENT_ID)(Pipeline)
+
+    def test_component_id_decorators_require_uuid_ids(self) -> None:
+        with pytest.raises(ValueError, match="component id"):
+            resource_id("test.resource.alpha")(Resource)
+
+        with pytest.raises(ValueError, match="canonical lowercase UUID"):
+            resource_id(RESOURCE_COMPONENT_ID.upper())(Resource)
+
+    def test_component_id_decorators_reject_duplicate_loaded_ids(self) -> None:
+        @resource_id(RESOURCE_COMPONENT_ID)
+        class FirstDuplicateResource(Resource):  # pyright: ignore[reportUnusedClass]
+            pass
+
+        with pytest.raises(ValueError, match="Duplicate resource component id"):
+            @resource_id(RESOURCE_COMPONENT_ID)
+            class SecondDuplicateResource(Resource):  # pyright: ignore[reportUnusedClass]
+                pass
+
+    def test_idless_components_keep_fallback_identity(self) -> None:
+        class PrototypeResource(Resource):
+            pass
+
+        assert (
+            Gru._get_component_identity(PrototypeResource, "fallback.prototype")
+            == "fallback.prototype"
+        )
+
+    def test_attached_component_identity_ignores_current_address(self) -> None:
+        @resource_id(RESOURCE_COMPONENT_ID)
+        class AddressStableResource(Resource):
+            pass
+
+        original_module = AddressStableResource.__module__
+        try:
+            AddressStableResource.__module__ = "moved.module"
+            assert (
+                Gru._get_component_identity(AddressStableResource, "moved.module.AddressStableResource")
+                == RESOURCE_COMPONENT_ID
+            )
+        finally:
+            AddressStableResource.__module__ = original_module
+
     def test_inline_config_identity_is_stable_hashed_and_content_sensitive(self) -> None:
         cfg_a = Gru._make_inline_config_identity(InlineIdentityConfig(name="alpha"))
         cfg_a_again = Gru._make_inline_config_identity(InlineIdentityConfig(name="alpha"))
@@ -71,7 +174,53 @@ class TestUnit:
             cfg_a,
             "tests.assets.Pipeline",
         )
-        assert key == f"tests.assets.Minion|{cfg_a}|tests.assets.Pipeline"
+        assert key == self._expected_orchestration_id(
+            minion_id="tests.assets.Minion",
+            minion_config_id=cfg_a,
+            pipeline_id="tests.assets.Pipeline",
+        )
+        assert len(key) == 44
+
+    def test_config_id_is_used_for_toml_config_identity(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "renamable.toml"
+        config_path.write_text(
+            f'_minions_config_id = "{CONFIG_ID}"\n\n[config]\nname = "alpha"\n'
+        )
+
+        assert Gru._get_config_identity(str(config_path)) == CONFIG_ID
+        assert (
+            Gru._make_orchestration_id("minion-id", CONFIG_ID, "pipeline-id")
+            == self._expected_orchestration_id(
+                minion_id="minion-id",
+                minion_config_id=CONFIG_ID,
+                pipeline_id="pipeline-id",
+            )
+        )
+
+    def test_config_id_is_used_for_json_config_identity(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "renamable.json"
+        config_path.write_text(f'{{"_minions_config_id": "{CONFIG_ID}", "name": "alpha"}}')
+
+        assert Gru._get_config_identity(str(config_path)) == CONFIG_ID
+
+    def test_config_id_is_used_for_yaml_config_identity(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "renamable.yaml"
+        config_path.write_text(f'_minions_config_id: "{CONFIG_ID}"\nname: alpha\n')
+
+        assert Gru._get_config_identity(str(config_path)) == CONFIG_ID
+
+    def test_idless_config_keeps_path_fallback_identity(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "fallback.toml"
+        config_path.write_text('[config]\nname = "alpha"\n')
+
+        assert Gru._get_config_identity(str(config_path)) == config_path.resolve().as_posix()
+
+    def test_config_id_must_be_canonical_uuid(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "bad.toml"
+        config_path.write_text('_minions_config_id = "not-a-uuid"\n')
+
+        with pytest.raises(ValueError, match="config id"):
+            Gru._get_config_identity(str(config_path))
 
     @pytest.mark.asyncio
     async def test_start_and_stop_delegate_to_canonical_methods(

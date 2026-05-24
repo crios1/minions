@@ -59,7 +59,7 @@ class GruShell(cmd.Cmd):
         return shlex.split(line)
 
     def _get_minion_ids_and_names(self) -> list[str]:
-        return [i for i in self._gru._minions_by_id] \
+        return [i for i in self._gru._minions_by_instance_id] \
         + [n for n in self._gru._minions_by_name]
 
     def _submit(self, coro) -> cf.Future:
@@ -124,13 +124,13 @@ class GruShell(cmd.Cmd):
                 self._future_result(f); return "stopped"
             except asyncio.CancelledError: return "aborted"
             except Exception: return "failed"
-        if key in self._gru._minions_by_id:  # running if present
+        if key in self._gru._minions_by_instance_id:  # running if present
             return "running"
         return "unknown"
 
     def _print_summary(self):
         counts: dict[State, int] = {}
-        keys = set(self._start_ops) | set(self._stop_ops) | set(self._gru._minions_by_id)
+        keys = set(self._start_ops) | set(self._stop_ops) | set(self._gru._minions_by_instance_id)
         for k in keys:
             s = self._compute_state(k); counts[s] = counts.get(s, 0) + 1
         print(" ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "(none)")

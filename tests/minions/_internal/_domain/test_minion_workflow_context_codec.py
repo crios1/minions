@@ -106,6 +106,48 @@ def test_direct_typed_decoder_accepts_persisted_workflow_context(
     assert loaded_ctx == ctx
 
 
+def test_direct_typed_decoder_ignores_stale_persisted_context_cls_path() -> None:
+    ctx: MinionWorkflowContext[Any, Any] = MinionWorkflowContext(
+        orchestration_id="moved",
+        minion_modpath="old_app.minion",
+        workflow_id="wf-moved-context-cls",
+        event=EventDC(1),
+        context=ContextDC(2),
+        context_cls=ContextDC,
+        next_step_index=1,
+    )
+    persisted = deserialize(
+        serialize_persisted_workflow_context(ctx),
+        PersistedMinionWorkflowContext,
+    )
+    # Simulate a persisted blob from before the context class moved modules.
+    moved_payload = serialize(
+        PersistedMinionWorkflowContext(
+            orchestration_id=persisted.orchestration_id,
+            minion_modpath=persisted.minion_modpath,
+            workflow_id=persisted.workflow_id,
+            event=persisted.event,
+            context=persisted.context,
+            context_cls="old_app.contexts.ContextDC",
+            next_step_index=persisted.next_step_index,
+            error_msg=persisted.error_msg,
+            started_at=persisted.started_at,
+            schema_version=persisted.schema_version,
+        )
+    )
+
+    loaded_ctx = decode_persisted_workflow_context_typed(
+        moved_payload,
+        event_cls=EventDC,
+        context_cls=ContextDC,
+    )
+
+    assert isinstance(loaded_ctx.event, EventDC)
+    assert isinstance(loaded_ctx.context, ContextDC)
+    assert loaded_ctx.context == ctx.context
+    assert loaded_ctx.context_cls is ContextDC
+
+
 def test_serialize_workflow_context_writes_adapter_shape():
     ctx = MinionWorkflowContext(
         orchestration_id="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",

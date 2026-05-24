@@ -290,6 +290,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         metrics: Metrics,
         logger: Logger,
         inline_config: object | None = None,
+        minion_id: str | None = None,
+        minion_config_id: str | None = None,
+        pipeline_id: str | None = None,
         workflow_persistence_failure_policy: WorkflowPersistenceFailurePolicy = "continue-on-failure",
         workflow_persistence_retry_delay_seconds: float = 1.0,
         workflow_persistence_retry_max_delay_seconds: float = 60.0,
@@ -305,8 +308,12 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             raise TypeError(f"{type(self).__name__}.name must be a string, got {type(name).__name__}")
         self._mn_name = name
 
+        # Instance id identifies this live runtime object; minion id identifies the stable component.
         self._mn_minion_instance_id = minion_instance_id
         self._mn_orchestration_id = orchestration_id
+        self._mn_minion_id = minion_id if minion_id is not None else minion_modpath
+        self._mn_minion_config_id = minion_config_id if minion_config_id is not None else (config_path or "")
+        self._mn_pipeline_id = pipeline_id if pipeline_id is not None else ""
         self._mn_minion_modpath = minion_modpath
         self._mn_config_path = config_path
         self._mn_config: object | None = None
@@ -369,6 +376,15 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         self._mn_workflow: tuple[Callable[..., Any], ...] = tuple(
             getattr(self, name) for name in cls._mn_workflow_spec
         )
+
+    # TODO: may want to centralize this to gru later
+    def _mn_orchestration_log_kwargs(self) -> dict[str, str]:
+        return {
+            "orchestration_id": self._mn_orchestration_id,
+            "minion_id": self._mn_minion_id,
+            "minion_config_id": self._mn_minion_config_id,
+            "pipeline_id": self._mn_pipeline_id,
+        }
 
     @staticmethod
     def _mn_validate_workflow_persistence_failure_policy(
@@ -603,7 +619,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             persistence_retryable=True,
                             minion_name=self._mn_name,
                             minion_instance_id=self._mn_minion_instance_id,
-                            orchestration_id=self._mn_orchestration_id,
+                            **self._mn_orchestration_log_kwargs(),
                             minion_modpath=self._mn_minion_modpath,
                         )
                     return True
@@ -728,7 +744,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             "context_type": getattr(ctx.context_cls, "__name__", type(ctx.context).__name__),
             "minion_name": self._mn_name,
             "minion_instance_id": self._mn_minion_instance_id,
-            "orchestration_id": self._mn_orchestration_id,
+            **self._mn_orchestration_log_kwargs(),
             "minion_modpath": self._mn_minion_modpath,
         }
         if error is not None:
@@ -889,7 +905,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             workflow_id=ctx.workflow_id,
                             minion_name=self._mn_name,
                             minion_instance_id=self._mn_minion_instance_id,
-                            orchestration_id=self._mn_orchestration_id,
+                            **self._mn_orchestration_log_kwargs(),
                             minion_modpath=self._mn_minion_modpath
                         ),
                         self._mn_metrics._mn_inc(
@@ -904,7 +920,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         workflow_id=ctx.workflow_id,
                         minion_name=self._mn_name,
                         minion_instance_id=self._mn_minion_instance_id,
-                        orchestration_id=self._mn_orchestration_id,
+                        **self._mn_orchestration_log_kwargs(),
                         minion_modpath=self._mn_minion_modpath
                     )
 
@@ -929,7 +945,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             step_index=i,
                             minion_name=self._mn_name,
                             minion_instance_id=self._mn_minion_instance_id,
-                            orchestration_id=self._mn_orchestration_id,
+                            **self._mn_orchestration_log_kwargs(),
                             minion_modpath=self._mn_minion_modpath
                         ),
                         self._mn_metrics._mn_inc(
@@ -961,7 +977,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 step_index=i,
                                 minion_name=self._mn_name,
                                 minion_instance_id=self._mn_minion_instance_id,
-                                orchestration_id=self._mn_orchestration_id,
+                                **self._mn_orchestration_log_kwargs(),
                                 minion_modpath=self._mn_minion_modpath
                             ),
                             self._mn_metrics._mn_inc(
@@ -981,7 +997,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             "step_index": i,
                             "minion_name": self._mn_name,
                             "minion_instance_id": self._mn_minion_instance_id,
-                            "orchestration_id": self._mn_orchestration_id,
+                            **self._mn_orchestration_log_kwargs(),
                             "minion_modpath": self._mn_minion_modpath
                         }
                         tb = sys.exc_info()[2]
@@ -1020,7 +1036,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 step_index=i,
                                 minion_name=self._mn_name,
                                 minion_instance_id=self._mn_minion_instance_id,
-                                orchestration_id=self._mn_orchestration_id,
+                                **self._mn_orchestration_log_kwargs(),
                                 minion_modpath=self._mn_minion_modpath
                             ),
                             self._mn_metrics._mn_inc(
@@ -1091,7 +1107,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             workflow_id=ctx.workflow_id,
                             minion_name=self._mn_name,
                             minion_instance_id=self._mn_minion_instance_id,
-                            orchestration_id=self._mn_orchestration_id,
+                            **self._mn_orchestration_log_kwargs(),
                             minion_modpath=self._mn_minion_modpath
                         ),
                         self._mn_metrics._mn_inc(
@@ -1111,7 +1127,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             workflow_id=ctx.workflow_id,
                             minion_name=self._mn_name,
                             minion_instance_id=self._mn_minion_instance_id,
-                            orchestration_id=self._mn_orchestration_id,
+                            **self._mn_orchestration_log_kwargs(),
                             minion_modpath=self._mn_minion_modpath,
                         ),
                         self._mn_metrics._mn_inc(
@@ -1130,7 +1146,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             workflow_id=ctx.workflow_id,
                             minion_name=self._mn_name,
                             minion_instance_id=self._mn_minion_instance_id,
-                            orchestration_id=self._mn_orchestration_id,
+                            **self._mn_orchestration_log_kwargs(),
                             minion_modpath=self._mn_minion_modpath
                         ),
                         self._mn_metrics._mn_inc(

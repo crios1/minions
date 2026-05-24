@@ -10,6 +10,22 @@ def main(argv: list[str] | None = None) -> int:
         from ._internal._cli.sqlite_tune import main as sqlite_tune_main
 
         return sqlite_tune_main(argv_list[2:], prog="python -m minions tune sqlite")
+    if argv_list[:2] == ["stamp", "component-ids"]:
+        from ._internal._cli.component_id_stamp import main as component_id_stamp_main
+
+        return component_id_stamp_main(argv_list[2:], prog="python -m minions stamp component-ids")
+    if argv_list[:2] == ["stamp", "config-ids"]:
+        from ._internal._cli.config_id_stamp import main as config_id_stamp_main
+
+        return config_id_stamp_main(argv_list[2:], prog="python -m minions stamp config-ids")
+    if argv_list[:2] == ["stamp", "all"]:
+        from ._internal._cli.stamp_all import main as stamp_all_main
+
+        return stamp_all_main(argv_list[2:], prog="python -m minions stamp all")
+    if argv_list[:2] == ["doctor", "ids"]:
+        from ._internal._cli.doctor_ids import main as doctor_ids_main
+
+        return doctor_ids_main(argv_list[2:], prog="python -m minions doctor ids")
 
     parser = argparse.ArgumentParser(
         prog="python -m minions",
@@ -31,6 +47,14 @@ def main(argv: list[str] | None = None) -> int:
         "tune",
         help="Run Minions tuning and diagnostics helpers.",
     )
+    sub.add_parser(
+        "stamp",
+        help="Stamp durable metadata into Minions source files.",
+    )
+    sub.add_parser(
+        "doctor",
+        help="Run non-mutating project diagnostics.",
+    )
 
     args, rest = parser.parse_known_args(argv_list)
 
@@ -48,6 +72,20 @@ def main(argv: list[str] | None = None) -> int:
         if target != "sqlite":
             parser.error(f"Unknown tune target: {target}")
         parser.error("Use `minions tune sqlite ...` to run the SQLiteStateStore tuner")
+    if args.command == "stamp":
+        if not rest:
+            parser.error("stamp requires a target (currently: component-ids, config-ids, all)")
+        target, *_ = rest
+        if target not in {"component-ids", "config-ids", "all"}:
+            parser.error(f"Unknown stamp target: {target}")
+        parser.error("Use `minions stamp component-ids ...`, `minions stamp config-ids ...`, or `minions stamp all ...`")
+    if args.command == "doctor":
+        if not rest:
+            parser.error("doctor requires a target (currently: ids)")
+        target, *_ = rest
+        if target != "ids":
+            parser.error(f"Unknown doctor target: {target}")
+        parser.error("Use `minions doctor ids ...` to inspect durable identity metadata")
 
     parser.error(f"Unknown command: {args.command}")
 

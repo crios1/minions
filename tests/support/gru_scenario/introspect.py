@@ -26,7 +26,7 @@ class GruIntrospector:
         return self._gru._make_pipeline_id(pipeline_modpath)
 
     def get_minion_instance(self, instance_id: str) -> Minion[Any, Any] | None:
-        return self._gru._minions_by_id.get(instance_id)
+        return self._gru._minions_by_instance_id.get(instance_id)
 
     def get_minion_by_orchestration_id(self, orchestration_id: str) -> Minion[Any, Any] | None:
         return self._gru._minions_by_orchestration_id.get(orchestration_id)

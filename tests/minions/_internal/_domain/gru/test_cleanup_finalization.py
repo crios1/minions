@@ -157,7 +157,7 @@ async def test_stop_resource_cleanup_failure_preserves_shared_runtime_state_for_
         assert stop.reason == "resource cleanup boom"
         assert FIXED_RESOURCE_ID in gru._resources
         assert gru._resource_refcounts[FIXED_RESOURCE_ID] == 1
-        assert len(gru._minions_by_id) == 1
+        assert len(gru._minions_by_instance_id) == 1
         assert second.orchestration_id in gru._minions_by_orchestration_id
 
 
@@ -223,7 +223,7 @@ async def test_start_subscribe_failure_preserves_shared_runtime_state_for_live_o
         assert second.reason == "subscribe boom"
         assert FIXED_RESOURCE_ID in gru._resources
         assert gru._resource_refcounts[FIXED_RESOURCE_ID] == 1
-        assert len(gru._minions_by_id) == 1
+        assert len(gru._minions_by_instance_id) == 1
         assert first.orchestration_id in gru._minions_by_orchestration_id
 
 

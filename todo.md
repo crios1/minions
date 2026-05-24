@@ -493,7 +493,7 @@
     - why it matters:
       - unclear identity terminology can become a compatibility problem for users who build alerts, dashboards, stored state tools, or operational docs around these names
 
-  - todo: decouple orchestration addressing from stable runtime identity with source-anchored ids
+  - done: decouple orchestration addressing from stable runtime identity with source-anchored ids
     - context:
       - current identity spine is “project-root relative path/modpath”
       - this breaks resumability + Prometheus continuity on directory refactors
@@ -507,10 +507,9 @@
         - `@pipeline_id(...)`, `@minion_id(...)`, and `@resource_id(...)` carry stable ids with user classes across module renames and relocations
         - a small CLI/source-editing helper can stamp ids so the user pays a one-time explicit cost instead of hand-writing UUIDs
       - make durable file config identity artifact-anchored:
-        - stable config slot id lives in a reserved `_mn_config_id` entry prepended to the config file
+        - stable config slot id lives in a reserved `_minions_config_id` entry prepended to the config file
         - config file moves preserve the slot id because the id moves with the config artifact
-        - `_mn_config_id` must not accidentally leak into the config mapping exposed to user minion code
-          - _mn_config_id is the right config name or should be changed? `minion_config_id` maybe looks less internal?
+        - `_minions_config_id` must not accidentally leak into the config mapping exposed to user minion code
       - refs and paths remain for loading / addressing / diagnostics:
         - string refs continue to work as “how to import the class”
         - config paths continue to work as “where to load the config file now”
@@ -534,11 +533,14 @@
         - validate id shape and component kind at class definition time
         - detect duplicate/conflicting loaded ids clearly
         - keep components without explicit ids available for non-durable/prototyping usage, but do not promise refactor-stable resume identity for them
+        - done: added public component UUID decorators and Gru identity resolution that uses explicit component ids when present while preserving current fallback identity for id-less components
+        - done: added loaded duplicate-id detection and tests for decorator validation, fallback behavior, and address-independent decorated component identity
       - add config slot id metadata:
-        - define `_mn_config_id` parsing and prepending behavior for supported config file formats
-        - define the identity extraction boundary before normal minion config loading, including how `_mn_config_id` works when users override `Minion.load_config(...)`
+        - define `_minions_config_id` parsing and prepending behavior for supported config file formats
+        - define the identity extraction boundary before normal minion config loading, including how `_minions_config_id` works when users override `Minion.load_config(...)`
         - define whether id-less file configs are rejected for durable mode, assigned by a CLI helper, or retain only refactor-fragile fallback identity
         - record a normalized config content digest separately from the stable config slot id
+        - done: added `_minions_config_id` parsing for TOML/YAML/JSON config identity before normal `Minion.load_config(...)`, with path fallback for id-less configs
       - define canonical “component ref” format for addresses and diagnostics:
         - prefer `module:qualname` (plus `kind` prefix internally if needed)
         - store refs/paths where needed for loading and debugging, but never make them the durable persistence identity when ids are available
@@ -548,52 +550,73 @@
         - moved source/config artifacts with unchanged ids compute the same durable orchestration identity without registry maintenance
         - make durable reuse/resume keys use stable ids, not relpaths/modpaths/config paths
         - decide id behavior for inline `minion_config` mappings: content digest, explicitly non-durable identity, or an explicit config slot id API
+        - done: Gru resolves explicit component UUIDs and `_minions_config_id` values at `start_orchestration(...)` and uses them in new orchestration ids when present
+        - done: id-less components/configs remain supported with current fallback identities for prototype/non-durable usage
+        - done: added explicit lifecycle coverage for decorated minion + decorated pipeline + `_minions_config_id` file config together
+        - done: inline `minion_config` remains prototype/exploration-only and uses the existing content/type digest identity; production durability should use file-backed configs with `_minions_config_id`
       - define orchestration identity from the current orchestration model:
         - orchestration is currently the stable wiring of pipeline + minion + minion config slot
-        - `orchestration_id = hash(pipeline_component_id + minion_component_id + config_slot_id)` unless the public model chooses an explicit orchestration id later
+        - `orchestration_id = left-padded base62(sha256(canonical internally versioned minion_id/pipeline_id/minion_config_id payload))`
+        - public `orchestration_id` is opaque and deterministic; logs carry `minion_id`, `pipeline_id`, and `minion_config_id` separately for inspection
         - add resource binding ids only if/when resource binding choices become orchestration identity inputs
         - reuse policy:
           - pipelines reuse on stable pipeline identity unless pipeline configuration later makes that model insufficient
           - minion orchestration reuse/resume follows the durable `orchestration_id`
           - live start ids remain distinct from durable orchestration identity
+        - done: new orchestration identity is derived from stable pipeline/minion/config ids when present
+        - done: public orchestration ids now use a full SHA-256 hash over a canonical versioned payload instead of the old readable joined string
+        - done: live minion start identity remains distinct as `minion_instance_id`
       - define config revision behavior for Model B before relying on it:
         - stable `config_slot_id` preserves deployment-slot identity across file moves and content updates
         - normalized config digest records the content revision
         - decide whether in-flight workflows resume under the latest config slot contents, require explicit cutover/migration handling, or retain another revision contract
+        - done: decided baseline semantics that Gru keys identity on `config_slot_id`; config content changes are user/application-managed
+        - deferred: normalized config content digest is observability-only and not currently high priority
       - update persistence + resume:
         - change workflow state keys to use durable ids (never component refs or config paths when stable ids exist)
         - keep baseline resume semantics aligned with current architecture: recovery occurs when the orchestration is declared/started again with the moved artifacts
         - decide what extra index/discovery support is required only if Minions later promises auto-resume of persisted workflows before orchestration redeclaration
-        - add migration shim:
-          - if old state keys exist (path-based), attempt best-effort mapping to new ids or mark orphaned with a clear error
-      - update prometheus labeling:
-        - stable labels:
-          - durable `component_id` / `orchestration_id` fields chosen by the terminology cleanup
-        - human/debug labels:
-          - `component_ref`
-          - current readable minion/pipeline/config labels where cardinality and compatibility permit
-        - ensure dashboards can be written against stable labels
+        - done: newly persisted workflow contexts use the new `orchestration_id` value produced at orchestration start
+        - done: decided not to migrate prototype path/module-based persisted contexts into durable UUID identity; users must drain prototype workflows before stamping durable ids
+        - done: documented the drain-before-stamping requirement for prototype-to-durable identity cutovers
+        - done: added explicit resume regression proving moved id-bearing source/config artifacts recover persisted workflows under the same durable orchestration id
+      - update observability:
+        - done: metrics that already use `orchestration_id` benefit from the new stable id derivation
+        - done: orchestration-scoped runtime logs now carry `minion_id`, `pipeline_id`, and `minion_config_id` alongside `orchestration_id`
       - define type / class persistence as part of this identity model:
         - this work also decides how persisted Python `type` references are serialized and resolved
         - `MinionWorkflowContext.context_cls` is the current concrete example
         - keep runtime/domain objects Python-native; persistence adaptation belongs at the framework boundary
         - persisted state must not rely solely on current import path stability
         - decide whether persisted type references store `component_id`, current `component_ref`, or both
-        - support migration after old path-based persisted state without making persisted workflows unusable
+        - support refactor-stable type references for workflows persisted after durable ids are in place
         - UX should remain simple while file structure changes are happening, not only after everything is stable again
+        - done: typed workflow resume now decodes persisted event/context payloads using the current Minion schema supplied at orchestration start, so moved context class import paths do not block resume when the current schema is compatible
       - add CLI/tooling support (minimal but sufficient):
         - stamp missing component/config ids intentionally instead of asking users to hand-write UUIDs
         - inspect/validate durable ids and show duplicate/conflicting ids
         - expose optional alias/index/listing support only where it reduces operational friction
+        - done: added `python -m minions stamp component-ids` to stamp missing component UUID decorators into Python source files
+        - done: added `python -m minions stamp config-ids` to stamp missing TOML/YAML/JSON config slot UUIDs
+        - done: added `python -m minions doctor ids` to inspect missing, invalid, and duplicate component/config ids without mutating files
       - document the new contract:
         - “refs and config paths can change; ids persist with source/config artifacts”
         - “normal component/config moves keep durable orchestration identity when the same id-bearing artifacts are started again”
         - “id-less/prototype artifacts do not receive the same refactor-stable durability guarantee”
         - “durable observability uses stable identity labels; step/resource method labels remain readable operation labels unless an explicit semantic metric name is added”
+        - done: docs now describe component UUIDs, config slot UUIDs, id-less fallback behavior, stamping commands, `doctor ids`, drain-before-stamping, inline config prototype semantics, and typed resume behavior
     - convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/69446e9e-053c-832c-abfb-ba40b5123693
     - other convo: https://chatgpt.com/g/g-p-6843ab69c6f081918162f6743a0722c4-minions-dev/c/694725cf-a5c4-8326-bdfc-b95f1b289f14
     - note: consider how cross env (dev,qa,prod) comparison will work: like with grushell snapshot/redeploy, discussed in "other convo"
     - note: `orchestration_id` is now the current runtime identity term; future durable-id work should preserve this name while changing how the value is derived
+
+  - later: add explicit component/resource observability labels if dashboards need them
+    - context:
+      - orchestration-scoped logs now carry `orchestration_id`, `minion_id`, `pipeline_id`, and `minion_config_id`
+      - metrics currently keep the stable `orchestration_id` label and readable operation labels such as step/resource method names
+    - deferred because:
+      - no current dashboard/operator need requires additional component/resource labels
+      - extra labels should be introduced only when their cardinality and operational value are clear
 
   - done: audit the todos in todo.md to align them to the new Gru.start / Gru.stop API
   

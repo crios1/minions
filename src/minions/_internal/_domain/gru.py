@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import importlib
+import json
 import psutil
 import uuid
 
@@ -10,12 +11,14 @@ from contextlib import asynccontextmanager
 from collections import defaultdict, deque
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Iterable, TypeGuard, get_type_hints, overload
+from typing import Any, Iterable, TypeGuard, cast, get_type_hints, overload
 
 from .minion import Minion, WorkflowPersistenceFailurePolicy
 from .pipeline import Pipeline
 from .resource import Resource
 from .types import T_Event, T_Ctx
+from .component_identity import get_component_id
+from .config_identity import get_config_id
 from .gru_result_types import (
     StartResult,
     StopResult,
@@ -48,10 +51,13 @@ from .._utils.serialization import (
     require_type_serializable,
     serialize,
 )
+from .._utils.base62_encode import base62_encode
 
 class _UnsetType: ...
 
 _UNSET = _UnsetType()
+
+ORCHESTRATION_ID_VERSION = 1
 
 _gru_instance: Gru | None = None
 
@@ -214,7 +220,7 @@ class Gru:
         self._resource_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
         # registries
-        self._minions_by_id: dict[str, Minion[Any, Any]] = {}                        # minion_instance_id -> Minion
+        self._minions_by_instance_id: dict[str, Minion[Any, Any]] = {}                        # minion_instance_id -> Minion
         self._minions_by_name: dict[str, list[Minion[Any, Any]]] = defaultdict(list) # minion_name -> Minion (minions could have the same name)
         self._minions_by_orchestration_id: dict[str, Minion[Any, Any]] = {}             # orchestration_id -> Minion
         self._minion_tasks: dict[str, asyncio.Task[None]] = {}             # minion_instance_id -> asyncio.Task
@@ -344,20 +350,42 @@ class Gru:
         return f"<inline:{digest}>"
 
     @staticmethod
-    def _make_orchestration_id(minion_modpath: str, minion_config_path: str | None, pipeline_modpath: str) -> str:
-        "conceptually orchestration_id is project-root-relative identity (with absolute fallbacks)"
-        if minion_config_path:
-            p = Path(minion_config_path)
-            if minion_config_path.startswith("<inline:"):
-                cfg = minion_config_path
-            else:
-                try:
-                    cfg = p.resolve().relative_to(Path.cwd().resolve()).as_posix()
-                except ValueError:
-                    cfg = p.resolve().as_posix()
-        else:
-            cfg = ""
-        return f"{minion_modpath}|{cfg}|{pipeline_modpath}"
+    def _make_orchestration_id(
+        minion_id: str,
+        minion_config_id: str,
+        pipeline_id: str,
+    ) -> str:
+        payload = {
+            # Version the payload in case ther is a need to migrate IDs in the future.
+            "version": ORCHESTRATION_ID_VERSION,
+            "minion_id": minion_id,
+            "minion_config_id": minion_config_id,
+            "pipeline_id": pipeline_id,
+        }
+        serialized = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        # Base62 makes the SHA-256-backed ID prettier: alphanumeric and shorter than hex.
+        # Left-padding keeps the ID consistently 44 characters long.
+        digest = hashlib.sha256(serialized).digest()
+        return base62_encode(digest).rjust(44, "0")
+
+    @staticmethod
+    def _get_config_identity(minion_config_path: str | None) -> str:
+        if not minion_config_path:
+            return ""
+        p = Path(minion_config_path)
+        if minion_config_path.startswith("<inline:"):
+            return minion_config_path
+        config_id = get_config_id(minion_config_path)
+        if config_id is not None:
+            return config_id
+        try:
+            return p.resolve().relative_to(Path.cwd().resolve()).as_posix()
+        except ValueError:
+            return p.resolve().as_posix()
+
+    @staticmethod
+    def _get_component_identity(typ: type[Any], fallback: str) -> str:
+        return get_component_id(typ) or fallback
 
     def _get_minion_class(self, minion_modpath: str) -> type[Minion[Any, Any]]:
         mod = importlib.import_module(minion_modpath)
@@ -397,15 +425,23 @@ class Gru:
         self,
         minion_instance_id: str,
         orchestration_id: str,
+        minion_id: str,
+        minion_config_id: str,
+        pipeline_id: str,
         minion_modpath: str,
         minion_config_path: str | None,
         inline_minion_config: object | None = None,
+        minion_cls: type[Minion[Any, Any]] | None = None,
     ) -> Minion[Any, Any]:
-        minion_cls = self._get_minion_class(minion_modpath)
+        if minion_cls is None:
+            minion_cls = self._get_minion_class(minion_modpath)
 
         return minion_cls(
             minion_instance_id=minion_instance_id,
             orchestration_id=orchestration_id,
+            minion_id=minion_id,
+            minion_config_id=minion_config_id,
+            pipeline_id=pipeline_id,
             minion_modpath=minion_modpath,
             config_path=minion_config_path,
             inline_config=inline_minion_config,
@@ -422,19 +458,19 @@ class Gru:
         )
 
     async def _start_orchestration_minion(self, minion: Minion[Any, Any]):
-        id = minion._mn_minion_instance_id
+        instance_id = minion._mn_minion_instance_id
         name = minion._mn_name
 
         async with self._runtime_state_lock:
-            self._minions_by_id[id] = minion
+            self._minions_by_instance_id[instance_id] = minion
             if name:
                 self._minions_by_name[name].append(minion)
 
-            self._minion_tasks[id] = safe_create_task(
+            self._minion_tasks[instance_id] = safe_create_task(
                 minion._mn_start(),
                 self._logger,
-                name=f"minion:{id}",
-                on_failure=self._make_task_failure_hook("minion", id),
+                name=f"minion:{instance_id}",
+                on_failure=self._make_task_failure_hook("minion", instance_id),
             )
 
         await minion._mn_wait_until_started()
@@ -442,7 +478,7 @@ class Gru:
     async def _stop_orchestration_minion(self, minion: Minion[Any, Any]):
         instance_id = minion._mn_minion_instance_id
         async with self._runtime_state_lock:
-            self._minions_by_id.pop(instance_id, None)
+            self._minions_by_instance_id.pop(instance_id, None)
 
             name = minion._mn_name
             if name:
@@ -471,7 +507,8 @@ class Gru:
     # Resource Methods
 
     def _make_resource_id(self, resource_cls: type[Resource]) -> str:
-        return f"{resource_cls.__module__}.{resource_cls.__name__}"
+        fallback = f"{resource_cls.__module__}.{resource_cls.__name__}"
+        return self._get_component_identity(resource_cls, fallback)
 
     def _get_direct_resource_dependencies(self, cls: type[Minion[Any, Any] | Pipeline[Any] | Resource]) -> list[type[Resource]]:
         classes: list[type[Resource]] = []
@@ -634,6 +671,9 @@ class Gru:
         """idempotently make pipeline id"""
         return pipeline_modpath
 
+    def _get_pipeline_identity(self, pipeline_cls: type[Pipeline[Any]], pipeline_modpath: str) -> str:
+        return self._get_component_identity(pipeline_cls, pipeline_modpath)
+
     def _get_pipeline_class(self, pipeline_modpath: str) -> type[Pipeline[Any]]:
         mod = importlib.import_module(pipeline_modpath)
 
@@ -668,11 +708,17 @@ class Gru:
         
         return pipeline_cls
 
-    def _get_pipeline(self, pipeline_id: str, pipeline_modpath: str) -> Pipeline[Any]:
+    def _get_pipeline(
+        self,
+        pipeline_id: str,
+        pipeline_modpath: str,
+        pipeline_cls: type[Pipeline[Any]] | None = None,
+    ) -> Pipeline[Any]:
         if pipeline_id in self._pipelines:
             return self._pipelines[pipeline_id]
         
-        pipeline_cls = self._get_pipeline_class(pipeline_modpath)
+        if pipeline_cls is None:
+            pipeline_cls = self._get_pipeline_class(pipeline_modpath)
 
         return pipeline_cls(
             pipeline_id=pipeline_id,
@@ -812,7 +858,7 @@ class Gru:
     async def _discard_orchestration_runtime_state(self, minion: Minion[Any, Any]) -> None:
         instance_id = minion._mn_minion_instance_id
         async with self._runtime_state_lock:
-            self._minions_by_id.pop(instance_id, None)
+            self._minions_by_instance_id.pop(instance_id, None)
             if minion._mn_name:
                 remaining = [
                     item for item in self._minions_by_name.get(minion._mn_name, [])
@@ -1030,7 +1076,7 @@ class Gru:
 
     def _runtime_state_snapshot(self) -> dict[str, object]:
         runtime_state = {
-            "minions_by_id": self._minions_by_id,
+            "minions_by_instance_id": self._minions_by_instance_id,
             "minions_by_name": dict(self._minions_by_name),
             "minions_by_orchestration_id": self._minions_by_orchestration_id,
             "minion_tasks": self._minion_tasks,
@@ -1172,6 +1218,14 @@ class Gru:
                 minion_config_path = \
                     None if not minion_config_path \
                     else str(Path(minion_config_path.strip()).resolve())
+                try:
+                    minion_cls: type[Minion[Any, Any]] | None = self._get_minion_class(minion_modpath)
+                except Exception:
+                    minion_cls = None
+                try:
+                    pipeline_cls: type[Pipeline[Any]] | None = self._get_pipeline_class(pipeline_modpath)
+                except Exception:
+                    pipeline_cls = None
 
             # class based start
             elif isinstance(minion, type) and issubclass(minion, Minion):
@@ -1185,9 +1239,11 @@ class Gru:
                         success=False,
                         reason="minion_config_path is only allowed when using module path strings for minion and pipeline",
                         suggestion="use minion_config instead"
-                    )
-                minion_modpath = minion.__module__
-                pipeline_modpath = pipeline.__module__
+                )
+                minion_cls = cast(type[Minion[Any, Any]], minion)
+                pipeline_cls = cast(type[Pipeline[Any]], pipeline)
+                minion_modpath = minion_cls.__module__
+                pipeline_modpath = pipeline_cls.__module__
                 try:
                     minion_config_path = (
                         self._make_inline_config_identity(minion_config)
@@ -1209,7 +1265,28 @@ class Gru:
             # TODO: if ram_usage >= self._max_ram_usage: log and return MinionStartResult;
 
             minion_instance_id = self._make_minion_instance_id()
-            orchestration_id = self._make_orchestration_id(minion_modpath, minion_config_path, pipeline_modpath)
+            minion_identity = (
+                self._get_component_identity(minion_cls, minion_modpath)
+                if minion_cls is not None
+                else minion_modpath
+            )
+            pipeline_identity = (
+                self._get_pipeline_identity(pipeline_cls, pipeline_modpath)
+                if pipeline_cls is not None
+                else pipeline_modpath
+            )
+            minion_config_identity = self._get_config_identity(minion_config_path)
+            orchestration_id = self._make_orchestration_id(
+                minion_id=minion_identity,
+                minion_config_id=minion_config_identity,
+                pipeline_id=pipeline_identity,
+            )
+            orchestration_log_kwargs = {
+                "orchestration_id": orchestration_id,
+                "minion_id": minion_identity,
+                "minion_config_id": minion_config_identity,
+                "pipeline_id": pipeline_identity,
+            }
             minion_inst: Minion[Any, Any] | None = None
             pipeline_inst: Pipeline[Any] | None = None
             pipeline_id: str | None = None
@@ -1235,7 +1312,7 @@ class Gru:
                             suggestion=suggestion,
                             minion_name=minion_name,
                             minion_instance_id=minion_instance_id,
-                            orchestration_id=orchestration_id,
+                            **orchestration_log_kwargs,
                             minion_modpath=minion_modpath,
                             minion_config_path=minion_config_path,
                             pipeline_modpath=pipeline_modpath,
@@ -1252,12 +1329,16 @@ class Gru:
                     minion_inst = self._get_minion(
                         minion_instance_id=minion_instance_id,
                         orchestration_id=orchestration_id,
+                        minion_id=minion_identity,
+                        minion_config_id=minion_config_identity,
+                        pipeline_id=pipeline_identity,
                         minion_modpath=minion_modpath,
                         minion_config_path=minion_config_path,
                         inline_minion_config=minion_config,
+                        minion_cls=minion_cls,
                     )
-                    pipeline_id = self._make_pipeline_id(pipeline_modpath)
-                    pipeline_inst = self._get_pipeline(pipeline_id, pipeline_modpath)
+                    pipeline_id = pipeline_identity
+                    pipeline_inst = self._get_pipeline(pipeline_id, pipeline_modpath, pipeline_cls=pipeline_cls)
 
                     if minion_inst._mn_event_cls != pipeline_inst._mn_event_cls:
                         reason = (
@@ -1275,7 +1356,7 @@ class Gru:
                             suggestion=suggestion,
                             minion_name=minion_name,
                             minion_instance_id=minion_instance_id,
-                            orchestration_id=orchestration_id,
+                            **orchestration_log_kwargs,
                             minion_modpath=minion_modpath,
                             minion_config_path=minion_config_path,
                             pipeline_modpath=pipeline_modpath,
@@ -1291,7 +1372,7 @@ class Gru:
                     await self._logger._mn_log(
                         DEBUG,
                         "Starting orchestration...",
-                        orchestration_id=orchestration_id,
+                        **orchestration_log_kwargs,
                         minion_modpath=minion_modpath,
                         minion_config_path=minion_config_path,
                         pipeline_modpath=pipeline_modpath,
@@ -1382,7 +1463,7 @@ class Gru:
                         "Orchestration started",
                         minion_name=minion_inst._mn_name,
                         minion_instance_id=minion_inst._mn_minion_instance_id,
-                        orchestration_id=orchestration_id,
+                        **orchestration_log_kwargs,
                         minion_modpath=minion_modpath,
                         minion_config_path=minion_config_path,
                         pipeline_modpath=pipeline_modpath,
@@ -1409,9 +1490,15 @@ class Gru:
                             ERROR,
                             "Failed-start cleanup raised",
                             cleanup_err,
+                            **orchestration_log_kwargs,
                         )
 
-                    await self._logger._mn_log_exception(ERROR, "Failed to start orchestration", e)
+                    await self._logger._mn_log_exception(
+                        ERROR,
+                        "Failed to start orchestration",
+                        e,
+                        **orchestration_log_kwargs,
+                    )
                     return StartResult(
                         success=False,
                         reason=str(e),
@@ -1507,7 +1594,8 @@ class Gru:
                         DEBUG,
                         "Stopping orchestration...",
                         minion_name=minion._mn_name,
-                        minion_instance_id=minion._mn_minion_instance_id
+                        minion_instance_id=minion._mn_minion_instance_id,
+                        **minion._mn_orchestration_log_kwargs(),
                     )
 
                     # unsub minion from pipeline
@@ -1528,6 +1616,7 @@ class Gru:
                             reason=reason,
                             minion_name=minion._mn_name,
                             minion_instance_id=minion._mn_minion_instance_id,
+                            **minion._mn_orchestration_log_kwargs(),
                         )
                         return StopResult(
                             success=False,
@@ -1563,7 +1652,8 @@ class Gru:
                         INFO,
                         "Orchestration stopped",
                         minion_name=minion._mn_name,
-                        minion_instance_id=minion._mn_minion_instance_id
+                        minion_instance_id=minion._mn_minion_instance_id,
+                        **minion._mn_orchestration_log_kwargs(),
                     )
 
                     return StopResult(success=True)
@@ -1584,8 +1674,21 @@ class Gru:
                             cleanup_err,
                             minion_name=minion._mn_name,
                             minion_instance_id=minion._mn_minion_instance_id,
+                            **minion._mn_orchestration_log_kwargs(),
                         )
-                await self._logger._mn_log_exception(ERROR, "Failed to stop orchestration", e)
+                stop_log_kwargs: dict[str, object] = {}
+                if minion is not None:
+                    stop_log_kwargs = {
+                        "minion_name": minion._mn_name,
+                        "minion_instance_id": minion._mn_minion_instance_id,
+                        **minion._mn_orchestration_log_kwargs(),
+                    }
+                await self._logger._mn_log_exception(
+                    ERROR,
+                    "Failed to stop orchestration",
+                    e,
+                    **stop_log_kwargs,
+                )
                 return StopResult(
                     success=False,
                     reason=str(e),

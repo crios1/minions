@@ -91,7 +91,7 @@ async def test_gru_serializes_concurrent_starts_for_same_orchestration(
         gru._orchestration_locks = defaultdict(GatedLock)
         orchestration_id = gru._make_orchestration_id(
             "tests.assets.minions.two_steps.simple.basic",
-            None,
+            "",
             "tests.assets.pipelines.simple.simple_event.single_event_1",
         )
         orchestration_gated_lock = gru._orchestration_locks[orchestration_id]
@@ -149,7 +149,7 @@ async def test_gru_serializes_concurrent_stops_for_same_orchestration(
         gru._orchestration_locks = defaultdict(GatedLock)
         orchestration_id = gru._make_orchestration_id(
             "tests.assets.minions.two_steps.simple.basic",
-            None,
+            "",
             "tests.assets.pipelines.simple.simple_event.single_event_1",
         )
         orchestration_gated_lock = gru._orchestration_locks[orchestration_id]
@@ -197,7 +197,7 @@ async def test_gru_serializes_concurrent_start_and_stop_for_same_orchestration(
         gru._orchestration_locks = defaultdict(GatedLock)
         orchestration_id = gru._make_orchestration_id(
             "tests.assets.minions.two_steps.simple.basic",
-            None,
+            "",
             "tests.assets.pipelines.simple.simple_event.single_event_1",
         )
         orchestration_gated_lock = gru._orchestration_locks[orchestration_id]
@@ -241,12 +241,12 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations(
         gru._orchestration_locks = defaultdict(GatedLock)
         orchestration_id_1 = gru._make_orchestration_id(
             "tests.assets.minions.two_steps.simple.basic",
-            None,
+            "",
             "tests.assets.pipelines.simple.simple_event.single_event_1",
         )
         orchestration_id_2 = gru._make_orchestration_id(
             "tests.assets.minions.two_steps.simple.basic",
-            None,
+            "",
             "tests.assets.pipelines.simple.simple_event.single_event_2",
         )
         gate1 = gru._orchestration_locks[orchestration_id_1]
@@ -390,7 +390,7 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations_while_s
         assert orchestration2_start_result.orchestration_id in gru._minions_by_orchestration_id
         orchestration2_id = gru._make_orchestration_id(
             "tests.assets.minions.two_steps.simple.basic",
-            None,
+            "",
             "tests.assets.pipelines.simple.simple_event.single_event_2",
         )
         assert orchestration2_id in gru._minions_by_orchestration_id

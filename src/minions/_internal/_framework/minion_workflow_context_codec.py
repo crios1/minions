@@ -280,12 +280,6 @@ def decode_persisted_workflow_context_typed(
             f"Invalid persisted workflow context payload: {e}"
         ) from e
 
-    expected_context_cls = _serialize_context_cls(context_cls)
-    if persisted.context_cls != expected_context_cls:
-        raise WorkflowContextSchemaError(
-            "Persisted workflow context_cls mismatch: "
-            f"expected {expected_context_cls!r}, got {persisted.context_cls!r}."
-        )
     if persisted.schema_version != CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION:
         raise WorkflowContextSchemaError(
             "Unsupported persisted workflow context schema_version="
@@ -293,6 +287,9 @@ def decode_persisted_workflow_context_typed(
             f"{CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION}."
         )
 
+    # Typed startup decode treats the current Minion schema as authoritative.
+    # The persisted context_cls string is retained as inspectable metadata, but
+    # must not block compatible context class relocation across refactors.
     return MinionWorkflowContext(
         orchestration_id=persisted.orchestration_id,
         minion_modpath=persisted.minion_modpath,
