@@ -39,6 +39,7 @@ from .._framework.metrics_constants import (
 )
 
 from .._framework.async_component import AsyncComponent
+from .._framework.minion_workflow_context_codec import WorkflowContextTypeMismatchError
 from .._framework.state_store import StateStore
 from .._framework.state_store_noop import NoOpStateStore
 from .._framework.state_store_sqlite import SQLiteStateStore
@@ -1499,6 +1500,27 @@ class Gru:
                         e,
                         **orchestration_log_kwargs,
                     )
+                    context_type_mismatch_error: WorkflowContextTypeMismatchError | None = None
+                    current_error: BaseException | None = e
+                    seen_error_ids: set[int] = set()
+                    while current_error is not None and id(current_error) not in seen_error_ids:
+                        seen_error_ids.add(id(current_error))
+                        if isinstance(current_error, WorkflowContextTypeMismatchError):
+                            context_type_mismatch_error = current_error
+                            break
+                        current_error = current_error.__cause__ or current_error.__context__
+                    if context_type_mismatch_error is not None:
+                        return StartResult(
+                            success=False,
+                            reason=str(context_type_mismatch_error),
+                            suggestion=(
+                                "Run the previous compatible code and drain the orchestration "
+                                "before starting it with the new types. If these workflows are "
+                                "no longer needed, delete the persisted workflow contexts for "
+                                f"orchestration {orchestration_id!r} from your configured "
+                                "StateStore."
+                            ),
+                        )
                     return StartResult(
                         success=False,
                         reason=str(e),

@@ -37,6 +37,7 @@ from minions._internal._domain.exceptions import AbortWorkflow
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.minion_workflow_context_codec import (
     PersistedMinionWorkflowContext,
+    WorkflowContextTypeMismatchError,
     deserialize_workflow_context_blob,
     serialize_persisted_workflow_context,
 )
@@ -52,6 +53,10 @@ class ReplayEvent(msgspec.Struct):
 
 class ReplayContext(msgspec.Struct):
     count: int = 0
+
+
+class StringValueEvent(msgspec.Struct):
+    value: str
 
 
 class DictEvent(msgspec.Struct):
@@ -1079,4 +1084,78 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
     await m._mn_wait_until_workflows_idle(timeout=2)
 
     assert observed == [123]
-    assert logger.has_log("StateStore failed to decode stored workflow context")
+    assert logger.has_log(
+        "StateStore failed to decode stored workflow context",
+        log_kwargs={"error_type": "WorkflowContextSchemaError"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_minion_startup_replay_fails_closed_on_context_type_mismatch():
+    observed: list[int] = []
+
+    class ReplayWithMismatchedContextMinion(Minion[DictEvent, DictContext]):
+        name = "replay-with-mismatched-context-minion"
+
+        @minion_step
+        async def step_1(self):
+            observed.append(self.event.value)
+
+    logger = InMemoryLogger()
+    metrics = InMemoryMetrics()
+    store = InMemoryStateStore(logger=logger)
+    minion_modpath = "tests.assets.replay_with_mismatched_context_minion"
+    orchestration_id = f"{minion_modpath}|cfg|tests.assets.pipelines.invalid"
+
+    valid_context: MinionWorkflowContext[DictEvent, DictContext] = MinionWorkflowContext(
+        orchestration_id=orchestration_id,
+        minion_modpath=minion_modpath,
+        workflow_id="wf-valid",
+        event=DictEvent(value=123),
+        context=DictContext(),
+        context_cls=DictContext,
+        next_step_index=0,
+    )
+    mismatched_context: MinionWorkflowContext[StringValueEvent, DictContext] = MinionWorkflowContext(
+        orchestration_id=orchestration_id,
+        minion_modpath=minion_modpath,
+        workflow_id="wf-mismatch",
+        event=StringValueEvent(value="not-an-int"),
+        context=DictContext(),
+        context_cls=DictContext,
+        next_step_index=0,
+    )
+
+    store._contexts["wf-valid"] = StoredWorkflowContext(
+        workflow_id="wf-valid",
+        orchestration_id=orchestration_id,
+        context=serialize_persisted_workflow_context(valid_context),
+    )
+    store._contexts["wf-mismatch"] = StoredWorkflowContext(
+        workflow_id="wf-mismatch",
+        orchestration_id=orchestration_id,
+        context=serialize_persisted_workflow_context(mismatched_context),
+    )
+
+    m = ReplayWithMismatchedContextMinion(
+        "iid",
+        orchestration_id,
+        minion_modpath,
+        None,
+        store,
+        metrics,
+        logger,
+    )
+
+    with pytest.raises(Exception) as exc_info:
+        await m._mn_startup()
+
+    assert isinstance(exc_info.value.__cause__, WorkflowContextTypeMismatchError)
+    assert observed == []
+    assert logger.has_log(
+        "StateStore failed to decode stored workflow context",
+        log_kwargs={
+            "workflow_id": "wf-mismatch",
+            "error_type": "WorkflowContextTypeMismatchError",
+        },
+    )

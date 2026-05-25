@@ -135,6 +135,18 @@ class GruShell(cmd.Cmd):
             s = self._compute_state(k); counts[s] = counts.get(s, 0) + 1
         print(" ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "(none)")
 
+    def _print_failed_start_result(self, result: StartResult) -> None:
+        print("Cannot start orchestration.")
+        if result.reason:
+            print()
+            print(result.reason)
+        if result.suggestion:
+            print()
+            print("Recommended:")
+            print(result.suggestion)
+        print()
+        print("No workflows were started.")
+
     # -------- start --------
 
     def do_start(self, line: str):
@@ -164,6 +176,8 @@ class GruShell(cmd.Cmd):
                 return
             if not isinstance(result, StartResult) or not result.success or not result.orchestration_id:
                 self._start_ops[pending_id] = f  # keep for status to show 'failed'
+                if isinstance(result, StartResult):
+                    self._print_failed_start_result(result)
                 return
             self._start_ops.pop(pending_id, None)
             self._start_ops[result.orchestration_id] = f

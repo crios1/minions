@@ -7,6 +7,7 @@ from .logger import ERROR
 from .minion_workflow_context_codec import (
     deserialize_workflow_context_blob,
     serialize_persisted_workflow_context,
+    WorkflowContextTypeMismatchError,
 )
 from .._domain.minion_workflow_context import MinionWorkflowContext
 from .._domain.types import T_Ctx, T_Event
@@ -192,6 +193,7 @@ class StateStore(AsyncComponent):
         log_kwargs: dict[str, object] | None = None,
     ) -> list[MinionWorkflowContext[T_Event, T_Ctx]] | list[MinionWorkflowContext[Any, Any]]:
         contexts: list[MinionWorkflowContext[T_Event, T_Ctx]] | list[MinionWorkflowContext[Any, Any]] = []
+        type_mismatch_workflow_ids: list[str] = []
         for stored_context in stored_contexts:
             try:
                 contexts.append(
@@ -202,6 +204,8 @@ class StateStore(AsyncComponent):
                     )
                 )
             except Exception as e:
+                if isinstance(e, WorkflowContextTypeMismatchError):
+                    type_mismatch_workflow_ids.append(stored_context.workflow_id)
                 await self._mn_logger._mn_log_exception(
                     ERROR,
                     "StateStore failed to decode stored workflow context",
@@ -212,6 +216,14 @@ class StateStore(AsyncComponent):
                     state_store_operation=log_action,
                     **(log_kwargs or {}),
                 )
+        if type_mismatch_workflow_ids:
+            workflow_count = len(type_mismatch_workflow_ids)
+            plural = "s" if workflow_count != 1 else ""
+            raise WorkflowContextTypeMismatchError(
+                f"{workflow_count} persisted workflow context{plural} could not be decoded "
+                "with the current Minion event and workflow context types. This usually means "
+                "those types changed before the orchestration was drained."
+            )
         return contexts
 
     @overload

@@ -5,6 +5,9 @@ from pathlib import Path
 import pytest
 
 from minions._internal._domain.gru import Gru
+from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
+from minions._internal._framework.minion_workflow_context_codec import serialize_persisted_workflow_context
+from minions._internal._framework.state_store import StoredWorkflowContext
 from minions._internal._framework.metrics_constants import (
     LABEL_ERROR_TYPE,
     LABEL_ORCHESTRATION_ID,
@@ -18,6 +21,8 @@ from minions._internal._framework.metrics_constants import (
     RESOURCE_ERROR_TOTAL,
 )
 from tests.assets.crash.boom import BOOM_MESSAGE
+from tests.assets.contexts.simple import SimpleContext
+from tests.assets.events.simple import SimpleEvent
 from tests.assets.crash.support.state_store_boom_get_contexts_for_orchestration import (
     BoomGetContextsForOrchestrationStateStore,
 )
@@ -72,6 +77,52 @@ async def test_start_orchestration_contains_state_store_resume_read_failure(
             log_kwargs={"error_type": "BoomError"},
         )
         assert logger.has_log("Failed to start orchestration", log_kwargs={"error_message": BOOM_MESSAGE})
+        assert gru._runtime_state_snapshot() == {}
+
+
+@pytest.mark.asyncio
+async def test_start_orchestration_fails_closed_on_persisted_workflow_decode_mismatch(
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> None:
+    expected_orchestration_id = orchestration_id(GOOD_MINION, GOOD_PIPELINE)
+    persisted_context = MinionWorkflowContext(
+        orchestration_id=expected_orchestration_id,
+        minion_modpath=GOOD_MINION,
+        workflow_id="wf-incompatible",
+        event=SimpleEvent(timestamp=1.0),
+        context=SimpleContext(price=1.23),
+        context_cls=SimpleContext,
+        next_step_index=0,
+    )
+    state_store._contexts["wf-incompatible"] = StoredWorkflowContext(
+        workflow_id="wf-incompatible",
+        orchestration_id=expected_orchestration_id,
+        context=serialize_persisted_workflow_context(persisted_context),
+    )
+
+    async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
+        result = await gru.start_orchestration(GOOD_PIPELINE, GOOD_MINION)
+
+        assert not result.success
+        assert result.reason is not None
+        assert "could not be decoded with the current Minion event and workflow context types" in result.reason
+        assert result.suggestion is not None
+        assert "drain the orchestration" in result.suggestion
+        assert (
+            f"delete the persisted workflow contexts for orchestration {expected_orchestration_id!r}"
+            in result.suggestion
+        )
+        assert logger.has_log(
+            "StateStore failed to decode stored workflow context",
+            log_kwargs={
+                "workflow_id": "wf-incompatible",
+                "error_type": "WorkflowContextTypeMismatchError",
+            },
+        )
+        assert logger.has_log("Failed to start orchestration")
         assert gru._runtime_state_snapshot() == {}
 
 

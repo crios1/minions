@@ -57,6 +57,10 @@ class WorkflowContextSchemaError(ValueError):
     pass
 
 
+class WorkflowContextTypeMismatchError(WorkflowContextSchemaError):
+    pass
+
+
 def _normalize_workflow_context_data(
     data: WorkflowContextData,
 ) -> WorkflowContextData:
@@ -276,6 +280,21 @@ def decode_persisted_workflow_context_typed(
             context_cls,
         ).decode(payload)
     except (msgspec.DecodeError, msgspec.ValidationError) as e:
+        # Keep the hot path on the cached typed decoder. Only after typed
+        # recovery fails do we decode the envelope untyped to distinguish
+        # corrupt persisted state from a valid context written for old types.
+        try:
+            untyped_persisted = deserialize(payload, PersistedMinionWorkflowContext)
+        except ValueError:
+            raise WorkflowContextSchemaError(
+                f"Invalid persisted workflow context payload: {e}"
+            ) from e
+        if untyped_persisted.schema_version == CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION:
+            raise WorkflowContextTypeMismatchError(
+                "Persisted workflow context payload is valid, but could not be decoded "
+                "with the current Minion event and workflow context types. "
+                f"Details: {e}"
+            ) from None
         raise WorkflowContextSchemaError(
             f"Invalid persisted workflow context payload: {e}"
         ) from e
