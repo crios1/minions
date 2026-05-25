@@ -31,8 +31,32 @@ Rules from the runtime:
 - Bare `dict` is accepted for quick examples and prototypes. For durable workflow state, prefer explicit schemas such as dataclasses, TypedDicts, msgspec structs, or `dict[str, V]` / `Mapping[str, V]` with serializable values.
 - Steps must be instance methods decorated with `{py:func}``@minion_step``. They run in source order.
 - Use `self.event` to access the current pipeline event; the event is contextvar-bound per workflow.
+- Use `self.workflow_handle` when business code needs optional diagnostic correlation data for logs or audit records. The read-only handle exposes `orchestration_id` and `workflow_id`, matching the stable identity fields used by framework diagnostics and persisted workflow state.
 - Raise `{py:class}``minions._internal._domain.exceptions.AbortWorkflow`` to stop a workflow gracefully without treating it as a failure.
 - Do not raise `asyncio.CancelledError` to intentionally stop a workflow. The runtime treats cancellation as an interruption, keeps the persisted workflow context, and may replay the workflow later. Use `AbortWorkflow` when the workflow should stop as an intentional terminal outcome.
+
+### Workflow handle
+
+`self.workflow_handle` is available only while a workflow is running. Accessing it outside an active workflow raises `RuntimeError` because there is no current workflow identity to report.
+
+Use it to copy runtime identity into business-owned records without coupling those records to Minions internals:
+
+```python
+class OrderMinion(Minion[OrderEvent, WorkflowCtx]):
+    audit_log: AuditLog
+
+    @minion_step
+    async def charge_customer(self):
+        handle = self.workflow_handle
+        await self.audit_log.record(
+            action="charge_customer",
+            order_id=self.event.order_id,
+            orchestration_id=handle.orchestration_id,
+            workflow_id=handle.workflow_id,
+        )
+```
+
+Framework diagnostics and business audit trails remain separate concerns: Minions logs and metrics describe runtime behavior, while your audit records describe domain work. The handle is just a narrow bridge for correlation when that is useful during debugging or investigations.
 
 ### Reserved attribute space
 

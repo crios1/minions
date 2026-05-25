@@ -19,6 +19,7 @@ from typing import (
 
 from .types import T_Event, T_Ctx
 from .minion_workflow_context import MinionWorkflowContext
+from .minion_workflow_handle import MinionWorkflowHandle
 from .exceptions import AbortWorkflow
 from .resource import Resource
 from .._framework.async_lifecycle import LifecycleCallback
@@ -79,6 +80,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
 
     _mn_event_var: contextvars.ContextVar[T_Event] = contextvars.ContextVar("minion_pipeline_event")
     _mn_context_var: contextvars.ContextVar[T_Ctx] = contextvars.ContextVar("minion_workflow_context")
+    _mn_workflow_handle_var: contextvars.ContextVar[MinionWorkflowHandle] = contextvars.ContextVar(
+        "minion_workflow_handle"
+    )
     _mn_event_cls: Type[T_Event]
     _mn_workflow_ctx_cls: Type[T_Ctx]
 
@@ -443,6 +447,13 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             return self._mn_context_var.get()
         except LookupError:
             raise RuntimeError("No context is currently bound to this workflow")
+
+    @property
+    def workflow_handle(self) -> MinionWorkflowHandle:
+        try:
+            return self._mn_workflow_handle_var.get()
+        except LookupError:
+            raise RuntimeError("No workflow handle is currently bound to this workflow")
 
     def _mn_make_workflow(self) -> tuple[Callable[..., Any], ...]:
         "workflow is defined as the subclass's methods tagged as minion steps, in declaration order"
@@ -891,6 +902,12 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         async def run() -> None:
             event_token = self._mn_event_var.set(ctx.event)
             context_token = self._mn_context_var.set(ctx.context)
+            workflow_handle_token = self._mn_workflow_handle_var.set(
+                MinionWorkflowHandle(
+                    orchestration_id=ctx.orchestration_id,
+                    workflow_id=ctx.workflow_id,
+                )
+            )
             workflow_status: ExecutionStatus = "undefined"
             delete_persisted_context_on_exit = True
             terminal_workflow_log_level: int | None = None
@@ -1184,6 +1201,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         )
                 self._mn_event_var.reset(event_token)
                 self._mn_context_var.reset(context_token)
+                self._mn_workflow_handle_var.reset(workflow_handle_token)
 
         def get_user_error_location(tb: TracebackType | None) -> dict[str, object] | None:
             if not tb:

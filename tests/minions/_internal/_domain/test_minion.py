@@ -2,10 +2,11 @@
 
 import asyncio
 import pytest
-from dataclasses import dataclass
-from typing import TypedDict, TypeVar
+from dataclasses import FrozenInstanceError, dataclass
+from typing import Any, TypedDict, TypeVar
 import msgspec
 from minions import Minion, Resource, minion_step
+from minions.types import MinionWorkflowHandle
 from minions._internal._domain.exceptions import UnsupportedUserCode
 
 from minions._internal._framework.logger_noop import NoOpLogger
@@ -13,7 +14,9 @@ from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_noop import NoOpStateStore
 from minions._internal._utils.serialization import SERIALIZABLE_PRIMITIVE_TYPES
 
+from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.mixin import Mixin
+from tests.assets.support.state_store_inmemory import InMemoryStateStore
 # compositional validation happens on instantiation of each domain object
 # so each domain object has it's own test
 
@@ -27,6 +30,11 @@ class MyEvent:
 @dataclass
 class MyContext:
     ts: int
+
+
+@dataclass
+class EmptyContext:
+    pass
 
 
 class MyStructEvent(msgspec.Struct):
@@ -99,6 +107,106 @@ class TestMinionSubclassingValid:
         )
 
         assert not hasattr(m, "config")
+
+    @pytest.mark.asyncio
+    async def test_workflow_handle_is_available_during_workflow_steps(self):
+        captured_handles: list[MinionWorkflowHandle] = []
+
+        class MyMinion(Minion[MyEvent, EmptyContext]):
+            @minion_step
+            async def step_1(self):
+                captured_handles.append(self.workflow_handle)
+
+        m = MyMinion(
+            minion_instance_id="instance-1",
+            orchestration_id="orchestration-1",
+            minion_modpath="mock",
+            config_path=None,
+            state_store=NoOpStateStore(),
+            metrics=NoOpMetrics(),
+            logger=NoOpLogger(),
+        )
+        m._mn_started.set()
+
+        await m._mn_handle_event(MyEvent(ts=1))
+        await m._mn_wait_until_tasks_idle(timeout=1.0, timeout_msg="workflow did not finish")
+
+        assert len(captured_handles) == 1
+        assert captured_handles[0].orchestration_id == "orchestration-1"
+        assert isinstance(captured_handles[0].workflow_id, str)
+        assert captured_handles[0].workflow_id
+
+    @pytest.mark.asyncio
+    async def test_workflow_handle_values_match_framework_log_and_state_identity(self):
+        logger = InMemoryLogger()
+        state_store = InMemoryStateStore(logger=logger)
+
+        captured_handles: list[MinionWorkflowHandle] = []
+        captured_stored_contexts: list[Any] = []
+
+        class MyMinion(Minion[MyEvent, EmptyContext]):
+            @minion_step
+            async def step_1(self):
+                captured_handles.append(self.workflow_handle)
+                captured_stored_contexts.extend(await state_store.get_all_contexts())
+
+        m = MyMinion(
+            minion_instance_id="instance-1",
+            orchestration_id="orchestration-1",
+            minion_modpath="mock",
+            config_path=None,
+            state_store=state_store,
+            metrics=NoOpMetrics(),
+            logger=logger,
+        )
+        m._mn_started.set()
+
+        await m._mn_handle_event(MyEvent(ts=1))
+        await m._mn_wait_until_tasks_idle(timeout=1.0, timeout_msg="workflow did not finish")
+
+        assert len(captured_handles) == 1
+        handle = captured_handles[0]
+        assert captured_stored_contexts
+        assert all(
+            stored.orchestration_id == handle.orchestration_id
+            for stored in captured_stored_contexts
+        )
+        assert all(stored.workflow_id == handle.workflow_id for stored in captured_stored_contexts)
+        assert await state_store.get_all_contexts() == []
+        workflow_started = next(log for log in logger.logs if log.msg == "Workflow started")
+        assert workflow_started.kwargs["orchestration_id"] == handle.orchestration_id
+        assert workflow_started.kwargs["workflow_id"] == handle.workflow_id
+
+    def test_workflow_handle_is_read_only(self):
+        handle = MinionWorkflowHandle(
+            orchestration_id="orchestration-1",
+            workflow_id="workflow-1",
+        )
+
+        with pytest.raises(FrozenInstanceError):
+            handle.workflow_id = "workflow-2" # pyright: ignore[reportAttributeAccessIssue]
+
+    def test_workflow_handle_outside_active_workflow_raises_clear_error(self):
+        class MyMinion(Minion[MyEvent, MyContext]):
+            @minion_step
+            async def step_1(self):
+                ...
+
+        m = MyMinion(
+            minion_instance_id="instance-1",
+            orchestration_id="orchestration-1",
+            minion_modpath="mock",
+            config_path=None,
+            state_store=NoOpStateStore(),
+            metrics=NoOpMetrics(),
+            logger=NoOpLogger(),
+        )
+
+        with pytest.raises(
+            RuntimeError,
+            match="No workflow handle is currently bound to this workflow",
+        ):
+            m.workflow_handle
 
     @pytest.mark.asyncio
     async def test_minion_binds_loaded_config_to_declared_attribute(self):
