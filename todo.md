@@ -602,7 +602,7 @@
 
   - done: audit the todos in todo.md to align them to the new Gru.start / Gru.stop API
   
-  - todo: optimize SQLiteStateStore orchestration-scoped context reads
+  - done: optimize SQLiteStateStore orchestration-scoped context reads
     - shape:
       - current schema shape:
         CREATE TABLE workflows(

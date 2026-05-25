@@ -5,6 +5,7 @@ import pytest
 
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.minion_workflow_context_codec import deserialize_workflow_context_blob
+from minions._internal._framework.state_store_sqlite import SQL_WORKFLOWS_SELECT_FOR_ORCHESTRATION
 from tests.minions._internal._framework.state_store_sqlite._support import blob_for, mk_ctx
 from tests.minions._internal._framework.state_store_sqlite.conftest import MakeStateStoreAndLogger
 
@@ -42,6 +43,36 @@ async def test_framework_serialized_context_remains_hydratable(make_state_store_
     row = next(r for r in rows if r.workflow_id == ctx.workflow_id)
     assert row.orchestration_id == ctx.orchestration_id
     assert deserialize_workflow_context_blob(row.context) == ctx
+
+
+async def test_get_contexts_for_orchestration_uses_orchestration_index(
+    make_state_store_and_logger: MakeStateStoreAndLogger,
+):
+    s, _ = await make_state_store_and_logger()
+    target = mk_ctx(i=1, size=16)
+    other = mk_ctx(i=2, size=16)
+
+    await s.save_context(target.workflow_id, target.orchestration_id, blob_for(target))
+    await s.save_context(other.workflow_id, other.orchestration_id, blob_for(other))
+
+    rows = await s.get_contexts_for_orchestration(target.orchestration_id)
+
+    assert [(row.workflow_id, row.orchestration_id) for row in rows] == [
+        (target.workflow_id, target.orchestration_id),
+    ]
+
+    assert s._db is not None
+    async with s._db.execute(
+        f"EXPLAIN QUERY PLAN {SQL_WORKFLOWS_SELECT_FOR_ORCHESTRATION}",
+        (target.orchestration_id,),
+    ) as cursor:
+        plan_rows = await cursor.fetchall()
+
+    plan = " ".join(str(column) for row in plan_rows for column in row)
+
+    assert "SEARCH workflows" in plan
+    assert "orchestration_id=?" in plan
+    assert "SCAN workflows" not in plan
 
 
 async def test_runtime_save_context_serialize_failure_is_non_retryable_and_logged(
