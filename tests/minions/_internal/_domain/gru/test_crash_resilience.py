@@ -11,9 +11,12 @@ from minions._internal._framework.state_store import StoredWorkflowContext
 from minions._internal._framework.metrics_constants import (
     LABEL_ERROR_TYPE,
     LABEL_ORCHESTRATION_ID,
+    LABEL_MINION,
     LABEL_MINION_WORKFLOW_STEP,
     LABEL_PIPELINE,
     LABEL_RESOURCE,
+    LABEL_RESOURCE_CALLER,
+    LABEL_RESOURCE_CALLER_KIND,
     LABEL_RESOURCE_METHOD,
     MINION_WORKFLOW_FAILED_TOTAL,
     MINION_WORKFLOW_STEP_FAILED_TOTAL,
@@ -184,6 +187,7 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
                     "tests.assets.crash.minions.boom_step",
                     "tests.assets.crash.pipelines.emit_1_then_block",
                 ),
+                LABEL_MINION: "tests.assets.crash.minions.boom_step",
                 LABEL_MINION_WORKFLOW_STEP: "step_1",
                 LABEL_ERROR_TYPE: "BoomError",
             },
@@ -196,6 +200,7 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
                     "tests.assets.crash.minions.boom_step",
                     "tests.assets.crash.pipelines.emit_1_then_block",
                 ),
+                LABEL_MINION: "tests.assets.crash.minions.boom_step",
                 LABEL_ERROR_TYPE: "BoomError",
             },
         )
@@ -255,8 +260,14 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
             metrics,
             RESOURCE_ERROR_TOTAL,
             {
-                LABEL_RESOURCE: "BoomMethodResource",
+                LABEL_RESOURCE: "tests.assets.crash.resources.boom_method.BoomMethodResource",
                 LABEL_RESOURCE_METHOD: "explode",
+                LABEL_RESOURCE_CALLER_KIND: "minion",
+                LABEL_RESOURCE_CALLER: "tests.assets.crash.minions.boom_resource_method",
+                LABEL_ORCHESTRATION_ID: orchestration_id(
+                    "tests.assets.crash.minions.boom_resource_method",
+                    "tests.assets.crash.pipelines.emit_1_then_block",
+                ),
                 LABEL_ERROR_TYPE: "BoomError",
             },
         )

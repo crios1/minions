@@ -17,6 +17,7 @@ from minions._internal._framework.metrics_constants import (
     MINION_WORKFLOW_STEP_DURATION_SECONDS,
     MINION_WORKFLOW_STEP_FAILED_TOTAL,
     LABEL_ORCHESTRATION_ID,
+    LABEL_MINION,
     LABEL_MINION_WORKFLOW_STEP,
     LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE,
     LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE,
@@ -303,6 +304,7 @@ async def test_workflow_failed_increments_failed_counter():
         metrics.snapshot_histograms()[MINION_WORKFLOW_DURATION_SECONDS],
         {
             LABEL_ORCHESTRATION_ID: "ck",
+            LABEL_MINION: "tests.assets.fail_minion",
             LABEL_STATUS: "failed",
         },
     )
@@ -310,6 +312,7 @@ async def test_workflow_failed_increments_failed_counter():
         metrics.snapshot_histograms()[MINION_WORKFLOW_STEP_DURATION_SECONDS],
         {
             LABEL_ORCHESTRATION_ID: "ck",
+            LABEL_MINION: "tests.assets.fail_minion",
             LABEL_MINION_WORKFLOW_STEP: "step_1",
             LABEL_STATUS: "failed",
         },
@@ -351,6 +354,7 @@ async def test_workflow_cancellation_records_interrupted_duration_status_and_kee
         metrics.snapshot_histograms()[MINION_WORKFLOW_DURATION_SECONDS],
         {
             LABEL_ORCHESTRATION_ID: "ck",
+            LABEL_MINION: "tests.assets.interrupted_minion",
             LABEL_STATUS: "interrupted",
         },
     )
@@ -358,6 +362,7 @@ async def test_workflow_cancellation_records_interrupted_duration_status_and_kee
         metrics.snapshot_histograms()[MINION_WORKFLOW_STEP_DURATION_SECONDS],
         {
             LABEL_ORCHESTRATION_ID: "ck",
+            LABEL_MINION: "tests.assets.interrupted_minion",
             LABEL_MINION_WORKFLOW_STEP: "step_1",
             LABEL_STATUS: "interrupted",
         },
@@ -481,6 +486,7 @@ async def test_workflow_persistence_idle_until_persisted_blocks_next_step_until_
         metrics,
         {
             LABEL_ORCHESTRATION_ID: "ck",
+            LABEL_MINION: "tests.assets.idle_persistence_minion",
             LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "before_step",
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
             LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "save",
@@ -525,6 +531,7 @@ async def test_workflow_persistence_blocked_gauge_counts_concurrent_workflows_fo
 
     labels = {
         LABEL_ORCHESTRATION_ID: "ck",
+        LABEL_MINION: "tests.assets.concurrent_idle_persistence_minion",
         LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "before_step",
         LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
         LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "save",
@@ -638,6 +645,7 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds():
         metrics,
         {
             LABEL_ORCHESTRATION_ID: "ck",
+            LABEL_MINION: "tests.assets.delete_blocking_success_minion",
             LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "workflow_resolve",
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "delete",
             LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "delete",
@@ -661,6 +669,7 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds():
         metrics,
         {
             LABEL_ORCHESTRATION_ID: "ck",
+            LABEL_MINION: "tests.assets.delete_blocking_success_minion",
             LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "workflow_resolve",
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "delete",
             LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "delete",
@@ -728,6 +737,7 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
         failure_samples,
         {
             LABEL_ORCHESTRATION_ID: "ck",
+            LABEL_MINION: "tests.assets.non_retryable_persistence_minion",
             LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "before_step",
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
             LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "serialize",

@@ -25,8 +25,9 @@ When investigating persistence behavior, start with these labels:
 - `minion_workflow_persistence_policy`: `continue-on-failure` or `idle-until-persisted`
 - `state_store`: backend implementation name
 - `orchestration_id`: affected minion instance/config/pipeline orchestration
+- `minion`: stable minion component identity, using `@minion_id(...)` when present and the module-path fallback otherwise
 
-Those labels tell you whether you are looking at application data that cannot be persisted, an operational store outage, or a workflow that is already done with user code and is now waiting to resolve checkpoint cleanup.
+Those labels tell you whether you are looking at application data that cannot be persisted, an operational store outage, a workflow that is already done with user code and is now waiting to resolve checkpoint cleanup, or a recurring issue across all orchestrations of the same minion component.
 
 ## What normal behavior looks like
 
@@ -109,7 +110,17 @@ When an operator sees persistence trouble:
 1. Check whether `minion_workflow_persistence_blocked_gauge` is non-zero.
 2. Split by `minion_workflow_persistence_operation` to see whether the issue is blocking workflow progress or terminal cleanup.
 3. Inspect `minion_workflow_persistence_failures_total` by `minion_workflow_persistence_failure_stage` and `minion_workflow_persistence_retryable`.
-4. Narrow by `state_store` and `orchestration_id` to see whether the issue is backend-wide or isolated.
+4. Narrow by `state_store`, `minion`, and `orchestration_id` to see whether the issue is backend-wide, component-wide, or isolated to one orchestration.
 5. Use the persistence logs to confirm whether the runtime is retrying, resuming, or hitting a deterministic serialization failure.
+
+## Resource metrics
+
+Resource metrics carry the stable callee `resource` identity, the immediate caller identity, and `orchestration_id` when a resource method runs inside workflow execution:
+
+- `resource_serves_total`
+- `resource_latency_seconds`
+- `resource_error_total`
+
+Use `resource` / `resource_method` to see how a shared resource behaves overall. Use `resource_caller_kind` and `resource_caller` to identify the immediate caller (`minion`, `pipeline`, `resource`, or `unknown`). Include `orchestration_id` to see which deployed composition is affected. As a defensive fallback, calls made without caller or workflow context use `resource_caller_kind="unknown"`, `resource_caller=""`, and `orchestration_id=""`.
 
 For the underlying persistence semantics, see {doc}`/concepts/state-and-persistence`.

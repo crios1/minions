@@ -592,13 +592,17 @@
     - note: consider how cross env (dev,qa,prod) comparison will work: like with grushell snapshot/redeploy, discussed in "other convo"
     - note: `orchestration_id` is now the current runtime identity term; future durable-id work should preserve this name while changing how the value is derived
 
-  - later: add explicit component/resource observability labels if dashboards need them
+  - done: add stable minion identity labels to workflow metrics for cross-orchestration aggregation
     - context:
       - orchestration-scoped logs now carry `orchestration_id`, `minion_id`, `pipeline_id`, and `minion_config_id`
-      - metrics currently keep the stable `orchestration_id` label and readable operation labels such as step/resource method names
-    - deferred because:
-      - no current dashboard/operator need requires additional component/resource labels
-      - extra labels should be introduced only when their cardinality and operational value are clear
+      - workflow metrics currently keep the stable `orchestration_id` label and readable operation labels such as step names
+      - dashboards also need to answer how a minion component performs across all configs/pipelines/orchestrations
+    - scope:
+      - add `minion` to minion workflow, workflow-step, and workflow-persistence metric labels alongside `orchestration_id`
+      - use the durable `@minion_id(...)` value when present, otherwise the module-path fallback already used for orchestration identity
+      - keep resource metrics scoped to `resource` / `resource_method`; do not add broad generic component labels
+    - why it matters:
+      - enables cross-orchestration aggregation by minion component while preserving orchestration-level drilldown
 
   - done: audit the todos in todo.md to align them to the new Gru.start / Gru.stop API
   

@@ -9,6 +9,7 @@ import time
 import traceback
 import uuid
 from collections.abc import Awaitable
+from contextlib import ExitStack
 from pathlib import Path
 from types import TracebackType
 from typing import (
@@ -40,7 +41,7 @@ from .._framework.metrics_constants import (
     MINION_WORKFLOW_STEP_ABORTED_TOTAL, MINION_WORKFLOW_STEP_FAILED_TOTAL,
     MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
     MINION_WORKFLOW_STEP_DURATION_SECONDS,
-    LABEL_ORCHESTRATION_ID, LABEL_MINION_WORKFLOW_STEP,
+    LABEL_ORCHESTRATION_ID, LABEL_MINION, LABEL_MINION_WORKFLOW_STEP,
     LABEL_ERROR_TYPE,
     LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE,
     LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE,
@@ -50,6 +51,7 @@ from .._framework.metrics_constants import (
     LABEL_STATE_STORE,
     LABEL_STATUS,
 )
+from .._framework.metrics_context import resource_metric_context
 from .._framework.state_store import PersistenceOperationResult, StateStore
 from .._utils.get_type_from_hint import get_type_from_hint
 from .._utils.serialization import (
@@ -388,6 +390,12 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             "minion_id": self._mn_minion_id,
             "minion_config_id": self._mn_minion_config_id,
             "pipeline_id": self._mn_pipeline_id,
+        }
+
+    def _mn_workflow_base_metric_labels(self) -> dict[str, str]:
+        return {
+            LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
+            LABEL_MINION: self._mn_minion_id,
         }
 
     @staticmethod
@@ -771,7 +779,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     ) -> dict[str, str]:
         checkpoint_type, _ = self._mn_workflow_persistence_checkpoint_metric_parts(checkpoint)
         return {
-            LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
+            **self._mn_workflow_base_metric_labels(),
             LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: checkpoint_type,
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: operation,
             LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: self._mn_workflow_persistence_failure_policy,
@@ -800,7 +808,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     ) -> dict[str, str]:
         checkpoint_type, _ = self._mn_workflow_persistence_checkpoint_metric_parts(checkpoint)
         return {
-            LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
+            **self._mn_workflow_base_metric_labels(),
             LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: checkpoint_type,
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: operation,
             LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: result.failure_stage or "none",
@@ -913,6 +921,14 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             terminal_workflow_log_level: int | None = None
             terminal_workflow_log_message: str | None = None
             terminal_workflow_error: Exception | None = None
+            metric_context = ExitStack()
+            metric_context.enter_context(
+                resource_metric_context(
+                    orchestration_id=self._mn_orchestration_id,
+                    caller_kind="minion",
+                    caller=self._mn_minion_id,
+                )
+            )
             try: # run workflow (step by step)
                 if ctx.next_step_index == 0:
                     await _shielded_gather(*[
@@ -927,7 +943,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         ),
                         self._mn_metrics._mn_inc(
                             metric_name=MINION_WORKFLOW_STARTED_TOTAL,
-                            labels={LABEL_ORCHESTRATION_ID: self._mn_orchestration_id},
+                            labels=self._mn_workflow_base_metric_labels(),
                         )
                     ])
                 else:
@@ -968,7 +984,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         self._mn_metrics._mn_inc(
                             metric_name=MINION_WORKFLOW_STEP_STARTED_TOTAL,
                             labels={
-                                LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
+                                **self._mn_workflow_base_metric_labels(),
                                 LABEL_MINION_WORKFLOW_STEP: step_name,
                             },
                         )
@@ -1000,7 +1016,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             self._mn_metrics._mn_inc(
                                 metric_name=MINION_WORKFLOW_STEP_ABORTED_TOTAL,
                                 labels={
-                                    LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
+                                    **self._mn_workflow_base_metric_labels(),
                                     LABEL_MINION_WORKFLOW_STEP: step_name,
                                 },
                             )
@@ -1035,7 +1051,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             self._mn_metrics._mn_inc(
                                 metric_name=MINION_WORKFLOW_STEP_FAILED_TOTAL,
                                 labels={
-                                    LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
+                                    **self._mn_workflow_base_metric_labels(),
                                     LABEL_MINION_WORKFLOW_STEP: step_name,
                                     LABEL_ERROR_TYPE: type(e).__name__,
                                 },
@@ -1059,7 +1075,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             self._mn_metrics._mn_inc(
                                 metric_name=MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
                                 labels={
-                                    LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
+                                    **self._mn_workflow_base_metric_labels(),
                                     LABEL_MINION_WORKFLOW_STEP: step_name,
                                 },
                             )
@@ -1077,7 +1093,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             metric_name=MINION_WORKFLOW_STEP_DURATION_SECONDS,
                             value=duration,
                             labels={
-                                LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
+                                **self._mn_workflow_base_metric_labels(),
                                 LABEL_MINION_WORKFLOW_STEP: step_name,
                                 LABEL_STATUS: step_status,
                             },
@@ -1129,7 +1145,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         ),
                         self._mn_metrics._mn_inc(
                             metric_name=MINION_WORKFLOW_ABORTED_TOTAL,
-                            labels={LABEL_ORCHESTRATION_ID: self._mn_orchestration_id},
+                            labels=self._mn_workflow_base_metric_labels(),
                         )
                     ])
                 elif workflow_status == "failed" and terminal_workflow_log_message is not None:
@@ -1150,7 +1166,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         self._mn_metrics._mn_inc(
                             metric_name=MINION_WORKFLOW_FAILED_TOTAL,
                             labels={
-                                LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
+                                **self._mn_workflow_base_metric_labels(),
                                 LABEL_ERROR_TYPE: type(failure_error).__name__,
                             },
                         )
@@ -1168,7 +1184,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         ),
                         self._mn_metrics._mn_inc(
                             metric_name=MINION_WORKFLOW_SUCCEEDED_TOTAL,
-                            labels={LABEL_ORCHESTRATION_ID: self._mn_orchestration_id},
+                            labels=self._mn_workflow_base_metric_labels(),
                         )
                     ])
 
@@ -1183,7 +1199,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     metric_name=MINION_WORKFLOW_DURATION_SECONDS,
                     value=duration,
                     labels={
-                        LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
+                        **self._mn_workflow_base_metric_labels(),
                         LABEL_STATUS: workflow_status,
                     },
                 )
@@ -1197,10 +1213,11 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         await self._mn_metrics._mn_set(
                             metric_name=MINION_WORKFLOW_INFLIGHT_GAUGE,
                             value=inflight,
-                            labels={LABEL_ORCHESTRATION_ID: self._mn_orchestration_id},
+                            labels=self._mn_workflow_base_metric_labels(),
                         )
                 self._mn_event_var.reset(event_token)
                 self._mn_context_var.reset(context_token)
+                metric_context.close()
                 self._mn_workflow_handle_var.reset(workflow_handle_token)
 
         def get_user_error_location(tb: TracebackType | None) -> dict[str, object] | None:
@@ -1279,7 +1296,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         await self._mn_metrics._mn_set(
             metric_name=MINION_WORKFLOW_INFLIGHT_GAUGE,
             value=inflight,
-            labels={LABEL_ORCHESTRATION_ID: self._mn_orchestration_id},
+            labels=self._mn_workflow_base_metric_labels(),
         )
 
     async def _mn_wait_until_tasks_idle(

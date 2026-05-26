@@ -42,16 +42,18 @@ def extract_metric_value(text: str, name: str, labels: dict[str, str]) -> float:
     handles 'some_metric{label1="foo",label2="bar"} 42.0'
     and 'some_metric 42.0'
     """
-    if labels:
-        label_str = ",".join(f'{re.escape(k)}="{re.escape(v)}"' for k, v in labels.items())
-        pattern = rf'^{re.escape(name)}{{{label_str}}} ([0-9\.e+-]+)$'
-    else:
-        pattern = rf'^{re.escape(name)} ([0-9\.e+-]+)$'
-
     for line in text.splitlines():
-        match = re.match(pattern, line)
-        if match:
-            return float(match.group(1))
+        if labels:
+            match = re.match(rf'^{re.escape(name)}{{([^}}]*)}} ([0-9\.e+-]+)$', line)
+            if not match:
+                continue
+            actual_labels = dict(re.findall(r'([^=,]+)="([^"]*)"', match.group(1)))
+            if actual_labels == labels:
+                return float(match.group(2))
+        else:
+            match = re.match(rf'^{re.escape(name)} ([0-9\.e+-]+)$', line)
+            if match:
+                return float(match.group(1))
 
     raise KeyError(f"{name} with labels {labels} not found")
 
@@ -70,14 +72,14 @@ async def test_counter_exposed_on_http():
     metrics = PrometheusMetrics(logger=NoOpLogger(), port=port, registry=registry)
     await metrics.startup()
 
-    counter = metrics.create_metric(MINION_WORKFLOW_STARTED_TOTAL, [LABEL_ORCHESTRATION_ID], "counter")
-    counter.labels(**{LABEL_ORCHESTRATION_ID: "minion|config|pipeline"}).inc()
+    counter = metrics.create_metric(MINION_WORKFLOW_STARTED_TOTAL, [LABEL_ORCHESTRATION_ID, LABEL_MINION], "counter")
+    counter.labels(**{LABEL_ORCHESTRATION_ID: "minion|config|pipeline", LABEL_MINION: "minion"}).inc()
 
     page = await poll_read_metrics_from_http(port)
     value = extract_metric_value(
         page,
         MINION_WORKFLOW_STARTED_TOTAL,
-        {LABEL_ORCHESTRATION_ID: "minion|config|pipeline"},
+        {LABEL_ORCHESTRATION_ID: "minion|config|pipeline", LABEL_MINION: "minion"},
     )
     assert value == 1.0
 
@@ -104,13 +106,21 @@ async def test_histogram_exposed_on_http():
 
     histogram = metrics.create_metric(
         MINION_WORKFLOW_STEP_DURATION_SECONDS,
-        [LABEL_MINION, LABEL_MINION_WORKFLOW_STEP],
+        [LABEL_ORCHESTRATION_ID, LABEL_MINION, LABEL_MINION_WORKFLOW_STEP],
         "histogram",
     )
-    histogram.labels(**{LABEL_MINION: "minion123", LABEL_MINION_WORKFLOW_STEP: "step_xyz"}).observe(0.75)
+    histogram.labels(**{
+        LABEL_ORCHESTRATION_ID: "orchestration123",
+        LABEL_MINION: "minion123",
+        LABEL_MINION_WORKFLOW_STEP: "step_xyz",
+    }).observe(0.75)
 
     page = await poll_read_metrics_from_http(port)
-    labels = {LABEL_MINION: "minion123", LABEL_MINION_WORKFLOW_STEP: "step_xyz"}
+    labels = {
+        LABEL_ORCHESTRATION_ID: "orchestration123",
+        LABEL_MINION: "minion123",
+        LABEL_MINION_WORKFLOW_STEP: "step_xyz",
+    }
 
     sum_val = extract_metric_value(page, MINION_WORKFLOW_STEP_DURATION_SECONDS + "_sum", labels)
     count_val = extract_metric_value(page, MINION_WORKFLOW_STEP_DURATION_SECONDS + "_count", labels)

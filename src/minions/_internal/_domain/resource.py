@@ -1,4 +1,3 @@
-
 import inspect
 import time
 from typing import Awaitable, Callable, Coroutine, ParamSpec, TypeGuard, TypeVar, Any, overload
@@ -8,15 +7,26 @@ from .._framework.async_lifecycle import LifecycleCallback
 from .._framework.logger import Logger, WARNING
 from .._framework.metrics import Metrics
 from .._framework.metrics_constants import (
-    LABEL_RESOURCE, LABEL_RESOURCE_METHOD, LABEL_ERROR_TYPE,
-    RESOURCE_SERVES_TOTAL, RESOURCE_LATENCY_SECONDS, RESOURCE_ERROR_TOTAL
+    LABEL_ERROR_TYPE,
+    LABEL_ORCHESTRATION_ID,
+    LABEL_RESOURCE,
+    LABEL_RESOURCE_CALLER,
+    LABEL_RESOURCE_CALLER_KIND,
+    LABEL_RESOURCE_METHOD,
+    RESOURCE_ERROR_TOTAL,
+    RESOURCE_LATENCY_SECONDS,
+    RESOURCE_SERVES_TOTAL,
+)
+from .._framework.metrics_context import (
+    current_resource_metric_caller,
+    current_resource_metric_orchestration_id,
+    resource_metric_context,
 )
 
 
 T = TypeVar("T")
 P = ParamSpec("P")
 R = TypeVar("R")
-
 
 class Resource(AsyncService):
     """
@@ -27,10 +37,17 @@ class Resource(AsyncService):
     """
     _mn_user_facing = True
 
-    def __init__(self, logger: Logger, metrics: Metrics, resource_modpath: str):
+    def __init__(
+        self,
+        logger: Logger,
+        metrics: Metrics,
+        resource_modpath: str,
+        resource_id: str | None = None,
+    ):
         super().__init__(logger)
         self._mn_metrics = metrics
         self._mn_resource_modpath = resource_modpath
+        self._mn_resource_id = resource_id if resource_id is not None else resource_modpath
 
     async def _mn_startup(
         self,
@@ -91,7 +108,7 @@ class Resource(AsyncService):
             ) -> Callable[..., Coroutine[Any, Any, object]]:
                 async def wrapper(*args: object, **kwargs: object) -> object:
                     return await self._mn_run_with_tracking(
-                        type(self).__name__,
+                        self._mn_resource_id,
                         attr_name,
                         method,
                         *args,
@@ -103,52 +120,54 @@ class Resource(AsyncService):
 
     async def _mn_run_with_tracking(
         self,
-        resource: str,
+        resource_id: str,
         resource_method: str,
         method: Callable[..., Coroutine[Any, Any, T]],
         *args: object,
         **kwargs: object
     ) -> T:
         start = time.monotonic()
-        try:
-            result = await method(*args, **kwargs)
-        except Exception as e:
-            await self._mn_metrics._mn_inc(
-                metric_name=RESOURCE_ERROR_TOTAL,
-                labels={
-                    LABEL_RESOURCE: resource,
-                    LABEL_RESOURCE_METHOD: resource_method,
-                    LABEL_ERROR_TYPE: type(e).__name__,
-                },
-            )
-            await self._mn_logger._mn_log_exception(
-                WARNING,
-                "Resource method failed",
-                e,
-                resource=resource,
-                resource_method=resource_method,
-                args=args,
-                kwargs=kwargs
-            )
-            raise
-        else:
-            duration = time.monotonic() - start
-            await self._mn_metrics._mn_observe(
-                metric_name=RESOURCE_LATENCY_SECONDS,
-                value=duration,
-                labels={
-                    LABEL_RESOURCE: resource,
-                    LABEL_RESOURCE_METHOD: resource_method,
-                },
-            )
-            await self._mn_metrics._mn_inc(
-                metric_name=RESOURCE_SERVES_TOTAL,
-                labels={
-                    LABEL_RESOURCE: resource,
-                    LABEL_RESOURCE_METHOD: resource_method,
-                },
-            )
-            return result
+        caller_kind, caller = current_resource_metric_caller()
+        base_labels = {
+            LABEL_RESOURCE: resource_id,
+            LABEL_RESOURCE_METHOD: resource_method,
+            LABEL_RESOURCE_CALLER_KIND: caller_kind,
+            LABEL_RESOURCE_CALLER: caller,
+            LABEL_ORCHESTRATION_ID: current_resource_metric_orchestration_id(),
+        }
+        with resource_metric_context(caller_kind="resource", caller=self._mn_resource_id):
+            try:
+                result = await method(*args, **kwargs)
+            except Exception as e:
+                await self._mn_metrics._mn_inc(
+                    metric_name=RESOURCE_ERROR_TOTAL,
+                    labels={
+                        **base_labels,
+                        LABEL_ERROR_TYPE: type(e).__name__,
+                    },
+                )
+                await self._mn_logger._mn_log_exception(
+                    WARNING,
+                    "Resource method failed",
+                    e,
+                    resource=resource_id,
+                    resource_method=resource_method,
+                    args=args,
+                    kwargs=kwargs
+                )
+                raise
+            else:
+                duration = time.monotonic() - start
+                await self._mn_metrics._mn_observe(
+                    metric_name=RESOURCE_LATENCY_SECONDS,
+                    value=duration,
+                    labels=base_labels,
+                )
+                await self._mn_metrics._mn_inc(
+                    metric_name=RESOURCE_SERVES_TOTAL,
+                    labels=base_labels,
+                )
+                return result
     
     @staticmethod
     @overload

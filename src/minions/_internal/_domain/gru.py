@@ -636,7 +636,8 @@ class Gru:
                     resource = resource_cls(
                         logger=self._logger,
                         metrics=self._metrics,
-                        resource_modpath=f"{resource_cls.__module__}.{resource_cls.__name__}"
+                        resource_modpath=f"{resource_cls.__module__}.{resource_cls.__name__}",
+                        resource_id=resource_id,
                     )
                     self._resources[resource_id] = resource
                     self._resource_tasks[resource_id] = safe_create_task(
