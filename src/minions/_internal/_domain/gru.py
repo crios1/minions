@@ -563,11 +563,16 @@ class Gru:
 
         for cls in start_order:
             rid = self._make_resource_id(cls)
-            await self._start_resource(rid, cls)
+            dependency_resource_classes = self._get_direct_resource_dependencies(cls)
+            await self._start_resource(
+                rid,
+                cls,
+                dependency_resource_classes=dependency_resource_classes,
+            )
             
             async with self._runtime_state_lock:
-                for dep_cls in self._get_direct_resource_dependencies(cls):
-                    dep_id = self._make_resource_id(dep_cls)
+                for dependency_resource_cls in dependency_resource_classes:
+                    dep_id = self._make_resource_id(dependency_resource_cls)
                     if dep_id in self._resource_dependencies[rid]:
                         continue
                     self._resource_dependencies[rid].add(dep_id)
@@ -624,7 +629,21 @@ class Gru:
     def _get_resource(self):
         ...
 
-    async def _start_resource(self, resource_id: str, resource_cls: type[Resource]) -> Resource:
+    async def _start_resource(
+        self,
+        resource_id: str,
+        resource_cls: type[Resource],
+        *,
+        dependency_resource_classes: Iterable[type[Resource]] = (),
+    ) -> Resource:
+        dependency_resource_class_set = set(dependency_resource_classes)
+
+        def inject_resource_dependencies(resource: Resource) -> None:
+            for attr, hint in get_type_hints(resource_cls).items():
+                attr_cls = get_type_from_hint(hint)
+                if attr_cls in dependency_resource_class_set:
+                    setattr(resource, attr, self._resources[self._make_resource_id(attr_cls)])
+
         async with self._resource_locks[resource_id]:
             created = False
             async with self._runtime_state_lock:
@@ -639,6 +658,7 @@ class Gru:
                         resource_modpath=f"{resource_cls.__module__}.{resource_cls.__name__}",
                         resource_id=resource_id,
                     )
+                    inject_resource_dependencies(resource)
                     self._resources[resource_id] = resource
                     self._resource_tasks[resource_id] = safe_create_task(
                         resource._mn_start(),

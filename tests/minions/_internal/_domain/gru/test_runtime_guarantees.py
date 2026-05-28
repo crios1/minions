@@ -352,6 +352,58 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
 
 
 @pytest.mark.asyncio
+async def test_gru_injects_resource_dependencies_before_resource_startup(
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+) -> None:
+    logger = InMemoryLogger()
+    metrics = InMemoryMetrics()
+    state_store = InMemoryStateStore(logger=logger)
+
+    minion_module = importlib.import_module("tests.assets.minions.two_steps.counter.basic")
+    minion_module.TwoStepMinion.enable_spy()
+    minion_module.TwoStepMinion.reset_spy()
+
+    pipeline_modpath = "tests.assets.pipelines.resourced.counter.has_transitive_resource"
+
+    resource_module_fixed = importlib.import_module("tests.assets.resources.fixed.base")
+    resource_module_depends_on_fixed = importlib.import_module(
+        "tests.assets.resources.with_dependencies.depends_on_fixed"
+    )
+
+    async with gru_factory(
+        logger=logger,
+        metrics=metrics,
+        state_store=state_store,
+    ) as gru:
+        result = await gru.start_orchestration(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline=pipeline_modpath,
+        )
+
+        assert result.success
+        await minion_module.TwoStepMinion.wait_for_calls(
+            expected={"step_1": 1, "step_2": 1},
+            timeout=5.0,
+        )
+
+        fixed_resource_id = gru._make_resource_id(resource_module_fixed.FixedResource)
+        depends_on_fixed_resource_id = gru._make_resource_id(
+            resource_module_depends_on_fixed.DependsOnFixedResource
+        )
+        depends_on_fixed_resource_inst = gru._resources[depends_on_fixed_resource_id]
+        assert gru._pipeline_resource_map[pipeline_modpath] == {depends_on_fixed_resource_id}
+        assert gru._resource_dependencies[depends_on_fixed_resource_id] == {fixed_resource_id}
+        assert gru._resource_refcounts[depends_on_fixed_resource_id] == 1
+        assert gru._resource_refcounts[fixed_resource_id] == 1
+        assert getattr(depends_on_fixed_resource_inst, "startup_value") == 123
+
+        stop = await gru.stop_orchestration(result.orchestration_id or "")
+
+        assert stop.success
+        assert gru._runtime_state_snapshot() == {}
+
+
+@pytest.mark.asyncio
 async def test_gru_allows_concurrent_starts_for_different_orchestrations_while_stop_is_in_flight(
     gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     monkeypatch: pytest.MonkeyPatch,
