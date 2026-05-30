@@ -62,7 +62,6 @@ def mk_ctx(
 ) -> MinionWorkflowContext[Any, Any]:
     return MinionWorkflowContext(
         orchestration_id=_ck(minion_modpath, config=config, pipeline=pipeline),
-        minion_modpath=minion_modpath,
         workflow_id=workflow_id,
         event={} if event is None else event,
         context={} if context is None else context,
@@ -124,14 +123,7 @@ async def test_state_store_roundtrips_runtime_context(
 
     assert len(ctxs) == 1
     actual = ctxs[0]
-    assert actual.workflow_id == expected.workflow_id
-    assert actual.orchestration_id == expected.orchestration_id
-    assert actual.minion_modpath == expected.minion_modpath
-    assert actual.event == expected.event
-    assert actual.context == expected.context
-    assert actual.context_cls is dict
-    assert actual.next_step_index == expected.next_step_index
-    assert actual.error_msg == expected.error_msg
+    assert actual == expected
 
 
 async def test_state_store_overwrites_existing_workflow_context(
@@ -146,7 +138,6 @@ async def test_state_store_overwrites_existing_workflow_context(
         next_step_index=1,
     )
     updated = mk_ctx(
-        minion_modpath="app.minion.updated",
         workflow_id=workflow_id,
         event={"i": 2},
         context={"k": "updated"},
@@ -162,7 +153,6 @@ async def test_state_store_overwrites_existing_workflow_context(
     actual = ctxs[0]
     assert actual.workflow_id == workflow_id
     assert actual.orchestration_id == updated.orchestration_id
-    assert actual.minion_modpath == updated.minion_modpath
     assert actual.event == updated.event
     assert actual.context == updated.context
     assert actual.context_cls is dict
@@ -225,9 +215,12 @@ async def test_state_store_get_all_contexts_returns_blob_records(
         type=PersistedMinionWorkflowContext,
     )
     assert persisted.workflow_id == expected.workflow_id
+    assert not hasattr(persisted, "minion_modpath")
+    assert not hasattr(persisted, "minion_id")
     assert persisted.context_cls == "builtins.dict"
     assert persisted.schema_version == CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION
-    assert deserialize_workflow_context_blob(ctx.context) == expected
+    decoded = deserialize_workflow_context_blob(ctx.context)
+    assert decoded == expected
 
 
 # Orchestration Filtering
@@ -239,14 +232,12 @@ async def test_state_store_get_contexts_for_orchestration_filters_by_identity(
     store, _ = store_and_logger
     target_modpath = "app.minion.shared"
     target_a = mk_ctx(
-        minion_modpath=target_modpath,
         config="cfg-a",
         workflow_id="wf-target-a",
         event={"i": 1},
         context={"k": "a"},
     )
     target_b = mk_ctx(
-        minion_modpath=target_modpath,
         config="cfg-b",
         workflow_id="wf-target-b",
         event={"i": 2},
@@ -254,7 +245,6 @@ async def test_state_store_get_contexts_for_orchestration_filters_by_identity(
         next_step_index=1,
     )
     other = mk_ctx(
-        minion_modpath=target_modpath,
         config="cfg-c",
         workflow_id="wf-other",
         event={"i": 3},
@@ -270,7 +260,6 @@ async def test_state_store_get_contexts_for_orchestration_filters_by_identity(
     filtered_ids = {ctx.workflow_id for ctx in filtered}
     assert filtered_ids == {"wf-target-a"}
     assert all(ctx.orchestration_id == target_a.orchestration_id for ctx in filtered)
-    assert all(ctx.minion_modpath == target_modpath for ctx in filtered)
 
     missing = await store._mn_get_decoded_contexts_for_orchestration(_ck(target_modpath, config="cfg-missing"))
     assert missing == []
@@ -295,7 +284,6 @@ async def test_state_store_get_contexts_for_orchestration_restores_typed_models(
 ):
     store, _ = store_and_logger
     expected = mk_ctx(
-        minion_modpath="app.minion.typed",
         workflow_id="wf-typed",
         event=event,
         context=context,
@@ -357,7 +345,6 @@ async def test_state_store_skips_unknown_schema_blob(
     )
     unknown_payload = PersistedMinionWorkflowContext(
         orchestration_id=unknown_ctx.orchestration_id,
-        minion_modpath=unknown_ctx.minion_modpath,
         workflow_id=unknown_ctx.workflow_id,
         event=unknown_ctx.event,
         context=unknown_ctx.context,

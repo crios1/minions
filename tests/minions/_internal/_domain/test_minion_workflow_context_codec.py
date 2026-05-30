@@ -54,7 +54,6 @@ def test_adapter_payload_roundtrip_restores_typed_event_and_context(
 ) -> None:
     ctx: MinionWorkflowContext[Any, Any] = MinionWorkflowContext(
         orchestration_id="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
-        minion_modpath="tests.assets.minions.sample",
         workflow_id="wf-typed-blob",
         event=event,
         context=context,
@@ -86,7 +85,6 @@ def test_direct_typed_decoder_accepts_persisted_workflow_context(
 ) -> None:
     ctx: MinionWorkflowContext[Any, Any] = MinionWorkflowContext(
         orchestration_id="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
-        minion_modpath="tests.assets.minions.sample",
         workflow_id="wf-direct-typed",
         event=event,
         context=context,
@@ -109,7 +107,6 @@ def test_direct_typed_decoder_accepts_persisted_workflow_context(
 def test_direct_typed_decoder_ignores_stale_persisted_context_cls_path() -> None:
     ctx: MinionWorkflowContext[Any, Any] = MinionWorkflowContext(
         orchestration_id="moved",
-        minion_modpath="old_app.minion",
         workflow_id="wf-moved-context-cls",
         event=EventDC(1),
         context=ContextDC(2),
@@ -124,7 +121,6 @@ def test_direct_typed_decoder_ignores_stale_persisted_context_cls_path() -> None
     moved_payload = serialize(
         PersistedMinionWorkflowContext(
             orchestration_id=persisted.orchestration_id,
-            minion_modpath=persisted.minion_modpath,
             workflow_id=persisted.workflow_id,
             event=persisted.event,
             context=persisted.context,
@@ -151,7 +147,6 @@ def test_direct_typed_decoder_ignores_stale_persisted_context_cls_path() -> None
 def test_serialize_workflow_context_writes_adapter_shape():
     ctx = MinionWorkflowContext(
         orchestration_id="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
-        minion_modpath="tests.assets.minions.sample",
         workflow_id="wf-1",
         event={"v": 1},
         context={"c": 1},
@@ -170,7 +165,6 @@ def test_serialize_workflow_context_writes_adapter_shape():
 def test_serialize_persisted_workflow_context_writes_blob_contract():
     ctx = MinionWorkflowContext(
         orchestration_id="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
-        minion_modpath="tests.assets.minions.sample",
         workflow_id="wf-blob-contract",
         event={"v": 1},
         context={"c": 1},
@@ -183,6 +177,7 @@ def test_serialize_persisted_workflow_context_writes_blob_contract():
     loaded_ctx = deserialize_workflow_context_blob(blob)
 
     assert persisted.workflow_id == ctx.workflow_id
+    assert not hasattr(persisted, "minion_modpath")
     assert persisted.context_cls == "builtins.dict"
     assert persisted.schema_version == CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION
     assert loaded_ctx == ctx
@@ -191,7 +186,6 @@ def test_serialize_persisted_workflow_context_writes_blob_contract():
 def test_adapter_payload_roundtrips_msgspec_struct_payloads():
     ctx = MinionWorkflowContext(
         orchestration_id="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
-        minion_modpath="tests.assets.minions.sample",
         workflow_id="wf-structs",
         event=EventStruct(1),
         context=ContextStruct(2),
@@ -247,7 +241,6 @@ def test_normalize_workflow_context_data_rejects_future_schema_version():
 def test_adapter_payload_roundtrips_context_cls_and_schema_version():
     ctx = MinionWorkflowContext(
         orchestration_id="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
-        minion_modpath="tests.assets.minions.sample",
         workflow_id="wf-storage",
         event={"v": 1},
         context={"c": 1},
@@ -266,7 +259,6 @@ def test_deserialize_workflow_context_rejects_invalid_context_cls_string():
     payload = serialize_workflow_context(
         MinionWorkflowContext(
             orchestration_id="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
-            minion_modpath="tests.assets.minions.sample",
             workflow_id="wf-invalid-context-cls",
             event={"v": 1},
             context={"c": 1},
@@ -284,7 +276,6 @@ def test_deserialize_workflow_context_accepts_integer_started_at():
     payload = serialize_workflow_context(
         MinionWorkflowContext(
             orchestration_id="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
-            minion_modpath="tests.assets.minions.sample",
             workflow_id="wf-int-started-at",
             event={"v": 1},
             context={"c": 1},
@@ -304,7 +295,6 @@ def test_deserialize_workflow_context_rejects_unknown_leftover_fields():
     payload = serialize_workflow_context(
         MinionWorkflowContext(
             orchestration_id="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
-            minion_modpath="tests.assets.minions.sample",
             workflow_id="wf-unknown-leftover",
             event={"v": 1},
             context={"c": 1},

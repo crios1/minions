@@ -1278,7 +1278,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
 
         ctx: MinionWorkflowContext[T_Event, T_Ctx] = MinionWorkflowContext(
             orchestration_id=self._mn_orchestration_id,
-            minion_modpath=self._mn_minion_modpath,
             workflow_id=workflow_id,
             event=t_event,
             context=type(self)._mn_workflow_ctx_cls(),

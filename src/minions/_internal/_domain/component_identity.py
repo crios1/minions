@@ -50,7 +50,11 @@ def _register_component_id(kind: ComponentKind, component_id: str, cls: type[Any
     key = (kind, component_id)
     existing_ref = _COMPONENT_ID_REGISTRY.get(key)
     existing = existing_ref() if existing_ref is not None else None
-    if existing is not None and existing is not cls:
+    if (
+        existing is not None
+        and existing is not cls
+        and _component_ref(existing) != _component_ref(cls)
+    ):
         raise ValueError(
             f"Duplicate {kind} component id {component_id!r}: "
             f"{_component_ref(existing)} and {_component_ref(cls)}"

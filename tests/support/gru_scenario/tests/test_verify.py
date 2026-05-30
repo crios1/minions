@@ -1449,7 +1449,6 @@ def test_assert_persisted_context_integrity_accepts_matching_snapshot():
                     "tests.assets.minions.two_steps.counter.basic": (
                         MinionWorkflowContext(
                             orchestration_id="ck",
-                            minion_modpath="tests.assets.minions.two_steps.counter.basic",
                             workflow_id="workflow-1",
                             event=CounterEvent(seq=1),
                             context=CounterContext(),

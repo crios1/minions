@@ -26,7 +26,6 @@ def mk_ctx(
 ) -> MinionWorkflowContext[dict[str, int], dict[str, str]]:
     return MinionWorkflowContext(
         orchestration_id=f"{modpath}|cfg-{i}|app.pipeline",
-        minion_modpath=modpath,
         workflow_id=f"wf-{i}",
         event={"i": i},
         context={"p": "x" * size},

@@ -8,7 +8,6 @@ class MinionWorkflowContext(Generic[T_Event, T_Ctx]):
     """If you change this dataclass, review minion_workflow_context_codec.py and add any needed codec updates or migration."""
 
     orchestration_id: str
-    minion_modpath: str
     workflow_id: str
     event: T_Event
     context: T_Ctx
@@ -21,7 +20,6 @@ class MinionWorkflowContext(Generic[T_Event, T_Ctx]):
         # explicit field assembly is much faster than dataclasses.asdict(...) here
         return {
             "orchestration_id": self.orchestration_id,
-            "minion_modpath": self.minion_modpath,
             "workflow_id": self.workflow_id,
             "event": self.event,
             "context": self.context,

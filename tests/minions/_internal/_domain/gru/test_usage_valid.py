@@ -397,7 +397,6 @@ class TestValidUsage:
         await state_store._mn_serialize_and_save_context(
             MinionWorkflowContext(
                 orchestration_id=expected_orchestration_id,
-                minion_modpath="original_app.minion",
                 workflow_id="wf-moved-resume",
                 event=SimpleEvent(timestamp=123),
                 context=SimpleContext(step1="already-complete"),

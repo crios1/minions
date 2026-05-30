@@ -93,7 +93,6 @@ async def test_start_orchestration_fails_closed_on_persisted_workflow_decode_mis
     expected_orchestration_id = orchestration_id(GOOD_MINION, GOOD_PIPELINE)
     persisted_context = MinionWorkflowContext(
         orchestration_id=expected_orchestration_id,
-        minion_modpath=GOOD_MINION,
         workflow_id="wf-incompatible",
         event=SimpleEvent(timestamp=1.0),
         context=SimpleContext(price=1.23),

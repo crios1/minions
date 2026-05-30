@@ -43,7 +43,6 @@ class PersistedMinionWorkflowContext(msgspec.Struct, forbid_unknown_fields=True)
     """Versioned StateStore payload for one runtime MinionWorkflowContext."""
 
     orchestration_id: str
-    minion_modpath: str
     workflow_id: str
     event: object
     context: object
@@ -159,7 +158,6 @@ def persist_workflow_context(
 
     return PersistedMinionWorkflowContext(
         orchestration_id=ctx.orchestration_id,
-        minion_modpath=ctx.minion_modpath,
         workflow_id=ctx.workflow_id,
         event=ctx.event,
         context=ctx.context,
@@ -201,7 +199,6 @@ def restore_workflow_context_types(
 
     return MinionWorkflowContext(
         orchestration_id=ctx.orchestration_id,
-        minion_modpath=ctx.minion_modpath,
         workflow_id=ctx.workflow_id,
         event=event,
         context=context,
@@ -228,7 +225,6 @@ def hydrate_persisted_workflow_context(
     return restore_workflow_context_types(
         MinionWorkflowContext(
             orchestration_id=persisted.orchestration_id,
-            minion_modpath=persisted.minion_modpath,
             workflow_id=persisted.workflow_id,
             event=persisted.event,
             context=persisted.context,
@@ -248,7 +244,6 @@ def _typed_persisted_workflow_context_decoder(
 ) -> msgspec.msgpack.Decoder[Any]:
     fields: list[_MsgspecFieldSpec] = [
         ("orchestration_id", str),
-        ("minion_modpath", str),
         ("workflow_id", str),
         ("event", event_cls),
         ("context", context_cls),
@@ -311,7 +306,6 @@ def decode_persisted_workflow_context_typed(
     # must not block compatible context class relocation across refactors.
     return MinionWorkflowContext(
         orchestration_id=persisted.orchestration_id,
-        minion_modpath=persisted.minion_modpath,
         workflow_id=persisted.workflow_id,
         event=persisted.event,
         context=persisted.context,
@@ -417,7 +411,6 @@ def deserialize_workflow_context(
         )
 
     orchestration_id = data.get("orchestration_id")
-    minion_modpath = data.get("minion_modpath")
     workflow_id = data.get("workflow_id")
     context_cls = data.get("context_cls")
     next_step_index = data.get("next_step_index", 0)
@@ -426,8 +419,6 @@ def deserialize_workflow_context(
 
     if not isinstance(orchestration_id, str):
         raise WorkflowContextSchemaError("Invalid workflow context orchestration_id.")
-    if not isinstance(minion_modpath, str):
-        raise WorkflowContextSchemaError("Invalid workflow context minion_modpath.")
     if not isinstance(workflow_id, str):
         raise WorkflowContextSchemaError("Invalid workflow context workflow_id.")
     if "event" not in data:
@@ -447,7 +438,6 @@ def deserialize_workflow_context(
 
     return MinionWorkflowContext(
         orchestration_id=orchestration_id,
-        minion_modpath=minion_modpath,
         workflow_id=workflow_id,
         event=data["event"],
         context=data["context"],

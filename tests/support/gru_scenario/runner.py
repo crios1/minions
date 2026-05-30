@@ -599,7 +599,8 @@ class ScenarioRunner:
                     )
                 else:
                     ctx = deserialize_workflow_context_blob(stored_context.context)
-                contexts_by_modpath[ctx.minion_modpath].append(ctx)
+                modpath = receipt.minion_modpath if receipt is not None else ""
+                contexts_by_modpath[modpath].append(ctx)
         except Exception:
             return None
 

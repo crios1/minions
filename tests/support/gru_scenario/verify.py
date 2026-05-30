@@ -280,12 +280,6 @@ class ScenarioVerifier:
                             f"orchestration_id={ctx.orchestration_id!r}, "
                             f"checkpoint={checkpoint.order}."
                         )
-                    if ctx.minion_modpath != receipt.minion_modpath:
-                        pytest.fail(
-                            "Persisted context minion_modpath mismatch: "
-                            f"workflow_id={ctx.workflow_id!r}, "
-                            f"expected {receipt.minion_modpath!r}, got {ctx.minion_modpath!r}."
-                        )
                     if not isinstance(ctx.event, event_cls):
                         pytest.fail(
                             "Persisted context event type mismatch: "

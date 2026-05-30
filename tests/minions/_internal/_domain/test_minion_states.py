@@ -768,7 +768,6 @@ async def test_minion_startup_replays_only_own_contexts():
     await store._mn_serialize_and_save_context(
         MinionWorkflowContext(
             orchestration_id=own_orchestration_id,
-            minion_modpath=minion_modpath,
             workflow_id="wf-own",
             event=DictEvent(),
             context=DictContext(),
@@ -778,7 +777,6 @@ async def test_minion_startup_replays_only_own_contexts():
     await store._mn_serialize_and_save_context(
         MinionWorkflowContext(
             orchestration_id=other_orchestration_id,
-            minion_modpath=minion_modpath,
             workflow_id="wf-other",
             event=DictEvent(),
             context=DictContext(),
@@ -833,7 +831,6 @@ async def test_minion_startup_replays_typed_msgspec_event_and_context():
     await store._mn_serialize_and_save_context(
         MinionWorkflowContext(
             orchestration_id="mock.modpath.minion_replay_typed|cfg|tests.assets.pipelines.shared",
-            minion_modpath="mock.modpath.minion_replay_typed",
             workflow_id="wf-typed",
             event=ReplayEvent(7),
             context=ReplayContext(11),
@@ -993,7 +990,6 @@ async def test_resumed_workflow_step_can_access_event_and_context_from_state_sto
     await store._mn_serialize_and_save_context(
         MinionWorkflowContext(
             orchestration_id="tests.assets.resume_access_minion|cfg|tests.assets.pipelines.resume",
-            minion_modpath="tests.assets.resume_access_minion",
             workflow_id="wf-resume",
             event=DictEvent(value=7),
             context=DictContext(from_step_1=8),
@@ -1036,7 +1032,6 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
 
     valid_context: MinionWorkflowContext[DictEvent, DictContext] = MinionWorkflowContext(
         orchestration_id=f"{minion_modpath}|cfg|tests.assets.pipelines.invalid",
-        minion_modpath=minion_modpath,
         workflow_id="wf-valid",
         event=DictEvent(value=123),
         context=DictContext(),
@@ -1047,7 +1042,6 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
     )
     invalid_context: MinionWorkflowContext[DictEvent, DictContext] = MinionWorkflowContext(
         orchestration_id=f"{minion_modpath}|cfg|tests.assets.pipelines.invalid",
-        minion_modpath=minion_modpath,
         workflow_id="wf-invalid",
         event=DictEvent(value=456),
         context=DictContext(),
@@ -1058,7 +1052,6 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
     )
     invalid_payload = PersistedMinionWorkflowContext(
         orchestration_id=invalid_context.orchestration_id,
-        minion_modpath=invalid_context.minion_modpath,
         workflow_id=invalid_context.workflow_id,
         event=invalid_context.event,
         context=invalid_context.context,
@@ -1119,7 +1112,6 @@ async def test_minion_startup_replay_fails_closed_on_context_type_mismatch():
 
     valid_context: MinionWorkflowContext[DictEvent, DictContext] = MinionWorkflowContext(
         orchestration_id=orchestration_id,
-        minion_modpath=minion_modpath,
         workflow_id="wf-valid",
         event=DictEvent(value=123),
         context=DictContext(),
@@ -1128,7 +1120,6 @@ async def test_minion_startup_replay_fails_closed_on_context_type_mismatch():
     )
     mismatched_context: MinionWorkflowContext[StringValueEvent, DictContext] = MinionWorkflowContext(
         orchestration_id=orchestration_id,
-        minion_modpath=minion_modpath,
         workflow_id="wf-mismatch",
         event=StringValueEvent(value="not-an-int"),
         context=DictContext(),
