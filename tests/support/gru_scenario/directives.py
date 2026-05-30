@@ -1,7 +1,9 @@
+import importlib
 import inspect
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Iterator
+from typing import Any, Iterable, Iterator, TypeGuard
 
+from minions._internal._domain.component_identity import get_component_id
 from minions._internal._domain.gru import Gru
 from minions._internal._domain.minion import Minion
 from minions._internal._domain.pipeline import Pipeline
@@ -44,6 +46,17 @@ class OrchestrationStart(Directive):
         if isinstance(self.pipeline, str):
             return self.pipeline
         return self.pipeline.__module__
+
+    @property
+    def pipeline_id(self) -> str:
+        if isinstance(self.pipeline, str):
+            try:
+                pipeline_cls = _get_pipeline_class(self.pipeline)
+            except Exception:
+                return self.pipeline_modpath
+        else:
+            pipeline_cls = self.pipeline
+        return get_component_id(pipeline_cls) or self.pipeline_modpath
 
 
 @dataclass(frozen=True)
@@ -95,3 +108,29 @@ def iter_directives_flat(directives: Iterable["Directive"]) -> Iterator["Directi
             yield from iter_directives_flat((d.directive,))
             continue
         yield d
+
+
+def _get_pipeline_class(pipeline_modpath: str) -> type[Pipeline[Any]]:
+    mod = importlib.import_module(pipeline_modpath)
+
+    def is_pipeline_class(obj: object) -> TypeGuard[type[Pipeline[Any]]]:
+        return isinstance(obj, type) and issubclass(obj, Pipeline)
+
+    pipeline_attr = getattr(mod, "pipeline", None)
+    if pipeline_attr is None:
+        pipeline_classes: list[type[Pipeline[Any]]] = [
+            obj for obj in vars(mod).values()
+            if is_pipeline_class(obj) and obj is not Pipeline
+        ]
+        if len(pipeline_classes) == 1:
+            return pipeline_classes[0]
+        if len(pipeline_classes) == 0:
+            raise ImportError(
+                f"Module '{pipeline_modpath}' must define a `pipeline` variable or contain at least one subclass of `Pipeline`."
+            )
+        raise ImportError(
+            f"Module '{pipeline_modpath}' contains multiple Pipeline subclasses but no explicit `pipeline` variable to resolve the entrypoint."
+        )
+    if is_pipeline_class(pipeline_attr):
+        return pipeline_attr
+    raise TypeError(f"`pipeline` attribute in module '{pipeline_modpath}' is not a subclass of Pipeline")

@@ -23,6 +23,34 @@ from tests.support.gru_scenario import (
 
 
 @pytest.mark.asyncio
+async def test_run_gru_scenario_uses_durable_pipeline_id_for_event_targets(
+    gru: Gru,
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> None:
+    from tests.assets.pipelines.emit1.counter.identified import IDENTIFIED_COUNTER_PIPELINE_ID
+
+    directives: list[Directive] = [
+        OrchestrationStart(
+            pipeline="tests.assets.pipelines.emit1.counter.identified",
+            minion="tests.assets.minions.two_steps.counter.basic",
+        ),
+        WaitWorkflowCompletions(workflow_steps_mode="exact"),
+        GruShutdown(expect_success=True),
+    ]
+
+    await run_gru_scenario(
+        gru,
+        logger,
+        metrics,
+        state_store,
+        directives,
+        pipeline_event_counts={IDENTIFIED_COUNTER_PIPELINE_ID: 1},
+    )
+
+
+@pytest.mark.asyncio
 async def test_run_gru_scenario_with_new_assets(
     gru: Gru,
     logger: InMemoryLogger,

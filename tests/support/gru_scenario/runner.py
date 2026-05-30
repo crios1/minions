@@ -73,6 +73,11 @@ class OrchestrationStartReceipt:
     minion_cls: type[SpiedMinion[Any, Any]] | None
     success: bool
     orchestration_id: str | None = None
+    pipeline_id: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.pipeline_id:
+            object.__setattr__(self, "pipeline_id", self.pipeline_modpath)
 
 
 @dataclass
@@ -140,8 +145,6 @@ class ScenarioRunner:
             minion_modpath = d.minion_modpath
             pipeline_modpath = d.pipeline_modpath
 
-            self._spies.pipeline_start_attempt_counts[pipeline_modpath] += 1
-
             if minion_modpath not in self._spies.minions:
                 m_cls = d.minion if isinstance(d.minion, type) else self._insp.get_minion_class(minion_modpath)
                 if not issubclass(m_cls, SpiedMinion):
@@ -159,14 +162,17 @@ class ScenarioRunner:
                         )
                     self._spies.resources.add(r_cls)
 
-            if pipeline_modpath not in self._spies.pipelines:
-                p_cls = d.pipeline if isinstance(d.pipeline, type) else self._insp.get_pipeline_class(pipeline_modpath)
+            p_cls = d.pipeline if isinstance(d.pipeline, type) else self._insp.get_pipeline_class(pipeline_modpath)
+            pipeline_id = self._insp.get_pipeline_identity(pipeline_modpath, p_cls)
+            self._spies.pipeline_start_attempt_counts[pipeline_id] += 1
+
+            if pipeline_id not in self._spies.pipelines:
                 if not issubclass(p_cls, SpiedPipeline):
                     pytest.fail(
                         "OrchestrationStart pipeline must resolve to a spy-enabled pipeline subclass; "
                         f"got {p_cls!r} for '{pipeline_modpath}'"
                     )
-                self._spies.pipelines[pipeline_modpath] = p_cls
+                self._spies.pipelines[pipeline_id] = p_cls
 
                 for r_cls in self._insp.get_all_resource_dependencies(p_cls):
                     if not issubclass(r_cls, SpiedResource):
@@ -242,6 +248,7 @@ class ScenarioRunner:
             directive_index=self._plan.directive_index(d),
             minion_modpath=d.minion_modpath,
             pipeline_modpath=d.pipeline_modpath,
+            pipeline_id=self._insp.get_pipeline_identity(d.pipeline_modpath),
             instance_id=None,
             resolved_name=getattr(r, "name", None),
             minion_cls=None,
@@ -267,6 +274,7 @@ class ScenarioRunner:
                 directive_index=receipt.directive_index,
                 minion_modpath=receipt.minion_modpath,
                 pipeline_modpath=receipt.pipeline_modpath,
+                pipeline_id=receipt.pipeline_id,
                 instance_id=instance_id,
                 resolved_name=resolved_name,
                 minion_cls=minion_cls,
@@ -278,7 +286,7 @@ class ScenarioRunner:
 
         result.receipts.append(receipt)
         self._orchestration_start_receipts_by_directive_id[id(d)] = receipt
-        self._record_instance_tags(minion_inst, d.pipeline_modpath, receipt.instance_id)
+        self._record_instance_tags(minion_inst, receipt.pipeline_id, receipt.instance_id)
 
     async def _run_stop(self, d: OrchestrationStop) -> None:
         target_id = self._resolve_stop_target_id(d.id)
@@ -352,19 +360,19 @@ class ScenarioRunner:
     def _record_instance_tags(
         self,
         minion_inst: Minion[Any, Any] | None,
-        pipeline_modpath: str,
+        pipeline_id: str,
         instance_id: str | None,
     ) -> None:
         self._record_tag_if_present(minion_inst)
         if instance_id is None:
             return
 
-        pipeline_inst = self._insp.get_pipeline_instance(pipeline_modpath)
+        pipeline_inst = self._insp.get_pipeline_instance(pipeline_id)
         self._record_tag_if_present(pipeline_inst)
 
         resource_ids = self._insp.resource_ids_for(
             minion_instance_id=instance_id,
-            pipeline_modpath=pipeline_modpath,
+            pipeline_id=pipeline_id,
         )
         for rid in resource_ids:
             res_inst = self._insp.get_resource_instance(rid)
@@ -750,7 +758,7 @@ class ScenarioWaiter:
             m_cls = receipt.minion_cls or self._spies.minions.get(receipt.minion_modpath)
             if m_cls is None:
                 continue
-            expected_events = self._plan.pipeline_event_targets.get(receipt.pipeline_modpath)
+            expected_events = self._plan.pipeline_event_targets.get(receipt.pipeline_id)
             if expected_events is None:
                 continue
             expected_per_class[m_cls] += expected_events

@@ -70,8 +70,8 @@ class ExpectedCallCounts:
 
 @dataclass(frozen=True)
 class PipelineAttemptOutcomes:
-    attempts_by_modpath: defaultdict[str, int]
-    successes_by_modpath: defaultdict[str, int]
+    attempts_by_pipeline_id: defaultdict[str, int]
+    successes_by_pipeline_id: defaultdict[str, int]
 
 
 @dataclass(frozen=True)
@@ -351,7 +351,7 @@ class ScenarioVerifier:
 
             if receipt.success:
                 minion_start_counts[m_cls] += 1
-                expected_events = self._plan.pipeline_event_targets.get(receipt.pipeline_modpath)
+                expected_events = self._plan.pipeline_event_targets.get(receipt.pipeline_id)
                 if expected_events is not None:
                     expected_workflows_by_class[m_cls] += expected_events
 
@@ -862,15 +862,15 @@ class ScenarioVerifier:
     def _assert_pipeline_events(self) -> None:
         spies = self._require_spies()
         outcomes = self._compute_pipeline_attempt_outcomes()
-        for modpath, p_cls in spies.pipelines.items():
-            expected_events = self._plan.pipeline_event_targets.get(modpath)
+        for pipeline_id, p_cls in spies.pipelines.items():
+            expected_events = self._plan.pipeline_event_targets.get(pipeline_id)
             counts = p_cls.get_call_counts()
 
             attempts = max(
-                outcomes.attempts_by_modpath.get(modpath, 0),
-                spies.pipeline_start_attempt_counts.get(modpath, 0),
+                outcomes.attempts_by_pipeline_id.get(pipeline_id, 0),
+                spies.pipeline_start_attempt_counts.get(pipeline_id, 0),
             )
-            successes = outcomes.successes_by_modpath.get(modpath, 0)
+            successes = outcomes.successes_by_pipeline_id.get(pipeline_id, 0)
 
             min_started = 1 if successes > 0 else 0
             max_started = attempts
@@ -918,15 +918,15 @@ class ScenarioVerifier:
                     )
 
     def _compute_pipeline_attempt_outcomes(self) -> PipelineAttemptOutcomes:
-        attempts_by_modpath: defaultdict[str, int] = defaultdict(int)
-        successes_by_modpath: defaultdict[str, int] = defaultdict(int)
+        attempts_by_pipeline_id: defaultdict[str, int] = defaultdict(int)
+        successes_by_pipeline_id: defaultdict[str, int] = defaultdict(int)
         for receipt in self._result.receipts:
-            attempts_by_modpath[receipt.pipeline_modpath] += 1
+            attempts_by_pipeline_id[receipt.pipeline_id] += 1
             if receipt.success:
-                successes_by_modpath[receipt.pipeline_modpath] += 1
+                successes_by_pipeline_id[receipt.pipeline_id] += 1
         return PipelineAttemptOutcomes(
-            attempts_by_modpath=attempts_by_modpath,
-            successes_by_modpath=successes_by_modpath,
+            attempts_by_pipeline_id=attempts_by_pipeline_id,
+            successes_by_pipeline_id=successes_by_pipeline_id,
         )
 
     async def _pin_and_assert_calls(
@@ -988,8 +988,8 @@ class ScenarioVerifier:
                     order.append("shutdown")
                 m_cls.assert_call_order_for_instance(tag, order)
 
-        for modpath, p_cls in spies.pipelines.items():
-            expected_events = self._plan.pipeline_event_targets.get(modpath)
+        for pipeline_id, p_cls in spies.pipelines.items():
+            expected_events = self._plan.pipeline_event_targets.get(pipeline_id)
             for tag in self._result.instance_tags.get(p_cls, set()):
                 names = _names_for_tag(p_cls, tag)
                 order = ["__init__", "startup", "run"]

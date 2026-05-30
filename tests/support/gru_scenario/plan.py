@@ -38,7 +38,7 @@ class ScenarioPlan:
                 raise ValueError(f"pipeline_event_counts[{pipeline!r}] must be >= 0, got {count}.")
 
         started_pipelines = {
-            d.pipeline_modpath
+            d.pipeline_id
             for d in self.flat_directives
             if isinstance(d, OrchestrationStart) and d.expect_success
         }
