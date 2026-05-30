@@ -445,6 +445,132 @@ def test_assert_pipeline_events_allows_restarted_pipeline_produce_event_totals(
     verifier._assert_pipeline_events()
 
 
+def test_assert_workflow_step_start_events_are_monotonic_allows_resume_replay_at_same_step():
+    plan = ScenarioPlan(
+        [
+            OrchestrationStart(
+                minion="tests.assets.minions.two_steps.counter.basic",
+                pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            ),
+        ],
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    result = ScenarioRunResult(
+        spies=spies,
+        checkpoints=[
+            ScenarioCheckpoint(
+                order=0,
+                kind="expect_runtime",
+                directive_type="ExpectRuntime",
+                receipt_count=1,
+                successful_receipt_count=1,
+                seen_shutdown=False,
+                workflow_step_start_events_by_class={
+                    key: {
+                        "workflow-1": (
+                            (0, "step_1"),
+                            (1, "step_2"),
+                            (1, "step_2"),
+                        ),
+                    },
+                },
+            ),
+        ],
+    )
+
+    verifier = _mk_verifier(plan, result)
+    verifier._assert_workflow_step_start_events_are_monotonic()
+
+
+def test_assert_workflow_step_start_events_are_monotonic_rejects_regression():
+    plan = ScenarioPlan(
+        [
+            OrchestrationStart(
+                minion="tests.assets.minions.two_steps.counter.basic",
+                pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            ),
+        ],
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    result = ScenarioRunResult(
+        spies=spies,
+        checkpoints=[
+            ScenarioCheckpoint(
+                order=0,
+                kind="expect_runtime",
+                directive_type="ExpectRuntime",
+                receipt_count=1,
+                successful_receipt_count=1,
+                seen_shutdown=False,
+                workflow_step_start_events_by_class={
+                    key: {
+                        "workflow-1": (
+                            (0, "step_1"),
+                            (1, "step_2"),
+                            (0, "step_1"),
+                        ),
+                    },
+                },
+            ),
+        ],
+    )
+
+    verifier = _mk_verifier(plan, result)
+    with pytest.raises(pytest.fail.Exception, match="not monotonic"):
+        verifier._assert_workflow_step_start_events_are_monotonic()
+
+
+def test_assert_workflow_step_start_events_are_monotonic_rejects_step_name_index_mismatch():
+    plan = ScenarioPlan(
+        [
+            OrchestrationStart(
+                minion="tests.assets.minions.two_steps.counter.basic",
+                pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            ),
+        ],
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    result = ScenarioRunResult(
+        spies=spies,
+        checkpoints=[
+            ScenarioCheckpoint(
+                order=0,
+                kind="expect_runtime",
+                directive_type="ExpectRuntime",
+                receipt_count=1,
+                successful_receipt_count=1,
+                seen_shutdown=False,
+                workflow_step_start_events_by_class={
+                    key: {
+                        "workflow-1": (
+                            (0, "step_2"),
+                        ),
+                    },
+                },
+            ),
+        ],
+    )
+
+    verifier = _mk_verifier(plan, result)
+    with pytest.raises(pytest.fail.Exception, match="step_name/index mismatch"):
+        verifier._assert_workflow_step_start_events_are_monotonic()
+
+
 def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_checkpoint():
     directives = [
         OrchestrationStart(

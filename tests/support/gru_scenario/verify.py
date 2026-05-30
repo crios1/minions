@@ -111,6 +111,7 @@ class ScenarioVerifier:
         self._assert_runtime_expectations()
         self._assert_persisted_context_integrity()
         self._assert_pipeline_events()
+        self._assert_workflow_step_start_events_are_monotonic()
         self._assert_checkpoint_window_workflow_step_progression()
 
         unpin_fns: list[Callable[[], None]] = []
@@ -474,6 +475,65 @@ class ScenarioVerifier:
             prev_counts = cp.spy_call_counts
             prev_counts_by_instance = cp.spy_call_counts_by_instance or {}
             prev_workflow_step_ids = cp.workflow_step_started_ids_by_class or {}
+
+    def _assert_workflow_step_start_events_are_monotonic(self) -> None:
+        spies = self._require_spies()
+        latest_checkpoint = next(
+            (
+                cp
+                for cp in reversed(self._result.checkpoints)
+                if cp.workflow_step_start_events_by_class is not None
+            ),
+            None,
+        )
+        if latest_checkpoint is None or latest_checkpoint.workflow_step_start_events_by_class is None:
+            return
+
+        workflow_by_class = latest_checkpoint.workflow_step_start_events_by_class
+        for m_cls in spies.minions.values():
+            workflow = tuple(m_cls._mn_workflow_spec or ())
+            if not workflow:
+                continue
+
+            class_key = f"{m_cls.__module__}.{m_cls.__name__}"
+            for workflow_id, events in workflow_by_class.get(class_key, {}).items():
+                previous_index = -1
+                previous_step_name: str | None = None
+                for step_index, step_name in events:
+                    if step_index < 0 or step_index >= len(workflow):
+                        pytest.fail(
+                            "Workflow step start event has out-of-bounds step_index for "
+                            f"{m_cls.__name__}: workflow_id={workflow_id!r}, "
+                            f"step_index={step_index}, workflow_len={len(workflow)}."
+                        )
+
+                    expected_step_name = workflow[step_index]
+                    if step_name != expected_step_name:
+                        pytest.fail(
+                            "Workflow step start event step_name/index mismatch for "
+                            f"{m_cls.__name__}: workflow_id={workflow_id!r}, "
+                            f"step_index={step_index}, expected {expected_step_name!r}, "
+                            f"got {step_name!r}."
+                        )
+
+                    if step_index < previous_index:
+                        pytest.fail(
+                            "Workflow step start events are not monotonic for "
+                            f"{m_cls.__name__}: workflow_id={workflow_id!r}, "
+                            f"previous={previous_index}:{previous_step_name}, "
+                            f"current={step_index}:{step_name}."
+                        )
+
+                    if step_index == previous_index and step_name != previous_step_name:
+                        pytest.fail(
+                            "Workflow step start events repeat a step_index with different names for "
+                            f"{m_cls.__name__}: workflow_id={workflow_id!r}, "
+                            f"previous={previous_index}:{previous_step_name}, "
+                            f"current={step_index}:{step_name}."
+                        )
+
+                    previous_index = step_index
+                    previous_step_name = step_name
 
     def _evaluate_window_step_progression(
         self,
