@@ -6,8 +6,10 @@ from collections.abc import Callable
 
 import pytest
 
+from minions import Minion, Pipeline, Resource, minion_step
 from minions._internal._domain.gru import Gru
-
+from tests.assets.contexts.counter import CounterContext
+from tests.assets.events.counter import CounterEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
@@ -400,6 +402,124 @@ async def test_gru_injects_resource_dependencies_before_resource_startup(
         stop = await gru.stop_orchestration(result.orchestration_id or "")
 
         assert stop.success
+        assert gru._runtime_state_snapshot() == {}
+
+
+@pytest.mark.asyncio
+async def test_gru_starts_resource_with_multiple_resource_dependencies(
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+) -> None:
+    class FirstLeafResource(Resource):
+        async def value(self) -> int:
+            return 10
+
+    class SecondLeafResource(Resource):
+        async def value(self) -> int:
+            return 20
+
+    class MultiDependencyResource(Resource):
+        first: FirstLeafResource
+        second: SecondLeafResource
+        startup_value: int | None = None
+
+        async def startup(self) -> None:
+            self.startup_value = await self.total()
+
+        async def total(self) -> int:
+            return await self.first.value() + await self.second.value()
+
+    class CompoundDependencyPipeline(Pipeline[CounterEvent]):
+        compound: MultiDependencyResource
+        _emitted = False
+
+        async def produce_event(self) -> CounterEvent:
+            if type(self)._emitted:
+                await asyncio.sleep(3600)
+            type(self)._emitted = True
+            return CounterEvent(seq=await self.compound.total())
+
+    class MyMinion(Minion[CounterEvent, CounterContext]):
+        @minion_step
+        async def record(self) -> None:
+            self.context.seq = self.event.seq
+
+    logger = InMemoryLogger()
+    metrics = InMemoryMetrics()
+    state_store = InMemoryStateStore(logger=logger)
+
+    async with gru_factory(
+        logger=logger,
+        metrics=metrics,
+        state_store=state_store,
+    ) as gru:
+        result = await gru.start_orchestration(
+            pipeline=CompoundDependencyPipeline,
+            minion=MyMinion,
+        )
+
+        assert result.success
+
+        first_id = gru._make_resource_id(FirstLeafResource)
+        second_id = gru._make_resource_id(SecondLeafResource)
+        compound_id = gru._make_resource_id(MultiDependencyResource)
+
+        compound = gru._resources[compound_id]
+        assert isinstance(compound, MultiDependencyResource)
+        assert compound.startup_value == 30
+        assert compound.first is gru._resources[first_id]
+        assert compound.second is gru._resources[second_id]
+        assert gru._pipeline_resource_map[CompoundDependencyPipeline.__module__] == {compound_id}
+        assert gru._resource_dependencies[compound_id] == {first_id, second_id}
+        assert gru._resource_refcounts[compound_id] == 1
+        assert gru._resource_refcounts[first_id] == 1
+        assert gru._resource_refcounts[second_id] == 1
+
+        stop = await gru.stop_orchestration(result.orchestration_id or "")
+
+        assert stop.success
+        assert gru._runtime_state_snapshot() == {}
+
+
+@pytest.mark.asyncio
+async def test_gru_start_fails_clearly_for_circular_resource_dependencies(
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+) -> None:
+    class CycleAResource(Resource):
+        pass
+
+    class CycleBResource(Resource):
+        a: CycleAResource
+
+    # Keep the cycle fixture local while mimicking a resolved postponed annotation.
+    CycleAResource.__annotations__ = {"b": CycleBResource}
+
+    class CircularResourcePipeline(Pipeline[CounterEvent]):
+        a: CycleAResource
+
+        async def produce_event(self) -> CounterEvent:
+            return CounterEvent(seq=1)
+
+    class MyMinion(Minion[CounterEvent, CounterContext]):
+        @minion_step
+        async def record(self) -> None:
+            self.context.seq = self.event.seq
+
+    logger = InMemoryLogger()
+    metrics = InMemoryMetrics()
+    state_store = InMemoryStateStore(logger=logger)
+
+    async with gru_factory(
+        logger=logger,
+        metrics=metrics,
+        state_store=state_store,
+    ) as gru:
+        result = await gru.start_orchestration(
+            pipeline=CircularResourcePipeline,
+            minion=MyMinion,
+        )
+
+        assert not result.success
+        assert result.reason == "Cycle detected in Resource dependencies"
         assert gru._runtime_state_snapshot() == {}
 
 
