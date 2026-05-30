@@ -111,6 +111,56 @@ async def test_runner_concurrent_starts_capture_started_minions_and_instance_tag
 
 
 @pytest.mark.asyncio
+async def test_runner_tracks_durable_minion_pipeline_and_resource_ids(
+    gru: Gru,
+) -> None:
+    from tests.assets.minions.two_steps.counter.identified_resourced import (
+        IDENTIFIED_COUNTER_MINION_ID,
+        IdentifiedResourcedMinion,
+    )
+    from tests.assets.pipelines.emit1.counter.identified import (
+        IDENTIFIED_COUNTER_PIPELINE_ID,
+    )
+    from tests.assets.resources.fixed.identified import (
+        IDENTIFIED_FIXED_RESOURCE_ID,
+        IdentifiedFixedResource,
+    )
+
+    start = OrchestrationStart(
+        pipeline="tests.assets.pipelines.emit1.counter.identified",
+        minion="tests.assets.minions.two_steps.counter.identified_resourced",
+    )
+    plan = ScenarioPlan(
+        [start, WaitWorkflowCompletions(workflow_steps_mode="exact")],
+        pipeline_event_counts={IDENTIFIED_COUNTER_PIPELINE_ID: 1},
+    )
+
+    result = await ScenarioRunner(gru, plan, per_verification_timeout=5.0).run()
+
+    assert len(result.receipts) == 1
+    receipt = result.receipts[0]
+    assert receipt.success
+    assert receipt.pipeline_id == IDENTIFIED_COUNTER_PIPELINE_ID
+    assert receipt.orchestration_id is not None
+    assert receipt.orchestration_id in gru._minions_by_orchestration_id
+    assert IDENTIFIED_COUNTER_PIPELINE_ID in gru._pipelines
+    assert IDENTIFIED_FIXED_RESOURCE_ID in gru._resources
+
+    minion = gru._minions_by_orchestration_id[receipt.orchestration_id]
+    assert minion._mn_minion_id == IDENTIFIED_COUNTER_MINION_ID
+    assert gru._minion_pipeline_map[minion._mn_minion_instance_id] == IDENTIFIED_COUNTER_PIPELINE_ID
+    assert gru._minion_resource_map[minion._mn_minion_instance_id] == {IDENTIFIED_FIXED_RESOURCE_ID}
+
+    assert result.spies is not None
+    assert result.spies.pipelines[IDENTIFIED_COUNTER_PIPELINE_ID].__name__ == "IdentifiedEmit1Pipeline"
+    assert IdentifiedResourcedMinion in result.spies.minions.values()
+    assert IdentifiedFixedResource in result.spies.resources
+
+    shutdown = await gru.shutdown()
+    assert shutdown.success
+
+
+@pytest.mark.asyncio
 async def test_runner_wait_workflows_subset_handles_mixed_success_and_failure(
     gru: Gru,
 ) -> None:
