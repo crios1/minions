@@ -1,9 +1,10 @@
 import inspect
 from dataclasses import dataclass, field
-from typing import Iterable, Iterator
+from typing import Any, Iterable, Iterator
 
 from minions._internal._domain.gru import Gru
-
+from minions._internal._domain.minion import Minion
+from minions._internal._domain.pipeline import Pipeline
 
 _ORCHESTRATION_START_PARAMS = set(inspect.signature(Gru.start_orchestration).parameters)
 _ORCHESTRATION_STOP_PARAMS = set(inspect.signature(Gru.stop_orchestration).parameters)
@@ -23,13 +24,26 @@ class RuntimeExpectSpec:
 
 @dataclass(frozen=True)
 class OrchestrationStart(Directive):
-    minion: str
-    pipeline: str
+    minion: str | type[Minion[Any, Any]]
+    pipeline: str | type[Pipeline[Any]]
     minion_config_path: str | None = None
+    minion_config: object | None = None
     expect_success: bool = True
 
     def as_kwargs(self) -> dict[str, object]:
         return {k: v for k, v in self.__dict__.items() if k in _ORCHESTRATION_START_PARAMS}
+
+    @property
+    def minion_modpath(self) -> str:
+        if isinstance(self.minion, str):
+            return self.minion
+        return self.minion.__module__
+
+    @property
+    def pipeline_modpath(self) -> str:
+        if isinstance(self.pipeline, str):
+            return self.pipeline
+        return self.pipeline.__module__
 
 
 @dataclass(frozen=True)

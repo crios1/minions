@@ -31,6 +31,28 @@ def test_wait_workflow_completions_accepts_minion_names_and_mode():
     assert directive.workflow_steps_mode == "exact"
 
 
+def test_orchestration_start_accepts_class_inputs_and_inline_config():
+    from tests.assets.minions.two_steps.simple.configured import ConfiguredSimpleMinion
+    from tests.assets.pipelines.simple.simple_event.single_event_1 import SimpleSingleEventPipeline1
+    from tests.assets.support.minion_spied_configed import AssetMinionConfig
+
+    config = AssetMinionConfig(name="inline")
+    directive = OrchestrationStart(
+        pipeline=SimpleSingleEventPipeline1,
+        minion=ConfiguredSimpleMinion,
+        minion_config=config,
+    )
+
+    assert directive.minion_modpath == "tests.assets.minions.two_steps.simple.configured"
+    assert directive.pipeline_modpath == "tests.assets.pipelines.simple.simple_event.single_event_1"
+    assert directive.as_kwargs() == {
+        "minion": ConfiguredSimpleMinion,
+        "pipeline": SimpleSingleEventPipeline1,
+        "minion_config_path": None,
+        "minion_config": config,
+    }
+
+
 def test_iter_directives_flattens_wait_workflow_step_starts_then_wrapped_directive():
     d1 = OrchestrationStart(minion="m1", pipeline="p1")
     d2 = OrchestrationStop(id=d1, expect_success=True)

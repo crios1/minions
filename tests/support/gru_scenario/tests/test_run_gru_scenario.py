@@ -88,6 +88,49 @@ async def test_run_gru_scenario_helper_basic(
 
 
 @pytest.mark.asyncio
+async def test_run_gru_scenario_accepts_class_start_with_inline_minion_config(
+    gru: Gru,
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> None:
+    from tests.assets.minions.two_steps.simple.configured import ConfiguredSimpleMinion
+    from tests.assets.pipelines.simple.simple_event.single_event_1 import SimpleSingleEventPipeline1
+    from tests.assets.support.minion_spied_configed import AssetMinionConfig
+
+    SimpleSingleEventPipeline1.total_events = 0
+    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    start = OrchestrationStart(
+        minion=ConfiguredSimpleMinion,
+        pipeline=SimpleSingleEventPipeline1,
+        minion_config=AssetMinionConfig(name="inline"),
+    )
+
+    directives: list[Directive] = [
+        start,
+        WaitWorkflowCompletions(workflow_steps_mode="exact"),
+        ExpectRuntime(
+            expect=RuntimeExpectSpec(
+                resolutions={"configured-simple-minion": {"succeeded": 1, "failed": 0, "aborted": 0}},
+                workflow_steps={"configured-simple-minion": {"step_1": 1, "step_2": 1}},
+                workflow_steps_mode="exact",
+            ),
+        ),
+        OrchestrationStop(id=start, expect_success=True),
+        GruShutdown(expect_success=True),
+    ]
+
+    await run_gru_scenario(
+        gru,
+        logger,
+        metrics,
+        state_store,
+        directives,
+        pipeline_event_counts={pipeline_modpath: 1},
+    )
+
+
+@pytest.mark.asyncio
 async def test_run_gru_scenario_wait_workflow_step_starts_then_stop_happy_path(
     gru: Gru,
     logger: InMemoryLogger,

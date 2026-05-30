@@ -89,7 +89,9 @@ Directives fall into two broad roles:
 - Condition-setup directives express when another directive should run, so tests can deterministically create runtime states that may expose lifecycle bugs.
 
 - `OrchestrationStart(...)` starts an orchestration from a minion, pipeline, and optional minion config.
-  - `minion` and `pipeline` are module path strings in the canonical DSL.
+  - `minion` and `pipeline` can be module path strings or Minion/Pipeline subclasses.
+  - Use `minion_config_path` with module path strings.
+  - Use `minion_config` with class-based starts.
 - `OrchestrationStop(id=...)` stops an orchestration by orchestration ID.
 - `OrchestrationStop(id=<OrchestrationStart>)` stops the orchestration started by that earlier `OrchestrationStart` directive.
 - `Concurrent(...)` runs child directives concurrently.

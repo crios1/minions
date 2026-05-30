@@ -136,39 +136,42 @@ class ScenarioRunner:
             if not isinstance(d, OrchestrationStart):
                 continue
 
-            self._spies.pipeline_start_attempt_counts[d.pipeline] += 1
+            minion_modpath = d.minion_modpath
+            pipeline_modpath = d.pipeline_modpath
 
-            if d.minion not in self._spies.minions:
-                m_cls = self._insp.get_minion_class(d.minion)
+            self._spies.pipeline_start_attempt_counts[pipeline_modpath] += 1
+
+            if minion_modpath not in self._spies.minions:
+                m_cls = d.minion if isinstance(d.minion, type) else self._insp.get_minion_class(minion_modpath)
                 if not issubclass(m_cls, SpiedMinion):
                     pytest.fail(
                         "OrchestrationStart minion must resolve to a spy-enabled minion subclass; "
-                        f"got {m_cls!r} for '{d.minion}'"
+                        f"got {m_cls!r} for '{minion_modpath}'"
                     )
-                self._spies.minions[d.minion] = m_cls
+                self._spies.minions[minion_modpath] = m_cls
 
                 for r_cls in self._insp.get_all_resource_dependencies(m_cls):
                     if not issubclass(r_cls, SpiedResource):
                         pytest.fail(
                             "Minion resource dependency must be spy-enabled; "
-                            f"got {r_cls!r} while resolving '{d.minion}'"
+                            f"got {r_cls!r} while resolving '{minion_modpath}'"
                         )
                     self._spies.resources.add(r_cls)
 
-            if d.pipeline not in self._spies.pipelines:
-                p_cls = self._insp.get_pipeline_class(d.pipeline)
+            if pipeline_modpath not in self._spies.pipelines:
+                p_cls = d.pipeline if isinstance(d.pipeline, type) else self._insp.get_pipeline_class(pipeline_modpath)
                 if not issubclass(p_cls, SpiedPipeline):
                     pytest.fail(
                         "OrchestrationStart pipeline must resolve to a spy-enabled pipeline subclass; "
-                        f"got {p_cls!r} for '{d.pipeline}'"
+                        f"got {p_cls!r} for '{pipeline_modpath}'"
                     )
-                self._spies.pipelines[d.pipeline] = p_cls
+                self._spies.pipelines[pipeline_modpath] = p_cls
 
                 for r_cls in self._insp.get_all_resource_dependencies(p_cls):
                     if not issubclass(r_cls, SpiedResource):
                         pytest.fail(
                             "Pipeline resource dependency must be spy-enabled; "
-                            f"got {r_cls!r} while resolving '{d.pipeline}'"
+                            f"got {r_cls!r} while resolving '{pipeline_modpath}'"
                         )
                     self._spies.resources.add(r_cls)
 
@@ -199,18 +202,45 @@ class ScenarioRunner:
 
     async def _run_start(self, d: OrchestrationStart) -> None:
         result = self._require_result()
-        r = await self._gru.start_orchestration(
-            pipeline=d.pipeline,
-            minion=d.minion,
-            minion_config_path=d.minion_config_path,
-        )
+        if isinstance(d.minion, str):
+            if not isinstance(d.pipeline, str):
+                pytest.fail(
+                    "OrchestrationStart.pipeline must be a module path string when "
+                    "OrchestrationStart.minion is a module path string."
+                )
+            if d.minion_config is not None:
+                pytest.fail(
+                    "OrchestrationStart.minion_config is only supported for class-based starts; "
+                    "use minion_config_path with module path strings."
+                )
+            r = await self._gru.start_orchestration(
+                pipeline=d.pipeline,
+                minion=d.minion,
+                minion_config_path=d.minion_config_path,
+            )
+        else:
+            if isinstance(d.pipeline, str):
+                pytest.fail(
+                    "OrchestrationStart.pipeline must be a Pipeline subclass when "
+                    "OrchestrationStart.minion is a Minion subclass."
+                )
+            if d.minion_config_path is not None:
+                pytest.fail(
+                    "OrchestrationStart.minion_config_path is only supported for module path starts; "
+                    "use minion_config with class-based starts."
+                )
+            r = await self._gru.start_orchestration(
+                pipeline=d.pipeline,
+                minion=d.minion,
+                minion_config=d.minion_config,
+            )
         if r.success != d.expect_success:
             pytest.fail(f"start_orchestration mismatch: {d} -> {r}")
 
         receipt = OrchestrationStartReceipt(
             directive_index=self._plan.directive_index(d),
-            minion_modpath=d.minion,
-            pipeline_modpath=d.pipeline,
+            minion_modpath=d.minion_modpath,
+            pipeline_modpath=d.pipeline_modpath,
             instance_id=None,
             resolved_name=getattr(r, "name", None),
             minion_cls=None,
@@ -247,7 +277,7 @@ class ScenarioRunner:
 
         result.receipts.append(receipt)
         self._orchestration_start_receipts_by_directive_id[id(d)] = receipt
-        self._record_instance_tags(minion_inst, d.pipeline, receipt.instance_id)
+        self._record_instance_tags(minion_inst, d.pipeline_modpath, receipt.instance_id)
 
     async def _run_stop(self, d: OrchestrationStop) -> None:
         target_id = self._resolve_stop_target_id(d.id)
