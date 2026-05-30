@@ -13,7 +13,7 @@ from tests.support.gru_scenario.directives import (
     OrchestrationStart,
     OrchestrationStop,
     RuntimeExpectSpec,
-    AfterWorkflowStarts,
+    AfterWorkflowStepStarts,
     WaitWorkflowCompletions,
 )
 from tests.support.gru_scenario.plan import ScenarioPlan
@@ -245,12 +245,12 @@ async def test_wait_workflows_named_lookup_is_scenario_local_only(
 
 
 @pytest.mark.asyncio
-async def test_runner_wait_workflow_starts_then_rejects_unsupported_wrapped_directive(
+async def test_runner_wait_workflow_step_starts_then_rejects_unsupported_wrapped_directive(
     gru: Gru,
 ) -> None:
     directives = [
-        AfterWorkflowStarts(
-            expected={"simple-minion": 1},
+        AfterWorkflowStepStarts(
+            expected={"simple-minion": {"step_1": 1}},
             directive=GruShutdown(expect_success=True),
         ),
     ]
@@ -262,17 +262,38 @@ async def test_runner_wait_workflow_starts_then_rejects_unsupported_wrapped_dire
 
 
 @pytest.mark.asyncio
-async def test_runner_wait_workflow_starts_then_rejects_unknown_names(gru: Gru) -> None:
+async def test_runner_wait_workflow_step_starts_then_rejects_unknown_names(gru: Gru) -> None:
     directives = [
-        AfterWorkflowStarts(
-            expected={"missing": 1},
+        AfterWorkflowStepStarts(
+            expected={"missing": {"step_1": 1}},
             directive=OrchestrationStop(id="missing", expect_success=False),
         ),
     ]
     plan = ScenarioPlan(directives, pipeline_event_counts={})
     runner = ScenarioRunner(gru, plan, per_verification_timeout=0.1)
 
-    with pytest.raises(pytest.fail.Exception, match="Unknown minion names in AfterWorkflowStarts.expected"):
+    with pytest.raises(pytest.fail.Exception, match="Unknown minion names in AfterWorkflowStepStarts.expected"):
+        await runner.run()
+
+
+@pytest.mark.asyncio
+async def test_runner_wait_workflow_step_starts_then_rejects_unknown_steps(gru: Gru) -> None:
+    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    start = OrchestrationStart(
+        minion="tests.assets.minions.two_steps.simple.basic",
+        pipeline=pipeline_modpath,
+    )
+    directives = [
+        start,
+        AfterWorkflowStepStarts(
+            expected={"simple-minion": {"missing_step": 1}},
+            directive=OrchestrationStop(id=start, expect_success=True),
+        ),
+    ]
+    plan = ScenarioPlan(directives, pipeline_event_counts={pipeline_modpath: 1})
+    runner = ScenarioRunner(gru, plan, per_verification_timeout=0.1)
+
+    with pytest.raises(pytest.fail.Exception, match="Unknown workflow step in AfterWorkflowStepStarts.expected"):
         await runner.run()
 
 
@@ -309,15 +330,15 @@ async def test_runner_records_checkpoints_for_wait_workflow_completions_and_shut
 
 
 @pytest.mark.asyncio
-async def test_runner_records_checkpoint_for_wait_workflow_starts_then(gru: Gru) -> None:
+async def test_runner_records_checkpoint_for_wait_workflow_step_starts_then(gru: Gru) -> None:
     start = OrchestrationStart(
         minion="tests.assets.minions.failure.abort_step",
         pipeline="tests.assets.pipelines.emit1.counter.emit_1",
     )
     directives = [
         start,
-        AfterWorkflowStarts(
-            expected={"abort-step-minion": 1},
+        AfterWorkflowStepStarts(
+            expected={"abort-step-minion": {"step_1": 1}},
             directive=OrchestrationStop(id=start, expect_success=True),
         ),
         GruShutdown(expect_success=True),
@@ -330,9 +351,9 @@ async def test_runner_records_checkpoint_for_wait_workflow_starts_then(gru: Gru)
     result = await ScenarioRunner(gru, plan, per_verification_timeout=5.0).run()
 
     checkpoints = result.checkpoints
-    assert [cp.kind for cp in checkpoints] == ["wait_workflow_starts_then", "gru_shutdown"]
-    assert checkpoints[0].directive_type == "AfterWorkflowStarts"
-    assert checkpoints[0].expected_starts == {"abort-step-minion": 1}
+    assert [cp.kind for cp in checkpoints] == ["wait_workflow_step_starts_then", "gru_shutdown"]
+    assert checkpoints[0].directive_type == "AfterWorkflowStepStarts"
+    assert checkpoints[0].expected_step_starts == {"abort-step-minion": {"step_1": 1}}
     assert checkpoints[0].wrapped_directive_type == "OrchestrationStop"
 
 
@@ -345,8 +366,8 @@ async def test_runner_restart_flow_checkpoints_separate_pre_stop_and_post_restar
     start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
     directives = [
         start,
-        AfterWorkflowStarts(
-            expected={"two-step-minion": 1},
+        AfterWorkflowStepStarts(
+            expected={"two-step-minion": {"step_1": 1}},
             directive=OrchestrationStop(id=start, expect_success=True),
         ),
         OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath),
@@ -362,7 +383,7 @@ async def test_runner_restart_flow_checkpoints_separate_pre_stop_and_post_restar
 
     checkpoints = result.checkpoints
     assert [cp.kind for cp in checkpoints] == [
-        "wait_workflow_starts_then",
+        "wait_workflow_step_starts_then",
         "wait_workflow_completions",
         "gru_shutdown",
     ]
@@ -402,8 +423,8 @@ async def test_runner_restart_same_orchestration_id_after_stop_succeeds(gru: Gru
 
     directives = [
         start,
-        AfterWorkflowStarts(
-            expected={"abort-step-minion": 1},
+        AfterWorkflowStepStarts(
+            expected={"abort-step-minion": {"step_1": 1}},
             directive=OrchestrationStop(id=start, expect_success=True),
         ),
         OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath, expect_success=True),
@@ -426,8 +447,8 @@ async def test_runner_records_expect_runtime_checkpoint_with_persistence_snapsho
     )
     directives = [
         start,
-        AfterWorkflowStarts(
-            expected={"slow-step-minion": 1},
+        AfterWorkflowStepStarts(
+            expected={"slow-step-minion": {"step_1": 1}},
             directive=OrchestrationStop(id=start, expect_success=True),
         ),
         ExpectRuntime(expect=RuntimeExpectSpec(persistence={"slow-step-minion": 1})),

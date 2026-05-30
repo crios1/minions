@@ -22,7 +22,7 @@ from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.assets.contexts.simple import SimpleContext
 from tests.assets.events.simple import SimpleEvent
 from tests.support.gru_scenario import (
-    AfterWorkflowStarts,
+    AfterWorkflowStepStarts,
     Concurrent,
     Directive,
     ExpectRuntime,
@@ -739,8 +739,8 @@ class TestValidUsageDSL:
         start_2 = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
         directives: list[Directive] = [
             start_1,
-            AfterWorkflowStarts(
-                expected={minion_name: 1},
+            AfterWorkflowStepStarts(
+                expected={minion_name: {"step_1": 1}},
                 directive=OrchestrationStop(id=start_1, expect_success=True),
             ),
             ExpectRuntime(

@@ -558,12 +558,12 @@ def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phas
         checkpoints=[
             ScenarioCheckpoint(
                 order=0,
-                kind="wait_workflow_starts_then",
-                directive_type="AfterWorkflowStarts",
+                kind="wait_workflow_step_starts_then",
+                directive_type="AfterWorkflowStepStarts",
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                expected_starts={"two-step-minion": 1},
+                expected_step_starts={"two-step-minion": {"step_1": 1}},
                 wrapped_directive_type="OrchestrationStop",
                 spy_call_counts={
                     "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
@@ -1667,12 +1667,12 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
         checkpoints=[
             ScenarioCheckpoint(
                 order=0,
-                kind="wait_workflow_starts_then",
-                directive_type="AfterWorkflowStarts",
+                kind="wait_workflow_step_starts_then",
+                directive_type="AfterWorkflowStepStarts",
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                expected_starts={"two-step-minion": 1},
+                expected_step_starts={"two-step-minion": {"step_1": 1}},
                 wrapped_directive_type="OrchestrationStop",
                 workflow_step_started_ids_by_class={
                     key: {

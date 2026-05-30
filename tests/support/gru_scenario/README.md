@@ -84,14 +84,19 @@ await run_gru_scenario(
 ```
 
 ## Directives
+Directives fall into two broad roles:
+- Gru command directives execute runtime operations directly, such as `OrchestrationStart(...)`, `OrchestrationStop(...)`, and `GruShutdown(...)`.
+- Condition-setup directives express when another directive should run, so tests can deterministically create runtime states that may expose lifecycle bugs.
+
 - `OrchestrationStart(...)` starts an orchestration from a minion, pipeline, and optional minion config.
   - `minion` and `pipeline` are module path strings in the canonical DSL.
 - `OrchestrationStop(id=...)` stops an orchestration by orchestration ID.
 - `OrchestrationStop(id=<OrchestrationStart>)` stops the orchestration started by that earlier `OrchestrationStart` directive.
 - `Concurrent(...)` runs child directives concurrently.
 - `WaitWorkflowCompletions(...)` waits for workflow completion.
-- `AfterWorkflowStarts(expected, directive)` waits for workflow starts then immediately executes a wrapped directive.
+- `AfterWorkflowStepStarts(expected, directive)` waits for explicit minion/step start counts then immediately executes a wrapped directive.
   - Initial supported wrapped directive: `OrchestrationStop(...)`.
+  - Use this for checkpoint/resume tests that need a named workflow step boundary.
 - `ExpectRuntime(...)` evaluates runtime expectations at the current scenario checkpoint.
   - Initial supported section: `expect=RuntimeExpectSpec(persistence={minion_name: count})`.
   - Supported targets: `at="latest"` (directive checkpoint) or `at=<checkpoint_index>` (0-based).
@@ -104,7 +109,7 @@ await run_gru_scenario(
 | `OrchestrationStop` | No | No | Indirect only (runtime state changes that may affect later call histories) |
 | `Concurrent` | No (container only) | No (container only) | No (container only) |
 | `WaitWorkflowCompletions` | No | Yes (waits by all started or named subset) | No direct counts; ensures async work is drained before assertions |
-| `AfterWorkflowStarts` | No | Yes (waits for start targets before running wrapped directive) | Indirect only (wrapped directive effects) |
+| `AfterWorkflowStepStarts` | No | Yes (waits for named step-start targets before running wrapped directive) | Indirect only (wrapped directive effects and checkpoint snapshots) |
 | `ExpectRuntime` | No | No | Yes (checkpoint-scoped runtime expectations and internal persisted-context integrity checks) |
 | `GruShutdown` | No | No | Yes (`seen_shutdown` gates shutdown-related expectations) |
 
@@ -123,7 +128,7 @@ await run_gru_scenario(
     - if workflow-id evidence exists and workflow-id delta mismatches, that mismatch is reported first,
     - otherwise call-count mismatch is reported with explicit expected range and actual delta.
 - The wait first blocks on workflow-step spy call counts, then drains minion tasks.
-- `AfterWorkflowStarts(expected={...}, directive=OrchestrationStop(...))` is the race-safe primitive for restart/resume stop points.
+- `AfterWorkflowStepStarts(expected={...}, directive=OrchestrationStop(...))` is the checkpoint condition primitive for stopping at a specific step boundary.
 
 ## Runtime Expectations
 - `ExpectRuntime(at="latest", expect=RuntimeExpectSpec(...))` asserts runtime state at the current checkpoint.
@@ -165,29 +170,30 @@ ExpectRuntime(
 - Restart/resume (strict) example:
 ```python
 start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
-start_2 = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
+resume = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
 directives = [
     start,
-    AfterWorkflowStarts(
-        expected={"slow-step-minion": 1},
+    AfterWorkflowStepStarts(
+        expected={"slow-second-step-minion": {"step_2": 1}},
         directive=OrchestrationStop(id=start, expect_success=True),
     ),
     ExpectRuntime(
         expect=RuntimeExpectSpec(
-            persistence={"slow-step-minion": 1},
-            workflow_steps={"slow-step-minion": {"step_1": 1}},
+            persistence={"slow-second-step-minion": 1},
+            workflow_steps={"slow-second-step-minion": {"step_1": 1, "step_2": 1}},
             workflow_steps_mode="exact",
         ),
     ),
+    resume,
     WaitWorkflowCompletions(),
     ExpectRuntime(
         expect=RuntimeExpectSpec(
-            resolutions={"slow-step-minion": {"succeeded": 2, "failed": 0, "aborted": 0}},
-            workflow_steps={"slow-step-minion": {"step_1": 2}},
+            resolutions={"slow-second-step-minion": {"succeeded": 2, "failed": 0, "aborted": 0}},
+            workflow_steps={"slow-second-step-minion": {"step_1": 2, "step_2": 2}},
             workflow_steps_mode="exact",
         ),
     ),
-    OrchestrationStop(id=start_2, expect_success=True),
+    OrchestrationStop(id=resume, expect_success=True),
 ]
 ```
 

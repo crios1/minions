@@ -27,7 +27,7 @@ from .directives import (
     OrchestrationStart,
     OrchestrationStop,
     WaitWorkflowCompletions,
-    AfterWorkflowStarts,
+    AfterWorkflowStepStarts,
     iter_directives_flat,
 )
 from .introspect import GruIntrospector
@@ -96,7 +96,7 @@ class ScenarioCheckpoint:
     seen_shutdown: bool
     minion_names: tuple[str, ...] | None = None
     workflow_steps_mode: str | None = None
-    expected_starts: dict[str, int] | None = None
+    expected_step_starts: dict[str, dict[str, int]] | None = None
     wrapped_directive_type: str | None = None
     spy_call_counts: dict[str, dict[str, int]] | None = None
     spy_call_counts_by_instance: dict[str, dict[int, dict[str, int]]] | None = None
@@ -185,8 +185,8 @@ class ScenarioRunner:
         elif isinstance(d, WaitWorkflowCompletions):
             await self._wait_workflows(d)
 
-        elif isinstance(d, AfterWorkflowStarts):
-            await self._wait_workflow_starts_then(d)
+        elif isinstance(d, AfterWorkflowStepStarts):
+            await self._wait_workflow_step_starts_then(d)
 
         elif isinstance(d, ExpectRuntime):
             await self._run_expect_runtime(d)
@@ -290,10 +290,10 @@ class ScenarioRunner:
             workflow_steps_mode=d.workflow_steps_mode,
         )
 
-    async def _wait_workflow_starts_then(self, d: AfterWorkflowStarts) -> None:
+    async def _wait_workflow_step_starts_then(self, d: AfterWorkflowStepStarts) -> None:
         if not isinstance(d.directive, OrchestrationStop):
             pytest.fail(
-                "AfterWorkflowStarts currently supports wrapping OrchestrationStop only; "
+                "AfterWorkflowStepStarts currently supports wrapping OrchestrationStop only; "
                 f"got {type(d.directive).__name__}"
             )
         waiter = ScenarioWaiter(
@@ -303,12 +303,12 @@ class ScenarioRunner:
             self._spies,
             result=self._require_result(),
         )
-        await waiter.wait_for_starts(expected=d.expected)
+        await waiter.wait_for_step_starts(expected=d.expected)
         await self._run_stop(d.directive)
         await self._record_checkpoint(
-            kind="wait_workflow_starts_then",
+            kind="wait_workflow_step_starts_then",
             directive=d,
-            expected_starts=d.expected,
+            expected_step_starts=d.expected,
             wrapped_directive_type=type(d.directive).__name__,
         )
 
@@ -366,7 +366,7 @@ class ScenarioRunner:
         directive: Directive,
         minion_names: set[str] | None = None,
         workflow_steps_mode: str | None = None,
-        expected_starts: dict[str, int] | None = None,
+        expected_step_starts: dict[str, dict[str, int]] | None = None,
         wrapped_directive_type: str | None = None,
     ) -> None:
         result = self._require_result()
@@ -380,7 +380,10 @@ class ScenarioRunner:
             seen_shutdown=result.seen_shutdown,
             minion_names=tuple(sorted(minion_names)) if minion_names is not None else None,
             workflow_steps_mode=workflow_steps_mode,
-            expected_starts=dict(expected_starts) if expected_starts is not None else None,
+            expected_step_starts={
+                name: dict(steps)
+                for name, steps in expected_step_starts.items()
+            } if expected_step_starts is not None else None,
             wrapped_directive_type=wrapped_directive_type,
             spy_call_counts=self._snapshot_spy_call_counts(),
             spy_call_counts_by_instance=self._snapshot_spy_call_counts_by_instance(),
@@ -582,29 +585,40 @@ class ScenarioWaiter:
         await self._wait_expected_workflow_calls(minion_names=minion_names)
         await self._wait_minion_tasks(self._result.started_minions)
 
-    async def wait_for_starts(self, *, expected: dict[str, int]) -> None:
+    async def wait_for_step_starts(self, *, expected: dict[str, dict[str, int]]) -> None:
         if not expected:
-            pytest.fail("AfterWorkflowStarts.expected must be a non-empty dict.")
+            pytest.fail("AfterWorkflowStepStarts.expected must be a non-empty dict.")
         waits: list[Awaitable[None]] = []
-        for name, count in expected.items():
-            if count <= 0:
+        for name, steps in expected.items():
+            if not steps:
                 pytest.fail(
-                    f"AfterWorkflowStarts.expected[{name!r}] must be >= 1, got {count}."
+                    f"AfterWorkflowStepStarts.expected[{name!r}] must be a non-empty dict."
                 )
 
             receipts = [r for r in self._result.receipts if r.resolved_name == name and r.success]
             if not receipts:
                 pytest.fail(
-                    "Unknown minion names in AfterWorkflowStarts.expected: "
+                    "Unknown minion names in AfterWorkflowStepStarts.expected: "
                     f"{[name]}"
                 )
 
             for receipt in receipts:
                 m_cls = receipt.minion_cls or self._spies.minions.get(receipt.minion_modpath)
-                if m_cls is None or not m_cls._mn_workflow_spec:  # type: ignore[attr-defined]
+                if m_cls is None:
                     continue
-                first_step = m_cls._mn_workflow_spec[0]  # type: ignore[index]
-                waits.append(m_cls.wait_for_call(first_step, count=count, timeout=self._timeout))
+                workflow = tuple(m_cls._mn_workflow_spec or ())
+                for step_name, count in steps.items():
+                    if count <= 0:
+                        pytest.fail(
+                            f"AfterWorkflowStepStarts.expected[{name!r}][{step_name!r}] "
+                            f"must be >= 1, got {count}."
+                        )
+                    if step_name not in workflow:
+                        pytest.fail(
+                            "Unknown workflow step in AfterWorkflowStepStarts.expected: "
+                            f"{name}.{step_name}"
+                        )
+                    waits.append(m_cls.wait_for_call(step_name, count=count, timeout=self._timeout))
 
         if waits:
             await asyncio.gather(*waits)
