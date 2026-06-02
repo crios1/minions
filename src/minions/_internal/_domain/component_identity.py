@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import uuid
 import weakref
-from typing import Any, Literal, TypeVar
+from typing import Any, Callable, Literal, TypeVar
 
 from .minion import Minion
 from .pipeline import Pipeline
@@ -90,19 +90,19 @@ def _attach_component_id(kind: ComponentKind, component_id: str, cls: T_Componen
     return cls
 
 
-def minion_id(component_id: str) -> Any:
+def minion_id(component_id: str) -> Callable[[T_Component], T_Component]:
     def decorator(cls: T_Component) -> T_Component:
         return _attach_component_id("minion", component_id, cls)
     return decorator
 
 
-def pipeline_id(component_id: str) -> Any:
+def pipeline_id(component_id: str) -> Callable[[T_Component], T_Component]:
     def decorator(cls: T_Component) -> T_Component:
         return _attach_component_id("pipeline", component_id, cls)
     return decorator
 
 
-def resource_id(component_id: str) -> Any:
+def resource_id(component_id: str) -> Callable[[T_Component], T_Component]:
     def decorator(cls: T_Component) -> T_Component:
         return _attach_component_id("resource", component_id, cls)
     return decorator
