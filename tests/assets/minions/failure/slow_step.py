@@ -1,13 +1,15 @@
 import asyncio
 from typing import Any
 
-from minions import minion_step
-
+from minions import minion_id, minion_step
 from tests.assets.support.minion_spied import SpiedMinion
 from tests.assets.contexts.counter import CounterContext
 from tests.assets.events.counter import CounterEvent
 
+SLOW_STEP_MINION_ID = "42345678-1234-5678-9234-567812345678"
 
+
+@minion_id(SLOW_STEP_MINION_ID)
 class SlowStepMinion(SpiedMinion[CounterEvent, CounterContext]):
     name = "slow-step-minion"
 

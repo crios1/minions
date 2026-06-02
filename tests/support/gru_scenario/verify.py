@@ -259,7 +259,7 @@ class ScenarioVerifier:
         tracked_minion_ids = {
             r.minion_id
             for r in self._result.receipts
-            if r.success and r.minion_modpath in spies.minions
+            if r.success and (r.minion_cls is not None or r.minion_id in persisted)
         }
         return sum(count for minion_id, count in persisted.items() if minion_id in tracked_minion_ids)
 
@@ -683,13 +683,11 @@ class ScenarioVerifier:
             workflow_steps_mode = directive.expect.workflow_steps_mode
 
             receipts = self._result.receipts[:target_checkpoint.receipt_count]
-            modpaths_by_name: defaultdict[str, set[str]] = defaultdict(set)
             minion_ids_by_name: defaultdict[str, set[str]] = defaultdict(set)
             metric_keys_by_name: defaultdict[str, set[str]] = defaultdict(set)
             for r in receipts:
                 if not r.success or not r.resolved_name:
                     continue
-                modpaths_by_name[r.resolved_name].add(r.minion_modpath)
                 minion_ids_by_name[r.resolved_name].add(r.minion_id)
                 if r.orchestration_id:
                     metric_keys_by_name[r.resolved_name].add(r.orchestration_id)
@@ -702,7 +700,7 @@ class ScenarioVerifier:
                     )
 
                 for minion_name, expected_count in persistence.items():
-                    if minion_name not in modpaths_by_name:
+                    if minion_name not in minion_ids_by_name:
                         pytest.fail(
                             f"ExpectRuntime.persistence references unknown minion name: {minion_name!r}."
                         )
@@ -786,6 +784,10 @@ class ScenarioVerifier:
                     modpath: f"{cls.__module__}.{cls.__name__}"
                     for modpath, cls in spies.minions.items()
                 }
+                modpaths_by_name: defaultdict[str, set[str]] = defaultdict(set)
+                for r in receipts:
+                    if r.success and r.resolved_name:
+                        modpaths_by_name[r.resolved_name].add(r.minion_modpath)
 
                 for minion_name, expected_steps in workflow_steps.items():
                     if minion_name not in modpaths_by_name:

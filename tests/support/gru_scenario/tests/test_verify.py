@@ -9,6 +9,10 @@ from tests.assets.events.counter import CounterEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
+from tests.assets.minions.two_steps.counter.identified_resourced import (
+    IDENTIFIED_COUNTER_MINION_ID,
+    IdentifiedResourcedMinion,
+)
 from tests.assets.minions.two_steps.counter.basic import TwoStepMinion
 from tests.assets.minions.two_steps.counter.resourced import TwoStepResourcedMinion
 from tests.assets.pipelines.emit1.counter.emit_1 import Emit1Pipeline
@@ -746,6 +750,7 @@ def test_checkpoint_window_workflow_step_progression_exact_fails_on_overage():
                 "two-step-minion",
                 TwoStepMinion,
                 True,
+                minion_id="durable-two-step-minion",
             ),
         ],
         checkpoints=[
@@ -1697,12 +1702,12 @@ def test_assert_runtime_expectations_workflow_steps_rejects_invalid_mode():
 def test_assert_runtime_expectations_persistence_at_checkpoint_index():
     directives = [
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
+            minion="tests.assets.minions.two_steps.counter.identified_resourced",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
         ExpectRuntime(
             at=0,
-            expect=RuntimeExpectSpec(persistence={"two-step-minion": 3}),
+            expect=RuntimeExpectSpec(persistence={"identified-resourced-minion": 3}),
         ),
     ]
     plan = ScenarioPlan(
@@ -1710,7 +1715,9 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
         pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        minions={
+            "tests.assets.minions.two_steps.counter.identified_resourced": IdentifiedResourcedMinion,
+        },
         pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
     )
     result = ScenarioRunResult(
@@ -1718,12 +1725,13 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
         receipts=[
             OrchestrationStartReceipt(
                 0,
-                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.minions.two_steps.counter.identified_resourced",
                 "tests.assets.pipelines.emit1.counter.emit_1",
                 "id-ok",
-                "two-step-minion",
-                TwoStepMinion,
+                "identified-resourced-minion",
+                IdentifiedResourcedMinion,
                 True,
+                minion_id=IDENTIFIED_COUNTER_MINION_ID,
             ),
         ],
         checkpoints=[
@@ -1735,7 +1743,7 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
                 successful_receipt_count=1,
                 seen_shutdown=False,
                 persisted_contexts_by_minion_id={
-                    "tests.assets.minions.two_steps.counter.basic": 3
+                    IDENTIFIED_COUNTER_MINION_ID: 3
                 },
             ),
             ScenarioCheckpoint(
@@ -1746,7 +1754,7 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
                 successful_receipt_count=1,
                 seen_shutdown=False,
                 persisted_contexts_by_minion_id={
-                    "tests.assets.minions.two_steps.counter.basic": 99
+                    IDENTIFIED_COUNTER_MINION_ID: 99
                 },
             ),
         ],
@@ -1869,7 +1877,7 @@ def test_assert_runtime_expectations_fails_for_out_of_range_checkpoint_index():
                 successful_receipt_count=1,
                 seen_shutdown=False,
                 persisted_contexts_by_minion_id={
-                    "tests.assets.minions.two_steps.counter.basic": 1
+                    "durable-two-step-minion": 1
                 },
             ),
             ScenarioCheckpoint(
@@ -1880,7 +1888,7 @@ def test_assert_runtime_expectations_fails_for_out_of_range_checkpoint_index():
                 successful_receipt_count=1,
                 seen_shutdown=False,
                 persisted_contexts_by_minion_id={
-                    "tests.assets.minions.two_steps.counter.basic": 1
+                    "durable-two-step-minion": 1
                 },
             ),
         ],

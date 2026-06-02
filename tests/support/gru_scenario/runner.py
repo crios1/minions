@@ -605,7 +605,9 @@ class ScenarioRunner:
                     )
                 else:
                     ctx = deserialize_workflow_context_blob(stored_context.context)
-                minion_id = receipt.minion_id if receipt is not None else ""
+                if receipt is None:
+                    continue
+                minion_id = receipt.minion_id
                 contexts_by_minion_id[minion_id].append(ctx)
         except Exception:
             return None

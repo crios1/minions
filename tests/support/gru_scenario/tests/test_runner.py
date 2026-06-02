@@ -492,6 +492,8 @@ async def test_runner_restart_same_orchestration_id_after_stop_succeeds(gru: Gru
 async def test_runner_records_expect_runtime_checkpoint_with_persistence_snapshot(
     gru: Gru,
 ) -> None:
+    from tests.assets.minions.failure.slow_step import SLOW_STEP_MINION_ID
+
     start = OrchestrationStart(
         minion="tests.assets.minions.failure.slow_step",
         pipeline="tests.assets.pipelines.emit1.counter.emit_1",
@@ -515,6 +517,7 @@ async def test_runner_records_expect_runtime_checkpoint_with_persistence_snapsho
     assert len(expect_cps) == 1
     persisted = expect_cps[0].persisted_contexts_by_minion_id
     assert persisted is not None
-    assert persisted.get("tests.assets.minions.failure.slow_step", 0) >= 1
+    assert persisted.get(SLOW_STEP_MINION_ID, 0) >= 1
+    assert "tests.assets.minions.failure.slow_step" not in persisted
     assert expect_cps[0].spy_call_counts_by_instance is not None
     assert expect_cps[0].workflow_step_started_ids_by_class is not None
