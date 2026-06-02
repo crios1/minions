@@ -375,7 +375,7 @@ async def test_runner_records_checkpoints_for_wait_workflow_completions_and_shut
     assert result.checkpoints[0].minion_names is None
     assert result.checkpoints[0].workflow_steps_mode == "at_least"
     assert result.checkpoints[0].spy_call_counts_by_instance is not None
-    assert result.checkpoints[0].workflow_step_started_ids_by_class is not None
+    assert result.checkpoints[0].workflow_step_started_ids_by_minion_id is not None
     assert result.checkpoints[1].directive_type == "GruShutdown"
     assert result.checkpoints[1].seen_shutdown is True
 
@@ -446,23 +446,24 @@ async def test_runner_restart_flow_checkpoints_separate_pre_stop_and_post_restar
     assert post_restart_cp.receipt_count == 2
     assert post_restart_cp.workflow_steps_mode == "at_least"
 
-    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    class_key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.basic"
     assert pre_stop_cp.spy_call_counts is not None
     assert pre_stop_cp.spy_call_counts_by_instance is not None
-    assert pre_stop_cp.workflow_step_started_ids_by_class is not None
+    assert pre_stop_cp.workflow_step_started_ids_by_minion_id is not None
     assert post_restart_cp.spy_call_counts is not None
     assert post_restart_cp.spy_call_counts_by_instance is not None
-    assert post_restart_cp.workflow_step_started_ids_by_class is not None
+    assert post_restart_cp.workflow_step_started_ids_by_minion_id is not None
 
-    pre_step1 = pre_stop_cp.spy_call_counts.get(key, {}).get("step_1", 0)
-    post_step1 = post_restart_cp.spy_call_counts.get(key, {}).get("step_1", 0)
+    pre_step1 = pre_stop_cp.spy_call_counts.get(class_key, {}).get("step_1", 0)
+    post_step1 = post_restart_cp.spy_call_counts.get(class_key, {}).get("step_1", 0)
     assert post_step1 >= pre_step1 + 1
-    pre_by_instance = pre_stop_cp.spy_call_counts_by_instance.get(key, {})
-    post_by_instance = post_restart_cp.spy_call_counts_by_instance.get(key, {})
+    pre_by_instance = pre_stop_cp.spy_call_counts_by_instance.get(class_key, {})
+    post_by_instance = post_restart_cp.spy_call_counts_by_instance.get(class_key, {})
     assert len(pre_by_instance) >= 1
     assert len(post_by_instance) >= 1
-    pre_workflows = pre_stop_cp.workflow_step_started_ids_by_class.get(key, {}).get("step_1", ())
-    post_workflows = post_restart_cp.workflow_step_started_ids_by_class.get(key, {}).get("step_1", ())
+    pre_workflows = pre_stop_cp.workflow_step_started_ids_by_minion_id.get(minion_id, {}).get("step_1", ())
+    post_workflows = post_restart_cp.workflow_step_started_ids_by_minion_id.get(minion_id, {}).get("step_1", ())
     assert len(post_workflows) >= len(pre_workflows)
 
 
@@ -520,4 +521,4 @@ async def test_runner_records_expect_runtime_checkpoint_with_persistence_snapsho
     assert persisted.get(SLOW_STEP_MINION_ID, 0) >= 1
     assert "tests.assets.minions.failure.slow_step" not in persisted
     assert expect_cps[0].spy_call_counts_by_instance is not None
-    assert expect_cps[0].workflow_step_started_ids_by_class is not None
+    assert expect_cps[0].workflow_step_started_ids_by_minion_id is not None

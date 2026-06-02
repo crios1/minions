@@ -463,9 +463,20 @@ def test_assert_workflow_step_start_events_are_monotonic_allows_resume_replay_at
         minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
         pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
     )
-    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.basic"
     result = ScenarioRunResult(
         spies=spies,
+        receipts=[
+            OrchestrationStartReceipt(
+                0,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "id-ok",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+            ),
+        ],
         checkpoints=[
             ScenarioCheckpoint(
                 order=0,
@@ -474,8 +485,8 @@ def test_assert_workflow_step_start_events_are_monotonic_allows_resume_replay_at
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                workflow_step_start_events_by_class={
-                    key: {
+                workflow_step_start_events_by_minion_id={
+                    minion_id: {
                         "workflow-1": (
                             (0, "step_1"),
                             (1, "step_2"),
@@ -505,9 +516,20 @@ def test_assert_workflow_step_start_events_are_monotonic_rejects_regression():
         minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
         pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
     )
-    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.basic"
     result = ScenarioRunResult(
         spies=spies,
+        receipts=[
+            OrchestrationStartReceipt(
+                0,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "id-ok",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+            ),
+        ],
         checkpoints=[
             ScenarioCheckpoint(
                 order=0,
@@ -516,8 +538,8 @@ def test_assert_workflow_step_start_events_are_monotonic_rejects_regression():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                workflow_step_start_events_by_class={
-                    key: {
+                workflow_step_start_events_by_minion_id={
+                    minion_id: {
                         "workflow-1": (
                             (0, "step_1"),
                             (1, "step_2"),
@@ -548,9 +570,20 @@ def test_assert_workflow_step_start_events_are_monotonic_rejects_step_name_index
         minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
         pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
     )
-    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.basic"
     result = ScenarioRunResult(
         spies=spies,
+        receipts=[
+            OrchestrationStartReceipt(
+                0,
+                "tests.assets.minions.two_steps.counter.basic",
+                "tests.assets.pipelines.emit1.counter.emit_1",
+                "id-ok",
+                "two-step-minion",
+                TwoStepMinion,
+                True,
+            ),
+        ],
         checkpoints=[
             ScenarioCheckpoint(
                 order=0,
@@ -559,8 +592,8 @@ def test_assert_workflow_step_start_events_are_monotonic_rejects_step_name_index
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                workflow_step_start_events_by_class={
-                    key: {
+                workflow_step_start_events_by_minion_id={
+                    minion_id: {
                         "workflow-1": (
                             (0, "step_2"),
                         ),
@@ -769,8 +802,8 @@ def test_checkpoint_window_workflow_step_progression_exact_fails_on_overage():
                         "step_2": 2,
                     }
                 },
-                workflow_step_started_ids_by_class={
-                    "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
+                workflow_step_started_ids_by_minion_id={
+                    "durable-two-step-minion": {
                         "step_1": ("workflow-1", "workflow-2"),
                         "step_2": ("workflow-1", "workflow-2"),
                     }
@@ -859,7 +892,8 @@ def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_wi
         minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
         pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
     )
-    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    class_key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.basic"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
@@ -893,13 +927,13 @@ def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_wi
                 minion_names=None,
                 workflow_steps_mode="at_least",
                 spy_call_counts={
-                    key: {
+                    class_key: {
                         "step_1": 2,  # tolerated overage for first window
                         "step_2": 2,
                     }
                 },
-                workflow_step_started_ids_by_class={
-                    key: {
+                workflow_step_started_ids_by_minion_id={
+                    minion_id: {
                         "step_1": ("workflow-1", "workflow-2"),
                         "step_2": ("workflow-1", "workflow-2"),
                     }
@@ -915,13 +949,13 @@ def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_wi
                 minion_names=None,
                 workflow_steps_mode="exact",
                 spy_call_counts={
-                    key: {
+                    class_key: {
                         "step_1": 3,  # exact +1 delta over prior checkpoint
                         "step_2": 3,
                     }
                 },
-                workflow_step_started_ids_by_class={
-                    key: {
+                workflow_step_started_ids_by_minion_id={
+                    minion_id: {
                         "step_1": ("workflow-1", "workflow-2", "workflow-3"),
                         "step_2": ("workflow-1", "workflow-2", "workflow-3"),
                     }
@@ -948,7 +982,8 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_all
         minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
         pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
     )
-    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    class_key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.basic"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
@@ -973,13 +1008,13 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_all
                 minion_names=None,
                 workflow_steps_mode="exact",
                 spy_call_counts={
-                    key: {
+                    class_key: {
                         "step_1": 2,  # overage tolerated when workflow-id exactness is available
                         "step_2": 2,
                     }
                 },
-                workflow_step_started_ids_by_class={
-                    key: {
+                workflow_step_started_ids_by_minion_id={
+                    minion_id: {
                         "step_1": ("workflow-1",),
                         "step_2": ("workflow-1",),
                     }
@@ -1006,7 +1041,8 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_rej
         minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
         pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
     )
-    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    class_key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.basic"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
@@ -1031,13 +1067,13 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_rej
                 minion_names=None,
                 workflow_steps_mode="exact",
                 spy_call_counts={
-                    key: {
+                    class_key: {
                         "step_1": 3,  # expected 1, max tolerated 2 (start_count=1)
                         "step_2": 2,
                     }
                 },
-                workflow_step_started_ids_by_class={
-                    key: {
+                workflow_step_started_ids_by_minion_id={
+                    minion_id: {
                         "step_1": ("workflow-1",),
                         "step_2": ("workflow-1",),
                     }
@@ -1072,7 +1108,8 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
         minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
         pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
     )
-    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    class_key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.basic"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
@@ -1106,19 +1143,19 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
                 minion_names=None,
                 workflow_steps_mode="exact",
                 spy_call_counts={
-                    key: {
+                    class_key: {
                         "step_1": 3,  # overage tolerated with workflow-id evidence
                         "step_2": 3,
                     }
                 },
                 spy_call_counts_by_instance={
-                    key: {
+                    class_key: {
                         1: {"step_1": 2, "step_2": 2},
                         2: {"step_1": 1, "step_2": 1},
                     }
                 },
-                workflow_step_started_ids_by_class={
-                    key: {
+                workflow_step_started_ids_by_minion_id={
+                    minion_id: {
                         "step_1": ("workflow-1", "workflow-2"),
                         "step_2": ("workflow-1", "workflow-2"),
                     }
@@ -1149,7 +1186,8 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
         minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
         pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
     )
-    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    class_key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.basic"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
@@ -1183,19 +1221,19 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
                 minion_names=None,
                 workflow_steps_mode="exact",
                 spy_call_counts={
-                    key: {
+                    class_key: {
                         "step_1": 3,
                         "step_2": 3,
                     }
                 },
                 spy_call_counts_by_instance={
-                    key: {
+                    class_key: {
                         1: {"step_1": 2, "step_2": 2},
                         2: {"step_1": 1, "step_2": 1},
                     }
                 },
-                workflow_step_started_ids_by_class={
-                    key: {
+                workflow_step_started_ids_by_minion_id={
+                    minion_id: {
                         # exact mode expects 2 new workflow ids for this window
                         "step_1": ("workflow-1",),
                         "step_2": ("workflow-1",),
@@ -1227,7 +1265,8 @@ def test_checkpoint_window_workflow_step_progression_exact_prioritizes_workflow_
         minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
         pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
     )
-    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    class_key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.basic"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
@@ -1252,13 +1291,13 @@ def test_checkpoint_window_workflow_step_progression_exact_prioritizes_workflow_
                 minion_names=None,
                 workflow_steps_mode="exact",
                 spy_call_counts={
-                    key: {
+                    class_key: {
                         "step_1": 3,  # expected 1..2
                         "step_2": 1,
                     }
                 },
-                workflow_step_started_ids_by_class={
-                    key: {
+                workflow_step_started_ids_by_minion_id={
+                    minion_id: {
                         "step_1": tuple(),  # expected workflow-id delta 1
                         "step_2": ("workflow-1",),
                     }
@@ -1349,7 +1388,7 @@ def test_checkpoint_window_fanout_fails_when_workflow_id_delta_below_expected():
                         "step_2": 2,
                     }
                 },
-                workflow_step_started_ids_by_class={
+                workflow_step_started_ids_by_minion_id={
                     "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
                         "step_1": ("workflow-1",),
                         "step_2": ("workflow-1",),
@@ -1552,7 +1591,7 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_latest_checkpoint()
         minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
         pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
     )
-    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.basic"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
@@ -1574,8 +1613,8 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_latest_checkpoint()
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                workflow_step_started_ids_by_class={
-                    key: {
+                workflow_step_started_ids_by_minion_id={
+                    minion_id: {
                         "step_1": ("workflow-1",),
                         "step_2": ("workflow-1",),
                     }
@@ -1608,7 +1647,7 @@ def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage():
         minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
         pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
     )
-    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.basic"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
@@ -1630,8 +1669,8 @@ def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                workflow_step_started_ids_by_class={
-                    key: {
+                workflow_step_started_ids_by_minion_id={
+                    minion_id: {
                         "step_1": ("workflow-1", "workflow-2"),
                     }
                 },
@@ -1663,7 +1702,7 @@ def test_assert_runtime_expectations_workflow_steps_rejects_invalid_mode():
         minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
         pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
     )
-    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.basic"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
@@ -1685,8 +1724,8 @@ def test_assert_runtime_expectations_workflow_steps_rejects_invalid_mode():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                workflow_step_started_ids_by_class={
-                    key: {"step_1": ("workflow-1",)}
+                workflow_step_started_ids_by_minion_id={
+                    minion_id: {"step_1": ("workflow-1",)}
                 },
             ),
         ],
@@ -1785,7 +1824,7 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
         minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
         pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
     )
-    key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.basic"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
@@ -1809,8 +1848,8 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
                 seen_shutdown=False,
                 expected_step_starts={"two-step-minion": {"step_1": 1}},
                 wrapped_directive_type="OrchestrationStop",
-                workflow_step_started_ids_by_class={
-                    key: {
+                workflow_step_started_ids_by_minion_id={
+                    minion_id: {
                         "step_1": ("workflow-1",),
                         "step_2": (),
                     }
@@ -1823,8 +1862,8 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                workflow_step_started_ids_by_class={
-                    key: {
+                workflow_step_started_ids_by_minion_id={
+                    minion_id: {
                         "step_1": ("workflow-1",),
                         "step_2": ("workflow-1",),
                     }

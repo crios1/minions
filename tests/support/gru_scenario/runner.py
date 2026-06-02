@@ -108,8 +108,8 @@ class ScenarioCheckpoint:
     wrapped_directive_type: str | None = None
     spy_call_counts: dict[str, dict[str, int]] | None = None
     spy_call_counts_by_instance: dict[str, dict[int, dict[str, int]]] | None = None
-    workflow_step_started_ids_by_class: dict[str, dict[str, tuple[str, ...]]] | None = None
-    workflow_step_start_events_by_class: dict[str, dict[str, tuple[tuple[int, str], ...]]] | None = None
+    workflow_step_started_ids_by_minion_id: dict[str, dict[str, tuple[str, ...]]] | None = None
+    workflow_step_start_events_by_minion_id: dict[str, dict[str, tuple[tuple[int, str], ...]]] | None = None
     persisted_contexts_by_minion_id: dict[str, int] | None = None
     persisted_context_snapshots_by_minion_id: dict[str, tuple[MinionWorkflowContext[Any, Any], ...]] | None = None
     metrics_counters: dict[str, list[dict[str, object]]] | None = None
@@ -432,8 +432,8 @@ class ScenarioRunner:
             wrapped_directive_type=wrapped_directive_type,
             spy_call_counts=self._snapshot_spy_call_counts(),
             spy_call_counts_by_instance=self._snapshot_spy_call_counts_by_instance(),
-            workflow_step_started_ids_by_class=self._snapshot_workflow_step_started_ids_by_class(),
-            workflow_step_start_events_by_class=self._snapshot_workflow_step_start_events_by_class(),
+            workflow_step_started_ids_by_minion_id=self._snapshot_workflow_step_started_ids_by_minion_id(),
+            workflow_step_start_events_by_minion_id=self._snapshot_workflow_step_start_events_by_minion_id(),
             persisted_contexts_by_minion_id=self._count_persisted_context_snapshots(
                 persisted_context_snapshots,
             ),
@@ -483,18 +483,14 @@ class ScenarioRunner:
             }
         return snapshots
 
-    def _snapshot_workflow_step_started_ids_by_class(self) -> dict[str, dict[str, tuple[str, ...]]] | None:
+    def _snapshot_workflow_step_started_ids_by_minion_id(self) -> dict[str, dict[str, tuple[str, ...]]] | None:
         logger = getattr(self._gru, "_logger", None)
         logs = getattr(logger, "logs", None)
         if not isinstance(logs, list):
             return None
         logs = cast(list[object], logs)
 
-        class_key_by_modpath = {
-            modpath: f"{cls.__module__}.{cls.__name__}"
-            for modpath, cls in self._spies.minions.items()
-        }
-        by_class_step: defaultdict[str, defaultdict[str, set[str]]] = defaultdict(
+        by_minion_id_step: defaultdict[str, defaultdict[str, set[str]]] = defaultdict(
             lambda: defaultdict(set)
         )
 
@@ -506,26 +502,23 @@ class ScenarioRunner:
                 continue
             kwargs = cast(dict[str, object], kwargs)
 
-            modpath = kwargs.get("minion_modpath")
+            minion_id = kwargs.get("minion_id")
             step_name = kwargs.get("step_name")
             workflow_id = kwargs.get("workflow_id")
-            if not isinstance(modpath, str) or not isinstance(step_name, str) or not isinstance(workflow_id, str):
+            if not isinstance(minion_id, str) or not isinstance(step_name, str) or not isinstance(workflow_id, str):
                 continue
 
-            class_key = class_key_by_modpath.get(modpath)
-            if class_key is None:
-                continue
-            by_class_step[class_key][step_name].add(workflow_id)
+            by_minion_id_step[minion_id][step_name].add(workflow_id)
 
         return {
-            class_key: {
+            minion_id: {
                 step_name: tuple(sorted(workflow_ids))
                 for step_name, workflow_ids in by_step.items()
             }
-            for class_key, by_step in by_class_step.items()
+            for minion_id, by_step in by_minion_id_step.items()
         }
 
-    def _snapshot_workflow_step_start_events_by_class(
+    def _snapshot_workflow_step_start_events_by_minion_id(
         self,
     ) -> dict[str, dict[str, tuple[tuple[int, str], ...]]] | None:
         logger = getattr(self._gru, "_logger", None)
@@ -534,11 +527,7 @@ class ScenarioRunner:
             return None
         logs = cast(list[object], logs)
 
-        class_key_by_modpath = {
-            modpath: f"{cls.__module__}.{cls.__name__}"
-            for modpath, cls in self._spies.minions.items()
-        }
-        by_class_workflow: defaultdict[str, defaultdict[str, list[tuple[int, str]]]] = defaultdict(
+        by_minion_id_workflow: defaultdict[str, defaultdict[str, list[tuple[int, str]]]] = defaultdict(
             lambda: defaultdict(list)
         )
 
@@ -550,29 +539,26 @@ class ScenarioRunner:
                 continue
             kwargs = cast(dict[str, object], kwargs)
 
-            modpath = kwargs.get("minion_modpath")
+            minion_id = kwargs.get("minion_id")
             step_name = kwargs.get("step_name")
             step_index = kwargs.get("step_index")
             workflow_id = kwargs.get("workflow_id")
             if (
-                not isinstance(modpath, str)
+                not isinstance(minion_id, str)
                 or not isinstance(step_name, str)
                 or not isinstance(step_index, int)
                 or not isinstance(workflow_id, str)
             ):
                 continue
 
-            class_key = class_key_by_modpath.get(modpath)
-            if class_key is None:
-                continue
-            by_class_workflow[class_key][workflow_id].append((step_index, step_name))
+            by_minion_id_workflow[minion_id][workflow_id].append((step_index, step_name))
 
         return {
-            class_key: {
+            minion_id: {
                 workflow_id: tuple(events)
                 for workflow_id, events in by_workflow.items()
             }
-            for class_key, by_workflow in by_class_workflow.items()
+            for minion_id, by_workflow in by_minion_id_workflow.items()
         }
 
     async def _snapshot_persisted_context_snapshots_by_minion_id(

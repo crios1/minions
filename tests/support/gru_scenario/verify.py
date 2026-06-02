@@ -392,7 +392,7 @@ class ScenarioVerifier:
                 prev_receipt_count = cp.receipt_count
                 prev_counts = cp.spy_call_counts
                 prev_counts_by_instance = cp.spy_call_counts_by_instance or {}
-                prev_workflow_step_ids = cp.workflow_step_started_ids_by_class or {}
+                prev_workflow_step_ids = cp.workflow_step_started_ids_by_minion_id or {}
                 continue
 
             if cp.minion_names == ():
@@ -421,12 +421,27 @@ class ScenarioVerifier:
                     )
 
                 key = f"{m_cls.__module__}.{m_cls.__name__}"
+                minion_ids = {
+                    r.minion_id
+                    for r in window_receipts
+                    if r.success
+                    and (
+                        r.minion_cls is m_cls
+                        or (r.minion_cls is None and spies.minions.get(r.minion_modpath) is m_cls)
+                    )
+                }
                 curr = cp.spy_call_counts.get(key, {})
                 prev = prev_counts.get(key, {})
                 curr_by_instance = (cp.spy_call_counts_by_instance or {}).get(key, {})
                 prev_by_instance = prev_counts_by_instance.get(key, {})
-                curr_workflow_ids_by_step = (cp.workflow_step_started_ids_by_class or {}).get(key, {})
-                prev_workflow_ids_by_step = prev_workflow_step_ids.get(key, {})
+                curr_workflow_ids_by_step = self._merge_workflow_step_ids_by_step(
+                    cp.workflow_step_started_ids_by_minion_id,
+                    minion_ids,
+                )
+                prev_workflow_ids_by_step = self._merge_workflow_step_ids_by_step(
+                    prev_workflow_step_ids,
+                    minion_ids,
+                )
 
                 if not m_cls._mn_workflow_spec:
                     continue
@@ -440,7 +455,7 @@ class ScenarioVerifier:
                         curr=curr_workflow_ids_by_step.get(step_name, ()),
                         prev=prev_workflow_ids_by_step.get(step_name, ()),
                     )
-                    has_workflow_id_evidence = cp.workflow_step_started_ids_by_class is not None
+                    has_workflow_id_evidence = cp.workflow_step_started_ids_by_minion_id is not None
                     check = self._evaluate_window_step_progression(
                         mode=mode,
                         expected_delta=expected_delta,
@@ -487,7 +502,7 @@ class ScenarioVerifier:
             prev_receipt_count = cp.receipt_count
             prev_counts = cp.spy_call_counts
             prev_counts_by_instance = cp.spy_call_counts_by_instance or {}
-            prev_workflow_step_ids = cp.workflow_step_started_ids_by_class or {}
+            prev_workflow_step_ids = cp.workflow_step_started_ids_by_minion_id or {}
 
     def _assert_workflow_step_start_events_are_monotonic(self) -> None:
         spies = self._require_spies()
@@ -495,21 +510,32 @@ class ScenarioVerifier:
             (
                 cp
                 for cp in reversed(self._result.checkpoints)
-                if cp.workflow_step_start_events_by_class is not None
+                if cp.workflow_step_start_events_by_minion_id is not None
             ),
             None,
         )
-        if latest_checkpoint is None or latest_checkpoint.workflow_step_start_events_by_class is None:
+        if latest_checkpoint is None or latest_checkpoint.workflow_step_start_events_by_minion_id is None:
             return
 
-        workflow_by_class = latest_checkpoint.workflow_step_start_events_by_class
+        workflow_by_minion_id = latest_checkpoint.workflow_step_start_events_by_minion_id
         for m_cls in spies.minions.values():
             workflow = tuple(m_cls._mn_workflow_spec or ())
             if not workflow:
                 continue
 
-            class_key = f"{m_cls.__module__}.{m_cls.__name__}"
-            for workflow_id, events in workflow_by_class.get(class_key, {}).items():
+            minion_ids = {
+                r.minion_id
+                for r in self._result.receipts[:latest_checkpoint.receipt_count]
+                if r.success
+                and (
+                    r.minion_cls is m_cls
+                    or (r.minion_cls is None and spies.minions.get(r.minion_modpath) is m_cls)
+                )
+            }
+            for workflow_id, events in self._merge_workflow_step_events_by_workflow_id(
+                workflow_by_minion_id,
+                minion_ids,
+            ).items():
                 previous_index = -1
                 previous_step_name: str | None = None
                 for step_index, step_name in events:
@@ -637,6 +663,38 @@ class ScenarioVerifier:
         curr_ids = set(curr)
         prev_ids = set(prev)
         return len(curr_ids - prev_ids)
+
+    def _merge_workflow_step_ids_by_step(
+        self,
+        workflow_step_ids_by_minion_id: dict[str, dict[str, tuple[str, ...]]] | None,
+        minion_ids: set[str],
+    ) -> dict[str, tuple[str, ...]]:
+        if workflow_step_ids_by_minion_id is None:
+            return {}
+        merged: defaultdict[str, set[str]] = defaultdict(set)
+        for minion_id in minion_ids:
+            for step_name, workflow_ids in workflow_step_ids_by_minion_id.get(minion_id, {}).items():
+                merged[step_name].update(workflow_ids)
+        return {
+            step_name: tuple(sorted(workflow_ids))
+            for step_name, workflow_ids in merged.items()
+        }
+
+    def _merge_workflow_step_events_by_workflow_id(
+        self,
+        workflow_step_events_by_minion_id: dict[str, dict[str, tuple[tuple[int, str], ...]]] | None,
+        minion_ids: set[str],
+    ) -> dict[str, tuple[tuple[int, str], ...]]:
+        if workflow_step_events_by_minion_id is None:
+            return {}
+        merged: defaultdict[str, list[tuple[int, str]]] = defaultdict(list)
+        for minion_id in minion_ids:
+            for workflow_id, events in workflow_step_events_by_minion_id.get(minion_id, {}).items():
+                merged[workflow_id].extend(events)
+        return {
+            workflow_id: tuple(events)
+            for workflow_id, events in merged.items()
+        }
 
     def _counter_sample_value(self, sample: dict[str, object]) -> int:
         value = sample.get("value", 0)
@@ -772,31 +830,25 @@ class ScenarioVerifier:
                         "ExpectRuntime.workflow_steps_mode="
                         f"{workflow_steps_mode!r} is unsupported. Use 'at_least' or 'exact'."
                     )
-                workflow_step_ids = target_checkpoint.workflow_step_started_ids_by_class
+                workflow_step_ids = target_checkpoint.workflow_step_started_ids_by_minion_id
                 if workflow_step_ids is None:
                     pytest.fail(
                         "ExpectRuntime.workflow_steps is unsupported without workflow step-id "
                         "checkpoint snapshots."
                     )
 
-                spies = self._require_spies()
-                class_key_by_modpath = {
-                    modpath: f"{cls.__module__}.{cls.__name__}"
-                    for modpath, cls in spies.minions.items()
-                }
-                modpaths_by_name: defaultdict[str, set[str]] = defaultdict(set)
+                minion_ids_by_name: defaultdict[str, set[str]] = defaultdict(set)
                 for r in receipts:
                     if r.success and r.resolved_name:
-                        modpaths_by_name[r.resolved_name].add(r.minion_modpath)
+                        minion_ids_by_name[r.resolved_name].add(r.minion_id)
 
                 for minion_name, expected_steps in workflow_steps.items():
-                    if minion_name not in modpaths_by_name:
+                    if minion_name not in minion_ids_by_name:
                         pytest.fail(
                             "ExpectRuntime.workflow_steps references unknown minion name: "
                             f"{minion_name!r}."
                         )
-                    modpaths = modpaths_by_name[minion_name]
-                    class_keys = [class_key_by_modpath[m] for m in modpaths if m in class_key_by_modpath]
+                    minion_ids = minion_ids_by_name[minion_name]
 
                     for step_name, expected_count in expected_steps.items():
                         if expected_count < 0:
@@ -805,8 +857,8 @@ class ScenarioVerifier:
                                 f"got {minion_name}.{step_name}={expected_count!r}."
                             )
                         actual_count = sum(
-                            len(workflow_step_ids.get(class_key, {}).get(step_name, ()))
-                            for class_key in class_keys
+                            len(workflow_step_ids.get(minion_id, {}).get(step_name, ()))
+                            for minion_id in minion_ids
                         )
                         if workflow_steps_mode == "at_least":
                             if actual_count < expected_count:
