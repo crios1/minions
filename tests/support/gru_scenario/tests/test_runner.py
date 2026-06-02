@@ -5,19 +5,50 @@ from typing import Any
 import pytest
 
 from minions._internal._domain.gru import Gru
-
 from tests.support.gru_scenario.directives import (
+    AfterWorkflowStepStarts,
     Concurrent,
     ExpectRuntime,
     GruShutdown,
     OrchestrationStart,
     OrchestrationStop,
     RuntimeExpectSpec,
-    AfterWorkflowStepStarts,
     WaitWorkflowCompletions,
 )
 from tests.support.gru_scenario.plan import ScenarioPlan
-from tests.support.gru_scenario.runner import ScenarioRunResult, ScenarioRunner, ScenarioWaiter, SpyRegistry
+from tests.support.gru_scenario.runner import (
+    OrchestrationStartReceipt,
+    ScenarioRunner,
+    ScenarioRunResult,
+    ScenarioWaiter,
+    SpyRegistry,
+)
+
+
+def test_orchestration_start_receipt_requires_durable_ids() -> None:
+    with pytest.raises(ValueError, match="pipeline_id is required"):
+        OrchestrationStartReceipt(
+            0,
+            "tests.assets.minions.two_steps.simple.basic",
+            "tests.assets.pipelines.simple.simple_event.single_event_1",
+            None,
+            None,
+            None,
+            True,
+            minion_id="tests.assets.minions.two_steps.simple.basic",
+        )
+
+    with pytest.raises(ValueError, match="minion_id is required"):
+        OrchestrationStartReceipt(
+            0,
+            "tests.assets.minions.two_steps.simple.basic",
+            "tests.assets.pipelines.simple.simple_event.single_event_1",
+            None,
+            None,
+            None,
+            True,
+            pipeline_id="tests.assets.pipelines.simple.simple_event.single_event_1",
+        )
 
 
 @pytest.mark.asyncio
@@ -35,25 +66,61 @@ async def test_runner_require_result_invariant_message_is_actionable(gru: Gru) -
 
 
 @pytest.mark.asyncio
+async def test_runner_validates_missing_pipeline_event_count_after_resolving_identity(gru: Gru) -> None:
+    plan = ScenarioPlan(
+        [
+            OrchestrationStart(
+                minion="tests.assets.minions.two_steps.simple.basic",
+                pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
+            )
+        ],
+        pipeline_event_counts={},
+    )
+
+    with pytest.raises(pytest.fail.Exception, match="Missing pipeline_event_counts entries"):
+        await ScenarioRunner(gru, plan, per_verification_timeout=0.1).run()
+
+
+@pytest.mark.asyncio
+async def test_runner_validates_unused_pipeline_event_count_after_resolving_identity(gru: Gru) -> None:
+    plan = ScenarioPlan(
+        [
+            OrchestrationStart(
+                minion="tests.assets.minions.two_steps.simple.basic",
+                pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
+            )
+        ],
+        pipeline_event_counts={
+            "tests.assets.pipelines.simple.simple_event.single_event_1": 1,
+            "unused-pipeline-id": 1,
+        },
+    )
+
+    with pytest.raises(pytest.fail.Exception, match="pipelines not started in directives"):
+        await ScenarioRunner(gru, plan, per_verification_timeout=0.1).run()
+
+
+@pytest.mark.asyncio
 async def test_runner_records_receipts_for_success_and_expected_failure(
     gru: Gru,
 ) -> None:
-    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_id = pipeline_ref
 
     directives = [
         OrchestrationStart(
             minion="tests.assets.minions.two_steps.simple.basic",
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_ref,
         ),
         OrchestrationStart(
             minion="tests.assets.minions.two_steps.simple.basic",
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_ref,
             expect_success=False,
         ),
         GruShutdown(expect_success=True),
     ]
 
-    plan = ScenarioPlan(directives, pipeline_event_counts={pipeline_modpath: 1})
+    plan = ScenarioPlan(directives, pipeline_event_counts={pipeline_id: 1})
     result = await ScenarioRunner(gru, plan, per_verification_timeout=5.0).run()
 
     assert len(result.receipts) == 2
@@ -73,25 +140,26 @@ async def test_runner_concurrent_starts_capture_started_minions_and_instance_tag
     gru: Gru,
     reload_wait_for_subs_pipeline: Callable[..., None],
 ) -> None:
-    pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_ref = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
 
     directives = [
         Concurrent(
             OrchestrationStart(
                 minion="tests.assets.minions.two_steps.simple.basic",
-                pipeline=pipeline_modpath,
+                pipeline=pipeline_ref,
             ),
             OrchestrationStart(
                 minion="tests.assets.minions.two_steps.simple.resourced_2",
-                pipeline=pipeline_modpath,
+                pipeline=pipeline_ref,
             ),
         ),
         WaitWorkflowCompletions(),
         GruShutdown(expect_success=True),
     ]
 
-    plan = ScenarioPlan(directives, pipeline_event_counts={pipeline_modpath: 1})
+    plan = ScenarioPlan(directives, pipeline_event_counts={pipeline_id: 1})
     result = await ScenarioRunner(gru, plan, per_verification_timeout=5.0).run()
 
     assert len(result.receipts) == 2
@@ -103,7 +171,7 @@ async def test_runner_concurrent_starts_capture_started_minions_and_instance_tag
     assert started_names == {"simple-minion", "simple-resourced-minion-2"}
 
     assert result.spies is not None
-    pipeline_cls = result.spies.pipelines[pipeline_modpath]
+    pipeline_cls = result.spies.pipelines[pipeline_id]
     assert len(result.instance_tags.get(pipeline_cls, set())) >= 1
 
     assert any(len(result.instance_tags.get(type(m), set())) >= 1 for m in result.started_minions)
@@ -154,7 +222,7 @@ async def test_runner_tracks_durable_minion_pipeline_and_resource_ids(
 
     assert result.spies is not None
     assert result.spies.pipelines[IDENTIFIED_COUNTER_PIPELINE_ID].__name__ == "IdentifiedEmit1Pipeline"
-    assert IdentifiedResourcedMinion in result.spies.minions.values()
+    assert result.spies.minions[IDENTIFIED_COUNTER_MINION_ID] is IdentifiedResourcedMinion
     assert IdentifiedFixedResource in result.spies.resources
 
     shutdown = await gru.shutdown()
@@ -165,23 +233,24 @@ async def test_runner_tracks_durable_minion_pipeline_and_resource_ids(
 async def test_runner_wait_workflows_subset_handles_mixed_success_and_failure(
     gru: Gru,
 ) -> None:
-    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_id = pipeline_ref
 
     directives = [
         OrchestrationStart(
             minion="tests.assets.minions.two_steps.simple.basic",
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_ref,
         ),
         OrchestrationStart(
             minion="tests.assets.minions.two_steps.simple.basic",
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_ref,
             expect_success=False,
         ),
         WaitWorkflowCompletions(minion_names={"simple-minion"}),
         GruShutdown(expect_success=True),
     ]
 
-    plan = ScenarioPlan(directives, pipeline_event_counts={pipeline_modpath: 1})
+    plan = ScenarioPlan(directives, pipeline_event_counts={pipeline_id: 1})
     result = await ScenarioRunner(gru, plan, per_verification_timeout=5.0).run()
 
     assert len(result.receipts) == 2
@@ -329,10 +398,11 @@ async def test_runner_wait_workflow_step_starts_then_rejects_unknown_names(gru: 
 
 @pytest.mark.asyncio
 async def test_runner_wait_workflow_step_starts_then_rejects_unknown_steps(gru: Gru) -> None:
-    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_id = pipeline_ref
     start = OrchestrationStart(
         minion="tests.assets.minions.two_steps.simple.basic",
-        pipeline=pipeline_modpath,
+        pipeline=pipeline_ref,
     )
     directives = [
         start,
@@ -341,7 +411,7 @@ async def test_runner_wait_workflow_step_starts_then_rejects_unknown_steps(gru: 
             directive=OrchestrationStop(id=start, expect_success=True),
         ),
     ]
-    plan = ScenarioPlan(directives, pipeline_event_counts={pipeline_modpath: 1})
+    plan = ScenarioPlan(directives, pipeline_event_counts={pipeline_id: 1})
     runner = ScenarioRunner(gru, plan, per_verification_timeout=0.1)
 
     with pytest.raises(pytest.fail.Exception, match="Unknown workflow step in AfterWorkflowStepStarts.expected"):
@@ -352,18 +422,19 @@ async def test_runner_wait_workflow_step_starts_then_rejects_unknown_steps(gru: 
 async def test_runner_records_checkpoints_for_wait_workflow_completions_and_shutdown(
     gru: Gru,
 ) -> None:
-    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_id = pipeline_ref
 
     directives = [
         OrchestrationStart(
             minion="tests.assets.minions.two_steps.simple.basic",
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_ref,
         ),
         WaitWorkflowCompletions(),
         GruShutdown(expect_success=True),
     ]
 
-    plan = ScenarioPlan(directives, pipeline_event_counts={pipeline_modpath: 1})
+    plan = ScenarioPlan(directives, pipeline_event_counts={pipeline_id: 1})
     result = await ScenarioRunner(gru, plan, per_verification_timeout=5.0).run()
 
     assert [cp.kind for cp in result.checkpoints] == [
@@ -412,23 +483,25 @@ async def test_runner_records_checkpoint_for_wait_workflow_step_starts_then(gru:
 async def test_runner_restart_flow_checkpoints_separate_pre_stop_and_post_restart_windows(
     gru: Gru,
 ) -> None:
-    pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
-    minion_modpath = "tests.assets.minions.two_steps.counter.basic"
-    start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
+    pipeline_ref = "tests.assets.pipelines.emit1.counter.emit_1"
+    pipeline_id = pipeline_ref
+    minion_ref = "tests.assets.minions.two_steps.counter.basic"
+    minion_id = minion_ref
+    start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
     directives = [
         start,
         AfterWorkflowStepStarts(
             expected={"two-step-minion": {"step_1": 1}},
             directive=OrchestrationStop(id=start, expect_success=True),
         ),
-        OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath),
+        OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref),
         WaitWorkflowCompletions(),
         GruShutdown(expect_success=True),
     ]
 
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
     result = await ScenarioRunner(gru, plan, per_verification_timeout=5.0).run()
 
@@ -447,7 +520,8 @@ async def test_runner_restart_flow_checkpoints_separate_pre_stop_and_post_restar
     assert post_restart_cp.workflow_steps_mode == "at_least"
 
     class_key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
-    minion_id = "tests.assets.minions.two_steps.counter.basic"
+    minion_ref = "tests.assets.minions.two_steps.counter.basic"
+    minion_id = minion_ref
     assert pre_stop_cp.spy_call_counts is not None
     assert pre_stop_cp.spy_call_counts_by_instance is not None
     assert pre_stop_cp.workflow_step_started_ids_by_minion_id is not None
@@ -469,9 +543,11 @@ async def test_runner_restart_flow_checkpoints_separate_pre_stop_and_post_restar
 
 @pytest.mark.asyncio
 async def test_runner_restart_same_orchestration_id_after_stop_succeeds(gru: Gru) -> None:
-    pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
-    minion_modpath = "tests.assets.minions.failure.abort_step"
-    start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
+    pipeline_ref = "tests.assets.pipelines.emit1.counter.emit_1"
+    pipeline_id = pipeline_ref
+    minion_ref = "tests.assets.minions.failure.abort_step"
+    minion_id = minion_ref
+    start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
 
     directives = [
         start,
@@ -479,12 +555,12 @@ async def test_runner_restart_same_orchestration_id_after_stop_succeeds(gru: Gru
             expected={"abort-step-minion": {"step_1": 1}},
             directive=OrchestrationStop(id=start, expect_success=True),
         ),
-        OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath, expect_success=True),
+        OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref, expect_success=True),
         GruShutdown(expect_success=True),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
     await ScenarioRunner(gru, plan, per_verification_timeout=5.0).run()
 

@@ -97,18 +97,20 @@ def test_scenario_plan_flattens_nested_concurrent_and_indexes_all_children():
         assert plan.directive_index(directive) == idx
 
 
-def test_scenario_plan_raises_when_missing_pipeline_event_count_for_started_pipeline():
+def test_scenario_plan_defers_missing_pipeline_event_count_validation_to_runner():
     d1 = OrchestrationStart(minion="m1", pipeline="p1")
 
-    with pytest.raises(ValueError, match="Missing pipeline_event_counts entries"):
-        ScenarioPlan([d1], pipeline_event_counts={})
+    plan = ScenarioPlan([d1], pipeline_event_counts={})
+
+    assert plan.pipeline_event_targets == {}
 
 
-def test_scenario_plan_raises_when_pipeline_event_count_has_unused_entry():
+def test_scenario_plan_defers_unused_pipeline_event_count_validation_to_runner():
     d1 = OrchestrationStart(minion="m1", pipeline="p1")
 
-    with pytest.raises(ValueError, match="pipelines not started in directives"):
-        ScenarioPlan([d1], pipeline_event_counts={"p1": 1, "p2": 1})
+    plan = ScenarioPlan([d1], pipeline_event_counts={"p1": 1, "p2": 1})
+
+    assert plan.pipeline_event_targets == {"p1": 1, "p2": 1}
 
 
 def test_scenario_plan_raises_when_pipeline_event_count_is_negative():

@@ -1,6 +1,7 @@
-from dataclasses import dataclass
 from collections.abc import Mapping, Sequence
-from .directives import Directive, OrchestrationStart, iter_directives_flat
+from dataclasses import dataclass
+
+from .directives import Directive, iter_directives_flat
 
 
 @dataclass
@@ -36,26 +37,6 @@ class ScenarioPlan:
         for pipeline, count in self.pipeline_event_targets.items():
             if count < 0:
                 raise ValueError(f"pipeline_event_counts[{pipeline!r}] must be >= 0, got {count}.")
-
-        started_pipelines = {
-            d.pipeline_id
-            for d in self.flat_directives
-            if isinstance(d, OrchestrationStart) and d.expect_success
-        }
-
-        missing = sorted(started_pipelines - set(self.pipeline_event_targets))
-        if missing:
-            raise ValueError(
-                "Missing pipeline_event_counts entries for started pipelines: "
-                + ", ".join(missing)
-            )
-
-        unused = sorted(set(self.pipeline_event_targets) - started_pipelines)
-        if unused:
-            raise ValueError(
-                "pipeline_event_counts contains entries for pipelines not started in directives: "
-                + ", ".join(unused)
-            )
 
     def _validate_unique_directive_instances(self) -> None:
         indices_by_id: dict[int, list[int]] = {}

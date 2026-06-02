@@ -78,9 +78,9 @@ class OrchestrationStartReceipt:
 
     def __post_init__(self) -> None:
         if not self.pipeline_id:
-            object.__setattr__(self, "pipeline_id", self.pipeline_modpath)
+            raise ValueError("OrchestrationStartReceipt.pipeline_id is required.")
         if not self.minion_id:
-            object.__setattr__(self, "minion_id", self.minion_modpath)
+            raise ValueError("OrchestrationStartReceipt.minion_id is required.")
 
 
 @dataclass
@@ -133,6 +133,7 @@ class ScenarioRunner:
 
     async def run(self) -> ScenarioRunResult:
         self._discover_spies()
+        self._validate_pipeline_event_targets()
         self._spies.enable_and_reset()
         self._result = ScenarioRunResult()
         self._result.spies = self._spies
@@ -148,14 +149,15 @@ class ScenarioRunner:
             minion_modpath = d.minion_modpath
             pipeline_modpath = d.pipeline_modpath
 
-            if minion_modpath not in self._spies.minions:
-                m_cls = d.minion if isinstance(d.minion, type) else self._insp.get_minion_class(minion_modpath)
+            m_cls = d.minion if isinstance(d.minion, type) else self._insp.get_minion_class(minion_modpath)
+            minion_id = self._insp.get_minion_identity(minion_modpath, m_cls)
+            if minion_id not in self._spies.minions:
                 if not issubclass(m_cls, SpiedMinion):
                     pytest.fail(
                         "OrchestrationStart minion must resolve to a spy-enabled minion subclass; "
                         f"got {m_cls!r} for '{minion_modpath}'"
                     )
-                self._spies.minions[minion_modpath] = m_cls
+                self._spies.minions[minion_id] = m_cls
 
                 for r_cls in self._insp.get_all_resource_dependencies(m_cls):
                     if not issubclass(r_cls, SpiedResource):
@@ -184,6 +186,30 @@ class ScenarioRunner:
                             f"got {r_cls!r} while resolving '{pipeline_modpath}'"
                         )
                     self._spies.resources.add(r_cls)
+
+    def _validate_pipeline_event_targets(self) -> None:
+        expected_success_pipeline_ids: set[str] = set()
+        for d in iter_directives_flat(self._plan.directives):
+            if not isinstance(d, OrchestrationStart) or not d.expect_success:
+                continue
+            pipeline_modpath = d.pipeline_modpath
+            p_cls = d.pipeline if isinstance(d.pipeline, type) else self._insp.get_pipeline_class(pipeline_modpath)
+            expected_success_pipeline_ids.add(self._insp.get_pipeline_identity(pipeline_modpath, p_cls))
+
+        configured_pipeline_ids = set(self._plan.pipeline_event_targets)
+        missing = sorted(expected_success_pipeline_ids - configured_pipeline_ids)
+        if missing:
+            pytest.fail(
+                "Missing pipeline_event_counts entries for started pipelines: "
+                + ", ".join(missing)
+            )
+
+        unused = sorted(configured_pipeline_ids - expected_success_pipeline_ids)
+        if unused:
+            pytest.fail(
+                "pipeline_event_counts contains entries for pipelines not started in directives: "
+                + ", ".join(unused)
+            )
 
     async def _execute(self, d: Directive) -> None:
         if isinstance(d, Concurrent):
@@ -688,7 +714,7 @@ class ScenarioWaiter:
                 )
 
             for receipt in receipts:
-                m_cls = receipt.minion_cls or self._spies.minions.get(receipt.minion_modpath)
+                m_cls = receipt.minion_cls or self._spies.minions.get(receipt.minion_id)
                 if m_cls is None:
                     continue
                 workflow = tuple(m_cls._mn_workflow_spec or ())
@@ -750,7 +776,7 @@ class ScenarioWaiter:
         for receipt in receipts:
             if not receipt.success:
                 continue
-            m_cls = receipt.minion_cls or self._spies.minions.get(receipt.minion_modpath)
+            m_cls = receipt.minion_cls or self._spies.minions.get(receipt.minion_id)
             if m_cls is None:
                 continue
             expected_events = self._plan.pipeline_event_targets.get(receipt.pipeline_id)

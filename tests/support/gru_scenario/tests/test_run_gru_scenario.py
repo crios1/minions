@@ -57,14 +57,15 @@ async def test_run_gru_scenario_with_new_assets(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    pipeline_modpath = "tests.assets.pipelines.sync.counter.sync_2subs_2events"
+    pipeline_ref = "tests.assets.pipelines.sync.counter.sync_2subs_2events"
+    pipeline_id = pipeline_ref
     start_1 = OrchestrationStart(
         minion="tests.assets.minions.two_steps.counter.basic",
-        pipeline=pipeline_modpath,
+        pipeline=pipeline_ref,
     )
     start_2 = OrchestrationStart(
         minion="tests.assets.minions.two_steps.counter.resourced",
-        pipeline=pipeline_modpath,
+        pipeline=pipeline_ref,
     )
 
     directives: list[Directive] = [
@@ -84,7 +85,7 @@ async def test_run_gru_scenario_with_new_assets(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 2},
+        pipeline_event_counts={pipeline_id: 2},
     )
 
 @pytest.mark.asyncio
@@ -94,12 +95,13 @@ async def test_run_gru_scenario_helper_basic(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_id = pipeline_ref
 
     directives: list[Directive] = [
         OrchestrationStart(
             minion="tests.assets.minions.two_steps.simple.basic",
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_ref,
         ),
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         GruShutdown(expect_success=True),
@@ -111,7 +113,7 @@ async def test_run_gru_scenario_helper_basic(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 
@@ -127,7 +129,8 @@ async def test_run_gru_scenario_accepts_class_start_with_inline_minion_config(
     from tests.assets.support.minion_spied_configed import AssetMinionConfig
 
     SimpleSingleEventPipeline1.total_events = 0
-    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_id = pipeline_ref
     start = OrchestrationStart(
         minion=ConfiguredSimpleMinion,
         pipeline=SimpleSingleEventPipeline1,
@@ -154,7 +157,7 @@ async def test_run_gru_scenario_accepts_class_start_with_inline_minion_config(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 
@@ -165,11 +168,13 @@ async def test_run_gru_scenario_wait_workflow_step_starts_then_stop_happy_path(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    minion_modpath = "tests.assets.minions.failure.abort_step"
-    pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+    minion_ref = "tests.assets.minions.failure.abort_step"
+    minion_id = minion_ref
+    pipeline_ref = "tests.assets.pipelines.emit1.counter.emit_1"
+    pipeline_id = pipeline_ref
     start = OrchestrationStart(
-        minion=minion_modpath,
-        pipeline=pipeline_modpath,
+        minion=minion_ref,
+        pipeline=pipeline_ref,
     )
 
     directives: list[Directive] = [
@@ -187,7 +192,7 @@ async def test_run_gru_scenario_wait_workflow_step_starts_then_stop_happy_path(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 
@@ -198,11 +203,13 @@ async def test_run_gru_scenario_expect_runtime_persistence_after_stop(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    minion_modpath = "tests.assets.minions.failure.slow_step"
-    pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+    minion_ref = "tests.assets.minions.failure.slow_step"
+    minion_id = minion_ref
+    pipeline_ref = "tests.assets.pipelines.emit1.counter.emit_1"
+    pipeline_id = pipeline_ref
     start = OrchestrationStart(
-        minion=minion_modpath,
-        pipeline=pipeline_modpath,
+        minion=minion_ref,
+        pipeline=pipeline_ref,
     )
 
     directives: list[Directive] = [
@@ -223,7 +230,7 @@ async def test_run_gru_scenario_expect_runtime_persistence_after_stop(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 
@@ -234,13 +241,15 @@ async def test_run_gru_scenario_expect_runtime_resolutions_after_completion(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    minion_modpath = "tests.assets.minions.two_steps.simple.basic"
-    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    minion_ref = "tests.assets.minions.two_steps.simple.basic"
+    minion_id = minion_ref
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_id = pipeline_ref
 
     directives: list[Directive] = [
         OrchestrationStart(
-            minion=minion_modpath,
-            pipeline=pipeline_modpath,
+            minion=minion_ref,
+            pipeline=pipeline_ref,
         ),
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         ExpectRuntime(
@@ -259,7 +268,7 @@ async def test_run_gru_scenario_expect_runtime_resolutions_after_completion(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 
@@ -270,13 +279,15 @@ async def test_run_gru_scenario_expect_runtime_workflow_steps_exact_after_comple
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    minion_modpath = "tests.assets.minions.two_steps.simple.basic"
-    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    minion_ref = "tests.assets.minions.two_steps.simple.basic"
+    minion_id = minion_ref
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_id = pipeline_ref
 
     directives: list[Directive] = [
         OrchestrationStart(
-            minion=minion_modpath,
-            pipeline=pipeline_modpath,
+            minion=minion_ref,
+            pipeline=pipeline_ref,
         ),
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         ExpectRuntime(
@@ -294,7 +305,7 @@ async def test_run_gru_scenario_expect_runtime_workflow_steps_exact_after_comple
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 
@@ -305,12 +316,16 @@ async def test_run_gru_scenario_mixed_wait_workflow_step_modes_end_to_end(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    minion_modpath_a = "tests.assets.minions.two_steps.simple.basic"
-    minion_modpath_b = "tests.assets.minions.two_steps.simple.resourced_2"
-    pipeline_modpath_a = "tests.assets.pipelines.simple.simple_event.single_event_1"
-    pipeline_modpath_b = "tests.assets.pipelines.simple.simple_event.single_event_2"
-    start_a = OrchestrationStart(minion=minion_modpath_a, pipeline=pipeline_modpath_a)
-    start_b = OrchestrationStart(minion=minion_modpath_b, pipeline=pipeline_modpath_b)
+    minion_ref_a = "tests.assets.minions.two_steps.simple.basic"
+    minion_id_a = minion_ref_a
+    minion_ref_b = "tests.assets.minions.two_steps.simple.resourced_2"
+    minion_id_b = minion_ref_b
+    pipeline_ref_a = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_id_a = pipeline_ref_a
+    pipeline_ref_b = "tests.assets.pipelines.simple.simple_event.single_event_2"
+    pipeline_id_b = pipeline_ref_b
+    start_a = OrchestrationStart(minion=minion_ref_a, pipeline=pipeline_ref_a)
+    start_b = OrchestrationStart(minion=minion_ref_b, pipeline=pipeline_ref_b)
 
     directives: list[Directive] = [
         start_a,
@@ -343,8 +358,8 @@ async def test_run_gru_scenario_mixed_wait_workflow_step_modes_end_to_end(
         state_store,
         directives,
         pipeline_event_counts={
-            pipeline_modpath_a: 1,
-            pipeline_modpath_b: 1,
+            pipeline_id_a: 1,
+            pipeline_id_b: 1,
         },
     )
 
@@ -356,9 +371,11 @@ async def test_run_gru_scenario_expect_runtime_at_checkpoint_index(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    minion_modpath = "tests.assets.minions.failure.slow_step"
-    pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
-    start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
+    minion_ref = "tests.assets.minions.failure.slow_step"
+    minion_id = minion_ref
+    pipeline_ref = "tests.assets.pipelines.emit1.counter.emit_1"
+    pipeline_id = pipeline_ref
+    start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
 
     directives: list[Directive] = [
         start,
@@ -379,7 +396,7 @@ async def test_run_gru_scenario_expect_runtime_at_checkpoint_index(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 
@@ -390,10 +407,12 @@ async def test_run_gru_scenario_restart_same_pipeline_with_persistence_and_resol
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    minion_modpath = "tests.assets.minions.failure.slow_step"
-    pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
-    start_1 = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
-    start_2 = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
+    minion_ref = "tests.assets.minions.failure.slow_step"
+    minion_id = minion_ref
+    pipeline_ref = "tests.assets.pipelines.emit1.counter.emit_1"
+    pipeline_id = pipeline_ref
+    start_1 = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
+    start_2 = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
 
     directives: list[Directive] = [
         start_1,
@@ -427,7 +446,7 @@ async def test_run_gru_scenario_restart_same_pipeline_with_persistence_and_resol
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 
@@ -438,10 +457,12 @@ async def test_run_gru_scenario_resume_from_explicit_step_boundary_does_not_repl
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    minion_modpath = "tests.assets.minions.two_steps.counter.slow_second_step"
-    pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
-    first_start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
-    second_start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
+    minion_ref = "tests.assets.minions.two_steps.counter.slow_second_step"
+    minion_id = minion_ref
+    pipeline_ref = "tests.assets.pipelines.emit1.counter.emit_1"
+    pipeline_id = pipeline_ref
+    first_start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
+    second_start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
 
     directives: list[Directive] = [
         first_start,
@@ -475,7 +496,7 @@ async def test_run_gru_scenario_resume_from_explicit_step_boundary_does_not_repl
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 
@@ -488,10 +509,13 @@ async def test_run_gru_scenario_resume_identified_minion_without_persisted_minio
 ) -> None:
     from tests.assets.pipelines.emit1.counter.identified import IDENTIFIED_COUNTER_PIPELINE_ID
 
-    minion_modpath = "tests.assets.minions.two_steps.counter.identified_slow_second_step"
-    pipeline_modpath = "tests.assets.pipelines.emit1.counter.identified"
-    first_start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
-    second_start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
+    minion_ref = "tests.assets.minions.two_steps.counter.identified_slow_second_step"
+
+    minion_id = minion_ref
+    pipeline_ref = "tests.assets.pipelines.emit1.counter.identified"
+    pipeline_id = pipeline_ref
+    first_start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
+    second_start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
 
     directives: list[Directive] = [
         first_start,
@@ -547,10 +571,11 @@ async def test_run_gru_scenario_batches_stops_serial(
     state_store: InMemoryStateStore,
     reload_wait_for_subs_pipeline: Callable[..., None],
 ) -> None:
-    pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_ref = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
-    start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_modpath)
-    start_2 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.resourced_2", pipeline=pipeline_modpath)
+    start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_ref)
+    start_2 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.resourced_2", pipeline=pipeline_ref)
 
     directives: list[Directive] = [
         start_1,
@@ -567,7 +592,7 @@ async def test_run_gru_scenario_batches_stops_serial(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 @pytest.mark.asyncio
@@ -577,16 +602,17 @@ async def test_run_gru_scenario_duplicate_start_fails(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_id = pipeline_ref
 
     directives: list[Directive] = [
         OrchestrationStart(
             minion="tests.assets.minions.two_steps.simple.basic",
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_ref,
         ),
         OrchestrationStart(
             minion="tests.assets.minions.two_steps.simple.basic",
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_ref,
             expect_success=False,
         ),
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
@@ -599,7 +625,7 @@ async def test_run_gru_scenario_duplicate_start_fails(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 @pytest.mark.asyncio
@@ -609,13 +635,15 @@ async def test_run_gru_scenario_failed_start_does_not_require_minion_startup(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    minion_modpath = "tests.assets.minions.two_steps.simple.basic"
-    pipeline_modpath = "tests.assets.pipelines.simple.record_event"
+    minion_ref = "tests.assets.minions.two_steps.simple.basic"
+    minion_id = minion_ref
+    pipeline_ref = "tests.assets.pipelines.simple.record_event"
+    pipeline_id = pipeline_ref
 
     directives: list[Directive] = [
         OrchestrationStart(
-            minion=minion_modpath,
-            pipeline=pipeline_modpath,
+            minion=minion_ref,
+            pipeline=pipeline_ref,
             expect_success=False,
         ),
         GruShutdown(expect_success=True),
@@ -637,12 +665,13 @@ async def test_run_gru_scenario_stop_unknown_fails(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_id = pipeline_ref
 
     directives: list[Directive] = [
         OrchestrationStart(
             minion="tests.assets.minions.two_steps.simple.basic",
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_ref,
         ),
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         OrchestrationStop(id="missing-orchestration", expect_success=False),
@@ -655,7 +684,7 @@ async def test_run_gru_scenario_stop_unknown_fails(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 @pytest.mark.asyncio
@@ -666,10 +695,11 @@ async def test_run_gru_scenario_parallel_starts(
     state_store: InMemoryStateStore,
     reload_wait_for_subs_pipeline: Callable[..., None],
 ) -> None:
-    pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_ref = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
-    start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_modpath)
-    start_2 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.resourced_2", pipeline=pipeline_modpath)
+    start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_ref)
+    start_2 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.resourced_2", pipeline=pipeline_ref)
 
     directives: list[Directive] = [
         Concurrent(start_1, start_2),
@@ -685,7 +715,7 @@ async def test_run_gru_scenario_parallel_starts(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 @pytest.mark.asyncio
@@ -696,10 +726,11 @@ async def test_run_gru_scenario_wait_workflows_subset(
     state_store: InMemoryStateStore,
     reload_wait_for_subs_pipeline: Callable[..., None],
 ) -> None:
-    pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_ref = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
-    start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_modpath)
-    start_2 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.resourced_2", pipeline=pipeline_modpath)
+    start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_ref)
+    start_2 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.resourced_2", pipeline=pipeline_ref)
 
     directives: list[Directive] = [
         start_1,
@@ -716,7 +747,7 @@ async def test_run_gru_scenario_wait_workflows_subset(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 @pytest.mark.asyncio
@@ -727,13 +758,14 @@ async def test_run_gru_scenario_wait_workflows_unknown_name_fails(
     state_store: InMemoryStateStore,
     reload_wait_for_subs_pipeline: Callable[..., None],
 ) -> None:
-    pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_ref = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=1)
 
     directives: list[Directive] = [
         OrchestrationStart(
             minion="tests.assets.minions.two_steps.simple.basic",
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_ref,
         ),
         # Intentional unknown-name failure path; mode is irrelevant because wait resolves names first.
         WaitWorkflowCompletions(minion_names={"missing-minion"}),
@@ -747,7 +779,7 @@ async def test_run_gru_scenario_wait_workflows_unknown_name_fails(
             metrics,
             state_store,
             directives,
-            pipeline_event_counts={pipeline_modpath: 1},
+            pipeline_event_counts={pipeline_id: 1},
         )
 
 @pytest.mark.asyncio
@@ -758,18 +790,19 @@ async def test_run_gru_scenario_expect_runtime_exact_reports_mismatch(
     state_store: InMemoryStateStore,
     reload_wait_for_subs_pipeline: Callable[..., None],
 ) -> None:
-    pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_ref = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
 
     directives: list[Directive] = [
         Concurrent(
                 OrchestrationStart(
                     minion="tests.assets.minions.two_steps.simple.basic",
-                    pipeline=pipeline_modpath,
+                    pipeline=pipeline_ref,
                 ),
                 OrchestrationStart(
                     minion="tests.assets.minions.two_steps.simple.resourced_2",
-                    pipeline=pipeline_modpath,
+                    pipeline=pipeline_ref,
                 ),
             ),
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
@@ -792,7 +825,7 @@ async def test_run_gru_scenario_expect_runtime_exact_reports_mismatch(
             metrics,
             state_store,
             directives,
-            pipeline_event_counts={pipeline_modpath: 1},
+            pipeline_event_counts={pipeline_id: 1},
         )
 
 
@@ -807,20 +840,21 @@ async def test_run_gru_scenario_strict_wait_workflow_window_overlap_mismatch(
 ) -> None:
     cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
     cfg2 = str(tests_dir / "assets" / "config/minions/b.toml")
-    pipeline_modpath = "tests.assets.support.pipeline_overlap_window"
-    reload_pipeline_module(pipeline_modpath)
+    pipeline_ref = "tests.assets.support.pipeline_overlap_window"
+    pipeline_id = pipeline_ref
+    reload_pipeline_module(pipeline_ref)
 
     directives: list[Directive] = [
         OrchestrationStart(
             minion="tests.assets.minions.two_steps.simple.configured",
             minion_config_path=cfg1,
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_ref,
         ),
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         OrchestrationStart(
             minion="tests.assets.minions.two_steps.simple.configured",
             minion_config_path=cfg2,
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_ref,
         ),
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         GruShutdown(expect_success=True),
@@ -838,7 +872,7 @@ async def test_run_gru_scenario_strict_wait_workflow_window_overlap_mismatch(
             metrics,
             state_store,
             directives,
-            pipeline_event_counts={pipeline_modpath: 1},
+            pipeline_event_counts={pipeline_id: 1},
         )
 
 
@@ -849,8 +883,9 @@ async def test_run_gru_scenario_wait_workflows_empty_is_noop(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
-    start = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_modpath)
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_id = pipeline_ref
+    start = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_ref)
 
     directives: list[Directive] = [
         start,
@@ -867,7 +902,7 @@ async def test_run_gru_scenario_wait_workflows_empty_is_noop(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 @pytest.mark.asyncio
@@ -878,10 +913,11 @@ async def test_run_gru_scenario_parallel_mixed_directives(
     state_store: InMemoryStateStore,
     reload_wait_for_subs_pipeline: Callable[..., None],
 ) -> None:
-    pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_ref = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
-    start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_modpath)
-    start_2 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.resourced_2", pipeline=pipeline_modpath)
+    start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_ref)
+    start_2 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.resourced_2", pipeline=pipeline_ref)
 
     directives: list[Directive] = [
         Concurrent(start_1, start_2),
@@ -900,7 +936,7 @@ async def test_run_gru_scenario_parallel_mixed_directives(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 @pytest.mark.asyncio
@@ -910,12 +946,13 @@ async def test_run_gru_scenario_simple_start_wait_shutdown(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    pipeline_id = pipeline_ref
 
     directives: list[Directive] = [
         OrchestrationStart(
             minion="tests.assets.minions.two_steps.simple.basic",
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_ref,
         ),
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         GruShutdown(expect_success=True),
@@ -927,7 +964,7 @@ async def test_run_gru_scenario_simple_start_wait_shutdown(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 
@@ -940,10 +977,11 @@ async def test_dsl_exploration(
     state_store: InMemoryStateStore,
     reload_wait_for_subs_pipeline: Callable[..., None],
 ) -> None:
-    pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_ref = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
-    start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_modpath)
-    start_2 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.resourced_2", pipeline=pipeline_modpath)
+    start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_ref)
+    start_2 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.resourced_2", pipeline=pipeline_ref)
 
     directives: list[Directive] = [
         Concurrent(start_1, start_2),
@@ -959,7 +997,7 @@ async def test_dsl_exploration(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 
@@ -971,17 +1009,19 @@ async def test_run_gru_scenario_golden_regression_mixed_concurrent_wait_subset(
     state_store: InMemoryStateStore,
     reload_wait_for_subs_pipeline: Callable[..., None],
 ) -> None:
-    minion_modpath = "tests.assets.minions.two_steps.simple.basic"
-    pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
+    minion_ref = "tests.assets.minions.two_steps.simple.basic"
+    minion_id = minion_ref
+    pipeline_ref = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=1)
-    start_1 = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
+    start_1 = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
 
     directives: list[Directive] = [
         Concurrent(
             start_1,
             OrchestrationStart(
-                minion=minion_modpath,
-                pipeline=pipeline_modpath,
+                minion=minion_ref,
+                pipeline=pipeline_ref,
                 expect_success=False,
             ),
         ),
@@ -996,5 +1036,5 @@ async def test_run_gru_scenario_golden_regression_mixed_concurrent_wait_subset(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_modpath: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )

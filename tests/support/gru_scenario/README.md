@@ -33,7 +33,8 @@ This package provides a light, test-focused DSL for scripting Gru scenarios and 
   - timeout/verification failures,
   - expectation mismatches between declared directives and observed runtime behavior.
 - `ScenarioPlan(...)` raises `ValueError` for plan-construction validation errors
-  (for example missing/unused `pipeline_event_counts` entries or invalid counts).
+  (for example invalid `pipeline_event_counts` counts). Missing/unused durable
+  pipeline IDs are scenario-contract failures reported by runner verification.
 - Use `AssertionError` only for strict internal invariants in DSL internals:
   - impossible internal state that indicates a DSL implementation bug (not a scenario-authoring issue).
 - Reasoning:
@@ -79,7 +80,7 @@ await run_gru_scenario(
     metrics,
     state_store,
     directives,
-    pipeline_event_counts={pipeline_modpath: 1},
+    pipeline_event_counts={pipeline_id: 1},
 )
 ```
 
@@ -89,7 +90,10 @@ Directives fall into two broad roles:
 - Condition-setup directives express when another directive should run, so tests can deterministically create runtime states that may expose lifecycle bugs.
 
 - `OrchestrationStart(...)` starts an orchestration from a minion, pipeline, and optional minion config.
-  - `minion` and `pipeline` can be module path strings or Minion/Pipeline subclasses.
+  - `minion` and `pipeline` are component refs, matching `Gru.start_orchestration(...)`.
+  - String refs are module-path load addresses; class refs are Minion/Pipeline subclasses.
+  - Gru resolves refs to component IDs. Decorated components use their explicit `@minion_id(...)`
+    / `@pipeline_id(...)`; idless components use the module path as the fallback ID.
   - Use `minion_config_path` with module path strings.
   - Use `minion_config` with class-based starts.
 - `OrchestrationStop(id=...)` stops an orchestration by orchestration ID.
@@ -171,8 +175,8 @@ ExpectRuntime(
   - That bounded tolerance is intentionally scoped to `WaitWorkflowCompletions(workflow_steps_mode="exact")` window checks only.
 - Restart/resume (strict) example:
 ```python
-start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
-resume = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
+start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
+resume = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
 directives = [
     start,
     AfterWorkflowStepStarts(
@@ -200,20 +204,22 @@ directives = [
 ```
 
 ## Per-Run Expectations
-Provide `pipeline_event_counts` for exactly the pipelines started by successful `OrchestrationStart(...)` directives:
+Provide `pipeline_event_counts` for exactly the resolved pipeline IDs started by successful `OrchestrationStart(...)` directives:
 ```python
 await run_gru_scenario(
     ...,
-    pipeline_event_counts={pipeline_modpath: 3},
+    pipeline_event_counts={pipeline_id: 3},
 )
 ```
 Expected workflow counts are derived from `pipeline_event_counts`:
-- For each successful `OrchestrationStart`, expected workflows = `pipeline_event_counts[pipeline_modpath]`.
+- For each successful `OrchestrationStart`, expected workflows = `pipeline_event_counts[pipeline_id]`.
+- For idless pipelines, `pipeline_id` is the module-path fallback ID. For decorated pipelines,
+  it is the explicit `@pipeline_id(...)` value, even when the start ref is a module path.
 - Counts are summed per minion class.
 - These counts drive `WaitWorkflowCompletions`, workflow-step expectations, and state store save/delete totals.
 - Validation is strict:
-  - Missing counts for started pipelines fail plan creation.
-  - Unused pipeline keys in `pipeline_event_counts` fail plan creation.
+  - Missing counts for started pipeline IDs fail runner verification.
+  - Unused pipeline IDs in `pipeline_event_counts` fail runner verification.
   - Counts must be integers `>= 0`.
 
 ## Verification Tolerances

@@ -232,7 +232,7 @@ class ScenarioVerifier:
                 )
                 m_cls = receipt.minion_cls if receipt is not None else None
                 if m_cls is None and receipt is not None:
-                    m_cls = spies.minions.get(receipt.minion_modpath)
+                    m_cls = spies.minions.get(receipt.minion_id)
                 if m_cls is None:
                     continue
                 workflow = tuple(m_cls._mn_workflow_spec or ())
@@ -291,7 +291,7 @@ class ScenarioVerifier:
                             f"workflow_id={ctx.workflow_id!r}, "
                             f"expected {receipt.minion_id!r}, got {minion_id!r}."
                         )
-                    m_cls = receipt.minion_cls or spies.minions.get(receipt.minion_modpath)
+                    m_cls = receipt.minion_cls or spies.minions.get(receipt.minion_id)
                     if m_cls is None:
                         pytest.fail(
                             "Persisted context snapshot references unknown minion_id "
@@ -358,7 +358,7 @@ class ScenarioVerifier:
             if not isinstance(directive, OrchestrationStart):
                 continue
 
-            m_cls = receipt.minion_cls or spies.minions.get(receipt.minion_modpath)
+            m_cls = receipt.minion_cls or spies.minions.get(receipt.minion_id)
             if m_cls is None:
                 continue
 
@@ -427,7 +427,7 @@ class ScenarioVerifier:
                     if r.success
                     and (
                         r.minion_cls is m_cls
-                        or (r.minion_cls is None and spies.minions.get(r.minion_modpath) is m_cls)
+                        or (r.minion_cls is None and spies.minions.get(r.minion_id) is m_cls)
                     )
                 }
                 curr = cp.spy_call_counts.get(key, {})
@@ -529,7 +529,7 @@ class ScenarioVerifier:
                 if r.success
                 and (
                     r.minion_cls is m_cls
-                    or (r.minion_cls is None and spies.minions.get(r.minion_modpath) is m_cls)
+                    or (r.minion_cls is None and spies.minions.get(r.minion_id) is m_cls)
                 )
             }
             for workflow_id, events in self._merge_workflow_step_events_by_workflow_id(
