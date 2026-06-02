@@ -140,6 +140,7 @@ async def test_runner_tracks_durable_minion_pipeline_and_resource_ids(
     assert len(result.receipts) == 1
     receipt = result.receipts[0]
     assert receipt.success
+    assert receipt.minion_id == IDENTIFIED_COUNTER_MINION_ID
     assert receipt.pipeline_id == IDENTIFIED_COUNTER_PIPELINE_ID
     assert receipt.orchestration_id is not None
     assert receipt.orchestration_id in gru._minions_by_orchestration_id
@@ -512,7 +513,7 @@ async def test_runner_records_expect_runtime_checkpoint_with_persistence_snapsho
 
     expect_cps = [cp for cp in result.checkpoints if cp.kind == "expect_runtime"]
     assert len(expect_cps) == 1
-    persisted = expect_cps[0].persisted_contexts_by_modpath
+    persisted = expect_cps[0].persisted_contexts_by_minion_id
     assert persisted is not None
     assert persisted.get("tests.assets.minions.failure.slow_step", 0) >= 1
     assert expect_cps[0].spy_call_counts_by_instance is not None

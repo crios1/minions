@@ -1388,6 +1388,7 @@ def test_assert_runtime_expectations_persistence_at_latest_checkpoint():
                 "two-step-minion",
                 TwoStepMinion,
                 True,
+                minion_id="durable-two-step-minion",
             ),
         ],
         checkpoints=[
@@ -1398,8 +1399,8 @@ def test_assert_runtime_expectations_persistence_at_latest_checkpoint():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                persisted_contexts_by_modpath={
-                    "tests.assets.minions.two_steps.counter.basic": 1
+                persisted_contexts_by_minion_id={
+                    "durable-two-step-minion": 1
                 },
             ),
         ],
@@ -1435,6 +1436,7 @@ def test_assert_persisted_context_integrity_accepts_matching_snapshot():
                 TwoStepMinion,
                 True,
                 orchestration_id="ck",
+                minion_id="durable-two-step-minion",
             ),
         ],
         checkpoints=[
@@ -1445,8 +1447,8 @@ def test_assert_persisted_context_integrity_accepts_matching_snapshot():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                persisted_context_snapshots_by_modpath={
-                    "tests.assets.minions.two_steps.counter.basic": (
+                persisted_context_snapshots_by_minion_id={
+                    "durable-two-step-minion": (
                         MinionWorkflowContext(
                             orchestration_id="ck",
                             workflow_id="workflow-1",
@@ -1732,7 +1734,7 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                persisted_contexts_by_modpath={
+                persisted_contexts_by_minion_id={
                     "tests.assets.minions.two_steps.counter.basic": 3
                 },
             ),
@@ -1743,7 +1745,7 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                persisted_contexts_by_modpath={
+                persisted_contexts_by_minion_id={
                     "tests.assets.minions.two_steps.counter.basic": 99
                 },
             ),
@@ -1866,7 +1868,7 @@ def test_assert_runtime_expectations_fails_for_out_of_range_checkpoint_index():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                persisted_contexts_by_modpath={
+                persisted_contexts_by_minion_id={
                     "tests.assets.minions.two_steps.counter.basic": 1
                 },
             ),
@@ -1877,7 +1879,7 @@ def test_assert_runtime_expectations_fails_for_out_of_range_checkpoint_index():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                persisted_contexts_by_modpath={
+                persisted_contexts_by_minion_id={
                     "tests.assets.minions.two_steps.counter.basic": 1
                 },
             ),

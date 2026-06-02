@@ -74,10 +74,13 @@ class OrchestrationStartReceipt:
     success: bool
     orchestration_id: str | None = None
     pipeline_id: str = ""
+    minion_id: str = ""
 
     def __post_init__(self) -> None:
         if not self.pipeline_id:
             object.__setattr__(self, "pipeline_id", self.pipeline_modpath)
+        if not self.minion_id:
+            object.__setattr__(self, "minion_id", self.minion_modpath)
 
 
 @dataclass
@@ -107,8 +110,8 @@ class ScenarioCheckpoint:
     spy_call_counts_by_instance: dict[str, dict[int, dict[str, int]]] | None = None
     workflow_step_started_ids_by_class: dict[str, dict[str, tuple[str, ...]]] | None = None
     workflow_step_start_events_by_class: dict[str, dict[str, tuple[tuple[int, str], ...]]] | None = None
-    persisted_contexts_by_modpath: dict[str, int] | None = None
-    persisted_context_snapshots_by_modpath: dict[str, tuple[MinionWorkflowContext[Any, Any], ...]] | None = None
+    persisted_contexts_by_minion_id: dict[str, int] | None = None
+    persisted_context_snapshots_by_minion_id: dict[str, tuple[MinionWorkflowContext[Any, Any], ...]] | None = None
     metrics_counters: dict[str, list[dict[str, object]]] | None = None
 
 
@@ -248,6 +251,10 @@ class ScenarioRunner:
             directive_index=self._plan.directive_index(d),
             minion_modpath=d.minion_modpath,
             pipeline_modpath=d.pipeline_modpath,
+            minion_id=self._insp.get_minion_identity(
+                d.minion_modpath,
+                d.minion if isinstance(d.minion, type) else None,
+            ),
             pipeline_id=self._insp.get_pipeline_identity(d.pipeline_modpath),
             instance_id=None,
             resolved_name=getattr(r, "name", None),
@@ -266,17 +273,16 @@ class ScenarioRunner:
             minion_inst = self._insp.get_minion_by_orchestration_id(receipt.orchestration_id)
 
         if minion_inst is not None:
-            instance_id = getattr(minion_inst, "_mn_minion_instance_id", None)
-            resolved_name = getattr(minion_inst, "_mn_name", receipt.resolved_name)
             m_cls = type(minion_inst)
             minion_cls = m_cls if issubclass(m_cls, SpiedMinion) else None
             receipt = OrchestrationStartReceipt(
                 directive_index=receipt.directive_index,
                 minion_modpath=receipt.minion_modpath,
                 pipeline_modpath=receipt.pipeline_modpath,
+                minion_id=getattr(minion_inst, "_mn_minion_id", receipt.minion_id),
                 pipeline_id=receipt.pipeline_id,
-                instance_id=instance_id,
-                resolved_name=resolved_name,
+                instance_id=getattr(minion_inst, "_mn_minion_instance_id", None),
+                resolved_name=getattr(minion_inst, "_mn_name", receipt.resolved_name),
                 minion_cls=minion_cls,
                 success=receipt.success,
                 orchestration_id=receipt.orchestration_id,
@@ -409,7 +415,7 @@ class ScenarioRunner:
         wrapped_directive_type: str | None = None,
     ) -> None:
         result = self._require_result()
-        persisted_context_snapshots = await self._snapshot_persisted_context_snapshots_by_modpath()
+        persisted_context_snapshots = await self._snapshot_persisted_context_snapshots_by_minion_id()
         checkpoint = ScenarioCheckpoint(
             order=len(result.checkpoints),
             kind=kind,
@@ -428,10 +434,10 @@ class ScenarioRunner:
             spy_call_counts_by_instance=self._snapshot_spy_call_counts_by_instance(),
             workflow_step_started_ids_by_class=self._snapshot_workflow_step_started_ids_by_class(),
             workflow_step_start_events_by_class=self._snapshot_workflow_step_start_events_by_class(),
-            persisted_contexts_by_modpath=self._count_persisted_context_snapshots(
+            persisted_contexts_by_minion_id=self._count_persisted_context_snapshots(
                 persisted_context_snapshots,
             ),
-            persisted_context_snapshots_by_modpath=persisted_context_snapshots,
+            persisted_context_snapshots_by_minion_id=persisted_context_snapshots,
             metrics_counters=self._snapshot_metrics_counters(),
         )
         result.checkpoints.append(checkpoint)
@@ -569,7 +575,7 @@ class ScenarioRunner:
             for class_key, by_workflow in by_class_workflow.items()
         }
 
-    async def _snapshot_persisted_context_snapshots_by_modpath(
+    async def _snapshot_persisted_context_snapshots_by_minion_id(
         self,
     ) -> dict[str, tuple[MinionWorkflowContext[Any, Any], ...]] | None:
         state_store = getattr(self._gru, "_state_store", None)
@@ -583,9 +589,9 @@ class ScenarioRunner:
         receipts_by_orchestration_id = {
             r.orchestration_id: r
             for r in self._require_result().receipts
-            if r.success and r.orchestration_id and r.minion_cls is not None
+            if r.success and r.orchestration_id
         }
-        contexts_by_modpath: defaultdict[str, list[MinionWorkflowContext[Any, Any]]] = defaultdict(list)
+        contexts_by_minion_id: defaultdict[str, list[MinionWorkflowContext[Any, Any]]] = defaultdict(list)
         try:
             for stored_context in stored_contexts:
                 receipt = receipts_by_orchestration_id.get(stored_context.orchestration_id)
@@ -599,14 +605,14 @@ class ScenarioRunner:
                     )
                 else:
                     ctx = deserialize_workflow_context_blob(stored_context.context)
-                modpath = receipt.minion_modpath if receipt is not None else ""
-                contexts_by_modpath[modpath].append(ctx)
+                minion_id = receipt.minion_id if receipt is not None else ""
+                contexts_by_minion_id[minion_id].append(ctx)
         except Exception:
             return None
 
         return {
-            modpath: tuple(sorted(contexts, key=lambda ctx: ctx.workflow_id))
-            for modpath, contexts in contexts_by_modpath.items()
+            minion_id: tuple(sorted(contexts, key=lambda ctx: ctx.workflow_id))
+            for minion_id, contexts in contexts_by_minion_id.items()
         }
 
     def _count_persisted_context_snapshots(
@@ -616,8 +622,8 @@ class ScenarioRunner:
         if snapshots is None:
             return None
         counts: defaultdict[str, int] = defaultdict(int)
-        for modpath, contexts in snapshots.items():
-            counts[modpath] += len(contexts)
+        for minion_id, contexts in snapshots.items():
+            counts[minion_id] += len(contexts)
         return dict(counts)
 
     def _snapshot_metrics_counters(self) -> dict[str, list[dict[str, object]]] | None:

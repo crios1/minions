@@ -25,6 +25,15 @@ class GruIntrospector:
             pipeline_cls = self.get_pipeline_class(pipeline_modpath)
         return self._gru._get_pipeline_identity(pipeline_cls, pipeline_modpath)
 
+    def get_minion_identity(
+        self,
+        minion_modpath: str,
+        minion_cls: type[Minion[Any, Any]] | None = None,
+    ) -> str:
+        if minion_cls is None:
+            minion_cls = self.get_minion_class(minion_modpath)
+        return self._gru._get_component_identity(minion_cls, minion_modpath)
+
     def get_all_resource_dependencies(
         self,
         cls: type[Minion[Any, Any]] | type[Pipeline[Any]] | type[Resource],

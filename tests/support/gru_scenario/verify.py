@@ -212,18 +212,27 @@ class ScenarioVerifier:
         replayed: defaultdict[type[SpiedMinion[Any, Any]], defaultdict[str, int]] = defaultdict(lambda: defaultdict(int))
         seen: set[tuple[str, str]] = set()
         for checkpoint in self._result.checkpoints:
-            snapshots = checkpoint.persisted_context_snapshots_by_modpath
+            snapshots = checkpoint.persisted_context_snapshots_by_minion_id
             if not snapshots:
                 continue
-            later_successful_modpaths = {
-                r.minion_modpath
+            later_successful_minion_ids = {
+                r.minion_id
                 for r in self._result.receipts[checkpoint.receipt_count:]
                 if r.success
             }
-            for modpath, contexts in snapshots.items():
-                if modpath not in later_successful_modpaths:
+            for minion_id, contexts in snapshots.items():
+                if minion_id not in later_successful_minion_ids:
                     continue
-                m_cls = spies.minions.get(modpath)
+                receipt = next(
+                    (
+                        r for r in self._result.receipts
+                        if r.success and r.minion_id == minion_id
+                    ),
+                    None,
+                )
+                m_cls = receipt.minion_cls if receipt is not None else None
+                if m_cls is None and receipt is not None:
+                    m_cls = spies.minions.get(receipt.minion_modpath)
                 if m_cls is None:
                     continue
                 workflow = tuple(m_cls._mn_workflow_spec or ())
@@ -241,14 +250,18 @@ class ScenarioVerifier:
 
     def _count_unresolved_persisted_workflows(self, spies: SpyRegistry) -> int:
         latest_with_persistence = next(
-            (cp for cp in reversed(self._result.checkpoints) if cp.persisted_contexts_by_modpath is not None),
+            (cp for cp in reversed(self._result.checkpoints) if cp.persisted_contexts_by_minion_id is not None),
             None,
         )
-        if latest_with_persistence is None or latest_with_persistence.persisted_contexts_by_modpath is None:
+        if latest_with_persistence is None or latest_with_persistence.persisted_contexts_by_minion_id is None:
             return 0
-        persisted = latest_with_persistence.persisted_contexts_by_modpath
-        tracked_modpaths = set(spies.minions.keys())
-        return sum(count for modpath, count in persisted.items() if modpath in tracked_modpaths)
+        persisted = latest_with_persistence.persisted_contexts_by_minion_id
+        tracked_minion_ids = {
+            r.minion_id
+            for r in self._result.receipts
+            if r.success and r.minion_modpath in spies.minions
+        }
+        return sum(count for minion_id, count in persisted.items() if minion_id in tracked_minion_ids)
 
     def _assert_persisted_context_integrity(self) -> None:
         spies = self._require_spies()
@@ -259,18 +272,10 @@ class ScenarioVerifier:
         }
 
         for checkpoint in self._result.checkpoints:
-            snapshots = checkpoint.persisted_context_snapshots_by_modpath
+            snapshots = checkpoint.persisted_context_snapshots_by_minion_id
             if snapshots is None:
                 continue
-            for modpath, contexts in snapshots.items():
-                m_cls = spies.minions.get(modpath)
-                if m_cls is None:
-                    pytest.fail(
-                        "Persisted context snapshot references unknown minion modpath "
-                        f"{modpath!r} at checkpoint {checkpoint.order}."
-                    )
-                workflow_len = len(m_cls._mn_workflow_spec or ())
-                event_cls, context_cls = _get_minion_event_and_context_types(m_cls)
+            for minion_id, contexts in snapshots.items():
                 for ctx in contexts:
                     receipt = receipt_by_orchestration_id.get(ctx.orchestration_id)
                     if receipt is None:
@@ -280,6 +285,20 @@ class ScenarioVerifier:
                             f"orchestration_id={ctx.orchestration_id!r}, "
                             f"checkpoint={checkpoint.order}."
                         )
+                    if receipt.minion_id != minion_id:
+                        pytest.fail(
+                            "Persisted context snapshot minion_id mismatch: "
+                            f"workflow_id={ctx.workflow_id!r}, "
+                            f"expected {receipt.minion_id!r}, got {minion_id!r}."
+                        )
+                    m_cls = receipt.minion_cls or spies.minions.get(receipt.minion_modpath)
+                    if m_cls is None:
+                        pytest.fail(
+                            "Persisted context snapshot references unknown minion_id "
+                            f"{minion_id!r} at checkpoint {checkpoint.order}."
+                        )
+                    workflow_len = len(m_cls._mn_workflow_spec or ())
+                    event_cls, context_cls = _get_minion_event_and_context_types(m_cls)
                     if not isinstance(ctx.event, event_cls):
                         pytest.fail(
                             "Persisted context event type mismatch: "
@@ -665,16 +684,18 @@ class ScenarioVerifier:
 
             receipts = self._result.receipts[:target_checkpoint.receipt_count]
             modpaths_by_name: defaultdict[str, set[str]] = defaultdict(set)
+            minion_ids_by_name: defaultdict[str, set[str]] = defaultdict(set)
             metric_keys_by_name: defaultdict[str, set[str]] = defaultdict(set)
             for r in receipts:
                 if not r.success or not r.resolved_name:
                     continue
                 modpaths_by_name[r.resolved_name].add(r.minion_modpath)
+                minion_ids_by_name[r.resolved_name].add(r.minion_id)
                 if r.orchestration_id:
                     metric_keys_by_name[r.resolved_name].add(r.orchestration_id)
 
             if persistence:
-                persisted = target_checkpoint.persisted_contexts_by_modpath
+                persisted = target_checkpoint.persisted_contexts_by_minion_id
                 if persisted is None:
                     pytest.fail(
                         "ExpectRuntime.persistence is unsupported with this StateStore snapshot strategy."
@@ -691,8 +712,8 @@ class ScenarioVerifier:
                             f"got {minion_name!r}={expected_count!r}."
                         )
 
-                    modpaths = modpaths_by_name[minion_name]
-                    actual_count = sum(persisted.get(modpath, 0) for modpath in modpaths)
+                    minion_ids = minion_ids_by_name[minion_name]
+                    actual_count = sum(persisted.get(minion_id, 0) for minion_id in minion_ids)
                     if actual_count != expected_count:
                         pytest.fail(
                             f"ExpectRuntime.persistence mismatch for {minion_name}: "
