@@ -480,6 +480,66 @@ async def test_run_gru_scenario_resume_from_explicit_step_boundary_does_not_repl
 
 
 @pytest.mark.asyncio
+async def test_run_gru_scenario_resume_identified_minion_without_persisted_minion_metadata(
+    gru: Gru,
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> None:
+    from tests.assets.pipelines.emit1.counter.identified import IDENTIFIED_COUNTER_PIPELINE_ID
+
+    minion_modpath = "tests.assets.minions.two_steps.counter.identified_slow_second_step"
+    pipeline_modpath = "tests.assets.pipelines.emit1.counter.identified"
+    first_start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
+    second_start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
+
+    directives: list[Directive] = [
+        first_start,
+        AfterWorkflowStepStarts(
+            expected={"identified-slow-second-step-minion": {"step_2": 1}},
+            directive=OrchestrationStop(id=first_start, expect_success=True),
+        ),
+        ExpectRuntime(
+            expect=RuntimeExpectSpec(
+                persistence={"identified-slow-second-step-minion": 1},
+                workflow_steps={
+                    "identified-slow-second-step-minion": {"step_1": 1, "step_2": 1},
+                },
+                workflow_steps_mode="exact",
+            ),
+        ),
+        second_start,
+        WaitWorkflowCompletions(workflow_steps_mode="exact"),
+        ExpectRuntime(
+            expect=RuntimeExpectSpec(
+                resolutions={
+                    "identified-slow-second-step-minion": {
+                        "succeeded": 2,
+                        "failed": 0,
+                        "aborted": 0,
+                    },
+                },
+                workflow_steps={
+                    "identified-slow-second-step-minion": {"step_1": 2, "step_2": 2},
+                },
+                workflow_steps_mode="exact",
+            ),
+        ),
+        OrchestrationStop(id=second_start, expect_success=True),
+        GruShutdown(expect_success=True),
+    ]
+
+    await run_gru_scenario(
+        gru,
+        logger,
+        metrics,
+        state_store,
+        directives,
+        pipeline_event_counts={IDENTIFIED_COUNTER_PIPELINE_ID: 1},
+    )
+
+
+@pytest.mark.asyncio
 async def test_run_gru_scenario_batches_stops_serial(
     gru: Gru,
     logger: InMemoryLogger,
