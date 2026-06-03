@@ -1,20 +1,13 @@
-import asyncio
-import sys
-
+from tests.assets.support.pipeline_subscriber_ready_fixed_events import (
+    SubscriberReadyFixedEventsPipeline,
+)
 from tests.assets.user_guarantees.persisted_shapes import StructEvent
-from tests.assets.support.pipeline_spied import SpiedPipeline
 
 
-class StructPersistenceGuaranteePipeline(SpiedPipeline[StructEvent]):
-    _emitted = False
-
+class StructPersistenceGuaranteePipeline(
+    SubscriberReadyFixedEventsPipeline[StructEvent],
+):
     async def produce_event(self) -> StructEvent:
-        if self._emitted:
-            await asyncio.sleep(sys.maxsize)
-
-        await self.wait_for_subscribers()
-
-        self._emitted = True
         return StructEvent(kind="struct-event", payload_value=10)
 
 

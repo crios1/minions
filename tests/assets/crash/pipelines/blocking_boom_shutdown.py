@@ -1,9 +1,11 @@
 from tests.assets.crash.boom import boom
 from tests.assets.events.counter import CounterEvent
-from tests.assets.support.pipeline_fixed_event_count import FixedEventCountSpiedPipeline
+from tests.assets.support.pipeline_subscriber_ready_fixed_events import (
+    SubscriberReadyFixedEventsPipeline,
+)
 
 
-class BlockingBoomShutdownPipeline(FixedEventCountSpiedPipeline[CounterEvent]):
+class BlockingBoomShutdownPipeline(SubscriberReadyFixedEventsPipeline[CounterEvent]):
     total_events = 0
 
     async def produce_event(self) -> CounterEvent:

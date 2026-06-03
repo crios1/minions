@@ -2,8 +2,8 @@ import contextlib
 import importlib
 import sys
 from collections.abc import AsyncGenerator, Callable, Generator
-from typing import Any
 from pathlib import Path
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -22,12 +22,15 @@ def tests_dir() -> Path:
 @pytest.fixture
 def reload_wait_for_subs_pipeline() -> Callable[..., None]:
     def _reload(*, expected_subs: int) -> None:
-        from tests.assets.support import pipeline_wait_for_subs
-
-        importlib.reload(pipeline_wait_for_subs)
-        from tests.assets.support.pipeline_wait_for_subs import WaitForSubsPipeline
-
-        WaitForSubsPipeline.reset_gate(expected_subs=expected_subs)
+        from tests.assets.pipelines.simple.simple_event import (
+            subscriber_ready_fixed_events,
+        )
+        importlib.reload(subscriber_ready_fixed_events)
+        
+        from tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events import (
+            SimpleSubscriberReadyFixedEventsPipeline,
+        )
+        SimpleSubscriberReadyFixedEventsPipeline.reset_gate(expected_subs=expected_subs)
 
     return _reload
 

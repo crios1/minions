@@ -122,7 +122,7 @@ class TestValidUsage:
         reload_wait_for_subs_pipeline: Callable[..., None],
     ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.simple.basic"
-        pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
+        pipeline_modpath = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
         from tests.assets.minions.two_steps.simple.basic import SimpleMinion
         SimpleMinion.enable_spy()
         SimpleMinion.reset_spy()
@@ -516,7 +516,7 @@ class TestValidUsage:
         Verify pipeline and resource are shared and cleaned up after stopping all minions.
         """
         minion_modpath = "tests.assets.minions.two_steps.simple.resourced_1"
-        pipeline_modpath = "tests.assets.support.pipeline_wait_for_subs"
+        pipeline_modpath = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
         reload_wait_for_subs_pipeline(expected_subs=3)
         from tests.assets.minions.two_steps.simple.resourced_1 import SimpleResourcedMinion1
         SimpleResourcedMinion1.enable_spy()

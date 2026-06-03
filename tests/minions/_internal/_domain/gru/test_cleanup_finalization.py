@@ -12,7 +12,7 @@ from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
 
 GOOD_MINION = "tests.assets.crash.minions.good"
-GOOD_PIPELINE = "tests.assets.crash.pipelines.emit_1_then_block"
+GOOD_PIPELINE = "tests.assets.crash.pipelines.healthy_counter"
 FIXED_RESOURCE_ID = "tests.assets.resources.fixed.base.FixedResource"
 
 

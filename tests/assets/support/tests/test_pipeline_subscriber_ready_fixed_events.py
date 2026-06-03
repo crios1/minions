@@ -4,13 +4,14 @@ from typing import cast
 import pytest
 
 from minions import Minion
-
 from tests.assets.contexts.counter import CounterContext
 from tests.assets.events.record import RecordEvent
-from tests.assets.support.pipeline_spied import SpiedPipeline
+from tests.assets.support.pipeline_subscriber_ready_fixed_events import (
+    SubscriberReadyFixedEventsPipeline,
+)
 
 
-class DummyPipeline(SpiedPipeline[RecordEvent]):
+class DummyPipeline(SubscriberReadyFixedEventsPipeline[RecordEvent]):
     async def produce_event(self) -> RecordEvent:
         return RecordEvent()
 

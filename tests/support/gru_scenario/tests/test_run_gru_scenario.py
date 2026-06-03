@@ -128,7 +128,6 @@ async def test_run_gru_scenario_accepts_class_start_with_inline_minion_config(
     from tests.assets.pipelines.simple.simple_event.single_event_1 import SimpleSingleEventPipeline1
     from tests.assets.support.minion_spied_configed import AssetMinionConfig
 
-    SimpleSingleEventPipeline1.total_events = 0
     pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
     pipeline_id = pipeline_ref
     start = OrchestrationStart(
@@ -169,7 +168,6 @@ async def test_run_gru_scenario_wait_workflow_step_starts_then_stop_happy_path(
     state_store: InMemoryStateStore,
 ) -> None:
     minion_ref = "tests.assets.minions.failure.abort_step"
-    minion_id = minion_ref
     pipeline_ref = "tests.assets.pipelines.emit1.counter.emit_1"
     pipeline_id = pipeline_ref
     start = OrchestrationStart(
@@ -204,7 +202,6 @@ async def test_run_gru_scenario_expect_runtime_persistence_after_stop(
     state_store: InMemoryStateStore,
 ) -> None:
     minion_ref = "tests.assets.minions.failure.slow_step"
-    minion_id = minion_ref
     pipeline_ref = "tests.assets.pipelines.emit1.counter.emit_1"
     pipeline_id = pipeline_ref
     start = OrchestrationStart(
@@ -242,7 +239,6 @@ async def test_run_gru_scenario_expect_runtime_resolutions_after_completion(
     state_store: InMemoryStateStore,
 ) -> None:
     minion_ref = "tests.assets.minions.two_steps.simple.basic"
-    minion_id = minion_ref
     pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
     pipeline_id = pipeline_ref
 
@@ -280,7 +276,6 @@ async def test_run_gru_scenario_expect_runtime_workflow_steps_exact_after_comple
     state_store: InMemoryStateStore,
 ) -> None:
     minion_ref = "tests.assets.minions.two_steps.simple.basic"
-    minion_id = minion_ref
     pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
     pipeline_id = pipeline_ref
 
@@ -317,9 +312,7 @@ async def test_run_gru_scenario_mixed_wait_workflow_step_modes_end_to_end(
     state_store: InMemoryStateStore,
 ) -> None:
     minion_ref_a = "tests.assets.minions.two_steps.simple.basic"
-    minion_id_a = minion_ref_a
     minion_ref_b = "tests.assets.minions.two_steps.simple.resourced_2"
-    minion_id_b = minion_ref_b
     pipeline_ref_a = "tests.assets.pipelines.simple.simple_event.single_event_1"
     pipeline_id_a = pipeline_ref_a
     pipeline_ref_b = "tests.assets.pipelines.simple.simple_event.single_event_2"
@@ -372,7 +365,6 @@ async def test_run_gru_scenario_expect_runtime_at_checkpoint_index(
     state_store: InMemoryStateStore,
 ) -> None:
     minion_ref = "tests.assets.minions.failure.slow_step"
-    minion_id = minion_ref
     pipeline_ref = "tests.assets.pipelines.emit1.counter.emit_1"
     pipeline_id = pipeline_ref
     start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
@@ -408,7 +400,6 @@ async def test_run_gru_scenario_restart_same_pipeline_with_persistence_and_resol
     state_store: InMemoryStateStore,
 ) -> None:
     minion_ref = "tests.assets.minions.failure.slow_step"
-    minion_id = minion_ref
     pipeline_ref = "tests.assets.pipelines.emit1.counter.emit_1"
     pipeline_id = pipeline_ref
     start_1 = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
@@ -458,7 +449,6 @@ async def test_run_gru_scenario_resume_from_explicit_step_boundary_does_not_repl
     state_store: InMemoryStateStore,
 ) -> None:
     minion_ref = "tests.assets.minions.two_steps.counter.slow_second_step"
-    minion_id = minion_ref
     pipeline_ref = "tests.assets.pipelines.emit1.counter.emit_1"
     pipeline_id = pipeline_ref
     first_start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
@@ -511,9 +501,7 @@ async def test_run_gru_scenario_resume_identified_minion_without_persisted_minio
 
     minion_ref = "tests.assets.minions.two_steps.counter.identified_slow_second_step"
 
-    minion_id = minion_ref
     pipeline_ref = "tests.assets.pipelines.emit1.counter.identified"
-    pipeline_id = pipeline_ref
     first_start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
     second_start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
 
@@ -571,7 +559,7 @@ async def test_run_gru_scenario_batches_stops_serial(
     state_store: InMemoryStateStore,
     reload_wait_for_subs_pipeline: Callable[..., None],
 ) -> None:
-    pipeline_ref = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
     pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
     start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_ref)
@@ -636,9 +624,7 @@ async def test_run_gru_scenario_failed_start_does_not_require_minion_startup(
     state_store: InMemoryStateStore,
 ) -> None:
     minion_ref = "tests.assets.minions.two_steps.simple.basic"
-    minion_id = minion_ref
     pipeline_ref = "tests.assets.pipelines.simple.record_event"
-    pipeline_id = pipeline_ref
 
     directives: list[Directive] = [
         OrchestrationStart(
@@ -695,7 +681,7 @@ async def test_run_gru_scenario_parallel_starts(
     state_store: InMemoryStateStore,
     reload_wait_for_subs_pipeline: Callable[..., None],
 ) -> None:
-    pipeline_ref = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
     pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
     start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_ref)
@@ -726,7 +712,7 @@ async def test_run_gru_scenario_wait_workflows_subset(
     state_store: InMemoryStateStore,
     reload_wait_for_subs_pipeline: Callable[..., None],
 ) -> None:
-    pipeline_ref = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
     pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
     start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_ref)
@@ -758,7 +744,7 @@ async def test_run_gru_scenario_wait_workflows_unknown_name_fails(
     state_store: InMemoryStateStore,
     reload_wait_for_subs_pipeline: Callable[..., None],
 ) -> None:
-    pipeline_ref = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
     pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=1)
 
@@ -790,7 +776,7 @@ async def test_run_gru_scenario_expect_runtime_exact_reports_mismatch(
     state_store: InMemoryStateStore,
     reload_wait_for_subs_pipeline: Callable[..., None],
 ) -> None:
-    pipeline_ref = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
     pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
 
@@ -840,7 +826,7 @@ async def test_run_gru_scenario_strict_wait_workflow_window_overlap_mismatch(
 ) -> None:
     cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
     cfg2 = str(tests_dir / "assets" / "config/minions/b.toml")
-    pipeline_ref = "tests.assets.support.pipeline_overlap_window"
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.overlap_window"
     pipeline_id = pipeline_ref
     reload_pipeline_module(pipeline_ref)
 
@@ -913,7 +899,7 @@ async def test_run_gru_scenario_parallel_mixed_directives(
     state_store: InMemoryStateStore,
     reload_wait_for_subs_pipeline: Callable[..., None],
 ) -> None:
-    pipeline_ref = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
     pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
     start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_ref)
@@ -977,7 +963,7 @@ async def test_dsl_exploration(
     state_store: InMemoryStateStore,
     reload_wait_for_subs_pipeline: Callable[..., None],
 ) -> None:
-    pipeline_ref = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
     pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
     start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_ref)
@@ -1010,8 +996,7 @@ async def test_run_gru_scenario_golden_regression_mixed_concurrent_wait_subset(
     reload_wait_for_subs_pipeline: Callable[..., None],
 ) -> None:
     minion_ref = "tests.assets.minions.two_steps.simple.basic"
-    minion_id = minion_ref
-    pipeline_ref = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
     pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=1)
     start_1 = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)

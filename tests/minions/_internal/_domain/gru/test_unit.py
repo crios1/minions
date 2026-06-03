@@ -433,7 +433,7 @@ class TestUnit:
             state_store=NoOpStateStore(),
         ) as gru:
             result = await gru.start_orchestration(
-                "tests.assets.crash.pipelines.emit_1_then_block",
+                "tests.assets.crash.pipelines.healthy_counter",
                 "tests.assets.crash.minions.good",
             )
             assert result.success
@@ -461,7 +461,7 @@ class TestUnit:
             state_store=NoOpStateStore(),
         ) as gru:
             result = await gru.start_orchestration(
-                "tests.assets.crash.pipelines.emit_1_then_block",
+                "tests.assets.crash.pipelines.healthy_counter",
                 "tests.assets.crash.minions.good",
             )
             assert result.success
@@ -496,7 +496,7 @@ class TestUnit:
             state_store=NoOpStateStore(),
         ) as gru:
             result = await gru.start_orchestration(
-                "tests.assets.crash.pipelines.emit_1_then_block",
+                "tests.assets.crash.pipelines.healthy_counter",
                 "tests.assets.crash.minions.good",
             )
             assert result.success
@@ -533,7 +533,7 @@ class TestUnit:
             state_store=NoOpStateStore(),
         ) as gru:
             result = await gru.start_orchestration(
-                "tests.assets.crash.pipelines.emit_1_then_block",
+                "tests.assets.crash.pipelines.healthy_counter",
                 "tests.assets.crash.minions.good",
             )
             assert result.success

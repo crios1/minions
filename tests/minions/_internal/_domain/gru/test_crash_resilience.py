@@ -35,7 +35,7 @@ from tests.assets.support.state_store_inmemory import InMemoryStateStore
 
 
 GOOD_MINION = "tests.assets.crash.minions.good"
-GOOD_PIPELINE = "tests.assets.crash.pipelines.emit_1_then_block"
+GOOD_PIPELINE = "tests.assets.crash.pipelines.healthy_counter"
 
 
 def orchestration_id(minion_modpath: str, pipeline_modpath: str, config: str = "") -> str:
@@ -184,7 +184,7 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
             {
                 LABEL_ORCHESTRATION_ID: orchestration_id(
                     "tests.assets.crash.minions.boom_step",
-                    "tests.assets.crash.pipelines.emit_1_then_block",
+                    "tests.assets.crash.pipelines.healthy_counter",
                 ),
                 LABEL_MINION: "tests.assets.crash.minions.boom_step",
                 LABEL_MINION_WORKFLOW_STEP: "step_1",
@@ -197,7 +197,7 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
             {
                 LABEL_ORCHESTRATION_ID: orchestration_id(
                     "tests.assets.crash.minions.boom_step",
-                    "tests.assets.crash.pipelines.emit_1_then_block",
+                    "tests.assets.crash.pipelines.healthy_counter",
                 ),
                 LABEL_MINION: "tests.assets.crash.minions.boom_step",
                 LABEL_ERROR_TYPE: "BoomError",
@@ -265,7 +265,7 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
                 LABEL_RESOURCE_CALLER: "tests.assets.crash.minions.boom_resource_method",
                 LABEL_ORCHESTRATION_ID: orchestration_id(
                     "tests.assets.crash.minions.boom_resource_method",
-                    "tests.assets.crash.pipelines.emit_1_then_block",
+                    "tests.assets.crash.pipelines.healthy_counter",
                 ),
                 LABEL_ERROR_TYPE: "BoomError",
             },

@@ -6,9 +6,11 @@ from tests.assets.support.pipeline_subscriber_ready_fixed_events import (
 )
 
 
-class SimpleSingleEventPipeline2(SubscriberReadyFixedEventsPipeline[SimpleEvent]):
+class SimpleSubscriberReadyFixedEventsPipeline(
+    SubscriberReadyFixedEventsPipeline[SimpleEvent],
+):
     async def produce_event(self) -> SimpleEvent:
         return SimpleEvent(timestamp=time.time())
 
 
-pipeline = SimpleSingleEventPipeline2
+pipeline = SimpleSubscriberReadyFixedEventsPipeline

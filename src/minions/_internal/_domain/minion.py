@@ -383,7 +383,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             getattr(self, name) for name in cls._mn_workflow_spec
         )
 
-    # TODO: may want to centralize this to gru later
     def _mn_orchestration_log_kwargs(self) -> dict[str, str]:
         return {
             "orchestration_id": self._mn_orchestration_id,

@@ -140,7 +140,7 @@ async def test_runner_concurrent_starts_capture_started_minions_and_instance_tag
     gru: Gru,
     reload_wait_for_subs_pipeline: Callable[..., None],
 ) -> None:
-    pipeline_ref = "tests.assets.support.pipeline_wait_for_subs"
+    pipeline_ref = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
     pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
 
@@ -546,7 +546,6 @@ async def test_runner_restart_same_orchestration_id_after_stop_succeeds(gru: Gru
     pipeline_ref = "tests.assets.pipelines.emit1.counter.emit_1"
     pipeline_id = pipeline_ref
     minion_ref = "tests.assets.minions.failure.abort_step"
-    minion_id = minion_ref
     start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
 
     directives = [

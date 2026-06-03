@@ -4,7 +4,7 @@ from tests.assets.support.pipeline_subscriber_ready_fixed_events import (
 )
 
 
-class Emit1PipelineA(SubscriberReadyFixedEventsPipeline[CounterEvent]):
+class HealthyCounterPipeline(SubscriberReadyFixedEventsPipeline[CounterEvent]):
     _next_seq = 0
 
     async def produce_event(self) -> CounterEvent:
@@ -13,4 +13,4 @@ class Emit1PipelineA(SubscriberReadyFixedEventsPipeline[CounterEvent]):
         return CounterEvent(seq=seq)
 
 
-pipeline = Emit1PipelineA
+pipeline = HealthyCounterPipeline
