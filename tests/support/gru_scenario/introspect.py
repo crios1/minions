@@ -32,7 +32,7 @@ class GruIntrospector:
     ) -> str:
         if minion_cls is None:
             minion_cls = self.get_minion_class(minion_modpath)
-        return self._gru._get_component_identity(minion_cls, minion_modpath)
+        return self._gru._get_minion_identity(minion_cls, minion_modpath)
 
     def get_all_resource_dependencies(
         self,

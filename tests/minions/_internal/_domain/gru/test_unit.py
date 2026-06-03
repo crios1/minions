@@ -107,6 +107,7 @@ class TestUnit:
         assert Gru._get_component_identity(StableIdMinion, "fallback.minion") == MINION_COMPONENT_ID
         assert Gru._get_component_identity(StableIdPipeline, "fallback.pipeline") == PIPELINE_COMPONENT_ID
         assert Gru._get_component_identity(StableIdResource, "fallback.resource") == RESOURCE_COMPONENT_ID
+        assert Gru._get_minion_identity(StableIdMinion, "fallback.minion") == MINION_COMPONENT_ID
 
     def test_component_id_decorators_validate_component_kind(self) -> None:
         with pytest.raises(TypeError, match="@minion_id"):

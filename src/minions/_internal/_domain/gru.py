@@ -388,6 +388,10 @@ class Gru:
     def _get_component_identity(typ: type[Any], fallback: str) -> str:
         return get_component_id(typ) or fallback
 
+    @staticmethod
+    def _get_minion_identity(minion_cls: type[Minion[Any, Any]], minion_modpath: str) -> str:
+        return Gru._get_component_identity(minion_cls, minion_modpath)
+
     def _get_minion_class(self, minion_modpath: str) -> type[Minion[Any, Any]]:
         mod = importlib.import_module(minion_modpath)
 
@@ -1288,7 +1292,7 @@ class Gru:
 
             minion_instance_id = self._make_minion_instance_id()
             minion_identity = (
-                self._get_component_identity(minion_cls, minion_modpath)
+                self._get_minion_identity(minion_cls, minion_modpath)
                 if minion_cls is not None
                 else minion_modpath
             )
