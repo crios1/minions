@@ -103,6 +103,25 @@ class TestValidCompositionUsingNewAssets:
                 assert result.success
 
         @pytest.mark.asyncio
+        async def test_gru_accepts_file_with_single_minion_subclass(
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        ) -> None:
+            minion_modpath = "tests.assets.entrypoints.valid.single_minion_subclass"
+            pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+
+            async with gru_factory(
+                state_store=NoOpStateStore(),
+                logger=ConsoleLogger(),
+                metrics=NoOpMetrics(),
+            ) as gru:
+                result = await gru.start_orchestration(
+                    minion=minion_modpath,
+                    pipeline=pipeline_modpath,
+                )
+                assert result.success
+
+        @pytest.mark.asyncio
         async def test_gru_starts_minion_with_multiple_distinct_resource_dependencies(
             self,
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
@@ -131,11 +150,28 @@ class TestValidCompositionUsingNewAssets:
         async def test_gru_accepts_file_with_single_pipeline_class(
             self,
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            reload_pipeline_module: Callable[[str], None],
         ) -> None:
             minion_modpath = "tests.assets.minions.two_steps.counter.basic"
             pipeline_modpath = "tests.assets.pipelines.entrypoint.counter.single_class"
-            reload_pipeline_module(pipeline_modpath)
+
+            async with gru_factory(
+                state_store=NoOpStateStore(),
+                logger=ConsoleLogger(),
+                metrics=NoOpMetrics(),
+            ) as gru:
+                result = await gru.start_orchestration(
+                    minion=minion_modpath,
+                    pipeline=pipeline_modpath,
+                )
+                assert result.success
+
+        @pytest.mark.asyncio
+        async def test_gru_accepts_file_with_single_pipeline_subclass(
+            self,
+            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        ) -> None:
+            minion_modpath = "tests.assets.minions.two_steps.counter.basic"
+            pipeline_modpath = "tests.assets.entrypoints.valid.single_pipeline_subclass"
 
             async with gru_factory(
                 state_store=NoOpStateStore(),

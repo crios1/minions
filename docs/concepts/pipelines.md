@@ -14,7 +14,6 @@ class HeartbeatPipeline(Pipeline[Heartbeat]):
         await asyncio.sleep(1)
         return Heartbeat(timestamp=time.time())
 
-pipeline = HeartbeatPipeline  # module-level export helps Gru resolve it
 ```
 
 Guidelines from the runtime:
@@ -23,7 +22,8 @@ Guidelines from the runtime:
 - Use string-key map types for event dictionaries: `dict[str, V]` and `Mapping[str, V]` are accepted when `V` is serializable. Bare `dict` is useful for prototypes, but explicit event schemas are preferred for durable systems.
 - Implement `produce_event`, an infinite (or very long-lived) async producer.
 - Optionally implement `startup`, `run`, and `shutdown` hooks inherited from `AsyncService`.
-- Expose a module-level `pipeline` variable or a single `Pipeline` subclass so Gru can resolve it from the module path you pass to `start_orchestration`.
+- Define a single `Pipeline` subclass in the module so Gru can resolve it from the module path you pass to `start_orchestration`.
+- If a module contains multiple local pipeline classes, set a module-level `pipeline` variable to identify the entrypoint class.
 
 ## Resources and fanout
 

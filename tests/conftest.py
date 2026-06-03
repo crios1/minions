@@ -35,22 +35,6 @@ def reload_wait_for_subs_pipeline() -> Callable[..., None]:
     return _reload
 
 
-@pytest.fixture
-def reload_pipeline_module() -> Callable[[str], None]:
-    def _reload(module_name: str) -> None:
-        mod = importlib.import_module(module_name)
-        pipeline_cls = getattr(mod, "pipeline", None)
-        if pipeline_cls is None:
-            return
-        if hasattr(pipeline_cls, "reset_gate"):
-            pipeline_cls.reset_gate()
-            return
-        if hasattr(pipeline_cls, "_emitted"):
-            pipeline_cls._emitted = False
-
-    return _reload
-
-
 @pytest.fixture(autouse=True)
 def scrub_asset_modules() -> Generator[None, None, None]:
     "enables non-leaky reuse of assets across tests"

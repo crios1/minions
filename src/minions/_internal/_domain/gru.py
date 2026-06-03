@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from collections import defaultdict, deque
 from dataclasses import asdict
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Iterable, TypeGuard, cast, get_type_hints, overload
 
 from .minion import Minion, WorkflowPersistenceFailurePolicy
@@ -389,6 +390,18 @@ class Gru:
         return get_component_id(typ) or fallback
 
     @staticmethod
+    def _get_local_subclasses(mod: ModuleType, base_cls: type[Any]) -> list[type[Any]]:
+        return [
+            obj for obj in vars(mod).values()
+            if (
+                isinstance(obj, type)
+                and issubclass(obj, base_cls)
+                and obj is not base_cls
+                and obj.__module__ == mod.__name__
+            )
+        ]
+
+    @staticmethod
     def _get_minion_identity(minion_cls: type[Minion[Any, Any]], minion_modpath: str) -> str:
         return Gru._get_component_identity(minion_cls, minion_modpath)
 
@@ -404,8 +417,8 @@ class Gru:
         if minion_attr is None:
             
             minion_classes: list[type[Minion[Any, Any]]] = [
-                obj for obj in vars(mod).values()
-                if is_minion_class(obj) and obj is not Minion
+                obj for obj in self._get_local_subclasses(mod, Minion)
+                if is_minion_class(obj)
             ]
 
             if len(minion_classes) == 1:
@@ -712,8 +725,8 @@ class Gru:
         if pipeline_attr is None:
 
             pipeline_classes: list[type[Pipeline[Any]]] = [
-                obj for obj in vars(mod).values()
-                if is_pipeline_class(obj) and obj is not Pipeline
+                obj for obj in self._get_local_subclasses(mod, Pipeline)
+                if is_pipeline_class(obj)
             ]
 
             if len(pipeline_classes) == 1:

@@ -100,8 +100,8 @@ async def main():
     gru = await Gru.create()
 
     await gru.start_orchestration(
-        "my_app.minions",   # module containing a Minion subclass or `minion` variable
-        "my_app.pipelines", # module containing a Pipeline subclass or `pipeline` variable
+        "my_app.minions",   # module containing one local Minion subclass
+        "my_app.pipelines", # module containing one local Pipeline subclass
     )
 
     shell = GruShell(gru)

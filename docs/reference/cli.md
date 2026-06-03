@@ -35,9 +35,8 @@ Current commands:
   - `minions stamp all PATH [...]`
   - `minions doctor ids PATH [...]`
   - `minions tune sqlite --recommend-config`
-- Module paths passed to `start` follow Python import semantics (e.g., `my_app.minions`). Each module must expose either:
-  - a single `Minion`/`Pipeline` subclass, or
-  - a module-level variable named `minion`/`pipeline` pointing to the desired class.
+- Module paths passed to `start` follow Python import semantics (e.g., `my_app.minions`). The recommended shape is one `Minion` or `Pipeline` subclass defined in each entrypoint module.
+- If a module contains multiple local component classes, expose a module-level variable named `minion` or `pipeline` pointing to the desired entrypoint class.
 
 ## SQLite tuning
 

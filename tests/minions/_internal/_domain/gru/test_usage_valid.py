@@ -153,11 +153,7 @@ class TestValidUsage:
     async def test_gru_start_stop_orchestration_from_classes(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        reload_pipeline_module: Callable[[str], None],
     ) -> None:
-        pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
-        reload_pipeline_module(pipeline_modpath)
-
         from tests.assets.minions.two_steps.counter.basic import TwoStepMinion
         from tests.assets.pipelines.emit1.counter.emit_1 import Emit1Pipeline
 
@@ -640,12 +636,8 @@ class TestValidUsage:
     async def test_gru_loads_inline_minion_config_from_classes(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        reload_pipeline_module: Callable[[str], None],
         inline_config_kind: str,
     ) -> None:
-        pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
-        reload_pipeline_module(pipeline_modpath)
-
         from tests.assets.minions.two_steps.counter.inline_config import (
             InlineConfigMinion,
             InlineDataclassConfig,
@@ -1182,11 +1174,9 @@ class TestValidUsageUsingNewAssetsDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-        reload_pipeline_module: Callable[[str], None],
     ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.counter.resourced"
         pipeline_modpath = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
-        reload_pipeline_module(pipeline_modpath)
         start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
 
         directives: list[Directive] = [

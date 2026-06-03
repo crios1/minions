@@ -822,13 +822,11 @@ async def test_run_gru_scenario_strict_wait_workflow_window_overlap_mismatch(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-    reload_pipeline_module: Callable[[str], None],
 ) -> None:
     cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
     cfg2 = str(tests_dir / "assets" / "config/minions/b.toml")
     pipeline_ref = "tests.assets.pipelines.simple.simple_event.overlap_window"
     pipeline_id = pipeline_ref
-    reload_pipeline_module(pipeline_ref)
 
     directives: list[Directive] = [
         OrchestrationStart(

@@ -4,8 +4,8 @@ A task-focused checklist to launch a minion with Gru.
 
 ## 1) Create modules
 
-- `pipelines.py` with a `Pipeline[T_Event]` subclass and module-level `pipeline = YourPipeline`.
-- `minions.py` with a `Minion[T_Event, T_Ctx]` subclass and optional `minion = YourMinion`.
+- `pipelines.py` with one `Pipeline[T_Event]` subclass.
+- `minions.py` with one `Minion[T_Event, T_Ctx]` subclass.
 - `resources.py` for any shared dependencies declared via type hints on your pipeline/minion.
 
 ## 2) Add a config model and loader
@@ -42,8 +42,8 @@ from minions import Gru, GruShell
 async def main():
     gru = await Gru.create()
     await gru.start_orchestration(
-        "my_app.minions",   # module containing your Minion subclass or `minion`
-        "my_app.pipelines", # module containing your Pipeline subclass or `pipeline`
+        "my_app.minions",   # module containing one local Minion subclass
+        "my_app.pipelines", # module containing one local Pipeline subclass
         minion_config_path="config/print.json",
     )
 
