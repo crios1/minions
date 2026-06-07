@@ -8,7 +8,6 @@ from tests.assets.support.minion_spied import SpiedMinion
 
 
 class SlowSecondStepMinion(SpiedMinion[CounterEvent, CounterContext]):
-    name = "slow-second-step-minion"
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)

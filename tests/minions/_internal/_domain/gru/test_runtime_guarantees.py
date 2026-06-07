@@ -46,7 +46,8 @@ async def test_gru_does_not_replay_same_workflow_id_during_startup(
                 log.kwargs["workflow_id"]
                 for log in logger.logs
                 if log.msg == "Workflow Step started"
-                and log.kwargs.get("minion_name") == "startup-replay-race-minion"
+                and log.kwargs.get("minion_id")
+                == "tests.assets.minions.race_cases.duplicate_workflow_replay"
                 and log.kwargs.get("step_name") == "step_1"
             ]
 

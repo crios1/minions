@@ -24,10 +24,14 @@ def test_iter_directives_flattens_concurrent():
     assert list(iter_directives_flat(directives)) == [d1a, d1b, d2, d3a, d3b, d4]
 
 
-def test_wait_workflow_completions_accepts_minion_names_and_mode():
-    directive = WaitWorkflowCompletions(minion_names={"m1"}, workflow_steps_mode="exact")
+def test_wait_workflow_completions_accepts_orchestrations_and_mode():
+    start = OrchestrationStart(minion="m1", pipeline="p1")
+    directive = WaitWorkflowCompletions(
+        orchestrations=(start,),
+        workflow_steps_mode="exact",
+    )
     assert isinstance(directive, WaitWorkflowCompletions)
-    assert directive.minion_names == {"m1"}
+    assert directive.orchestrations == (start,)
     assert directive.workflow_steps_mode == "exact"
 
 
@@ -53,10 +57,32 @@ def test_orchestration_start_accepts_class_inputs_and_inline_config():
     }
 
 
+def test_orchestration_starts_use_identity_with_unhashable_inline_configs():
+    start_a = OrchestrationStart(
+        minion="m1",
+        pipeline="p1",
+        minion_config={"values": []},
+    )
+    start_b = OrchestrationStart(
+        minion="m1",
+        pipeline="p1",
+        minion_config={"values": []},
+    )
+
+    workflow_steps = {
+        start_a: {"step_1": 1},
+        start_b: {"step_1": 2},
+    }
+
+    assert start_a != start_b
+    assert workflow_steps[start_a] == {"step_1": 1}
+    assert workflow_steps[start_b] == {"step_1": 2}
+
+
 def test_iter_directives_flattens_wait_workflow_step_starts_then_wrapped_directive():
     d1 = OrchestrationStart(minion="m1", pipeline="p1")
     d2 = OrchestrationStop(id=d1, expect_success=True)
-    wrapped = AfterWorkflowStepStarts(expected={"m1": {"step_2": 1}}, directive=d2)
+    wrapped = AfterWorkflowStepStarts(expected={d1: {"step_2": 1}}, directive=d2)
     d3 = GruShutdown()
 
     directives = [d1, wrapped, d3]

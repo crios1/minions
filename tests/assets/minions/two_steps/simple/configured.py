@@ -1,12 +1,10 @@
 from minions import minion_step
-
 from tests.assets.contexts.simple import SimpleContext
 from tests.assets.events.simple import SimpleEvent
 from tests.assets.support.minion_spied_configed import ConfiguredSpiedMinion
 
 
 class ConfiguredSimpleMinion(ConfiguredSpiedMinion[SimpleEvent, SimpleContext]):
-    name = "configured-simple-minion"
 
     @minion_step
     async def step_1(self) -> None:

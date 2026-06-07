@@ -58,9 +58,8 @@ class GruShell(cmd.Cmd):
     def _to_argv(self, line: str) -> list[str]:
         return shlex.split(line)
 
-    def _get_minion_ids_and_names(self) -> list[str]:
-        return [i for i in self._gru._minions_by_instance_id] \
-        + [n for n in self._gru._minions_by_name]
+    def _get_orchestration_ids(self) -> list[str]:
+        return list(self._gru._minions_by_orchestration_id)
 
     def _submit(self, coro) -> cf.Future:
         if self._loop.is_running():
@@ -202,7 +201,7 @@ class GruShell(cmd.Cmd):
         print(f"stop queued for {len(ids)}")
 
     def complete_stop(self, text: str, line: str, begidx: int, endidx: int):
-        return self._get_minion_ids_and_names()
+        return self._get_orchestration_ids()
 
     # -------- status --------
 

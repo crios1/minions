@@ -134,6 +134,30 @@ def test_scenario_plan_raises_when_reusing_same_directive_instance():
         ScenarioPlan([Concurrent(shared, shared)], pipeline_event_counts={"p1": 1})
 
 
+def test_scenario_plan_rejects_wait_reference_outside_plan():
+    start = OrchestrationStart(minion="m1", pipeline="p1")
+    wait = WaitWorkflowCompletions(orchestrations=(start,))
+
+    with pytest.raises(ValueError, match="outside this ScenarioPlan"):
+        ScenarioPlan([wait], pipeline_event_counts={})
+
+
+def test_scenario_plan_rejects_wait_reference_to_future_start():
+    start = OrchestrationStart(minion="m1", pipeline="p1")
+    wait = WaitWorkflowCompletions(orchestrations=(start,))
+
+    with pytest.raises(ValueError, match="precede it"):
+        ScenarioPlan([wait, start], pipeline_event_counts={"p1": 1})
+
+
+def test_scenario_plan_rejects_duplicate_wait_references():
+    start = OrchestrationStart(minion="m1", pipeline="p1")
+    wait = WaitWorkflowCompletions(orchestrations=(start, start))
+
+    with pytest.raises(ValueError, match="duplicate directive references"):
+        ScenarioPlan([start, wait], pipeline_event_counts={"p1": 1})
+
+
 def test_scenario_plan_copies_directives_input_list():
     start = OrchestrationStart(minion="m1", pipeline="p1")
     directives: list[Directive] = [start, OrchestrationStop(id=start, expect_success=True)]

@@ -14,15 +14,7 @@ class Directive:
     pass
 
 
-@dataclass(frozen=True)
-class RuntimeExpectSpec:
-    persistence: dict[str, int] | None = None
-    resolutions: dict[str, dict[str, int]] | None = None
-    workflow_steps: dict[str, dict[str, int]] | None = None
-    workflow_steps_mode: str = "at_least"
-
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class OrchestrationStart(Directive):
     minion: str | type[Minion[Any, Any]]
     pipeline: str | type[Pipeline[Any]]
@@ -46,7 +38,7 @@ class OrchestrationStart(Directive):
         return self.pipeline.__module__
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class OrchestrationStop(Directive):
     id: str | OrchestrationStart
     expect_success: bool
@@ -55,7 +47,7 @@ class OrchestrationStop(Directive):
         return {k: v for k, v in self.__dict__.items() if k in _ORCHESTRATION_STOP_PARAMS}
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class Concurrent(Directive):
     directives: tuple[Directive, ...]
 
@@ -63,25 +55,33 @@ class Concurrent(Directive):
         object.__setattr__(self, "directives", directives)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class WaitWorkflowCompletions(Directive):
-    minion_names: set[str] | None = None
+    orchestrations: tuple[OrchestrationStart, ...] | None = None
     workflow_steps_mode: str = "at_least"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class AfterWorkflowStepStarts(Directive):
-    expected: dict[str, dict[str, int]]
+    expected: dict[OrchestrationStart, dict[str, int]]
     directive: Directive
 
 
 @dataclass(frozen=True)
+class RuntimeExpectSpec:
+    persistence: dict[OrchestrationStart, int] | None = None
+    resolutions: dict[OrchestrationStart, dict[str, int]] | None = None
+    workflow_steps: dict[OrchestrationStart, dict[str, int]] | None = None
+    workflow_steps_mode: str = "at_least"
+
+
+@dataclass(frozen=True, eq=False)
 class ExpectRuntime(Directive):
     at: str | int = "latest"
     expect: RuntimeExpectSpec = field(default_factory=RuntimeExpectSpec)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class GruShutdown(Directive):
     expect_success: bool = True
 
@@ -95,4 +95,3 @@ def iter_directives_flat(directives: Iterable["Directive"]) -> Iterator["Directi
             yield from iter_directives_flat((d.directive,))
             continue
         yield d
-

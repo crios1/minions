@@ -1,13 +1,11 @@
 from minions import minion_step
-
-from tests.assets.support.minion_spied import SpiedMinion
 from tests.assets.contexts.simple import SimpleContext
 from tests.assets.events.simple import SimpleEvent
 from tests.assets.resources.simple.resource_3 import SimpleResource3
+from tests.assets.support.minion_spied import SpiedMinion
 
 
 class SimpleResourcedMinion3(SpiedMinion[SimpleEvent, SimpleContext]):
-    name = "simple-resourced-minion-3"
     simple_resource: SimpleResource3
 
     @minion_step

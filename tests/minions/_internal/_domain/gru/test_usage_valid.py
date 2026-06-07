@@ -138,7 +138,6 @@ class TestValidUsage:
             )
 
             assert result.success
-            assert result.name == "simple-minion"
             assert result.orchestration_id in gru._minions_by_orchestration_id
             assert gru._minions_by_orchestration_id[result.orchestration_id]._mn_minion_instance_id in gru._minion_tasks
 
@@ -168,7 +167,6 @@ class TestValidUsage:
             )
 
             assert start_result.success
-            assert start_result.name == "two-step-minion"
             assert start_result.orchestration_id in gru._minions_by_orchestration_id
             assert (
                 gru._minions_by_orchestration_id[start_result.orchestration_id]
@@ -192,8 +190,6 @@ class TestValidUsage:
 
         @minion_id(MINION_COMPONENT_ID)
         class LifecycleMinion(Minion[SimpleEvent, SimpleContext]):
-            name = "attached-id-lifecycle-minion"
-
             @minion_step
             async def step_1(self) -> None:
                 self.context.step1 = "step1"
@@ -266,7 +262,6 @@ class TestValidUsage:
                     "    name: str",
                     f"@minion_id({MINION_COMPONENT_ID!r})",
                     "class DurableMinion(Minion[SimpleEvent, SimpleContext]):",
-                    "    name = 'attached-id-config-lifecycle-minion'",
                     "    config: DurableConfig",
                     "    async def load_config(self, config_path: str) -> DurableConfig:",
                     "        parsed = tomllib.loads(Path(config_path).read_text())",
@@ -358,7 +353,6 @@ class TestValidUsage:
                     "    name: str",
                     f"@minion_id({MINION_COMPONENT_ID!r})",
                     "class MovedMinion(Minion[SimpleEvent, SimpleContext]):",
-                    "    name = 'moved-resume-minion'",
                     "    config: MovedConfig",
                     "    async def load_config(self, config_path: str) -> MovedConfig:",
                     "        parsed = tomllib.loads(Path(config_path).read_text())",
@@ -586,7 +580,6 @@ class TestValidUsage:
             )
 
             assert result.success
-            assert result.name == "simple-minion"
             assert result.orchestration_id in gru._minions_by_orchestration_id
             assert gru._minions_by_orchestration_id[result.orchestration_id]._mn_minion_instance_id in gru._minion_tasks
 
@@ -702,17 +695,15 @@ class TestValidUsage:
 class TestValidUsageDSL:
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        ("minion_modpath", "pipeline_modpath", "minion_name"),
+        ("minion_modpath", "pipeline_modpath"),
         [
             (
                 "tests.assets.minions.user_guarantees.persisted_dataclass",
                 "tests.assets.pipelines.user_guarantees.persisted_dataclass",
-                "dataclass-persistence-guarantee-minion",
             ),
             (
                 "tests.assets.minions.user_guarantees.persisted_msgspec",
                 "tests.assets.pipelines.user_guarantees.persisted_msgspec",
-                "struct-persistence-guarantee-minion",
             ),
         ],
     )
@@ -724,20 +715,19 @@ class TestValidUsageDSL:
         state_store: InMemoryStateStore,
         minion_modpath: str,
         pipeline_modpath: str,
-        minion_name: str,
     ) -> None:
         start_1 = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
         start_2 = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
         directives: list[Directive] = [
             start_1,
             AfterWorkflowStepStarts(
-                expected={minion_name: {"step_1": 1}},
+                expected={start_1: {"step_1": 1}},
                 directive=OrchestrationStop(id=start_1, expect_success=True),
             ),
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
-                    persistence={minion_name: 1},
-                    workflow_steps={minion_name: {"step_1": 1}},
+                    persistence={start_1: 1},
+                    workflow_steps={start_1: {"step_1": 1}},
                     workflow_steps_mode="exact",
                 ),
             ),
@@ -745,10 +735,8 @@ class TestValidUsageDSL:
             WaitWorkflowCompletions(),
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
-                    resolutions={
-                        minion_name: {"succeeded": 2, "failed": 0, "aborted": 0},
-                    },
-                    workflow_steps={minion_name: {"step_1": 2}},
+                    resolutions={start_2: {"succeeded": 2, "failed": 0, "aborted": 0}},
+                    workflow_steps={start_2: {"step_1": 2}},
                     workflow_steps_mode="exact",
                 ),
             ),
@@ -785,7 +773,11 @@ class TestValidUsageDSL:
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
-                        "two-step-minion": {"succeeded": 1, "failed": 0, "aborted": 0},
+                        start: {
+                            "succeeded": 1,
+                            "failed": 0,
+                            "aborted": 0
+                        },
                     }
                 ),
             ),
@@ -834,9 +826,21 @@ class TestValidUsageDSL:
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
-                        "two-step-resourced-minion": {"succeeded": 1, "failed": 0, "aborted": 0},
-                        "two-step-resourced-minion-b": {"succeeded": 1, "failed": 0, "aborted": 0},
-                        "two-step-resourced-minion-c": {"succeeded": 1, "failed": 0, "aborted": 0},
+                        start_1: {
+                            "succeeded": 1,
+                            "failed": 0,
+                            "aborted": 0
+                        },
+                        start_2: {
+                            "succeeded": 1,
+                            "failed": 0,
+                            "aborted": 0
+                        },
+                        start_3: {
+                            "succeeded": 1,
+                            "failed": 0,
+                            "aborted": 0
+                        },
                     }
                 ),
             ),
@@ -889,9 +893,21 @@ class TestValidUsageDSL:
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
-                        "two-step-resourced-minion": {"succeeded": 1, "failed": 0, "aborted": 0},
-                        "two-step-resourced-shared-minion-b": {"succeeded": 1, "failed": 0, "aborted": 0},
-                        "two-step-resourced-shared-minion-c": {"succeeded": 1, "failed": 0, "aborted": 0},
+                        start_1: {
+                            "succeeded": 1,
+                            "failed": 0,
+                            "aborted": 0
+                        },
+                        start_2: {
+                            "succeeded": 1,
+                            "failed": 0,
+                            "aborted": 0
+                        },
+                        start_3: {
+                            "succeeded": 1,
+                            "failed": 0,
+                            "aborted": 0
+                        },
                     }
                 ),
             ),
@@ -930,7 +946,11 @@ class TestValidUsageDSL:
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
-                        "two-step-resourced-minion": {"succeeded": 1, "failed": 0, "aborted": 0},
+                        start: {
+                            "succeeded": 1,
+                            "failed": 0,
+                            "aborted": 0
+                        },
                     }
                 ),
             ),
@@ -982,17 +1002,22 @@ class TestValidUsageDSL:
         state_store: InMemoryStateStore,
     ) -> None:
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+        start = OrchestrationStart(
+            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline=pipeline_modpath,
+        )
 
         directives: list[Directive] = [
-            OrchestrationStart(
-                minion="tests.assets.minions.two_steps.counter.basic",
-                pipeline=pipeline_modpath,
-            ),
+            start,
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
-                        "two-step-minion": {"succeeded": 1, "failed": 0, "aborted": 0},
+                        start: {
+                            "succeeded": 1,
+                            "failed": 0,
+                            "aborted": 0
+                        },
                     }
                 ),
             ),
@@ -1042,7 +1067,11 @@ class TestValidUsageUsingNewAssetsDSL:
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
-                        "two-step-minion": {"succeeded": 1, "failed": 0, "aborted": 0},
+                        start: {
+                            "succeeded": 1,
+                            "failed": 0,
+                            "aborted": 0
+                        },
                     }
                 ),
             ),
@@ -1069,16 +1098,18 @@ class TestValidUsageUsingNewAssetsDSL:
     ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.counter.basic"
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+        start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
         directives: list[Directive] = [
-            OrchestrationStart(
-                minion=minion_modpath,
-                pipeline=pipeline_modpath,
-            ),
+            start,
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
-                        "two-step-minion": {"succeeded": 1, "failed": 0, "aborted": 0},
+                        start: {
+                            "succeeded": 1,
+                            "failed": 0,
+                            "aborted": 0
+                        },
                     }
                 ),
             ),

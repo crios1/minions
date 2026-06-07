@@ -9,7 +9,6 @@ IDENTIFIED_COUNTER_MINION_ID = "32345678-1234-5678-9234-567812345678"
 
 @minion_id(IDENTIFIED_COUNTER_MINION_ID)
 class IdentifiedResourcedMinion(SpiedMinion[CounterEvent, CounterContext]):
-    name = "identified-resourced-minion"
     fixed_resource: IdentifiedFixedResource
 
     @minion_step

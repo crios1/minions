@@ -112,7 +112,6 @@ def test_compute_minion_expectations_accumulates_starts_from_successful_receipts
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-1",
-                resolved_name="n1",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -124,7 +123,6 @@ def test_compute_minion_expectations_accumulates_starts_from_successful_receipts
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-2",
-                resolved_name="n2",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -162,7 +160,6 @@ def test_build_expected_call_counts_state_store_formula_for_mixed_success_and_fa
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-ok",
-                resolved_name="ok",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -174,7 +171,6 @@ def test_build_expected_call_counts_state_store_formula_for_mixed_success_and_fa
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-fail",
-                resolved_name="fail",
                 minion_cls=TwoStepMinion,
                 success=False,
                 orchestration_id=None,
@@ -225,7 +221,6 @@ def test_build_expected_call_counts_scales_minion_init_with_successful_starts():
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-a",
-                resolved_name="a",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -237,7 +232,6 @@ def test_build_expected_call_counts_scales_minion_init_with_successful_starts():
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-b",
-                resolved_name="b",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -284,7 +278,6 @@ async def test_build_expected_call_counts_does_not_require_get_all_for_overridde
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-ok",
-                resolved_name="ok",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -345,7 +338,6 @@ def test_assert_state_store_read_call_bounds_rejects_excess_get_all_calls(
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-ok",
-                resolved_name="ok",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -388,7 +380,6 @@ def test_assert_minion_fanout_delivery_proves_pipeline_event_delivery_to_steps(
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-ok",
-                resolved_name="ok",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -434,7 +425,6 @@ def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnost
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-a",
-                resolved_name="a",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -446,7 +436,6 @@ def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnost
                 minion_modpath="tests.assets.minions.two_steps.counter.resourced",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-b",
-                resolved_name="b",
                 minion_cls=TwoStepResourcedMinion,
                 success=True,
                 orchestration_id=None,
@@ -494,7 +483,6 @@ def test_assert_minion_fanout_delivery_allows_plus_one_per_start_tolerance(
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-ok",
-                resolved_name="ok",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -536,7 +524,6 @@ def test_assert_minion_fanout_delivery_rejects_overage_beyond_plus_one_per_start
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-ok",
-                resolved_name="ok",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -583,7 +570,6 @@ def test_assert_pipeline_events_allows_restarted_pipeline_produce_event_totals(
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-a",
-                resolved_name="a",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -595,7 +581,6 @@ def test_assert_pipeline_events_allows_restarted_pipeline_produce_event_totals(
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-b",
-                resolved_name="b",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -637,7 +622,6 @@ def test_assert_workflow_step_start_events_are_monotonic_allows_resume_replay_at
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-ok",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -693,7 +677,6 @@ def test_assert_workflow_step_start_events_are_monotonic_rejects_regression():
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-ok",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -750,7 +733,6 @@ def test_assert_workflow_step_start_events_are_monotonic_rejects_step_name_index
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-ok",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -805,7 +787,6 @@ def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_ch
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-ok",
-                resolved_name="ok",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id="instance-1",
@@ -821,7 +802,7 @@ def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_ch
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                minion_names=(),
+                orchestration_directive_indexes=(),
                 spy_call_counts={
                     "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
                         "step_1": 0,
@@ -836,7 +817,7 @@ def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_ch
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                minion_names=None,
+                orchestration_directive_indexes=None,
                 spy_call_counts={
                     "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
                         "step_1": 1,
@@ -878,7 +859,6 @@ def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phas
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-pre-stop",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id="instance-1",
@@ -890,7 +870,6 @@ def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phas
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-post-restart",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id="instance-1",
@@ -906,7 +885,7 @@ def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phas
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                expected_step_starts={"two-step-minion": {"step_1": 1}},
+                expected_step_starts={0: {"step_1": 1}},
                 wrapped_directive_type="OrchestrationStop",
                 spy_call_counts={
                     "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
@@ -922,7 +901,7 @@ def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phas
                 receipt_count=2,
                 successful_receipt_count=2,
                 seen_shutdown=False,
-                minion_names=None,
+                orchestration_directive_indexes=None,
                 spy_call_counts={
                     "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
                         "step_1": 2,
@@ -960,7 +939,6 @@ def test_checkpoint_window_workflow_step_progression_exact_fails_on_overage():
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-ok",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -976,7 +954,7 @@ def test_checkpoint_window_workflow_step_progression_exact_fails_on_overage():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                minion_names=None,
+                orchestration_directive_indexes=None,
                 workflow_steps_mode="exact",
                 spy_call_counts={
                     "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
@@ -1022,7 +1000,6 @@ def test_checkpoint_window_workflow_step_progression_rejects_invalid_mode():
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-ok",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -1038,7 +1015,7 @@ def test_checkpoint_window_workflow_step_progression_rejects_invalid_mode():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                minion_names=None,
+                orchestration_directive_indexes=None,
                 workflow_steps_mode="strictly",
                 spy_call_counts={
                     "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
@@ -1087,7 +1064,6 @@ def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_wi
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-1",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -1099,7 +1075,6 @@ def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_wi
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-2",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -1115,7 +1090,7 @@ def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_wi
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                minion_names=None,
+                orchestration_directive_indexes=None,
                 workflow_steps_mode="at_least",
                 spy_call_counts={
                     class_key: {
@@ -1137,7 +1112,7 @@ def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_wi
                 receipt_count=2,
                 successful_receipt_count=2,
                 seen_shutdown=False,
-                minion_names=None,
+                orchestration_directive_indexes=None,
                 workflow_steps_mode="exact",
                 spy_call_counts={
                     class_key: {
@@ -1183,7 +1158,6 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_all
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-ok",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -1199,7 +1173,7 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_all
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                minion_names=None,
+                orchestration_directive_indexes=None,
                 workflow_steps_mode="exact",
                 spy_call_counts={
                     class_key: {
@@ -1245,7 +1219,6 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_rej
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-ok",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -1261,7 +1234,7 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_rej
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                minion_names=None,
+                orchestration_directive_indexes=None,
                 workflow_steps_mode="exact",
                 spy_call_counts={
                     class_key: {
@@ -1315,7 +1288,6 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-1",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -1327,7 +1299,6 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-2",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -1343,7 +1314,7 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
                 receipt_count=2,
                 successful_receipt_count=2,
                 seen_shutdown=False,
-                minion_names=None,
+                orchestration_directive_indexes=None,
                 workflow_steps_mode="exact",
                 spy_call_counts={
                     class_key: {
@@ -1399,7 +1370,6 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-1",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -1411,7 +1381,6 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-2",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -1427,7 +1396,7 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
                 receipt_count=2,
                 successful_receipt_count=2,
                 seen_shutdown=False,
-                minion_names=None,
+                orchestration_directive_indexes=None,
                 workflow_steps_mode="exact",
                 spy_call_counts={
                     class_key: {
@@ -1484,7 +1453,6 @@ def test_checkpoint_window_workflow_step_progression_exact_prioritizes_workflow_
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-1",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -1500,7 +1468,7 @@ def test_checkpoint_window_workflow_step_progression_exact_prioritizes_workflow_
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                minion_names=None,
+                orchestration_directive_indexes=None,
                 workflow_steps_mode="exact",
                 spy_call_counts={
                     class_key: {
@@ -1580,7 +1548,6 @@ def test_checkpoint_window_fanout_fails_when_workflow_id_delta_below_expected():
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-ok",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id=None,
@@ -1596,7 +1563,7 @@ def test_checkpoint_window_fanout_fails_when_workflow_id_delta_below_expected():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                minion_names=None,
+                orchestration_directive_indexes=None,
                 spy_call_counts={
                     "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
                         "step_1": 2,
@@ -1620,12 +1587,12 @@ def test_checkpoint_window_fanout_fails_when_workflow_id_delta_below_expected():
 
 def test_assert_runtime_expectations_persistence_at_latest_checkpoint():
     directives = [
-        OrchestrationStart(
+        start := OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
         ExpectRuntime(
-            expect=RuntimeExpectSpec(persistence={"two-step-minion": 1}),
+            expect=RuntimeExpectSpec(persistence={start: 1}),
         ),
     ]
     plan = ScenarioPlan(
@@ -1644,10 +1611,9 @@ def test_assert_runtime_expectations_persistence_at_latest_checkpoint():
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-ok",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
-                orchestration_id=None,
+                orchestration_id="instance-1",
                 pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
                 minion_id="durable-two-step-minion",
             ),
@@ -1660,8 +1626,8 @@ def test_assert_runtime_expectations_persistence_at_latest_checkpoint():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                persisted_contexts_by_minion_id={
-                    "durable-two-step-minion": 1
+                persisted_contexts_by_orchestration_id={
+                    "instance-1": 1
                 },
             ),
         ],
@@ -1693,7 +1659,6 @@ def test_assert_persisted_context_integrity_accepts_matching_snapshot():
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-ok",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id="ck",
@@ -1730,13 +1695,13 @@ def test_assert_persisted_context_integrity_accepts_matching_snapshot():
 
 def test_assert_runtime_expectations_resolutions_at_latest_checkpoint():
     directives = [
-        OrchestrationStart(
+        start := OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
-                resolutions={"two-step-minion": {"succeeded": 1, "failed": 0, "aborted": 0}}
+                resolutions={start: {"succeeded": 1, "failed": 0, "aborted": 0}}
             ),
         ),
     ]
@@ -1756,7 +1721,6 @@ def test_assert_runtime_expectations_resolutions_at_latest_checkpoint():
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="instance-1",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
                 orchestration_id="instance-1",
@@ -1792,13 +1756,13 @@ def test_assert_runtime_expectations_resolutions_at_latest_checkpoint():
 
 def test_assert_runtime_expectations_workflow_steps_exact_at_latest_checkpoint():
     directives = [
-        OrchestrationStart(
+        start := OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
-                workflow_steps={"two-step-minion": {"step_1": 1, "step_2": 1}},
+                workflow_steps={start: {"step_1": 1, "step_2": 1}},
                 workflow_steps_mode="exact",
             ),
         ),
@@ -1811,7 +1775,6 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_latest_checkpoint()
         minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
         pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
     )
-    minion_id = "tests.assets.minions.two_steps.counter.basic"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
@@ -1820,10 +1783,9 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_latest_checkpoint()
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="instance-1",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
-                orchestration_id=None,
+                orchestration_id="instance-1",
                 pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
                 minion_id="tests.assets.minions.two_steps.counter.basic",
             ),
@@ -1836,8 +1798,8 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_latest_checkpoint()
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                workflow_step_started_ids_by_minion_id={
-                    minion_id: {
+                workflow_step_started_ids_by_orchestration_id={
+                    "instance-1": {
                         "step_1": ("workflow-1",),
                         "step_2": ("workflow-1",),
                     }
@@ -1851,13 +1813,13 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_latest_checkpoint()
 
 def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage():
     directives = [
-        OrchestrationStart(
+        start := OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
-                workflow_steps={"two-step-minion": {"step_1": 1}},
+                workflow_steps={start: {"step_1": 1}},
                 workflow_steps_mode="at_least",
             ),
         ),
@@ -1870,7 +1832,6 @@ def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage():
         minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
         pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
     )
-    minion_id = "tests.assets.minions.two_steps.counter.basic"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
@@ -1879,10 +1840,9 @@ def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage():
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="instance-1",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
-                orchestration_id=None,
+                orchestration_id="instance-1",
                 pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
                 minion_id="tests.assets.minions.two_steps.counter.basic",
             ),
@@ -1895,8 +1855,8 @@ def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                workflow_step_started_ids_by_minion_id={
-                    minion_id: {
+                workflow_step_started_ids_by_orchestration_id={
+                    "instance-1": {
                         "step_1": ("workflow-1", "workflow-2"),
                     }
                 },
@@ -1909,13 +1869,13 @@ def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage():
 
 def test_assert_runtime_expectations_workflow_steps_rejects_invalid_mode():
     directives = [
-        OrchestrationStart(
+        start := OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
-                workflow_steps={"two-step-minion": {"step_1": 1}},
+                workflow_steps={start: {"step_1": 1}},
                 workflow_steps_mode="strictly",
             ),
         ),
@@ -1928,7 +1888,6 @@ def test_assert_runtime_expectations_workflow_steps_rejects_invalid_mode():
         minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
         pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
     )
-    minion_id = "tests.assets.minions.two_steps.counter.basic"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
@@ -1937,10 +1896,9 @@ def test_assert_runtime_expectations_workflow_steps_rejects_invalid_mode():
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="instance-1",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
-                orchestration_id=None,
+                orchestration_id="instance-1",
                 pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
                 minion_id="tests.assets.minions.two_steps.counter.basic",
             ),
@@ -1953,8 +1911,8 @@ def test_assert_runtime_expectations_workflow_steps_rejects_invalid_mode():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                workflow_step_started_ids_by_minion_id={
-                    minion_id: {"step_1": ("workflow-1",)}
+                workflow_step_started_ids_by_orchestration_id={
+                    "instance-1": {"step_1": ("workflow-1",)}
                 },
             ),
         ],
@@ -1969,13 +1927,13 @@ def test_assert_runtime_expectations_workflow_steps_rejects_invalid_mode():
 
 def test_assert_runtime_expectations_persistence_at_checkpoint_index():
     directives = [
-        OrchestrationStart(
+        start := OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.identified_resourced",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
         ExpectRuntime(
             at=0,
-            expect=RuntimeExpectSpec(persistence={"identified-resourced-minion": 3}),
+            expect=RuntimeExpectSpec(persistence={start: 3}),
         ),
     ]
     plan = ScenarioPlan(
@@ -1996,10 +1954,9 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
                 minion_modpath="tests.assets.minions.two_steps.counter.identified_resourced",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-ok",
-                resolved_name="identified-resourced-minion",
                 minion_cls=IdentifiedResourcedMinion,
                 success=True,
-                orchestration_id=None,
+                orchestration_id="instance-1",
                 pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
                 minion_id=IDENTIFIED_COUNTER_MINION_ID,
             ),
@@ -2012,8 +1969,8 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                persisted_contexts_by_minion_id={
-                    IDENTIFIED_COUNTER_MINION_ID: 3
+                persisted_contexts_by_orchestration_id={
+                    "instance-1": 3
                 },
             ),
             ScenarioCheckpoint(
@@ -2023,8 +1980,8 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                persisted_contexts_by_minion_id={
-                    IDENTIFIED_COUNTER_MINION_ID: 99
+                persisted_contexts_by_orchestration_id={
+                    "instance-1": 99
                 },
             ),
         ],
@@ -2035,14 +1992,14 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
 
 def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
     directives = [
-        OrchestrationStart(
+        start := OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
         ExpectRuntime(
             at=0,
             expect=RuntimeExpectSpec(
-                workflow_steps={"two-step-minion": {"step_1": 1, "step_2": 0}},
+                workflow_steps={start: {"step_1": 1, "step_2": 0}},
                 workflow_steps_mode="exact",
             ),
         ),
@@ -2055,7 +2012,6 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
         minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
         pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
     )
-    minion_id = "tests.assets.minions.two_steps.counter.basic"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
@@ -2064,10 +2020,9 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="instance-1",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
-                orchestration_id=None,
+                orchestration_id="instance-1",
                 pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
                 minion_id="tests.assets.minions.two_steps.counter.basic",
             ),
@@ -2080,10 +2035,10 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                expected_step_starts={"two-step-minion": {"step_1": 1}},
+                expected_step_starts={0: {"step_1": 1}},
                 wrapped_directive_type="OrchestrationStop",
-                workflow_step_started_ids_by_minion_id={
-                    minion_id: {
+                workflow_step_started_ids_by_orchestration_id={
+                    "instance-1": {
                         "step_1": ("workflow-1",),
                         "step_2": (),
                     }
@@ -2096,8 +2051,8 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                workflow_step_started_ids_by_minion_id={
-                    minion_id: {
+                workflow_step_started_ids_by_orchestration_id={
+                    "instance-1": {
                         "step_1": ("workflow-1",),
                         "step_2": ("workflow-1",),
                     }
@@ -2111,13 +2066,13 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
 
 def test_assert_runtime_expectations_fails_for_out_of_range_checkpoint_index():
     directives = [
-        OrchestrationStart(
+        start := OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
         ),
         ExpectRuntime(
             at=2,
-            expect=RuntimeExpectSpec(persistence={"two-step-minion": 1}),
+            expect=RuntimeExpectSpec(persistence={start: 1}),
         ),
     ]
     plan = ScenarioPlan(
@@ -2136,10 +2091,9 @@ def test_assert_runtime_expectations_fails_for_out_of_range_checkpoint_index():
                 minion_modpath="tests.assets.minions.two_steps.counter.basic",
                 pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
                 instance_id="id-ok",
-                resolved_name="two-step-minion",
                 minion_cls=TwoStepMinion,
                 success=True,
-                orchestration_id=None,
+                orchestration_id="instance-1",
                 pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
                 minion_id="tests.assets.minions.two_steps.counter.basic",
             ),
@@ -2152,8 +2106,8 @@ def test_assert_runtime_expectations_fails_for_out_of_range_checkpoint_index():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                persisted_contexts_by_minion_id={
-                    "durable-two-step-minion": 1
+                persisted_contexts_by_orchestration_id={
+                    "instance-1": 1
                 },
             ),
             ScenarioCheckpoint(
@@ -2163,8 +2117,8 @@ def test_assert_runtime_expectations_fails_for_out_of_range_checkpoint_index():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                persisted_contexts_by_minion_id={
-                    "durable-two-step-minion": 1
+                persisted_contexts_by_orchestration_id={
+                    "instance-1": 1
                 },
             ),
         ],

@@ -14,8 +14,6 @@ class WorkflowCtx:
     retries: int = 0
 
 class OrderMinion(Minion[dict, WorkflowCtx]):
-    name = "order-minion"
-
     @minion_step
     async def reserve_inventory(self, ctx: WorkflowCtx):
         ...

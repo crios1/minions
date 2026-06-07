@@ -46,9 +46,6 @@ class GruIntrospector:
     def get_minion_by_orchestration_id(self, orchestration_id: str) -> Minion[Any, Any] | None:
         return self._gru._minions_by_orchestration_id.get(orchestration_id)
 
-    def get_minions_by_name(self, name: str) -> list[Minion[Any, Any]]:
-        return list(self._gru._minions_by_name.get(name, []))
-
     def get_pipeline_instance(self, pipeline_id: str) -> object | None:
         return self._gru._pipelines.get(pipeline_id)
 

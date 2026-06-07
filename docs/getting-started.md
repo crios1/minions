@@ -76,8 +76,6 @@ from .types import Heartbeat, WorkflowCtx
 
 class PrintMinion(Minion[Heartbeat, WorkflowCtx]):
     store: HeartbeatStore  # dependency injected automatically
-    name = "print-minion"
-
     @minion_step
     async def record(self, ctx: WorkflowCtx):
         await self.store.save(self.event)

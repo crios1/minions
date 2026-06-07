@@ -3,8 +3,6 @@ from minions import Minion, minion_step
 # Draft of a Minion using all the Minion Features
 
 class MyMinion(Minion[MyEvent, MyContext]):
-    name = "my-minion"
-
     r1: MyResource1
     r2: MyResource2
     r3: MyResource3

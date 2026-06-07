@@ -431,21 +431,6 @@ class TestMinionSubclassingInvalid:
             "Subclasses of Minion subclasses are not supported."
         )
 
-    def test_invalid_name(self):
-        with pytest.raises(TypeError) as excinfo:
-            class MyMinion(Minion[MyEvent, MyContext]):
-                name = set('invalid_name') # only kebab-case is valid
-            MyMinion(
-                minion_instance_id="mock",
-                orchestration_id="mock",
-                minion_modpath="mock",
-                config_path="mock",
-                state_store=NoOpStateStore(),
-                metrics=NoOpMetrics(),
-                logger=NoOpLogger()
-            )
-        assert str(excinfo.value) == "MyMinion.name must be a string, got set"
-
     def test_duplicate_resource_dependency(self):
         class MyResource(Resource):
             ...

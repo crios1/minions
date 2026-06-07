@@ -141,8 +141,8 @@ async def test_run_gru_scenario_accepts_class_start_with_inline_minion_config(
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
-                resolutions={"configured-simple-minion": {"succeeded": 1, "failed": 0, "aborted": 0}},
-                workflow_steps={"configured-simple-minion": {"step_1": 1, "step_2": 1}},
+                resolutions={start: {"succeeded": 1, "failed": 0, "aborted": 0}},
+                workflow_steps={start: {"step_1": 1, "step_2": 1}},
                 workflow_steps_mode="exact",
             ),
         ),
@@ -178,7 +178,7 @@ async def test_run_gru_scenario_wait_workflow_step_starts_then_stop_happy_path(
     directives: list[Directive] = [
         start,
         AfterWorkflowStepStarts(
-            expected={"abort-step-minion": {"step_1": 1}},
+            expected={start: {"step_1": 1}},
             directive=OrchestrationStop(id=start, expect_success=True),
         ),
         GruShutdown(expect_success=True),
@@ -212,11 +212,11 @@ async def test_run_gru_scenario_expect_runtime_persistence_after_stop(
     directives: list[Directive] = [
         start,
         AfterWorkflowStepStarts(
-            expected={"slow-step-minion": {"step_1": 1}},
+            expected={start: {"step_1": 1}},
             directive=OrchestrationStop(id=start, expect_success=True),
         ),
         ExpectRuntime(
-            expect=RuntimeExpectSpec(persistence={"slow-step-minion": 1}),
+            expect=RuntimeExpectSpec(persistence={start: 1}),
         ),
         GruShutdown(expect_success=True),
     ]
@@ -242,17 +242,13 @@ async def test_run_gru_scenario_expect_runtime_resolutions_after_completion(
     pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
     pipeline_id = pipeline_ref
 
+    start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
     directives: list[Directive] = [
-        OrchestrationStart(
-            minion=minion_ref,
-            pipeline=pipeline_ref,
-        ),
+        start,
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
-                resolutions={
-                    "simple-minion": {"succeeded": 1, "failed": 0, "aborted": 0},
-                }
+                    resolutions={start: {"succeeded": 1, "failed": 0, "aborted": 0}}
             ),
         ),
         GruShutdown(expect_success=True),
@@ -279,15 +275,13 @@ async def test_run_gru_scenario_expect_runtime_workflow_steps_exact_after_comple
     pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
     pipeline_id = pipeline_ref
 
+    start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
     directives: list[Directive] = [
-        OrchestrationStart(
-            minion=minion_ref,
-            pipeline=pipeline_ref,
-        ),
+        start,
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
-                workflow_steps={"simple-minion": {"step_1": 1, "step_2": 1}},
+                workflow_steps={start: {"step_1": 1, "step_2": 1}},
                 workflow_steps_mode="exact",
             ),
         ),
@@ -328,13 +322,13 @@ async def test_run_gru_scenario_mixed_wait_workflow_step_modes_end_to_end(
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
-                resolutions={
-                    "simple-minion": {"succeeded": 1, "failed": 0, "aborted": 0},
-                    "simple-resourced-minion-2": {"succeeded": 1, "failed": 0, "aborted": 0},
-                },
+                    resolutions={
+                        start_a: {"succeeded": 1, "failed": 0, "aborted": 0},
+                        start_b: {"succeeded": 1, "failed": 0, "aborted": 0},
+                    },
                 workflow_steps={
-                    "simple-minion": {"step_1": 1, "step_2": 1},
-                    "simple-resourced-minion-2": {"step_1": 1, "step_2": 1},
+                    start_a: {"step_1": 1, "step_2": 1},
+                    start_b: {"step_1": 1, "step_2": 1},
                 },
                 workflow_steps_mode="exact",
             ),
@@ -372,12 +366,12 @@ async def test_run_gru_scenario_expect_runtime_at_checkpoint_index(
     directives: list[Directive] = [
         start,
         AfterWorkflowStepStarts(
-            expected={"slow-step-minion": {"step_1": 1}},
+            expected={start: {"step_1": 1}},
             directive=OrchestrationStop(id=start, expect_success=True),
         ),
         ExpectRuntime(
             at=0,
-            expect=RuntimeExpectSpec(persistence={"slow-step-minion": 1}),
+            expect=RuntimeExpectSpec(persistence={start: 1}),
         ),
         GruShutdown(expect_success=True),
     ]
@@ -408,13 +402,13 @@ async def test_run_gru_scenario_restart_same_pipeline_with_persistence_and_resol
     directives: list[Directive] = [
         start_1,
         AfterWorkflowStepStarts(
-            expected={"slow-step-minion": {"step_1": 1}},
+            expected={start_1: {"step_1": 1}},
             directive=OrchestrationStop(id=start_1, expect_success=True),
         ),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
-                persistence={"slow-step-minion": 1},
-                workflow_steps={"slow-step-minion": {"step_1": 1}},
+                persistence={start_1: 1},
+                workflow_steps={start_1: {"step_1": 1}},
                 workflow_steps_mode="exact",
             ),
         ),
@@ -422,8 +416,8 @@ async def test_run_gru_scenario_restart_same_pipeline_with_persistence_and_resol
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
-                resolutions={"slow-step-minion": {"succeeded": 2, "failed": 0, "aborted": 0}},
-                workflow_steps={"slow-step-minion": {"step_1": 2}},
+                resolutions={start_2: {"succeeded": 2, "failed": 0, "aborted": 0}},
+                workflow_steps={start_2: {"step_1": 2}},
                 workflow_steps_mode="exact",
             ),
         ),
@@ -457,13 +451,13 @@ async def test_run_gru_scenario_resume_from_explicit_step_boundary_does_not_repl
     directives: list[Directive] = [
         first_start,
         AfterWorkflowStepStarts(
-            expected={"slow-second-step-minion": {"step_2": 1}},
+            expected={first_start: {"step_2": 1}},
             directive=OrchestrationStop(id=first_start, expect_success=True),
         ),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
-                persistence={"slow-second-step-minion": 1},
-                workflow_steps={"slow-second-step-minion": {"step_1": 1, "step_2": 1}},
+                persistence={first_start: 1},
+                workflow_steps={first_start: {"step_1": 1, "step_2": 1}},
                 workflow_steps_mode="exact",
             ),
         ),
@@ -471,8 +465,8 @@ async def test_run_gru_scenario_resume_from_explicit_step_boundary_does_not_repl
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
-                resolutions={"slow-second-step-minion": {"succeeded": 2, "failed": 0, "aborted": 0}},
-                workflow_steps={"slow-second-step-minion": {"step_1": 2, "step_2": 2}},
+                resolutions={second_start: {"succeeded": 2, "failed": 0, "aborted": 0}},
+                workflow_steps={second_start: {"step_1": 2, "step_2": 2}},
                 workflow_steps_mode="exact",
             ),
         ),
@@ -508,14 +502,14 @@ async def test_run_gru_scenario_resume_identified_minion_without_persisted_minio
     directives: list[Directive] = [
         first_start,
         AfterWorkflowStepStarts(
-            expected={"identified-slow-second-step-minion": {"step_2": 1}},
+            expected={first_start: {"step_2": 1}},
             directive=OrchestrationStop(id=first_start, expect_success=True),
         ),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
-                persistence={"identified-slow-second-step-minion": 1},
+                persistence={first_start: 1},
                 workflow_steps={
-                    "identified-slow-second-step-minion": {"step_1": 1, "step_2": 1},
+                    first_start: {"step_1": 1, "step_2": 1},
                 },
                 workflow_steps_mode="exact",
             ),
@@ -525,14 +519,14 @@ async def test_run_gru_scenario_resume_identified_minion_without_persisted_minio
         ExpectRuntime(
             expect=RuntimeExpectSpec(
                 resolutions={
-                    "identified-slow-second-step-minion": {
+                    second_start: {
                         "succeeded": 2,
                         "failed": 0,
                         "aborted": 0,
                     },
                 },
                 workflow_steps={
-                    "identified-slow-second-step-minion": {"step_1": 2, "step_2": 2},
+                    second_start: {"step_1": 2, "step_2": 2},
                 },
                 workflow_steps_mode="exact",
             ),
@@ -721,7 +715,7 @@ async def test_run_gru_scenario_wait_workflows_subset(
     directives: list[Directive] = [
         start_1,
         start_2,
-        WaitWorkflowCompletions(minion_names={"simple-minion"}, workflow_steps_mode="exact"),
+        WaitWorkflowCompletions(orchestrations=(start_1,), workflow_steps_mode="exact"),
         OrchestrationStop(id=start_1, expect_success=True),
         OrchestrationStop(id=start_2, expect_success=True),
         GruShutdown(expect_success=True),
@@ -737,7 +731,7 @@ async def test_run_gru_scenario_wait_workflows_subset(
     )
 
 @pytest.mark.asyncio
-async def test_run_gru_scenario_wait_workflows_unknown_name_fails(
+async def test_run_gru_scenario_wait_workflows_unknown_start_fails(
     gru: Gru,
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
@@ -748,17 +742,18 @@ async def test_run_gru_scenario_wait_workflows_unknown_name_fails(
     pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=1)
 
+    start = OrchestrationStart(
+        minion="tests.assets.minions.two_steps.simple.basic",
+        pipeline=pipeline_ref,
+    )
+    start_missing = OrchestrationStart(minion="missing-minion", pipeline=pipeline_ref)
     directives: list[Directive] = [
-        OrchestrationStart(
-            minion="tests.assets.minions.two_steps.simple.basic",
-            pipeline=pipeline_ref,
-        ),
-        # Intentional unknown-name failure path; mode is irrelevant because wait resolves names first.
-        WaitWorkflowCompletions(minion_names={"missing-minion"}),
+        start,
+        WaitWorkflowCompletions(orchestrations=(start_missing,)),
         GruShutdown(expect_success=True),
     ]
 
-    with pytest.raises(pytest.fail.Exception):
+    with pytest.raises(ValueError, match="outside this ScenarioPlan"):
         await run_gru_scenario(
             gru,
             logger,
@@ -779,22 +774,24 @@ async def test_run_gru_scenario_expect_runtime_exact_reports_mismatch(
     pipeline_ref = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
     pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
+    start = OrchestrationStart(
+        minion="tests.assets.minions.two_steps.simple.basic",
+        pipeline=pipeline_ref,
+    )
+    start_other = OrchestrationStart(
+        minion="tests.assets.minions.two_steps.simple.resourced_2",
+        pipeline=pipeline_ref,
+    )
 
     directives: list[Directive] = [
         Concurrent(
-                OrchestrationStart(
-                    minion="tests.assets.minions.two_steps.simple.basic",
-                    pipeline=pipeline_ref,
-                ),
-                OrchestrationStart(
-                    minion="tests.assets.minions.two_steps.simple.resourced_2",
-                    pipeline=pipeline_ref,
-                ),
+                    start,
+                    start_other,
             ),
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
-                    workflow_steps={"simple-minion": {"step_1": 0, "step_2": 0}},
+                    workflow_steps={start: {"step_1": 0, "step_2": 0}},
                     workflow_steps_mode="exact",
                 ),
             ),
@@ -803,7 +800,10 @@ async def test_run_gru_scenario_expect_runtime_exact_reports_mismatch(
 
     with pytest.raises(
         pytest.fail.Exception,
-        match=r"ExpectRuntime\.workflow_steps mismatch for simple-minion\.step_1: expected 0, got 1",
+        match=(
+            r"ExpectRuntime\.workflow_steps mismatch for "
+                r"start 0\.step_1: expected 0, got 1"
+        ),
     ):
         await run_gru_scenario(
             gru,
@@ -874,7 +874,7 @@ async def test_run_gru_scenario_wait_workflows_empty_is_noop(
     directives: list[Directive] = [
         start,
         # Intentional no-op path for empty subset handling.
-        WaitWorkflowCompletions(minion_names=set()),
+        WaitWorkflowCompletions(orchestrations=()),
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         OrchestrationStop(id=start, expect_success=True),
         GruShutdown(expect_success=True),
@@ -907,7 +907,7 @@ async def test_run_gru_scenario_parallel_mixed_directives(
         Concurrent(start_1, start_2),
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         Concurrent(
-            WaitWorkflowCompletions(minion_names=set()),
+            WaitWorkflowCompletions(orchestrations=()),
             OrchestrationStop(id=start_2, expect_success=True),
         ),
         OrchestrationStop(id=start_1, expect_success=True),
@@ -1008,7 +1008,7 @@ async def test_run_gru_scenario_golden_regression_mixed_concurrent_wait_subset(
                 expect_success=False,
             ),
         ),
-        WaitWorkflowCompletions(minion_names={"simple-minion"}, workflow_steps_mode="exact"),
+        WaitWorkflowCompletions(orchestrations=(start_1,), workflow_steps_mode="exact"),
         OrchestrationStop(id=start_1, expect_success=True),
         GruShutdown(expect_success=True),
     ]

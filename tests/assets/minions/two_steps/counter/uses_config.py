@@ -1,12 +1,10 @@
 from minions import minion_step
-
-from tests.assets.support.minion_spied_configed import ConfiguredSpiedMinion
 from tests.assets.contexts.counter import CounterContext
 from tests.assets.events.counter import CounterEvent
+from tests.assets.support.minion_spied_configed import ConfiguredSpiedMinion
 
 
 class ConfigMinion(ConfiguredSpiedMinion[CounterEvent, CounterContext]):
-    name = "config-minion"
 
     @minion_step
     async def step_1(self) -> None:

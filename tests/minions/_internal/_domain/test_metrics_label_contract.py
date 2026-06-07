@@ -67,7 +67,7 @@ async def test_pipeline_runtime_metric_labels_match_contract():
             raise RuntimeError("boom")
 
     class FakeMinion:
-        _mn_name = "ContractMinion"
+        _mn_minion_id = "contract-minion-component"
         _mn_minion_instance_id = "contract-minion"
         _mn_orchestration_id = "contract-minion-key"
         _mn_minion_modpath = "tests.metrics_contract.FakeMinion"

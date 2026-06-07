@@ -1,13 +1,11 @@
 from minions import minion_step
-
-from tests.assets.support.minion_spied import SpiedMinion
 from tests.assets.contexts.counter import CounterContext
 from tests.assets.events.counter import CounterEvent
 from tests.assets.resources.fixed.base_c import FixedResourceC
+from tests.assets.support.minion_spied import SpiedMinion
 
 
 class TwoStepResourcedMinionC(SpiedMinion[CounterEvent, CounterContext]):
-    name = "two-step-resourced-minion-c"
     fixed_resource_c: FixedResourceC
 
     @minion_step

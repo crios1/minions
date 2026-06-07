@@ -12,7 +12,6 @@ IDENTIFIED_SLOW_SECOND_STEP_MINION_ID = "42345678-1234-5678-9234-567812345678"
 
 @minion_id(IDENTIFIED_SLOW_SECOND_STEP_MINION_ID)
 class IdentifiedSlowSecondStepMinion(SpiedMinion[CounterEvent, CounterContext]):
-    name = "identified-slow-second-step-minion"
     fixed_resource: IdentifiedFixedResource
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:

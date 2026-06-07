@@ -8,8 +8,6 @@ class MyWorkflowCtx:
     retries: int = 0
 
 class MyMinion(Minion[dict, MyWorkflowCtx]):
-    name = "my-minion" # can add env to name with like os.getenv('ENV'), can override in minion-config-file
-
     async def startup(self): # startup lifecyle hook
         return
     

@@ -189,7 +189,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
                         DEBUG,
                         "Pipeline Fanout: dispatched event to minion",
                         pipeline_id=self._mn_pipeline_id,
-                        minion_name=minion._mn_name,
+                        minion_id=minion._mn_minion_id,
                         minion_instance_id=minion._mn_minion_instance_id,
                         orchestration_id=minion._mn_orchestration_id,
                         minion_modpath=minion._mn_minion_modpath,

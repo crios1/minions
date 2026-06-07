@@ -16,11 +16,10 @@ class FakeGru:
     def __init__(self, start_result: StartResult | None = None) -> None:
         self._loop = asyncio.new_event_loop()
         self._minions_by_instance_id = {}
-        self._minions_by_name = {}
+        self._minions_by_orchestration_id = {}
         self.start_calls: list[tuple[str, str, str | None]] = []
         self._start_result = start_result or StartResult(
             success=True,
-            name="ExampleMinion",
             orchestration_id="minion-1",
         )
 
@@ -85,7 +84,7 @@ def test_wait_uses_last_target_without_undefined_helper_crash() -> None:
     shell = GruShell(gru)  # type: ignore[arg-type]
 
     fut: cf.Future[StartResult] = cf.Future()
-    fut.set_result(StartResult(success=True, name="ExampleMinion", orchestration_id="minion-1"))
+    fut.set_result(StartResult(success=True, orchestration_id="minion-1"))
 
     start_ops = getattr(shell, "_start_ops")
     assert isinstance(start_ops, dict)
@@ -112,7 +111,7 @@ def test_start_calls_current_gru_signature_and_rekeys_successful_result() -> Non
     ) -> cf.Future[StartResult]:
         submitted.append(coro)
         fut: cf.Future[StartResult] = cf.Future()
-        fut.set_result(StartResult(success=True, name="ExampleMinion", orchestration_id="minion-1"))
+        fut.set_result(StartResult(success=True, orchestration_id="minion-1"))
         coro.close()
         return fut
 

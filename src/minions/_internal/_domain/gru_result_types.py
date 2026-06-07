@@ -35,7 +35,6 @@ class StopResult(GruResult):
 
 @dataclass
 class StartResult(GruResult):
-    name: str | None = None
     orchestration_id: str | None = None
 
 @dataclass
@@ -44,7 +43,6 @@ class ShutdownResult(GruResult):
 
 @dataclass
 class MinionStatusResult(GruResult):
-    name: str | None = None
     instance_id: str | None = None
     orchestration_id: str | None = None
 

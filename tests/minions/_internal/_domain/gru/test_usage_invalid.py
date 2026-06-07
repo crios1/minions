@@ -167,7 +167,6 @@ class TestInvalidUsage:
             print(result1)
 
             assert result1.success
-            assert result1.name == "simple-minion"
             assert result1.orchestration_id is not None
             assert result1.orchestration_id in gru._minions_by_orchestration_id
             assert gru._minions_by_orchestration_id[result1.orchestration_id]._mn_minion_instance_id in gru._minion_tasks
@@ -504,7 +503,6 @@ class TestInvalidUsageUsingNewAssets:
             )
 
             assert result1.success
-            assert result1.name == "two-step-minion"
             assert result1.orchestration_id is not None
             assert result1.orchestration_id in gru._minions_by_orchestration_id
             assert gru._minions_by_orchestration_id[result1.orchestration_id]._mn_minion_instance_id in gru._minion_tasks

@@ -1,5 +1,5 @@
-from tests.assets.support.minion_spied import SpiedMinion
 from tests.assets.events.counter import CounterEvent
+from tests.assets.support.minion_spied import SpiedMinion
 
 
 class UnserializableContext:
@@ -7,7 +7,6 @@ class UnserializableContext:
 
 
 class BadContextMinion(SpiedMinion[CounterEvent, UnserializableContext]):
-    name = "bad-context-minion"
-
+    pass
 
 minion = BadContextMinion

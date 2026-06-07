@@ -395,7 +395,7 @@ class ScenarioVerifier:
                 prev_workflow_step_ids = cp.workflow_step_started_ids_by_minion_id or {}
                 continue
 
-            if cp.minion_names == ():
+            if cp.orchestration_directive_indexes == ():
                 continue
             mode = cp.workflow_steps_mode or "at_least"
             if mode not in ("at_least", "exact"):
@@ -405,11 +405,11 @@ class ScenarioVerifier:
                 )
 
             window_receipts = self._result.receipts[prev_receipt_count:cp.receipt_count]
-            if cp.minion_names is not None:
-                allowed_names = set(cp.minion_names)
+            if cp.orchestration_directive_indexes is not None:
+                allowed_indexes = set(cp.orchestration_directive_indexes)
                 window_receipts = [
                     r for r in window_receipts
-                    if r.resolved_name in allowed_names
+                    if r.directive_index in allowed_indexes
                 ]
             window_expectations = self._compute_minion_expectations_for_receipts(spies, window_receipts)
 
@@ -741,38 +741,42 @@ class ScenarioVerifier:
             workflow_steps_mode = directive.expect.workflow_steps_mode
 
             receipts = self._result.receipts[:target_checkpoint.receipt_count]
-            minion_ids_by_name: defaultdict[str, set[str]] = defaultdict(set)
-            metric_keys_by_name: defaultdict[str, set[str]] = defaultdict(set)
-            for r in receipts:
-                if not r.success or not r.resolved_name:
-                    continue
-                minion_ids_by_name[r.resolved_name].add(r.minion_id)
-                if r.orchestration_id:
-                    metric_keys_by_name[r.resolved_name].add(r.orchestration_id)
+            receipts_by_directive_index = {
+                receipt.directive_index: receipt
+                for receipt in receipts
+                if receipt.success
+            }
+
+            def receipt_for(start: OrchestrationStart, section: str) -> OrchestrationStartReceipt:
+                directive_index = self._plan.directive_index(start)
+                receipt = receipts_by_directive_index.get(directive_index)
+                if receipt is None:
+                    pytest.fail(
+                        f"ExpectRuntime.{section} references a start with no successful "
+                        f"receipt at checkpoint {target_checkpoint.order}: {directive_index}."
+                    )
+                return receipt
 
             if persistence:
-                persisted = target_checkpoint.persisted_contexts_by_minion_id
+                persisted = target_checkpoint.persisted_contexts_by_orchestration_id
                 if persisted is None:
                     pytest.fail(
                         "ExpectRuntime.persistence is unsupported with this StateStore snapshot strategy."
                     )
 
-                for minion_name, expected_count in persistence.items():
-                    if minion_name not in minion_ids_by_name:
-                        pytest.fail(
-                            f"ExpectRuntime.persistence references unknown minion name: {minion_name!r}."
-                        )
+                for start, expected_count in persistence.items():
+                    receipt = receipt_for(start, "persistence")
                     if expected_count < 0:
                         pytest.fail(
                             "ExpectRuntime.persistence counts must be ints >= 0; "
-                            f"got {minion_name!r}={expected_count!r}."
+                            f"got {expected_count!r}."
                         )
 
-                    minion_ids = minion_ids_by_name[minion_name]
-                    actual_count = sum(persisted.get(minion_id, 0) for minion_id in minion_ids)
+                    orchestration_id = receipt.orchestration_id
+                    actual_count = 0 if orchestration_id is None else persisted.get(orchestration_id, 0)
                     if actual_count != expected_count:
                         pytest.fail(
-                            f"ExpectRuntime.persistence mismatch for {minion_name}: "
+                            f"ExpectRuntime.persistence mismatch for start {receipt.directive_index}: "
                             f"expected {expected_count}, got {actual_count}."
                         )
 
@@ -783,44 +787,43 @@ class ScenarioVerifier:
                         "ExpectRuntime.resolutions is unsupported with this Metrics snapshot strategy."
                     )
 
-                for minion_name, expected_status_counts in resolutions.items():
-                    if minion_name not in metric_keys_by_name:
-                        pytest.fail(
-                            f"ExpectRuntime.resolutions references unknown minion name: {minion_name!r}."
-                        )
-                    metric_keys = metric_keys_by_name[minion_name]
+                for start, expected_status_counts in resolutions.items():
+                    receipt = receipt_for(start, "resolutions")
+                    orchestration_id = receipt.orchestration_id
                     counts = {
                         "succeeded": sum(
                             self._counter_sample_value(s)
                             for s in counters.get(MINION_WORKFLOW_SUCCEEDED_TOTAL, [])
-                            if self._counter_sample_label(s, LABEL_ORCHESTRATION_ID) in metric_keys
+                            if self._counter_sample_label(s, LABEL_ORCHESTRATION_ID) == orchestration_id
                         ),
                         "failed": sum(
                             self._counter_sample_value(s)
                             for s in counters.get(MINION_WORKFLOW_FAILED_TOTAL, [])
-                            if self._counter_sample_label(s, LABEL_ORCHESTRATION_ID) in metric_keys
+                            if self._counter_sample_label(s, LABEL_ORCHESTRATION_ID) == orchestration_id
                         ),
                         "aborted": sum(
                             self._counter_sample_value(s)
                             for s in counters.get(MINION_WORKFLOW_ABORTED_TOTAL, [])
-                            if self._counter_sample_label(s, LABEL_ORCHESTRATION_ID) in metric_keys
+                            if self._counter_sample_label(s, LABEL_ORCHESTRATION_ID) == orchestration_id
                         ),
                     }
 
                     for status, expected_count in expected_status_counts.items():
                         if status not in counts:
                             pytest.fail(
-                                f"ExpectRuntime.resolutions has unknown status {status!r} for {minion_name}."
+                                f"ExpectRuntime.resolutions has unknown status {status!r} "
+                                f"for start {receipt.directive_index}."
                             )
                         if expected_count < 0:
                             pytest.fail(
                                 "ExpectRuntime.resolutions counts must be ints >= 0; "
-                                f"got {minion_name}.{status}={expected_count!r}."
+                                f"got start {receipt.directive_index}.{status}={expected_count!r}."
                             )
                         actual = counts[status]
                         if actual != expected_count:
                             pytest.fail(
-                                f"ExpectRuntime.resolutions mismatch for {minion_name}.{status}: "
+                                "ExpectRuntime.resolutions mismatch for "
+                                f"start {receipt.directive_index}.{status}: "
                                 f"expected {expected_count}, got {actual}."
                             )
 
@@ -830,48 +833,42 @@ class ScenarioVerifier:
                         "ExpectRuntime.workflow_steps_mode="
                         f"{workflow_steps_mode!r} is unsupported. Use 'at_least' or 'exact'."
                     )
-                workflow_step_ids = target_checkpoint.workflow_step_started_ids_by_minion_id
+                workflow_step_ids = (
+                    target_checkpoint.workflow_step_started_ids_by_orchestration_id
+                )
                 if workflow_step_ids is None:
                     pytest.fail(
                         "ExpectRuntime.workflow_steps is unsupported without workflow step-id "
                         "checkpoint snapshots."
                     )
 
-                minion_ids_by_name: defaultdict[str, set[str]] = defaultdict(set)
-                for r in receipts:
-                    if r.success and r.resolved_name:
-                        minion_ids_by_name[r.resolved_name].add(r.minion_id)
-
-                for minion_name, expected_steps in workflow_steps.items():
-                    if minion_name not in minion_ids_by_name:
-                        pytest.fail(
-                            "ExpectRuntime.workflow_steps references unknown minion name: "
-                            f"{minion_name!r}."
-                        )
-                    minion_ids = minion_ids_by_name[minion_name]
-
+                for start, expected_steps in workflow_steps.items():
+                    receipt = receipt_for(start, "workflow_steps")
+                    orchestration_id = receipt.orchestration_id
                     for step_name, expected_count in expected_steps.items():
                         if expected_count < 0:
                             pytest.fail(
                                 "ExpectRuntime.workflow_steps counts must be ints >= 0; "
-                                f"got {minion_name}.{step_name}={expected_count!r}."
+                                f"got start {receipt.directive_index}.{step_name}={expected_count!r}."
                             )
-                        actual_count = sum(
-                            len(workflow_step_ids.get(minion_id, {}).get(step_name, ()))
-                            for minion_id in minion_ids
+                        actual_count = len(
+                            workflow_step_ids.get(orchestration_id or "", {}).get(
+                                step_name,
+                                (),
+                            )
                         )
                         if workflow_steps_mode == "at_least":
                             if actual_count < expected_count:
                                 pytest.fail(
                                     "ExpectRuntime.workflow_steps mismatch for "
-                                    f"{minion_name}.{step_name}: "
+                                    f"start {receipt.directive_index}.{step_name}: "
                                     f"expected >= {expected_count}, got {actual_count}."
                                 )
                         else:
                             if actual_count != expected_count:
                                 pytest.fail(
                                     "ExpectRuntime.workflow_steps mismatch for "
-                                    f"{minion_name}.{step_name}: "
+                                    f"start {receipt.directive_index}.{step_name}: "
                                     f"expected {expected_count}, got {actual_count}."
                                 )
 

@@ -1,14 +1,12 @@
 from minions import minion_step
-
-from tests.assets.support.minion_spied import SpiedMinion
 from tests.assets.contexts.simple import SimpleContext
 from tests.assets.events.simple import SimpleEvent
 from tests.assets.resources.simple.resource_1 import SimpleResource1
 from tests.assets.resources.simple.resource_2 import SimpleResource2
+from tests.assets.support.minion_spied import SpiedMinion
 
 
 class SimpleMultiResourcedMinion(SpiedMinion[SimpleEvent, SimpleContext]):
-    name = "simple-multi-resourced-minion"
     r1: SimpleResource1
     r2: SimpleResource2
 

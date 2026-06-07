@@ -1,14 +1,12 @@
 from minions import minion_step
-
-from tests.assets.support.minion_spied import SpiedMinion
 from tests.assets.contexts.counter import CounterContext
 from tests.assets.events.counter import CounterEvent
 from tests.assets.resources.fixed.base import FixedResource
 from tests.assets.resources.fixed.base_b import FixedResourceB
+from tests.assets.support.minion_spied import SpiedMinion
 
 
 class TwoResourceMinion(SpiedMinion[CounterEvent, CounterContext]):
-    name = "two-resource-minion"
     fixed_resource: FixedResource
     fixed_resource_b: FixedResourceB
 

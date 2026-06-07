@@ -223,7 +223,6 @@ class Gru:
 
         # registries
         self._minions_by_instance_id: dict[str, Minion[Any, Any]] = {}                        # minion_instance_id -> Minion
-        self._minions_by_name: dict[str, list[Minion[Any, Any]]] = defaultdict(list) # minion_name -> Minion (minions could have the same name)
         self._minions_by_orchestration_id: dict[str, Minion[Any, Any]] = {}             # orchestration_id -> Minion
         self._minion_tasks: dict[str, asyncio.Task[None]] = {}             # minion_instance_id -> asyncio.Task
 
@@ -477,12 +476,9 @@ class Gru:
 
     async def _start_orchestration_minion(self, minion: Minion[Any, Any]):
         instance_id = minion._mn_minion_instance_id
-        name = minion._mn_name
 
         async with self._runtime_state_lock:
             self._minions_by_instance_id[instance_id] = minion
-            if name:
-                self._minions_by_name[name].append(minion)
 
             self._minion_tasks[instance_id] = safe_create_task(
                 minion._mn_start(),
@@ -498,15 +494,6 @@ class Gru:
         async with self._runtime_state_lock:
             self._minions_by_instance_id.pop(instance_id, None)
 
-            name = minion._mn_name
-            if name:
-                minions = self._minions_by_name.get(name, [])
-                minions = [m for m in minions if m._mn_minion_instance_id != instance_id]
-                if minions:
-                    self._minions_by_name[name] = minions
-                else:
-                    self._minions_by_name.pop(name, None)
-
             task = self._minion_tasks.pop(instance_id, None)
         if task:
             await safe_cancel_task(task=task, logger=self._logger)
@@ -516,10 +503,7 @@ class Gru:
     # TODO: add helper methods for coherent runtime state inspection. Tests
     # should use them to verify minion, pipeline, resource, task, dependency,
     # and refcount state after lifecycle operations instead of reaching into
-    # registries directly. A running-minion lookup helper should acquire
-    # _runtime_state_lock, check instance ID before name, and account for
-    # duplicate names instead of collapsing "not found" and "ambiguous name"
-    # into the same None result.
+    # registries directly.
 
 
     # Resource Methods
@@ -855,7 +839,7 @@ class Gru:
                         ERROR,
                         "Failed-start cleanup could not unsubscribe minion",
                         e,
-                        minion_name=minion._mn_name,
+                        minion_id=minion._mn_minion_id,
                         minion_instance_id=instance_id,
                         pipeline_id=pipeline_id,
                     )
@@ -889,7 +873,7 @@ class Gru:
                 ERROR,
                 "Failed-start cleanup could not stop minion",
                 e,
-                minion_name=minion._mn_name,
+                minion_id=minion._mn_minion_id,
                 minion_instance_id=minion._mn_minion_instance_id,
             )
             await self._discard_orchestration_runtime_state(minion)
@@ -898,15 +882,6 @@ class Gru:
         instance_id = minion._mn_minion_instance_id
         async with self._runtime_state_lock:
             self._minions_by_instance_id.pop(instance_id, None)
-            if minion._mn_name:
-                remaining = [
-                    item for item in self._minions_by_name.get(minion._mn_name, [])
-                    if item._mn_minion_instance_id != instance_id
-                ]
-                if remaining:
-                    self._minions_by_name[minion._mn_name] = remaining
-                else:
-                    self._minions_by_name.pop(minion._mn_name, None)
             task = self._minion_tasks.pop(instance_id, None)
         if task is not None:
             try:
@@ -916,7 +891,7 @@ class Gru:
                     ERROR,
                     "Minion task discard cleanup failed",
                     e,
-                    minion_name=minion._mn_name,
+                    minion_id=minion._mn_minion_id,
                     minion_instance_id=instance_id,
                 )
 
@@ -942,7 +917,7 @@ class Gru:
                             ERROR,
                             "Stop cleanup could not discard pipeline subscription",
                             e,
-                            minion_name=minion._mn_name,
+                            minion_id=minion._mn_minion_id,
                             minion_instance_id=instance_id,
                             pipeline_id=pipeline_id,
                         )
@@ -967,7 +942,7 @@ class Gru:
                 ERROR,
                 "Stop cleanup failed",
                 e,
-                minion_name=minion._mn_name,
+                minion_id=minion._mn_minion_id,
                 minion_instance_id=minion._mn_minion_instance_id,
             )
         finally:
@@ -1116,7 +1091,6 @@ class Gru:
     def _runtime_state_snapshot(self) -> dict[str, object]:
         runtime_state = {
             "minions_by_instance_id": self._minions_by_instance_id,
-            "minions_by_name": dict(self._minions_by_name),
             "minions_by_orchestration_id": self._minions_by_orchestration_id,
             "minion_tasks": self._minion_tasks,
             "pipelines": self._pipelines,
@@ -1343,13 +1317,11 @@ class Gru:
                         reason = "Orchestration already running - start request was rejected."
                         suggestion = "Use a different config file if you want to launch another instance."
                         minion_instance_id = minion_inst._mn_minion_instance_id
-                        minion_name = minion_inst._mn_name
                         await self._logger._mn_log(
                             INFO,
                             "Failed to start orchestration",
                             reason=reason,
                             suggestion=suggestion,
-                            minion_name=minion_name,
                             minion_instance_id=minion_instance_id,
                             **orchestration_log_kwargs,
                             minion_modpath=minion_modpath,
@@ -1360,7 +1332,6 @@ class Gru:
                             success=False,
                             reason=reason,
                             suggestion=suggestion,
-                            name=minion_name,
                             orchestration_id=orchestration_id,
                         )
 
@@ -1387,13 +1358,11 @@ class Gru:
                         )
                         suggestion = "Update the minion or pipeline so they use the same event type."
                         minion_instance_id = minion_inst._mn_minion_instance_id
-                        minion_name = minion_inst._mn_name
                         await self._logger._mn_log(
                             INFO,
                             "Failed to start orchestration",
                             reason=reason,
                             suggestion=suggestion,
-                            minion_name=minion_name,
                             minion_instance_id=minion_instance_id,
                             **orchestration_log_kwargs,
                             minion_modpath=minion_modpath,
@@ -1404,7 +1373,6 @@ class Gru:
                             success=False,
                             reason=reason,
                             suggestion=suggestion,
-                            name=minion_name,
                             orchestration_id=orchestration_id,
                         )
 
@@ -1500,7 +1468,6 @@ class Gru:
                     await self._logger._mn_log(
                         INFO,
                         "Orchestration started",
-                        minion_name=minion_inst._mn_name,
                         minion_instance_id=minion_inst._mn_minion_instance_id,
                         **orchestration_log_kwargs,
                         minion_modpath=minion_modpath,
@@ -1510,7 +1477,6 @@ class Gru:
 
                     return StartResult(
                         success=True,
-                        name=minion_inst._mn_name,
                         orchestration_id=orchestration_id,
                     )
 
@@ -1653,7 +1619,6 @@ class Gru:
                     await self._logger._mn_log(
                         DEBUG,
                         "Stopping orchestration...",
-                        minion_name=minion._mn_name,
                         minion_instance_id=minion._mn_minion_instance_id,
                         **minion._mn_orchestration_log_kwargs(),
                     )
@@ -1674,7 +1639,6 @@ class Gru:
                             INFO,
                             "Failed to stop orchestration",
                             reason=reason,
-                            minion_name=minion._mn_name,
                             minion_instance_id=minion._mn_minion_instance_id,
                             **minion._mn_orchestration_log_kwargs(),
                         )
@@ -1711,7 +1675,6 @@ class Gru:
                     await self._logger._mn_log(
                         INFO,
                         "Orchestration stopped",
-                        minion_name=minion._mn_name,
                         minion_instance_id=minion._mn_minion_instance_id,
                         **minion._mn_orchestration_log_kwargs(),
                     )
@@ -1732,14 +1695,12 @@ class Gru:
                             ERROR,
                             "Failed-stop cleanup raised",
                             cleanup_err,
-                            minion_name=minion._mn_name,
                             minion_instance_id=minion._mn_minion_instance_id,
                             **minion._mn_orchestration_log_kwargs(),
                         )
                 stop_log_kwargs: dict[str, object] = {}
                 if minion is not None:
                     stop_log_kwargs = {
-                        "minion_name": minion._mn_name,
                         "minion_instance_id": minion._mn_minion_instance_id,
                         **minion._mn_orchestration_log_kwargs(),
                     }

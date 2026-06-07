@@ -29,7 +29,7 @@ This package provides a light, test-focused DSL for scripting Gru scenarios and 
 
 ### Failure Semantics
 - Use `pytest.fail(...)` for scenario-contract failures:
-  - invalid scenario usage (for example unknown names/directives),
+  - invalid scenario usage,
   - timeout/verification failures,
   - expectation mismatches between declared directives and observed runtime behavior.
 - `ScenarioPlan(...)` raises `ValueError` for plan-construction validation errors
@@ -100,29 +100,36 @@ Directives fall into two broad roles:
 - `OrchestrationStop(id=<OrchestrationStart>)` stops the orchestration started by that earlier `OrchestrationStart` directive.
 - `Concurrent(...)` runs child directives concurrently.
 - `WaitWorkflowCompletions(...)` waits for workflow completion.
-- `AfterWorkflowStepStarts(expected, directive)` waits for explicit minion/step start counts then immediately executes a wrapped directive.
-  - Initial supported wrapped directive: `OrchestrationStop(...)`.
-  - Use this for checkpoint/resume tests that need a named workflow step boundary.
+- `AfterWorkflowStepStarts(expected, directive)` waits for explicit start-directive/step counts, then immediately executes a wrapped directive.
+  - The wrapped directive must currently be `OrchestrationStop(...)`.
+  - Use this for checkpoint/resume tests that need a specific workflow step boundary.
 - `ExpectRuntime(...)` evaluates runtime expectations at the current scenario checkpoint.
-  - Initial supported section: `expect=RuntimeExpectSpec(persistence={minion_name: count})`.
+  - Expectations are keyed by the exact `OrchestrationStart` directive whose runtime state should be checked.
   - Supported targets: `at="latest"` (directive checkpoint) or `at=<checkpoint_index>` (0-based).
 - `GruShutdown(...)` shuts down the Gru runtime.
+
+### Directive Identity
+- Every directive object represents one distinct occurrence in a scenario plan, even when two directives have identical field values.
+- Create a separate `OrchestrationStart(...)` object for each start or resume attempt.
+- References in `OrchestrationStop`, `WaitWorkflowCompletions`, `AfterWorkflowStepStarts`, and `RuntimeExpectSpec` must use the exact `OrchestrationStart` object included earlier in the plan.
+- Do not reuse the same directive object in multiple plan positions; `ScenarioPlan` rejects duplicate object references.
+- Identity-based keys remain hashable when `minion_config` contains unhashable inline values such as dictionaries or lists.
 
 ## Directive Effects
 | Directive | Writes Receipts | Affects Waits | Affects Verification Counts |
 |---|---|---|---|
-| `OrchestrationStart` | Yes (`success`, `orchestration_id`, `resolved_name`, directive index) | Yes (successful starts contribute expected workflow waits) | Yes (minion start counts, workflow-step counts, pipeline attempt/success bounds, state-store totals) |
+| `OrchestrationStart` | Yes (`success`, `orchestration_id`, directive index) | Yes (successful starts contribute expected workflow waits) | Yes (minion start counts, workflow-step counts, pipeline attempt/success bounds, state-store totals) |
 | `OrchestrationStop` | No | No | Indirect only (runtime state changes that may affect later call histories) |
 | `Concurrent` | No (container only) | No (container only) | No (container only) |
-| `WaitWorkflowCompletions` | No | Yes (waits by all started or named subset) | No direct counts; ensures async work is drained before assertions |
-| `AfterWorkflowStepStarts` | No | Yes (waits for named step-start targets before running wrapped directive) | Indirect only (wrapped directive effects and checkpoint snapshots) |
+| `WaitWorkflowCompletions` | No | Yes (waits by all started or explicit start-directive subset) | No direct counts; ensures async work is drained before assertions |
+| `AfterWorkflowStepStarts` | No | Yes (waits for start-directive step targets before running wrapped directive) | Indirect only (wrapped directive effects and checkpoint snapshots) |
 | `ExpectRuntime` | No | No | Yes (checkpoint-scoped runtime expectations and internal persisted-context integrity checks) |
 | `GruShutdown` | No | No | Yes (`seen_shutdown` gates shutdown-related expectations) |
 
 ## Waiting for Workflows
 - `WaitWorkflowCompletions()` waits for all workflows expected from successful starts so far.
-- `WaitWorkflowCompletions(minion_names=set())` is a no-op.
-- `WaitWorkflowCompletions(minion_names={...})` waits only for those names and fails on unknown names.
+- `WaitWorkflowCompletions(orchestrations=())` is a no-op.
+- `WaitWorkflowCompletions(orchestrations=(start_a, start_b))` waits only for those starts.
 - `WaitWorkflowCompletions(workflow_steps_mode="at_least"|"exact")` controls checkpoint-window step-delta strictness.
   - default is `"at_least"` (compatibility mode).
   - use `"exact"` for deterministic windows where over-production should fail.
@@ -139,35 +146,37 @@ Directives fall into two broad roles:
 ## Runtime Expectations
 - `ExpectRuntime(at="latest", expect=RuntimeExpectSpec(...))` asserts runtime state at the current checkpoint.
 - `ExpectRuntime(at=0, expect=RuntimeExpectSpec(...))` asserts runtime state at an explicit checkpoint index.
-- Initial persistence section:
+- Persistence section:
 ```python
+start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
+
 ExpectRuntime(
     expect=RuntimeExpectSpec(
-        persistence={"my-minion-name": 1},
+        persistence={start: 1},
     ),
 )
 ```
 - When persisted context snapshots are available, the verifier also validates persisted context integrity internally: matching started minion/orchestration, declared event/context types, `context_cls`, and `next_step_index` bounds.
-- Initial resolutions section:
+- Resolutions section:
 ```python
 ExpectRuntime(
     expect=RuntimeExpectSpec(
-        resolutions={"my-minion-name": {"succeeded": 1, "failed": 0, "aborted": 0}},
+        resolutions={start: {"succeeded": 1, "failed": 0, "aborted": 0}},
     ),
 )
 ```
-- Workflow-step progression section (step workflow-id counts by minion name):
+- Workflow-step progression section (step workflow-ID counts for a start):
 ```python
 ExpectRuntime(
     expect=RuntimeExpectSpec(
-        workflow_steps={"my-minion-name": {"step_1": 1, "step_2": 1}},
+        workflow_steps={start: {"step_1": 1, "step_2": 1}},
         workflow_steps_mode="exact",  # "exact" or "at_least"
     ),
 )
 ```
-- Persistence counts are resolved by scenario-local minion names observed from successful starts.
-- Persisted context content/type checks are evaluated against decoded StateStore snapshots, using the scenario-local minion type to decode event/context payloads when available.
-- Resolution counts are evaluated from checkpoint metrics snapshots for scenario-local minion instances.
+- Runtime expectation mappings are keyed by the exact successful `OrchestrationStart` directive being asserted.
+- Persisted context content/type checks are evaluated against decoded StateStore snapshots, using the started minion type to decode event/context payloads when available.
+- Resolution counts are evaluated from checkpoint metrics snapshots for the start's orchestration.
 - Workflow-step progression counts are evaluated from checkpoint workflow step-start workflow IDs.
 - `ExpectRuntime.workflow_steps_mode="exact"` is checkpoint-total exactness (strict equality for declared counts at target checkpoint), not window-tolerance mode.
 - Strictness policy lock:
@@ -180,13 +189,13 @@ resume = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
 directives = [
     start,
     AfterWorkflowStepStarts(
-        expected={"slow-second-step-minion": {"step_2": 1}},
+        expected={start: {"step_2": 1}},
         directive=OrchestrationStop(id=start, expect_success=True),
     ),
     ExpectRuntime(
         expect=RuntimeExpectSpec(
-            persistence={"slow-second-step-minion": 1},
-            workflow_steps={"slow-second-step-minion": {"step_1": 1, "step_2": 1}},
+            persistence={start: 1},
+            workflow_steps={start: {"step_1": 1, "step_2": 1}},
             workflow_steps_mode="exact",
         ),
     ),
@@ -194,8 +203,8 @@ directives = [
     WaitWorkflowCompletions(),
     ExpectRuntime(
         expect=RuntimeExpectSpec(
-            resolutions={"slow-second-step-minion": {"succeeded": 2, "failed": 0, "aborted": 0}},
-            workflow_steps={"slow-second-step-minion": {"step_1": 2, "step_2": 2}},
+            resolutions={resume: {"succeeded": 2, "failed": 0, "aborted": 0}},
+            workflow_steps={resume: {"step_1": 2, "step_2": 2}},
             workflow_steps_mode="exact",
         ),
     ),

@@ -71,8 +71,6 @@ class DictContext(msgspec.Struct):
 
 
 class IdleWaitMinion(Minion[DictEvent, DictContext]):
-    name = "idle-wait-minion"
-
     @minion_step
     async def step_1(self):
         return
@@ -228,8 +226,6 @@ async def test_wait_until_tasks_idle_can_include_aux_tasks():
 async def test_workflow_aborted_increments_aborted_counter():
     # define a minion whose first step aborts
     class AbortMinion(Minion[DictEvent, DictContext]):
-        name = "abort-minion"
-
         @minion_step
         async def step_1(self):
             raise AbortWorkflow()
@@ -269,8 +265,6 @@ async def test_workflow_aborted_increments_aborted_counter():
 @pytest.mark.asyncio
 async def test_workflow_failed_increments_failed_counter():
     class FailMinion(Minion[DictEvent, DictContext]):
-        name = "fail-minion"
-
         @minion_step
         async def step_1(self):
             raise RuntimeError('boom')
@@ -329,8 +323,6 @@ async def test_workflow_cancellation_records_interrupted_duration_status_and_kee
     step_can_finish = asyncio.Event()
 
     class InterruptedMinion(Minion[DictEvent, DictContext]):
-        name = "interrupted-minion"
-
         @minion_step
         async def step_1(self):
             step_started.set()
@@ -378,8 +370,6 @@ async def test_workflow_persistence_continue_on_failure_advances_and_retries_at_
     step_calls: list[str] = []
 
     class ContinueOnFailureMinion(Minion[DictEvent, DictContext]):
-        name = "continue-persistence-minion"
-
         @minion_step
         async def step_1(self):
             step_calls.append("step_1")
@@ -437,8 +427,6 @@ async def test_workflow_persistence_idle_until_persisted_blocks_next_step_until_
     step_2_started = asyncio.Event()
 
     class IdleUntilPersistedMinion(Minion[DictEvent, DictContext]):
-        name = "idle-persistence-minion"
-
         @minion_step
         async def step_1(self):
             step_calls.append("step_1")
@@ -502,8 +490,6 @@ async def test_workflow_persistence_blocked_gauge_counts_concurrent_workflows_fo
     step_calls = 0
 
     class ConcurrentIdleUntilPersistedMinion(Minion[DictEvent, DictContext]):
-        name = "concurrent-idle-persistence-minion"
-
         @minion_step
         async def step_1(self):
             nonlocal step_calls
@@ -554,8 +540,6 @@ async def test_workflow_persistence_idle_until_persisted_relogs_and_escalates_su
     step_2_started = asyncio.Event()
 
     class SustainedIdleMinion(Minion[DictEvent, DictContext]):
-        name = "sustained-idle-persistence-minion"
-
         @minion_step
         async def step_1(self):
             step_1_done.set()
@@ -608,8 +592,6 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds():
     step_1_done = asyncio.Event()
 
     class DeleteBlockingSuccessMinion(Minion[DictEvent, DictContext]):
-        name = "delete-blocking-success-minion"
-
         @minion_step
         async def step_1(self):
             step_1_done.set()
@@ -688,8 +670,6 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
         pass
 
     class NonRetryablePersistenceMinion(Minion[DictEvent, DictContext]):
-        name = "non-retryable-persistence-minion"
-
         @minion_step
         async def step_1(self):
             step_calls.append("step_1")
@@ -752,8 +732,6 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
 @pytest.mark.asyncio
 async def test_minion_startup_replays_only_own_contexts():
     class ReplayMinion(Minion[DictEvent, DictContext]):
-        name = "replay-minion"
-
         @minion_step
         async def step_1(self):
             return
@@ -811,8 +789,6 @@ async def test_minion_startup_replays_typed_msgspec_event_and_context():
     observed: list[tuple[type, type, int, int]] = []
 
     class ReplayMinion(Minion[ReplayEvent, ReplayContext]):
-        name = "replay-minion-typed"
-
         @minion_step
         async def step_1(self):
             observed.append((
@@ -858,8 +834,6 @@ async def test_minion_startup_replays_typed_msgspec_event_and_context():
 @pytest.mark.asyncio
 async def test_runtime_guard_rejects_nested_step_invocation_via_indirect_call():
     class NestedCallMinion(Minion[DictEvent, DictContext]):
-        name = "nested-call-minion"
-
         @minion_step
         async def step_1(self):
             nested = getattr(self, "step_2")
@@ -916,8 +890,6 @@ async def test_minion_steps_can_access_event_and_context_across_workflow_steps()
     observed: list[tuple[str, int, object]] = []
 
     class AccessMinion(Minion[DictEvent, DictContext]):
-        name = "access-minion"
-
         @minion_step
         async def step_1(self):
             event_value = self.event.value
@@ -965,8 +937,6 @@ async def test_resumed_workflow_step_can_access_event_and_context_from_state_sto
     observed: list[tuple[str, int, object]] = []
 
     class ResumeAccessMinion(Minion[DictEvent, DictContext]):
-        name = "resume-access-minion"
-
         @minion_step
         async def step_1(self):
             pytest.fail("step_1 should not execute when replay resumes at next_step_index=1")
@@ -1019,8 +989,6 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
     observed: list[int] = []
 
     class ReplayWithInvalidContextMinion(Minion[DictEvent, DictContext]):
-        name = "replay-with-invalid-context-minion"
-
         @minion_step
         async def step_1(self):
             observed.append(self.event.value)
@@ -1098,8 +1066,6 @@ async def test_minion_startup_replay_fails_closed_on_context_type_mismatch():
     observed: list[int] = []
 
     class ReplayWithMismatchedContextMinion(Minion[DictEvent, DictContext]):
-        name = "replay-with-mismatched-context-minion"
-
         @minion_step
         async def step_1(self):
             observed.append(self.event.value)

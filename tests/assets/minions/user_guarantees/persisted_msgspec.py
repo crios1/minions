@@ -2,12 +2,11 @@ import asyncio
 from typing import Any
 
 from minions import minion_step
-from tests.assets.user_guarantees.persisted_shapes import StructContext, StructEvent
 from tests.assets.support.minion_spied import SpiedMinion
+from tests.assets.user_guarantees.persisted_shapes import StructContext, StructEvent
 
 
 class StructPersistenceGuaranteeMinion(SpiedMinion[StructEvent, StructContext]):
-    name = "struct-persistence-guarantee-minion"
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)

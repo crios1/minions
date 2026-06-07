@@ -309,11 +309,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     ):
         super().__init__(logger)
 
-        name = getattr(type(self), "name", None)
-        if name is not None and not isinstance(name, str):
-            raise TypeError(f"{type(self).__name__}.name must be a string, got {type(name).__name__}")
-        self._mn_name = name
-
         # Instance id identifies this live runtime object; minion id identifies the stable component.
         self._mn_minion_instance_id = minion_instance_id
         self._mn_orchestration_id = orchestration_id
@@ -635,7 +630,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 0.0 if first_failure_at is None else time.monotonic() - first_failure_at
                             ),
                             persistence_retryable=True,
-                            minion_name=self._mn_name,
                             minion_instance_id=self._mn_minion_instance_id,
                             **self._mn_orchestration_log_kwargs(),
                             minion_modpath=self._mn_minion_modpath,
@@ -760,7 +754,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             "state_store": type(self._mn_state_store).__name__,
             "event_type": type(ctx.event).__name__,
             "context_type": getattr(ctx.context_cls, "__name__", type(ctx.context).__name__),
-            "minion_name": self._mn_name,
             "minion_instance_id": self._mn_minion_instance_id,
             **self._mn_orchestration_log_kwargs(),
             "minion_modpath": self._mn_minion_modpath,
@@ -935,7 +928,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             INFO,
                             "Workflow started",
                             workflow_id=ctx.workflow_id,
-                            minion_name=self._mn_name,
                             minion_instance_id=self._mn_minion_instance_id,
                             **self._mn_orchestration_log_kwargs(),
                             minion_modpath=self._mn_minion_modpath
@@ -950,7 +942,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         INFO,
                         "Workflow resumed",
                         workflow_id=ctx.workflow_id,
-                        minion_name=self._mn_name,
                         minion_instance_id=self._mn_minion_instance_id,
                         **self._mn_orchestration_log_kwargs(),
                         minion_modpath=self._mn_minion_modpath
@@ -975,7 +966,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             workflow_id=ctx.workflow_id,
                             step_name=step_name,
                             step_index=i,
-                            minion_name=self._mn_name,
                             minion_instance_id=self._mn_minion_instance_id,
                             **self._mn_orchestration_log_kwargs(),
                             minion_modpath=self._mn_minion_modpath
@@ -1007,7 +997,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 workflow_id=ctx.workflow_id,
                                 step_name=step_name,
                                 step_index=i,
-                                minion_name=self._mn_name,
                                 minion_instance_id=self._mn_minion_instance_id,
                                 **self._mn_orchestration_log_kwargs(),
                                 minion_modpath=self._mn_minion_modpath
@@ -1027,7 +1016,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             "workflow_id": ctx.workflow_id,
                             "step_name": step_name,
                             "step_index": i,
-                            "minion_name": self._mn_name,
                             "minion_instance_id": self._mn_minion_instance_id,
                             **self._mn_orchestration_log_kwargs(),
                             "minion_modpath": self._mn_minion_modpath
@@ -1066,7 +1054,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 workflow_id=ctx.workflow_id,
                                 step_name=step_name,
                                 step_index=i,
-                                minion_name=self._mn_name,
                                 minion_instance_id=self._mn_minion_instance_id,
                                 **self._mn_orchestration_log_kwargs(),
                                 minion_modpath=self._mn_minion_modpath
@@ -1137,7 +1124,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             terminal_workflow_log_level or INFO,
                             terminal_workflow_log_message,
                             workflow_id=ctx.workflow_id,
-                            minion_name=self._mn_name,
                             minion_instance_id=self._mn_minion_instance_id,
                             **self._mn_orchestration_log_kwargs(),
                             minion_modpath=self._mn_minion_modpath
@@ -1157,7 +1143,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             terminal_workflow_log_message,
                             failure_error,
                             workflow_id=ctx.workflow_id,
-                            minion_name=self._mn_name,
                             minion_instance_id=self._mn_minion_instance_id,
                             **self._mn_orchestration_log_kwargs(),
                             minion_modpath=self._mn_minion_modpath,
@@ -1176,7 +1161,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             terminal_workflow_log_level or INFO,
                             terminal_workflow_log_message,
                             workflow_id=ctx.workflow_id,
-                            minion_name=self._mn_name,
                             minion_instance_id=self._mn_minion_instance_id,
                             **self._mn_orchestration_log_kwargs(),
                             minion_modpath=self._mn_minion_modpath
