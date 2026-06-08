@@ -2,12 +2,14 @@ from dataclasses import dataclass, field
 
 # === Supporting Types ===
 
+
 @dataclass
 class ConflictingMinion:
     instance_id: str
     modpath: str
     config_modpath: str | None
     pipeline_modpath: str
+
 
 @dataclass
 class ShutdownError:
@@ -19,6 +21,7 @@ class ShutdownError:
 
 # === Gru Return Types ===
 
+
 @dataclass
 class GruResult:
     success: bool
@@ -29,17 +32,21 @@ class GruResult:
     #     if not self.success and not self.reason:
     #         raise ValueError("`reason` must be set if `success` is False")
 
+
 @dataclass
 class StopResult(GruResult):
     conflicts: list[ConflictingMinion] = field(default_factory=list[ConflictingMinion])
+
 
 @dataclass
 class StartResult(GruResult):
     orchestration_id: str | None = None
 
+
 @dataclass
 class ShutdownResult(GruResult):
     errors: list[ShutdownError] = field(default_factory=list[ShutdownError])
+
 
 @dataclass
 class MinionStatusResult(GruResult):

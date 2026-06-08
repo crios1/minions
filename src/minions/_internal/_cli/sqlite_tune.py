@@ -140,7 +140,9 @@ async def _run_once(
     effective_batch_max_queued_writes = store._batch_max_queued_writes
     if effective_batch_max_queued_writes is None:
         raise RuntimeError("batch_max_queued_writes was not resolved during startup")
-    effective_flush_delay_ms = None if effective_batch_max_queued_writes == 1 else store._batch_max_flush_delay_ms
+    effective_flush_delay_ms = (
+        None if effective_batch_max_queued_writes == 1 else store._batch_max_flush_delay_ms
+    )
     try:
         warmup = min(warmup_ops, ops)
         for start in range(0, warmup, concurrency):
@@ -209,7 +211,8 @@ async def _run_benchmark(args: argparse.Namespace) -> list[RunResult]:
                 (
                     "autotuned" if batched_tuning == "calibrated" else "batched",
                     batched_tuning,
-                    None if batched_tuning == "calibrated" else args.batched_batch_max_queued_writes,
+                    None if batched_tuning == "calibrated"
+                    else args.batched_batch_max_queued_writes,
                     None if batched_tuning == "calibrated" else args.flush_delay_ms,
                 ),
             )
@@ -246,31 +249,48 @@ async def _run_tradeoff_profile(args: argparse.Namespace) -> list[RunResult]:
                 modes: list[tuple[str, BatchTuningMode, int | None, int | None, int | None]] = [
                     (f"{scenario}:immediate", "manual", 1, None, None),
                     (
-                        f"{scenario}:autotuned" if batched_tuning == "calibrated" else f"{scenario}:batched",
+                        f"{scenario}:autotuned" if batched_tuning == "calibrated"
+                        else f"{scenario}:batched",
                         batched_tuning,
-                        None if batched_tuning == "calibrated" else args.batched_batch_max_queued_writes,
-                        None if batched_tuning == "calibrated" else args.flush_delay_ms,
+                        None if batched_tuning == "calibrated"
+                        else args.batched_batch_max_queued_writes,
+                        None if batched_tuning == "calibrated"
+                        else args.flush_delay_ms,
                         args.batch_max_interarrival_delay_ms,
                     ),
                 ]
                 if args.compare_interarrival and args.batch_max_interarrival_delay_ms is not None:
                     modes[1] = (
-                        f"{scenario}:autotuned-base" if batched_tuning == "calibrated" else f"{scenario}:batched-base",
+                        f"{scenario}:autotuned-base"
+                        if batched_tuning == "calibrated"
+                        else f"{scenario}:batched-base",
                         batched_tuning,
-                        None if batched_tuning == "calibrated" else args.batched_batch_max_queued_writes,
+                        None
+                        if batched_tuning == "calibrated"
+                        else args.batched_batch_max_queued_writes,
                         None if batched_tuning == "calibrated" else args.flush_delay_ms,
                         None,
                     )
                     modes.append(
                         (
-                            f"{scenario}:autotuned-inter" if batched_tuning == "calibrated" else f"{scenario}:batched-inter",
+                            f"{scenario}:autotuned-inter"
+                            if batched_tuning == "calibrated"
+                            else f"{scenario}:batched-inter",
                             batched_tuning,
-                            None if batched_tuning == "calibrated" else args.batched_batch_max_queued_writes,
+                            None
+                            if batched_tuning == "calibrated"
+                            else args.batched_batch_max_queued_writes,
                             None if batched_tuning == "calibrated" else args.flush_delay_ms,
                             args.batch_max_interarrival_delay_ms,
                         )
                     )
-                for label, batch_tuning, batch_max_queued_writes, flush_delay_ms, interarrival_delay_ms in modes:
+                for (
+                    label,
+                    batch_tuning,
+                    batch_max_queued_writes,
+                    flush_delay_ms,
+                    interarrival_delay_ms,
+                ) in modes:
                     results.append(
                         await _run_once(
                             label=label,
@@ -380,7 +400,9 @@ async def _run_delay_sweep(args: argparse.Namespace) -> list[RunResult]:
                         results.append(
                             await _run_once(
                                 label="batched",
-                                db_path=os.path.join(round_dir, f"batched-{batch_size}-{delay_ms}.sqlite3"),
+                                db_path=os.path.join(
+                                    round_dir, f"batched-{batch_size}-{delay_ms}.sqlite3"
+                                ),
                                 batch_tuning="manual",
                                 batch_max_queued_writes=batch_size,
                                 batch_max_interarrival_delay_ms=args.batch_max_interarrival_delay_ms,
@@ -443,11 +465,7 @@ def _score_tuned_configs(
     args: argparse.Namespace,
 ) -> tuple[list[TunedConfigScore], dict[str, list[RunResult]]]:
     immediate, by_profile_label = _group_tuning_results(results)
-    config_labels = sorted({
-        label
-        for _profile, label in by_profile_label
-        if label != "immediate"
-    })
+    config_labels = sorted({label for _profile, label in by_profile_label if label != "immediate"})
     best_upper_ops_per_sec = max(
         _mean([r.ops_per_sec for r in by_profile_label[("upper", label)]])
         for label in config_labels
@@ -468,9 +486,15 @@ def _score_tuned_configs(
         upper_commits = _mean([r.commits for r in upper_runs])
 
         low_latency_score = min(1.0, immediate_low_p95_ms / low_p95_ms) if low_p95_ms else 0.0
-        medium_latency_score = min(1.0, immediate_medium_p95_ms / medium_p95_ms) if medium_p95_ms else 0.0
-        upper_throughput_score = upper_ops_per_sec / best_upper_ops_per_sec if best_upper_ops_per_sec else 0.0
-        upper_batch_fullness_score = min(1.0, upper_rows_per_commit / upper_runs[0].batch_max_queued_writes)
+        medium_latency_score = (
+            min(1.0, immediate_medium_p95_ms / medium_p95_ms) if medium_p95_ms else 0.0
+        )
+        upper_throughput_score = (
+            upper_ops_per_sec / best_upper_ops_per_sec if best_upper_ops_per_sec else 0.0
+        )
+        upper_batch_fullness_score = min(
+            1.0, upper_rows_per_commit / upper_runs[0].batch_max_queued_writes
+        )
         score = (
             args.tune_low_weight * low_latency_score
             + args.tune_medium_weight * medium_latency_score
@@ -485,9 +509,13 @@ def _score_tuned_configs(
                 interarrival_delay_ms=upper_runs[0].interarrival_delay_ms,
                 score=score,
                 low_p95_ms=low_p95_ms,
-                low_p95_vs_immediate=low_p95_ms / immediate_low_p95_ms if immediate_low_p95_ms else 0.0,
+                low_p95_vs_immediate=low_p95_ms / immediate_low_p95_ms
+                if immediate_low_p95_ms
+                else 0.0,
                 medium_p95_ms=medium_p95_ms,
-                medium_p95_vs_immediate=medium_p95_ms / immediate_medium_p95_ms if immediate_medium_p95_ms else 0.0,
+                medium_p95_vs_immediate=medium_p95_ms / immediate_medium_p95_ms
+                if immediate_medium_p95_ms
+                else 0.0,
                 upper_ops_per_sec=upper_ops_per_sec,
                 upper_speedup=upper_ops_per_sec / immediate_upper_ops_per_sec,
                 upper_rows_per_commit=upper_rows_per_commit,
@@ -561,7 +589,9 @@ def _select_balanced_recommendation(
         name="batched_balanced",
         score=max(ranked, key=_balanced_score),
         selection_status="fallback",
-        selection_reason="no candidate passed balanced guardrails; selected least-bad mixed-workload score",
+        selection_reason=(
+            "no candidate passed balanced guardrails; selected least-bad mixed-workload score"
+        ),
     )
 
 
@@ -593,7 +623,9 @@ def _select_max_throughput_recommendation(
         name="batched_max_throughput",
         score=max(ranked, key=_max_throughput_score),
         selection_status="fallback",
-        selection_reason="no candidate passed throughput guardrails; selected highest throughput-oriented score",
+        selection_reason=(
+            "no candidate passed throughput guardrails; selected highest throughput-oriented score"
+        ),
     )
 
 
@@ -647,10 +679,7 @@ def _print_results(results: list[RunResult], *, sweep: bool, tradeoff_profile: b
         return
 
     labels = list(dict.fromkeys(result.label for result in results))
-    by_label = {
-        label: [result for result in results if result.label == label]
-        for label in labels
-    }
+    by_label = {label: [result for result in results if result.label == label] for label in labels}
 
     sample = results[0]
     print(
@@ -666,12 +695,15 @@ def _print_results(results: list[RunResult], *, sweep: bool, tradeoff_profile: b
     )
     for label in labels:
         runs = by_label[label]
+        interarrival_delay = (
+            runs[0].interarrival_delay_ms if runs[0].interarrival_delay_ms is not None else "-"
+        )
         print(
             f"{label:<10} "
             f"{runs[0].batch_max_queued_writes:>6} "
             f"{runs[0].flush_delay_ms if runs[0].flush_delay_ms is not None else '-':>7} "
             f"{_mean([r.ops_per_sec for r in runs]):>10.0f} "
-            f"{runs[0].interarrival_delay_ms if runs[0].interarrival_delay_ms is not None else '-':>7} "
+            f"{interarrival_delay:>7} "
             f"{_mean([r.elapsed_ms for r in runs]):>12.1f} "
             f"{_mean([r.save_p50_ms for r in runs]):>10.2f} "
             f"{_mean([r.save_p95_ms for r in runs]):>10.2f} "
@@ -680,7 +712,9 @@ def _print_results(results: list[RunResult], *, sweep: bool, tradeoff_profile: b
             f"{_mean([r.db_bytes for r in runs]) / 1024.0:>9.1f}"
         )
 
-    comparison_labels = ("autotuned", "immediate") if "autotuned" in by_label else ("batched", "immediate")
+    comparison_labels = (
+        ("autotuned", "immediate") if "autotuned" in by_label else ("batched", "immediate")
+    )
     batched_label, immediate_label = comparison_labels
     if {batched_label, immediate_label}.issubset(by_label):
         batched_rps = _mean([r.ops_per_sec for r in by_label[batched_label]])
@@ -693,10 +727,7 @@ def _print_results(results: list[RunResult], *, sweep: bool, tradeoff_profile: b
 
 
 def _print_tradeoff_profile_results(results: list[RunResult]) -> None:
-    print(
-        "SQLite state store write tradeoff profile "
-        f"(payload={results[0].payload_bytes} bytes)"
-    )
+    print(f"SQLite state store write tradeoff profile (payload={results[0].payload_bytes} bytes)")
     print()
     print(
         f"{'profile':<8} {'mode':<10} {'batch':>6} {'delay':>7} {'ops':>6} "
@@ -704,12 +735,12 @@ def _print_tradeoff_profile_results(results: list[RunResult]) -> None:
         f"{'save p95':>10} {'commits':>9} {'rows/commit':>12} {'db KiB':>9}"
     )
     keys = list(dict.fromkeys(result.label for result in results))
-    by_label = {
-        label: [result for result in results if result.label == label]
-        for label in keys
-    }
+    by_label = {label: [result for result in results if result.label == label] for label in keys}
     for label, runs in by_label.items():
         profile, mode = label.split(":", 1)
+        interarrival_delay = (
+            runs[0].interarrival_delay_ms if runs[0].interarrival_delay_ms is not None else "-"
+        )
         print(
             f"{profile:<8} "
             f"{mode:<10} "
@@ -717,7 +748,7 @@ def _print_tradeoff_profile_results(results: list[RunResult]) -> None:
             f"{runs[0].flush_delay_ms if runs[0].flush_delay_ms is not None else '-':>7} "
             f"{runs[0].ops:>6} "
             f"{runs[0].concurrency:>5} "
-            f"{runs[0].interarrival_delay_ms if runs[0].interarrival_delay_ms is not None else '-':>7} "
+            f"{interarrival_delay:>7} "
             f"{_mean([r.ops_per_sec for r in runs]):>10.0f} "
             f"{_mean([r.elapsed_ms for r in runs]):>12.1f} "
             f"{_mean([r.save_p50_ms for r in runs]):>10.2f} "
@@ -728,7 +759,9 @@ def _print_tradeoff_profile_results(results: list[RunResult]) -> None:
         )
 
 
-def _print_tuning_results(results: list[RunResult], *, args: argparse.Namespace, top_n: int) -> None:
+def _print_tuning_results(
+    results: list[RunResult], *, args: argparse.Namespace, top_n: int
+) -> None:
     profiles = ("low", "medium", "upper")
     ranked, immediate = _score_tuned_configs(results, args)
     sample = results[0]
@@ -746,8 +779,7 @@ def _print_tuning_results(results: list[RunResult], *, args: argparse.Namespace,
     print()
     print("Immediate baselines:")
     print(
-        f"{'profile':<8} {'ops':>6} {'conc':>5} {'ops/s':>10} "
-        f"{'p50':>8} {'p95':>8} {'commits':>9}"
+        f"{'profile':<8} {'ops':>6} {'conc':>5} {'ops/s':>10} {'p50':>8} {'p95':>8} {'commits':>9}"
     )
     for profile in profiles:
         runs = immediate[profile]
@@ -840,15 +872,14 @@ def _print_recommendation(results: list[RunResult], *, args: argparse.Namespace)
             },
             "immediate_baseline": immediate_baseline,
             "immediate_baselines": immediate_baseline,
-            "top_candidates": [_score_to_json(score) for score in ranked[:args.tune_top_n]],
+            "top_candidates": [_score_to_json(score) for score in ranked[: args.tune_top_n]],
         }
         print(json.dumps(payload, indent=2, sort_keys=True))
         return
 
     print("Immediate baselines:")
     print(
-        f"{'profile':<8} {'ops':>6} {'conc':>5} {'ops/s':>10} "
-        f"{'p50':>8} {'p95':>8} {'commits':>9}"
+        f"{'profile':<8} {'ops':>6} {'conc':>5} {'ops/s':>10} {'p50':>8} {'p95':>8} {'commits':>9}"
     )
     for profile in ("low", "medium", "upper"):
         runs = immediate[profile]
@@ -876,8 +907,14 @@ def _print_recommendation(results: list[RunResult], *, args: argparse.Namespace)
         print(f"  selection_reason={selected.selection_reason}")
         print(f"  score={score.score:.2f}")
         print(f"  low p95={score.low_p95_ms:.2f} ms ({score.low_p95_vs_immediate:.2f}x immediate)")
-        print(f"  medium p95={score.medium_p95_ms:.2f} ms ({score.medium_p95_vs_immediate:.2f}x immediate)")
-        print(f"  upper throughput={score.upper_ops_per_sec:.0f} ops/s ({score.upper_speedup:.2f}x immediate)")
+        print(
+            f"  medium p95={score.medium_p95_ms:.2f} ms "
+            f"({score.medium_p95_vs_immediate:.2f}x immediate)"
+        )
+        print(
+            f"  upper throughput={score.upper_ops_per_sec:.0f} ops/s "
+            f"({score.upper_speedup:.2f}x immediate)"
+        )
         print(f"  upper commits={score.upper_commits:.1f}")
         print(f"  upper rows/commit={score.upper_rows_per_commit:.1f}")
         print()
@@ -887,7 +924,7 @@ def _print_recommendation(results: list[RunResult], *, args: argparse.Namespace)
         f"{'low p95':>9} {'low/imm':>8} {'med p95':>9} {'med/imm':>8} {'upper ops/s':>12} "
         f"{'upper x':>8} {'rows/commit':>12}"
     )
-    display_scores = list(ranked[:args.tune_top_n])
+    display_scores = list(ranked[: args.tune_top_n])
     displayed_labels = {score.label for score in display_scores}
     for selected in (balanced, max_throughput):
         if selected.score.label not in displayed_labels:
@@ -919,19 +956,18 @@ def _print_recommendation(results: list[RunResult], *, args: argparse.Namespace)
 
 
 def _print_sweep_results(results: list[RunResult]) -> None:
-    keys = sorted({
-        (
-            result.concurrency,
-            result.label,
-            result.batch_max_queued_writes,
-            result.flush_delay_ms,
-        )
-        for result in results
-    })
-    print(
-        "SQLite state store flush-delay sweep "
-        f"(payload={results[0].payload_bytes} bytes)"
+    keys = sorted(
+        {
+            (
+                result.concurrency,
+                result.label,
+                result.batch_max_queued_writes,
+                result.flush_delay_ms,
+            )
+            for result in results
+        }
     )
+    print(f"SQLite state store flush-delay sweep (payload={results[0].payload_bytes} bytes)")
     print()
     print(
         f"{'conc':>5} {'mode':<10} {'batch':>6} {'delay':>7} {'ops':>6} "
@@ -940,26 +976,31 @@ def _print_sweep_results(results: list[RunResult]) -> None:
     )
     rows_by_key = {
         key: [
-            result for result in results
+            result
+            for result in results
             if (
                 result.concurrency,
                 result.label,
                 result.batch_max_queued_writes,
                 result.flush_delay_ms,
-            ) == key
+            )
+            == key
         ]
         for key in keys
     }
     for key in keys:
         concurrency, label, _batch_max_queued_writes, flush_delay_ms = key
         runs = rows_by_key[key]
+        interarrival_delay = (
+            runs[0].interarrival_delay_ms if runs[0].interarrival_delay_ms is not None else "-"
+        )
         print(
             f"{concurrency:>5} "
             f"{label:<10} "
             f"{runs[0].batch_max_queued_writes:>6} "
             f"{flush_delay_ms if flush_delay_ms is not None else '-':>7} "
             f"{runs[0].ops:>6} "
-            f"{runs[0].interarrival_delay_ms if runs[0].interarrival_delay_ms is not None else '-':>7} "
+            f"{interarrival_delay:>7} "
             f"{_mean([r.ops_per_sec for r in runs]):>10.0f} "
             f"{_mean([r.elapsed_ms for r in runs]):>12.1f} "
             f"{_mean([r.save_p50_ms for r in runs]):>10.2f} "
@@ -991,14 +1032,19 @@ def _parse_args(
         "--batched-tuning",
         choices=("manual", "calibrated"),
         default="manual",
-        help="Use manual batch settings or calibrated startup autotuning for the non-immediate mode.",
+        help=(
+            "Use manual batch settings or calibrated startup autotuning for the non-immediate mode."
+        ),
     )
     parser.add_argument("--batched-batch-max-queued-writes", type=int, default=64)
     parser.add_argument("--batch-max-interarrival-delay-ms", type=int, default=None)
     parser.add_argument(
         "--compare-interarrival",
         action="store_true",
-        help="In tradeoff profile mode, compare batched/autotuned without and with interarrival delay.",
+        help=(
+            "In tradeoff profile mode, compare batched/autotuned without and with "
+            "interarrival delay."
+        ),
     )
     parser.add_argument(
         "--tradeoff-profile",
@@ -1058,13 +1104,18 @@ def main(
     args = _parse_args(argv, prog=prog)
     if args.tradeoff_profile and args.sweep_flush_delay_ms:
         raise SystemExit("--tradeoff-profile cannot be combined with --sweep-flush-delay-ms")
-    if args.tune_curve and (args.tradeoff_profile or args.sweep_flush_delay_ms or args.recommend_config):
+    if args.tune_curve and (
+        args.tradeoff_profile or args.sweep_flush_delay_ms or args.recommend_config
+    ):
         raise SystemExit(
             "--tune-curve cannot be combined with --tradeoff-profile, "
             "--sweep-flush-delay-ms, or --recommend-config"
         )
     if args.recommend_config and (args.tradeoff_profile or args.sweep_flush_delay_ms):
-        raise SystemExit("--recommend-config cannot be combined with --tradeoff-profile or --sweep-flush-delay-ms")
+        raise SystemExit(
+            "--recommend-config cannot be combined with --tradeoff-profile or "
+            "--sweep-flush-delay-ms"
+        )
     if args.sweep_flush_delay_ms and args.batched_tuning != "manual":
         raise SystemExit("--sweep-flush-delay-ms only supports --batched-tuning manual")
 

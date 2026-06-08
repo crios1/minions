@@ -6,7 +6,8 @@ from .logger import Logger
 
 
 class ConsoleLogger(Logger):
-    def __init__(self): pass
+    def __init__(self):
+        pass
 
     async def log(self, level: int, msg: str, **kwargs: Any) -> None:
         now = datetime.now(timezone.utc).isoformat()

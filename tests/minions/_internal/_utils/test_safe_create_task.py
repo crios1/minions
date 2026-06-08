@@ -13,10 +13,11 @@ class FailingLogger(InMemoryLogger):
     async def log(self, level: int, msg: str, **kwargs: Any) -> None:
         raise RuntimeError("logger backend failed")
 
+
 @pytest.mark.asyncio
 async def test_safe_create_task_logs_on_exception() -> None:
     logger = InMemoryLogger()
-    
+
     async def faulty() -> None:
         raise ValueError("test failure")
 
@@ -24,12 +25,13 @@ async def test_safe_create_task_logs_on_exception() -> None:
     await task
 
     [log] = logger.logs
-    
+
     assert log.level == ERROR
     assert "[Exception in asyncio.Task] (test_coro): test failure" in log.msg
     assert log.kwargs["error_type"] == "ValueError"
     assert log.kwargs["error_message"] == "test failure"
     assert "traceback" in log.kwargs
+
 
 @pytest.mark.asyncio
 async def test_safe_create_task_success_does_not_log() -> None:
@@ -42,6 +44,7 @@ async def test_safe_create_task_success_does_not_log() -> None:
     await task
 
     assert logger.logs == []
+
 
 @pytest.mark.asyncio
 async def test_safe_create_task_propagates_cancelled_error() -> None:
@@ -57,6 +60,7 @@ async def test_safe_create_task_propagates_cancelled_error() -> None:
 
     assert logger.logs == []
 
+
 @pytest.mark.asyncio
 async def test_safe_create_task_swallows_logger_failures() -> None:
     logger = FailingLogger()
@@ -66,6 +70,7 @@ async def test_safe_create_task_swallows_logger_failures() -> None:
 
     task = safe_create_task(faulty(), logger, name="faulty_with_bad_logger")
     await task
+
 
 @pytest.mark.asyncio
 async def test_safe_create_task_calls_on_failure_for_user_exceptions() -> None:
@@ -86,6 +91,7 @@ async def test_safe_create_task_calls_on_failure_for_user_exceptions() -> None:
     assert str(exception) == "boom"
     assert task_name == "faulty_task"
 
+
 @pytest.mark.asyncio
 async def test_safe_create_task_calls_on_failure_for_system_exit() -> None:
     logger = InMemoryLogger()
@@ -103,24 +109,31 @@ async def test_safe_create_task_calls_on_failure_for_system_exit() -> None:
     assert str(exception) == "bye"
     assert task_name == "system_exit_task"
 
+
 @pytest.mark.asyncio
 async def test_safe_create_task_swallows_on_failure_errors() -> None:
     logger = InMemoryLogger()
 
-    async def bad_failure_hook(
-        *_args: object, **_kwargs: object
-    ) -> None:
+    async def bad_failure_hook(*_args: object, **_kwargs: object):
         raise RuntimeError("failure hook crashed")
 
     async def faulty() -> None:
         raise ValueError("boom")
 
-    task = safe_create_task(faulty(), logger, name="faulty_with_bad_hook", on_failure=bad_failure_hook)
+    task = safe_create_task(
+        faulty(),
+        logger,
+        name="faulty_with_bad_hook",
+        on_failure=bad_failure_hook
+    )
     await task
 
     log = logger.logs[-1]
 
-    assert "[safe_create_task on_failure failed] (faulty_with_bad_hook): failure hook crashed" in log.msg
+    assert (
+        "[safe_create_task on_failure failed] (faulty_with_bad_hook): failure hook crashed"
+        in log.msg
+    )
     assert log.kwargs["error_type"] == "RuntimeError"
     assert log.kwargs["error_message"] == "failure hook crashed"
     assert "traceback" in log.kwargs

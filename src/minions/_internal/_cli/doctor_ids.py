@@ -66,10 +66,12 @@ def _split_paths(paths: list[Path]) -> tuple[list[Path], list[Path]]:
         elif path.suffix.lower() in _CONFIG_SUFFIXES:
             config_paths.append(path)
         else:
-            raise ValueError((
-                f"Unsupported doctor ids path for {path}: "
-                "expected a directory, .py, .toml, .yaml, .yml, or .json"
-            ))
+            raise ValueError(
+                (
+                    f"Unsupported doctor ids path for {path}: "
+                    "expected a directory, .py, .toml, .yaml, .yml, or .json"
+                )
+            )
     return component_paths, config_paths
 
 

@@ -75,7 +75,9 @@ async def test_safe_run_and_log_accepts_bound_class_method():
 async def test_safe_run_and_log_rejects_free_function():
     comp = ComponentA(NoOpLogger())
 
-    with pytest.raises(TypeError, match="require a method bound to this component instance or its class"):
+    with pytest.raises(
+        TypeError, match="require a method bound to this component instance or its class"
+    ):
         await comp._mn_safe_run_and_log_failure(free_add_five, method_args=[1])
 
 
@@ -83,7 +85,9 @@ async def test_safe_run_and_log_rejects_free_function():
 async def test_safe_run_and_log_rejects_static_method():
     comp = ComponentA(NoOpLogger())
 
-    with pytest.raises(TypeError, match="require a method bound to this component instance or its class"):
+    with pytest.raises(
+        TypeError, match="require a method bound to this component instance or its class"
+    ):
         await comp._mn_safe_run_and_log_failure(
             ComponentA.static_add_four,
             method_args=[1],
@@ -95,7 +99,9 @@ async def test_safe_run_and_log_rejects_method_bound_to_other_component():
     comp_a = ComponentA(NoOpLogger())
     comp_b = ComponentB(NoOpLogger())
 
-    with pytest.raises(TypeError, match="require a method bound to this component instance or its class"):
+    with pytest.raises(
+        TypeError, match="require a method bound to this component instance or its class"
+    ):
         await comp_a._mn_safe_run_and_log_failure(
             comp_b.instance_add_ten,
             method_args=[1],
@@ -112,9 +118,15 @@ async def test_safe_run_and_log_failure_logs_default_message_and_rel_modpath():
     assert result is None
     assert (
         logger.logs[-1].msg
-        == "FailingComponent.raise_runtime_error failed (tests/minions/_internal/_framework/test_async_component.py)"
+        == (
+            "FailingComponent.raise_runtime_error failed "
+            "(tests/minions/_internal/_framework/test_async_component.py)"
+        )
     )
-    assert str(logger.logs[-1].kwargs["rel_modpath"]) == "tests/minions/_internal/_framework/test_async_component.py"
+    assert (
+        str(logger.logs[-1].kwargs["rel_modpath"])
+        == "tests/minions/_internal/_framework/test_async_component.py"
+    )
 
 
 @pytest.mark.asyncio
@@ -129,7 +141,10 @@ async def test_safe_run_and_log_failure_accepts_log_message_override():
 
     assert result is None
     assert logger.logs[-1].msg == "Builder-facing failure message"
-    assert str(logger.logs[-1].kwargs["rel_modpath"]) == "tests/minions/_internal/_framework/test_async_component.py"
+    assert (
+        str(logger.logs[-1].kwargs["rel_modpath"])
+        == "tests/minions/_internal/_framework/test_async_component.py"
+    )
 
 
 @pytest.mark.asyncio
@@ -143,7 +158,10 @@ async def test_safe_run_and_log_failure_rel_modpath_overrides_log_kwargs_collisi
     )
 
     assert result is None
-    assert str(logger.logs[-1].kwargs["rel_modpath"]) == "tests/minions/_internal/_framework/test_async_component.py"
+    assert (
+        str(logger.logs[-1].kwargs["rel_modpath"])
+        == "tests/minions/_internal/_framework/test_async_component.py"
+    )
 
 
 @pytest.mark.asyncio
@@ -168,7 +186,10 @@ async def test_run_and_log_failure_logs_and_reraises_failure():
 
     assert (
         logger.logs[-1].msg
-        == "FailingComponent.raise_runtime_error failed (tests/minions/_internal/_framework/test_async_component.py)"
+        == (
+            "FailingComponent.raise_runtime_error failed "
+            "(tests/minions/_internal/_framework/test_async_component.py)"
+        )
     )
     assert logger.logs[-1].kwargs["error_type"] == "RuntimeError"
     assert logger.logs[-1].kwargs["error_message"] == "boom"

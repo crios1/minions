@@ -6,7 +6,6 @@ from tests.assets.support.minion_spied import SpiedMinion
 
 
 class BoomStepMinion(SpiedMinion[CounterEvent, CounterContext]):
-
     @minion_step
     async def step_1(self) -> None:
         boom()

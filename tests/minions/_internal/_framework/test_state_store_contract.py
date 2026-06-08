@@ -260,7 +260,9 @@ async def test_state_store_get_contexts_for_orchestration_filters_by_identity(
     assert filtered_ids == {"wf-target-a"}
     assert all(ctx.orchestration_id == target_a.orchestration_id for ctx in filtered)
 
-    missing = await store._mn_get_decoded_contexts_for_orchestration(_ck(target_modpath, config="cfg-missing"))
+    missing = await store._mn_get_decoded_contexts_for_orchestration(
+        _ck(target_modpath, config="cfg-missing")
+    )
     assert missing == []
 
 

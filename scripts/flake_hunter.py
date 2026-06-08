@@ -143,7 +143,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Keep logs, junitxml, and basetemp for passing runs. "
             "Default deletes passing run artifacts."
-        )
+        ),
     )
     parser.add_argument(
         "--run-timeout-seconds",
@@ -481,8 +481,7 @@ def choose_recommended_jobs(samples: list[DiagnosticSample]) -> int:
     best_throughput = max(sample.throughput_runs_per_s for sample in usable)
     threshold = best_throughput * (1.0 - PERFORMANCE_TIE_TOLERANCE)
     candidates = [
-        sample
-        for sample in usable
+        sample for sample in usable
         if sample.throughput_runs_per_s >= threshold
     ]
     return min(candidates, key=lambda sample: sample.jobs).jobs

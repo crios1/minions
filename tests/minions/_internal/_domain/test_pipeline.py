@@ -30,6 +30,7 @@ class TestPipelineSubclassingValid:
             async def produce_event(self):
                 return MyStructEvent(1)
 
+
 class TestPipelineSubclassingInvalid:
     def test_missing_event_type(self):
         with pytest.raises(TypeError) as excinfo:

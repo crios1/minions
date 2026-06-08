@@ -6,6 +6,7 @@ class FirstPipeline(SpiedPipeline[CounterEvent]):
     async def produce_event(self) -> CounterEvent:
         raise RuntimeError("should not run")
 
+
 class SecondPipeline(SpiedPipeline[CounterEvent]):
     async def produce_event(self) -> CounterEvent:
         raise RuntimeError("should not run")

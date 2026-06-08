@@ -61,7 +61,7 @@ class TestValidComposition:
 
                 assert result.orchestration_id is not None
 
-    class TestPipelineFile: # TODO: consider implementing tests to be in parity with TestMinionFile class
+    class TestPipelineFile: # TODO: consider implementing tests to be in parity with TestMinionFile class  # noqa: E501
         @pytest.mark.asyncio
         async def test_gru_accepts_file_with_single_pipeline_class(
             self,

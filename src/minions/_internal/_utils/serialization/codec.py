@@ -43,8 +43,10 @@ def _get_decoder(t: Any) -> msgspec.msgpack.Decoder[Any]:
 @overload
 def deserialize(payload: bytes, type_: type[T], *, exp_msg_prefix: str = "") -> T: ...
 
+
 @overload
 def deserialize(payload: bytes, type_: Any, *, exp_msg_prefix: str = "") -> Any: ...
+
 
 def deserialize(
     payload: bytes,

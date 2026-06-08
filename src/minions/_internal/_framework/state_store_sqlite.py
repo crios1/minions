@@ -121,25 +121,30 @@ class SQLiteStateStore(StateStore):
     - **Single long-lived connection** tuned with WAL + synchronous=NORMAL
     - **BLOB storage** (binary-encoded payloads via `msgspec`)
     - **Micro-batching**:
-        * Buffer up to `batch_max_queued_writes` contexts or `batch_max_flush_delay_ms` elapsed time
-        * Commit each flushed batch atomically; if one write fails, the whole batch rolls back.
-        * `batch_max_queued_writes=1` disables coalescing and uses one-row transactions.
+        * Buffer up to `batch_max_queued_writes` contexts or
+          `batch_max_flush_delay_ms` elapsed time
+        * Commit each flushed batch atomically; if one write fails, the whole
+          batch rolls back.
+        * `batch_max_queued_writes=1` disables coalescing and uses one-row
+          transactions.
     - **Startup measurements**:
         * Measure median/p95 commit latency
-        * In `batch_tuning="calibrated"`, pick sensible batch size/window based on disk speed
-          (NVMe-like -> smaller batches with shorter flush windows,
-          SSD-like -> medium batches with moderate flush windows,
+        * In `batch_tuning="calibrated"`, pick sensible batch size/window based
+          on disk speed (NVMe-like -> smaller batches with shorter flush
+          windows, SSD-like -> medium batches with moderate flush windows,
           HDD-like -> larger batches with longer flush windows)
     - **Hardware-relative warnings**:
-        * Detect when system is under more load than SQLiteStateStore can sustain
-        * Thresholds scale with startup measurements so they work across NVMe/SSD/HDD
+        * Detect when system is under more load than SQLiteStateStore can
+          sustain
+        * Thresholds scale with startup measurements so they work across
+          NVMe/SSD/HDD
 
     Why batching?
     -------------
-    - Without batching: every state update -> its own transaction/fsync
-      = high overhead, quickly I/O-bound.
-    - With batching: amortize commit cost over many updates
-      = 3-10x throughput increase depending on hardware.
+    - Without batching: every state update -> its own transaction/fsync =
+      high overhead, quickly I/O-bound.
+    - With batching: amortize commit cost over many updates = 3-10x throughput
+      increase depending on hardware.
 
     Warning Signals
     ---------------
@@ -159,14 +164,17 @@ class SQLiteStateStore(StateStore):
 
     Operator Actions
     ----------------
-    1. If latency budget allows -> increase batch caps (`batch_max_queued_writes`, `batch_max_flush_delay_ms`)
+    1. If latency budget allows -> increase batch caps
+       (`batch_max_queued_writes`, `batch_max_flush_delay_ms`)
     2. Confirm WAL + synchronous=NORMAL, consider adjusting wal_autocheckpoint
 
     Summary
     -------
-    - Startup measurements power hardware-relative warnings and can tune batching in calibrated mode
+    - Startup measurements power hardware-relative warnings and can tune
+      batching in calibrated mode
     - Micro-batching improves throughput
-    - Warnings give clear "you're outgrowing SQLiteStateStore" signals, scaled to hardware
+    - Warnings give clear "you're outgrowing SQLiteStateStore" signals, scaled
+      to hardware
     """
 
     def __init__(
@@ -217,7 +225,9 @@ class SQLiteStateStore(StateStore):
 
         self._batch_buffer: list[PendingWrite] = []
         self._batch_buffer_lock = asyncio.Lock()
-        self._batch_buffer_flush_task: asyncio.Task[None] | None = None  # scheduled flush task for the batch buffer
+        self._batch_buffer_flush_task: asyncio.Task[None] | None = (
+            None  # scheduled flush task for the batch buffer
+        )
         self._batch_buffer_flush_task_is_flushing = False
         self._batch_buffer_flush_deadline: float | None = None
         self._batch_buffer_last_enqueue_at: float | None = None
@@ -273,7 +283,8 @@ class SQLiteStateStore(StateStore):
             except Exception as close_error:
                 await self._mn_logger._mn_log_exception(
                     ERROR,
-                    f"{type(self).__name__} failed to close SQLite connection after startup failure",
+                    f"{type(self).__name__} "
+                    "failed to close SQLite connection after startup failure",
                     close_error,
                     startup_error_type=type(startup_error).__name__,
                     startup_error_message=str(startup_error),
@@ -288,7 +299,9 @@ class SQLiteStateStore(StateStore):
             and not self._batch_buffer_flush_task_is_flushing
         ):
             self._batch_buffer_flush_task.cancel()
-            await asyncio.gather(self._batch_buffer_flush_task, return_exceptions=True) # suppress expected CancelledError from the cancelled background flush task
+            await asyncio.gather(
+                self._batch_buffer_flush_task, return_exceptions=True
+            )  # suppress expected CancelledError from the cancelled background flush task
         if self._batch_buffer_flush_task and not self._batch_buffer_flush_task.done():
             await asyncio.gather(self._batch_buffer_flush_task, return_exceptions=True)
         self._batch_buffer_flush_task = None
@@ -367,7 +380,8 @@ class SQLiteStateStore(StateStore):
 
     async def _ensure_schema(self) -> None:
         db = self._require_db()
-        # currently assumes latest schema; add migrations here if schema evolves (e.g. PRAGMA user_version)
+        # Currently assumes latest schema; add migrations here if schema evolves
+        # (e.g. PRAGMA user_version).
         await db.execute(SQL_WORKFLOWS_TABLE_CREATE_IF_NOT_EXISTS)
         await db.execute(SQL_ORCHESTRATION_INDEX_CREATE_IF_NOT_EXISTS)
         await db.commit()
@@ -406,7 +420,9 @@ class SQLiteStateStore(StateStore):
                 await db.commit()
             except Exception as cleanup_error:
                 if probe_error is None:
-                    raise RuntimeError(f"{type(self).__name__} startup probe cleanup failed") from cleanup_error
+                    raise RuntimeError(
+                        f"{type(self).__name__} startup probe cleanup failed"
+                    ) from cleanup_error
                 await self._mn_logger._mn_log_exception(
                     ERROR,
                     f"{type(self).__name__} startup probe cleanup failed after probe error",
@@ -430,7 +446,8 @@ class SQLiteStateStore(StateStore):
         except Exception as e:
             await self._mn_logger._mn_log_exception(
                 WARNING,
-                f"{type(self).__name__} startup measurements degraded; could not read PRAGMA page_size",
+                f"{type(self).__name__} startup measurements degraded; could not "
+                "read PRAGMA page_size",
                 e,
             )
             return fallback
@@ -438,7 +455,8 @@ class SQLiteStateStore(StateStore):
         if page_size is None or page_size <= 0:
             await self._mn_logger._mn_log(
                 WARNING,
-                f"{type(self).__name__} startup measurements degraded; PRAGMA page_size returned unusable value",
+                f"{type(self).__name__} startup measurements degraded; PRAGMA "
+                "page_size returned unusable value",
                 page_size=page_size,
             )
             return fallback
@@ -478,7 +496,8 @@ class SQLiteStateStore(StateStore):
 
     async def _measure_commit_latency_percentiles(self, page_size: int) -> tuple[float, float]:
         db = self._require_db()
-        await db.executescript("BEGIN IMMEDIATE; ROLLBACK; " * 6)  # warm transaction start/rollback path before timing steady-state commit cost
+        # Warm transaction start/rollback path before timing steady-state commit cost.
+        await db.executescript("BEGIN IMMEDIATE; ROLLBACK; " * 6)
         measurement_error: Exception | None = None
 
         async def run_probe(payload: bytes) -> list[float]:
@@ -527,7 +546,8 @@ class SQLiteStateStore(StateStore):
                 if measurement_error is not None:
                     await self._mn_logger._mn_log_exception(
                         ERROR,
-                        f"{type(self).__name__} commit measurement probe cleanup failed after probe error",
+                        f"{type(self).__name__} commit measurement probe "
+                        "cleanup failed after probe error",
                         cleanup_error,
                         measurement_probe_error_type=type(measurement_error).__name__,
                         measurement_probe_error_message=str(measurement_error),
@@ -551,13 +571,21 @@ class SQLiteStateStore(StateStore):
         batch_max_queued_writes: int,
         batch_max_flush_delay_ms: int,
     ) -> None:
-        if not BATCH_MAX_QUEUED_WRITES_FLOOR <= batch_max_queued_writes <= BATCH_MAX_QUEUED_WRITES_CEILING:
+        if (
+            not BATCH_MAX_QUEUED_WRITES_FLOOR
+            <= batch_max_queued_writes
+            <= BATCH_MAX_QUEUED_WRITES_CEILING
+        ):
             raise ValueError(
                 "batch_max_queued_writes must be between "
                 f"{BATCH_MAX_QUEUED_WRITES_FLOOR} and {BATCH_MAX_QUEUED_WRITES_CEILING}; "
                 f"got {batch_max_queued_writes}"
             )
-        if not BATCH_MAX_FLUSH_DELAY_MS_FLOOR <= batch_max_flush_delay_ms <= BATCH_MAX_FLUSH_DELAY_MS_CEILING:
+        if (
+            not BATCH_MAX_FLUSH_DELAY_MS_FLOOR
+            <= batch_max_flush_delay_ms
+            <= BATCH_MAX_FLUSH_DELAY_MS_CEILING
+        ):
             raise ValueError(
                 "batch_max_flush_delay_ms must be between "
                 f"{BATCH_MAX_FLUSH_DELAY_MS_FLOOR} and {BATCH_MAX_FLUSH_DELAY_MS_CEILING}; "
@@ -577,13 +605,15 @@ class SQLiteStateStore(StateStore):
 
         await self._mn_logger._mn_log(
             WARNING,
-            f"{type(self).__name__} batch_max_queued_writes is below the recommended batching range",
+            f"{type(self).__name__} batch_max_queued_writes is below the "
+            "recommended batching range",
             batch_max_queued_writes=batch_max_queued_writes,
             immediate_writes_value=BATCH_MAX_QUEUED_WRITES_FLOOR,
             recommended_min_batch_max_queued_writes=BATCH_MAX_QUEUED_WRITES_RECOMMENDED_FLOOR,
             suggestion=(
                 "Use batch_max_queued_writes=1 for immediate durable writes, "
-                f"or {BATCH_MAX_QUEUED_WRITES_RECOMMENDED_FLOOR}+ for useful batching."
+                f"or {BATCH_MAX_QUEUED_WRITES_RECOMMENDED_FLOOR}+ for useful "
+                "batching."
             ),
         )
 
@@ -627,8 +657,10 @@ class SQLiteStateStore(StateStore):
         if self._batch_tuning != "calibrated":
             raise RuntimeError(f"unexpected batch_tuning: {self._batch_tuning!r}")
 
-        batch_max_queued_writes, batch_max_flush_delay_ms = self._derive_batch_config_from_measurements(
-            measurements.commit_p50_ms,
+        batch_max_queued_writes, batch_max_flush_delay_ms = (
+            self._derive_batch_config_from_measurements(
+                measurements.commit_p50_ms,
+            )
         )
         self._validate_batch_config(
             batch_max_queued_writes,
@@ -650,7 +682,9 @@ class SQLiteStateStore(StateStore):
     ) -> WriteWarnThresholds:
         batch_max_queued_writes = self._batch_max_queued_writes
         if batch_max_queued_writes is None:
-            raise RuntimeError("batch_max_queued_writes must be resolved before warning config is built")
+            raise RuntimeError(
+                "batch_max_queued_writes must be resolved before warning config is built"
+            )
 
         warn_commit = max(8.0, commit_p95_ms * 3.0)
         crit_commit = max(12.0, commit_p95_ms * 5.0)
@@ -740,7 +774,9 @@ class SQLiteStateStore(StateStore):
 
         batch_max_flush_delay_ms = self._batch_max_flush_delay_ms
         if batch_max_flush_delay_ms is None:
-            raise RuntimeError("batch_max_flush_delay_ms must be resolved before scheduling flushes")
+            raise RuntimeError(
+                "batch_max_flush_delay_ms must be resolved before scheduling flushes"
+            )
 
         self._batch_buffer_flush_deadline = time.monotonic() + (batch_max_flush_delay_ms / 1000.0)
         self._batch_buffer_flush_task = safe_create_task(
@@ -751,11 +787,16 @@ class SQLiteStateStore(StateStore):
 
     def _next_batch_flush_deadline(self) -> float | None:
         deadline = self._batch_buffer_flush_deadline
-        if self._batch_max_interarrival_delay_ms is not None and self._batch_buffer_last_enqueue_at is not None:
+        if (
+            self._batch_max_interarrival_delay_ms is not None
+            and self._batch_buffer_last_enqueue_at is not None
+        ):
             interarrival_deadline = self._batch_buffer_last_enqueue_at + (
                 self._batch_max_interarrival_delay_ms / 1000.0
             )
-            deadline = interarrival_deadline if deadline is None else min(deadline, interarrival_deadline)
+            deadline = (
+                interarrival_deadline if deadline is None else min(deadline, interarrival_deadline)
+            )
         return deadline
 
     async def _flush_soon(self) -> None:
@@ -794,7 +835,10 @@ class SQLiteStateStore(StateStore):
     def _enqueue_to_batch_commit_queue(self, items: list[PendingWrite]) -> None:
         self._batch_commit_queue_pending_writes += len(items)
         self._batch_commit_queue.append(items)
-        if self._batch_commit_queue_worker_task is None or self._batch_commit_queue_worker_task.done():
+        if (
+            self._batch_commit_queue_worker_task is None
+            or self._batch_commit_queue_worker_task.done()
+        ):
             self._batch_commit_queue_worker_task = asyncio.create_task(
                 self._run_batch_commit_queue(),
                 name=f"{type(self).__name__}._run_batch_commit_queue",
@@ -828,7 +872,9 @@ class SQLiteStateStore(StateStore):
             worker = self._batch_commit_queue_worker_task
             if worker is None:
                 if not self._batch_commit_queue:
-                    raise RuntimeError("batch commit queue has pending writes without a worker task")
+                    raise RuntimeError(
+                        "batch commit queue has pending writes without a worker task"
+                    )
                 worker = asyncio.create_task(
                     self._run_batch_commit_queue(),
                     name=f"{type(self).__name__}._run_batch_commit_queue",
@@ -861,7 +907,9 @@ class SQLiteStateStore(StateStore):
             for item in items:
                 if item.op == "upsert":
                     if item.orchestration_id is None or item.payload is None:
-                        raise RuntimeError("upsert batch item must include orchestration_id and payload")
+                        raise RuntimeError(
+                            "upsert batch item must include orchestration_id and payload"
+                        )
                     await db.execute(
                         SQL_WORKFLOW_UPSERT,
                         (item.workflow_id, item.orchestration_id, item.payload),
@@ -881,7 +929,8 @@ class SQLiteStateStore(StateStore):
                     try:
                         await self._mn_logger._mn_log_exception(
                             ERROR,
-                            f"{type(self).__name__} failed to rollback batch transaction after commit error",
+                            f"{type(self).__name__} failed to rollback batch "
+                            "transaction after commit error",
                             rollback_error,
                             commit_error_type=type(commit_error).__name__,
                             commit_error_message=str(commit_error),
@@ -918,7 +967,9 @@ class SQLiteStateStore(StateStore):
                 )
 
         if self._metric_rows_per_sec_hist:
-            avg_rps = sum(self._metric_rows_per_sec_hist) / max(1, len(self._metric_rows_per_sec_hist))
+            avg_rps = sum(self._metric_rows_per_sec_hist) / max(
+                1, len(self._metric_rows_per_sec_hist)
+            )
             rows_per_sec_threshold = self._warn_write_thresholds.rows_per_sec
             if avg_rps > rows_per_sec_threshold.warn:
                 self._maybe_warn_write_pressure(
@@ -928,7 +979,9 @@ class SQLiteStateStore(StateStore):
 
     def _maybe_warn_queued_writes(self, *, extra_queued_writes: int = 0) -> None:
         queued_writes_threshold = self._warn_write_thresholds.queued_writes
-        queued_writes = len(self._batch_buffer) + self._batch_commit_queue_pending_writes + extra_queued_writes
+        queued_writes = (
+            len(self._batch_buffer) + self._batch_commit_queue_pending_writes + extra_queued_writes
+        )
         if queued_writes > queued_writes_threshold.warn:
             self._maybe_warn_write_pressure(
                 f"queued_writes={queued_writes}>warn({queued_writes_threshold.warn})",

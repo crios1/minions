@@ -6,7 +6,6 @@ from tests.assets.support.minion_spied import SpiedMinion
 
 
 class BoomShutdownMinion(SpiedMinion[CounterEvent, CounterContext]):
-
     async def shutdown(self) -> None:
         boom()
 

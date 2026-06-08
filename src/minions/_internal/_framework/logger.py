@@ -21,22 +21,24 @@ LEVEL_NAMES = {
     50: "CRITICAL",
 }
 
+
 class Logger(AsyncLifecycle):
     """
     This framework enforces structured logs by default
     because it is the only sane way to trace workflow behavior, errors, and performance
     in something that behaves like a distributed system.
     """
+
     _mn_user_facing = True
 
     def __init__(self, level: int = INFO):
         self._level = level
-    
+
     def _mn_iso_8601_ts(self) -> str:
         "Returns ISO 8601 timestamp like '2025:07:03T20:45:01Z'"
         now_utc = datetime.now(timezone.utc)
         return now_utc.isoformat(timespec="seconds").replace("+00:00", "Z")
-    
+
     def _mn_iso_8601_ts_fs_safe(self) -> str:
         "Returns filesystem-safe ISO 8601 timestamp like '2025-07-03T20-45-01Z'"
         return self._mn_iso_8601_ts().replace(":", "-")

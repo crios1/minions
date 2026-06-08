@@ -9,6 +9,7 @@ from .._utils.get_relative_module_path import get_relative_module_path
 
 LifecycleCallback: TypeAlias = Callable[..., object | Awaitable[object]]
 
+
 class AsyncLifecycle(ABC):
     """
     Framework base class for async lifecycle components.
@@ -16,6 +17,7 @@ class AsyncLifecycle(ABC):
     Definition-time validation applies only to user-facing domain classes
     and is restricted to established user-facing inheritance chains.
     """
+
     _mn_user_facing = False
 
     def __init_subclass__(cls, **kwargs: object) -> None:
@@ -31,11 +33,12 @@ class AsyncLifecycle(ABC):
 
     @classmethod
     def _mn_ensure_attrspace(cls) -> None:
-        "Ensure no user-defined class attributes or annotations violate the reserved _mn_ attrspace."
+        "Ensure no user-defined class attributes or annotations violate the reserved _mn_ attrspace."  # noqa: E501
         names = {**cls.__dict__, **getattr(cls, "__annotations__", {})}
-        allowed = {"_mn_user_facing"} # allows subclasses of user facing classes to be user facing too
+        allowed = {"_mn_user_facing"}  # allows subclasses of user facing classes to be user facing too  # noqa: E501
         bad = {
-            n for n in names
+            n
+            for n in names
             if isinstance(n, str)
             and n.startswith("_mn_")
             and n not in allowed
@@ -45,7 +48,7 @@ class AsyncLifecycle(ABC):
             names = ", ".join(f"`{cls.__name__}.{n}`" for n in sorted(bad))
             raise UnsupportedUserCode(
                 f"Invalid attribute assignment: {names} in `{modpath}`. "
-                f"Attributes starting with `_mn_` are reserved for internal Minions runtime use."
+                "Attributes starting with `_mn_` are reserved for internal Minions runtime use."
             )
 
     @classmethod
@@ -76,8 +79,11 @@ class AsyncLifecycle(ABC):
         banned_task_fns = {"create_task", "ensure_future"}
         banned_exit_names = {"exit", "quit", "_exit", "SystemExit"}
         banned_exit_attrs = {
-            ("sys", "exit"), ("os", "_exit"), ("builtins", "exit"),
-            ("builtins", "quit"), ("builtins", "SystemExit")
+            ("sys", "exit"),
+            ("os", "_exit"),
+            ("builtins", "exit"),
+            ("builtins", "quit"),
+            ("builtins", "SystemExit"),
         }
 
         def _expr_name(expr: ast.expr | None) -> str | None:
@@ -91,7 +97,6 @@ class AsyncLifecycle(ABC):
             return None
 
         for node in ast.walk(tree):
-
             if isinstance(node, ast.Call):
                 f = node.func
 
@@ -99,59 +104,84 @@ class AsyncLifecycle(ABC):
                     owner = getattr(f.value, "id", None)
                     if owner in {"asyncio", "aio"} and f.attr in banned_task_fns:
                         raise UnsupportedUserCode(
-                            f"Unsupported use of `{owner}.{f.attr}` in `{func.__name__}` ({modpath}). "
-                            "Use `self.safe_create_task(...)` instead."
+                            f"Unsupported use of `{owner}.{f.attr}` in "
+                            f"`{func.__name__}` ({modpath}). Use "
+                            "`self.safe_create_task(...)` instead."
                         )
                     if (owner, f.attr) in banned_exit_attrs:
                         name = f"{owner}.{f.attr}"
                         raise UnsupportedUserCode(
-                            f"Unsupported use of `{name}` in `{func.__name__}` ({modpath}). "
-                            "If you want to abort an in-flight workflow, raise an AbortWorkflow exception. "
-                            "If you want to stop an orchestration, run stop_orchestration."
+                            f"Unsupported use of `{name}` in `{func.__name__}` "
+                            f"({modpath}). If you want to abort an in-flight workflow, "
+                            "raise an AbortWorkflow exception. If you want to stop "
+                            "an orchestration, run stop_orchestration."
                         )
                     if owner == "object" and f.attr == "__setattr__":
-                        if len(node.args) >= 2 and isinstance(node.args[0], ast.Name) and node.args[0].id == "self":
+                        if (
+                            len(node.args) >= 2
+                            and isinstance(node.args[0], ast.Name)
+                            and node.args[0].id == "self"
+                        ):
                             a1 = node.args[1]
-                            if isinstance(a1, ast.Constant) and isinstance(a1.value, str) and a1.value.startswith("_mn_"):
+                            if (
+                                isinstance(a1, ast.Constant)
+                                and isinstance(a1.value, str)
+                                and a1.value.startswith("_mn_")
+                            ):
                                 raise UnsupportedUserCode(
-                                    f"Invalid attribute assignment: `self.{a1.value}` in `{func.__name__}` ({modpath}). "
-                                    "Attributes starting with `_mn_` are reserved for framework use."
+                                    f"Invalid attribute assignment: "
+                                    f"`self.{a1.value}` in `{func.__name__}` "
+                                    f"({modpath}). Attributes starting with `_mn_` are "
+                                    "reserved for framework use."
                                 )
 
                 if isinstance(f, ast.Name):
                     if f.id in banned_task_fns:
                         raise UnsupportedUserCode(
-                            f"Unsupported use of `{f.id}` in `{func.__name__}` ({modpath}). "
-                            "Use `self.safe_create_task(...)` instead."
+                            f"Unsupported use of `{f.id}` in `{func.__name__}` "
+                            f"({modpath}). Use `self.safe_create_task(...)` instead."
                         )
                     if f.id in banned_exit_names:
                         raise UnsupportedUserCode(
-                            f"Unsupported use of `{f.id}` in `{func.__name__}` ({modpath}). "
-                            "If you want to abort an in-flight workflow, raise an AbortWorkflow exception. "
-                            "If you want to stop an orchestration, run stop_orchestration."
+                            f"Unsupported use of `{f.id}` in `{func.__name__}` "
+                            f"({modpath}). If you want to abort an in-flight workflow, "
+                            "raise an AbortWorkflow exception. If you want to stop "
+                            "an orchestration, run stop_orchestration."
                         )
                     if f.id == "setattr" and len(node.args) >= 2:
                         a0, a1 = node.args[0], node.args[1]
                         if isinstance(a0, ast.Name) and a0.id == "self":
-                            if isinstance(a1, ast.Constant) and isinstance(a1.value, str) and a1.value.startswith("_mn_"):
+                            if (
+                                isinstance(a1, ast.Constant)
+                                and isinstance(a1.value, str)
+                                and a1.value.startswith("_mn_")
+                            ):
                                 raise UnsupportedUserCode(
-                                    f"Invalid attribute assignment: `self.{a1.value}` in `{func.__name__}` ({modpath}). "
-                                    "Attributes starting with `_mn_` are reserved for framework use."
+                                    f"Invalid attribute assignment: "
+                                    f"`self.{a1.value}` in `{func.__name__}` "
+                                    f"({modpath}). Attributes starting with `_mn_` are "
+                                    "reserved for framework use."
                                 )
 
             if isinstance(node, ast.Raise):
                 exc = node.exc
                 if isinstance(exc, ast.Name) and exc.id == "SystemExit":
                     raise UnsupportedUserCode(
-                        f"Unsupported use of `raise SystemExit` in `{func.__name__}` ({modpath}). "
-                        "If you want to abort an in-flight workflow, raise an AbortWorkflow exception. "
-                        "If you want to stop an orchestration, run stop_orchestration."
+                        f"Unsupported use of `raise SystemExit` in "
+                        f"`{func.__name__}` ({modpath}). If you want to abort an "
+                        "in-flight workflow, raise an AbortWorkflow exception. If "
+                        "you want to stop an orchestration, run stop_orchestration."
                     )
-                if isinstance(exc, ast.Call) and isinstance(exc.func, ast.Name) and exc.func.id == "SystemExit":
+                if (
+                    isinstance(exc, ast.Call)
+                    and isinstance(exc.func, ast.Name)
+                    and exc.func.id == "SystemExit"
+                ):
                     raise UnsupportedUserCode(
-                        f"Unsupported use of `raise SystemExit(...)` in `{func.__name__}` ({modpath}). "
-                        "If you want to abort an in-flight workflow, raise an AbortWorkflow exception. "
-                        "If you want to stop an orchestration, run stop_orchestration."
+                        f"Unsupported use of `raise SystemExit(...)` in "
+                        f"`{func.__name__}` ({modpath}). If you want to abort an "
+                        "in-flight workflow, raise an AbortWorkflow exception. If "
+                        "you want to stop an orchestration, run stop_orchestration."
                     )
                 raised_name = _expr_name(exc.func if isinstance(exc, ast.Call) else exc)
                 if raised_name in {
@@ -161,9 +191,11 @@ class AsyncLifecycle(ABC):
                     "asyncio.exceptions.CancelledError",
                 }:
                     raise UnsupportedUserCode(
-                        f"Unsupported use of `raise {raised_name}` in `{func.__name__}` ({modpath}). "
-                        "The runtime treats asyncio cancellation as workflow interruption and may replay the workflow. "
-                        "If you want to intentionally stop an in-flight workflow, raise AbortWorkflow instead."
+                        f"Unsupported use of `raise {raised_name}` in "
+                        f"`{func.__name__}` ({modpath}). The runtime treats "
+                        "asyncio cancellation as workflow interruption and may "
+                        "replay the workflow. If you want to intentionally stop an "
+                        "in-flight workflow, raise AbortWorkflow instead."
                     )
 
             if not isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
@@ -178,8 +210,9 @@ class AsyncLifecycle(ABC):
                     if not t.attr.startswith("_mn_"):
                         continue
                     raise UnsupportedUserCode(
-                        f"Invalid attribute assignment: `self.{t.attr}` in `{func.__name__}` ({modpath}). "
-                        f"Attributes starting with `_mn_` are reserved for framework use."
+                        f"Invalid attribute assignment: `self.{t.attr}` in "
+                        f"`{func.__name__}` ({modpath}). Attributes starting with "
+                        "`_mn_` are reserved for framework use."
                     )
 
                 if not isinstance(t, ast.Subscript):
@@ -200,15 +233,17 @@ class AsyncLifecycle(ABC):
                     continue
 
                 raise UnsupportedUserCode(
-                    f"Invalid attribute assignment: `self.{key}` in `{func.__name__}` ({modpath}). "
-                    f"Attributes starting with `_mn_` are reserved for framework use."
+                    f"Invalid attribute assignment: `self.{key}` in "
+                    f"`{func.__name__}` ({modpath}). Attributes starting with "
+                    "`_mn_` are reserved for framework use."
                 )
 
     @staticmethod
     def _mn_raise_not_implemented(method_name: str, cls: type) -> None:
         raise NotImplementedError(
             f"{cls.__name__}.{method_name} must be implemented in a subclass and "
-            f"should only be called via _{method_name}(), which ensures logging and lifecycle safety."
+            f"should only be called via _{method_name}(), which ensures logging "
+            "and lifecycle safety."
         )
 
     async def _mn_run_lifecycle_phase(
@@ -249,9 +284,10 @@ class AsyncLifecycle(ABC):
         pre: LifecycleCallback | None = None,
         pre_args: list[object] | None = None,
         post: LifecycleCallback | None = None,
-        post_args: list[object] | None = None
+        post_args: list[object] | None = None,
     ) -> None:
         pre_args = pre_args or []
+
         async def _pre() -> None:
             self._mn_validate_user_code(self.startup, type(self).__module__)
             self._mn_validate_user_code(self.shutdown, type(self).__module__)
@@ -259,7 +295,7 @@ class AsyncLifecycle(ABC):
                 result = pre(*pre_args)
                 if inspect.isawaitable(result):
                     await result
-        
+
         await self._mn_run_lifecycle_phase(
             name="startup",
             lifecycle_method=self.startup,
@@ -276,7 +312,7 @@ class AsyncLifecycle(ABC):
         pre: LifecycleCallback | None = None,
         pre_args: list[object] | None = None,
         post: LifecycleCallback | None = None,
-        post_args: list[object] | None = None
+        post_args: list[object] | None = None,
     ) -> None:
         await self._mn_run_lifecycle_phase(
             name="shutdown",

@@ -334,6 +334,7 @@ class GruShell(cmd.Cmd):
         print()
         return True
 
+
 if __name__ == "__main__":
     shell = GruShell()
     while True:

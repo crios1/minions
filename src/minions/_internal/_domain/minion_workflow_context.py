@@ -6,7 +6,8 @@ from .types import T_Ctx, T_Event
 
 @dataclass
 class MinionWorkflowContext(Generic[T_Event, T_Ctx]):
-    """If you change this dataclass, review minion_workflow_context_codec.py and add any needed codec updates or migration."""
+    """If you change this dataclass, review minion_workflow_context_codec.py and
+    add any needed codec updates or migration."""
 
     orchestration_id: str
     workflow_id: str

@@ -142,8 +142,15 @@ def test_compute_minion_expectations_accumulates_starts_from_successful_receipts
 
 def test_build_expected_call_counts_state_store_formula_for_mixed_success_and_failure():
     directives = [
-        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
-        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1", expect_success=False),
+        OrchestrationStart(
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
+        ),
+        OrchestrationStart(
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
+            expect_success=False,
+        ),
     ]
     plan = ScenarioPlan(
         directives,
@@ -203,8 +210,14 @@ def test_build_expected_call_counts_state_store_formula_for_mixed_success_and_fa
 
 def test_build_expected_call_counts_scales_minion_init_with_successful_starts():
     directives = [
-        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
-        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
+        ),
+        OrchestrationStart(
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
+        ),
     ]
     plan = ScenarioPlan(
         directives,
@@ -261,7 +274,10 @@ async def test_build_expected_call_counts_does_not_require_get_all_for_overridde
             return []
 
     directives = [
-        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
+        ),
     ]
     plan = ScenarioPlan(
         directives,
@@ -321,7 +337,10 @@ def test_assert_state_store_read_call_bounds_rejects_excess_get_all_calls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directives = [
-        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
+        ),
     ]
     plan = ScenarioPlan(
         directives,
@@ -355,7 +374,10 @@ def test_assert_state_store_read_call_bounds_rejects_excess_get_all_calls(
         _stub_get_call_counts({"get_all_contexts": 2}),
     )
 
-    with pytest.raises(pytest.fail.Exception, match="get_all_contexts called more times than allowed"):
+    with pytest.raises(
+        pytest.fail.Exception,
+        match="get_all_contexts called more times than allowed"
+    ):
         verifier._assert_state_store_read_call_bounds()
 
 
@@ -363,7 +385,10 @@ def test_assert_minion_fanout_delivery_proves_pipeline_event_delivery_to_steps(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directives = [
-        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
+        ),
     ]
     plan = ScenarioPlan(
         directives,
@@ -404,8 +429,14 @@ def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnost
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directives = [
-        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
-        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.resourced", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
+        ),
+        OrchestrationStart(
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.resourced",
+        ),
     ]
     plan = ScenarioPlan(
         directives,
@@ -458,7 +489,10 @@ def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnost
         _stub_get_call_counts({"step_1": 1, "step_2": 2}),
     )
 
-    with pytest.raises(pytest.fail.Exception, match="Fanout mismatch for TwoStepResourcedMinion.step_1"):
+    with pytest.raises(
+        pytest.fail.Exception,
+        match="Fanout mismatch for TwoStepResourcedMinion.step_1"
+    ):
         verifier._assert_minion_fanout_delivery()
 
 
@@ -466,7 +500,10 @@ def test_assert_minion_fanout_delivery_allows_plus_one_per_start_tolerance(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directives = [
-        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
+        ),
     ]
     plan = ScenarioPlan(
         directives,
@@ -503,11 +540,14 @@ def test_assert_minion_fanout_delivery_allows_plus_one_per_start_tolerance(
     verifier._assert_minion_fanout_delivery()
 
 
-def test_assert_minion_fanout_delivery_rejects_overage_beyond_plus_one_per_start(
+def test_assert_minion_fanout_delivery_rejects_overage_beyond_plus_one(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directives = [
-        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
+        ),
     ]
     plan = ScenarioPlan(
         directives,
@@ -543,7 +583,10 @@ def test_assert_minion_fanout_delivery_rejects_overage_beyond_plus_one_per_start
 
     with pytest.raises(
         pytest.fail.Exception,
-        match=r"Fanout mismatch for TwoStepMinion\.step_1: expected 2\.\.3 workflow calls from pipeline events, got 4",
+        match=(
+            r"Fanout mismatch for TwoStepMinion\.step_1: expected 2\.\.3 workflow "
+            r"calls from pipeline events, got 4"
+        ),
     ):
         verifier._assert_minion_fanout_delivery()
 
@@ -552,8 +595,14 @@ def test_assert_pipeline_events_allows_restarted_pipeline_produce_event_totals(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directives = [
-        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
-        OrchestrationStart(minion="tests.assets.minions.two_steps.counter.basic", pipeline="tests.assets.pipelines.emit1.counter.emit_1"),
+        OrchestrationStart(
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
+        ),
+        OrchestrationStart(
+            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
+        ),
     ]
     plan = ScenarioPlan(
         directives,
@@ -751,9 +800,7 @@ def test_assert_workflow_step_start_events_are_monotonic_rejects_step_name_index
                 seen_shutdown=False,
                 workflow_step_start_events_by_minion_id={
                     minion_id: {
-                        "workflow-1": (
-                            (0, "step_2"),
-                        ),
+                        "workflow-1": ((0, "step_2"),),
                     },
                 },
             ),
@@ -1134,7 +1181,7 @@ def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_wi
     verifier._assert_checkpoint_window_workflow_step_progression()
 
 
-def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_allows_call_count_overage():
+def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_allows_call_count_overage():  # noqa: E501
     directives = [
         OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
@@ -1195,7 +1242,7 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_all
     verifier._assert_checkpoint_window_workflow_step_progression()
 
 
-def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_rejects_overage_beyond_start_tolerance():
+def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_rejects_overage_beyond_start_tolerance():  # noqa: E501
     directives = [
         OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
@@ -1255,12 +1302,13 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_rej
     verifier = _mk_verifier(plan, result)
     with pytest.raises(
         pytest.fail.Exception,
-        match=r"Checkpoint workflow-step progression mismatch.*expected call-count delta 1\.\.2, got 3",
+        match=r"Checkpoint workflow-step progression mismatch.*expected call-count delta "
+        r"1\.\.2, got 3",
     ):
         verifier._assert_checkpoint_window_workflow_step_progression()
 
 
-def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overlap_passes_with_workflow_id_exactness():
+def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overlap_passes_with_workflow_id_exactness():  # noqa: E501
     directives = [
         OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
@@ -1342,7 +1390,7 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
     verifier._assert_checkpoint_window_workflow_step_progression()
 
 
-def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overlap_reports_instance_deltas_on_workflow_id_mismatch():
+def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overlap_reports_instance_deltas_on_workflow_id_mismatch():  # noqa: E501
     directives = [
         OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
@@ -1429,7 +1477,7 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
         verifier._assert_checkpoint_window_workflow_step_progression()
 
 
-def test_checkpoint_window_workflow_step_progression_exact_prioritizes_workflow_id_mismatch_when_both_fail():
+def test_checkpoint_window_workflow_step_progression_exact_prioritizes_workflow_id_mismatch_when_both_fail():  # noqa: E501
     directives = [
         OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
@@ -1489,7 +1537,10 @@ def test_checkpoint_window_workflow_step_progression_exact_prioritizes_workflow_
     verifier = _mk_verifier(plan, result)
     with pytest.raises(
         pytest.fail.Exception,
-        match=r"Checkpoint workflow-id progression mismatch.*expected workflow-id delta 1, got 0\..*Call-count delta: 3 \(expected 1\.\.2\)",
+        match=(
+            r"Checkpoint workflow-id progression mismatch.*expected workflow-id "
+            r"delta 1, got 0\..*Call-count delta: 3 \(expected 1\.\.2\)"
+        ),
     ):
         verifier._assert_checkpoint_window_workflow_step_progression()
 
@@ -1943,7 +1994,9 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
     )
     spies = SpyRegistry(
         minions={
-            "tests.assets.minions.two_steps.counter.identified_resourced": IdentifiedResourcedMinion,
+            "tests.assets.minions.two_steps.counter.identified_resourced": (
+                IdentifiedResourcedMinion
+            ),
         },
         pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
     )
@@ -2107,9 +2160,7 @@ def test_assert_runtime_expectations_fails_for_out_of_range_checkpoint_index():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                persisted_contexts_by_orchestration_id={
-                    "instance-1": 1
-                },
+                persisted_contexts_by_orchestration_id={"instance-1": 1},
             ),
             ScenarioCheckpoint(
                 order=1,

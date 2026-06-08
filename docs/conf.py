@@ -1,4 +1,5 @@
 """Sphinx configuration for Minions documentation."""
+
 from __future__ import annotations
 
 import os
@@ -36,7 +37,10 @@ myst_heading_anchors = 3
 html_theme = "sphinx_book_theme"
 html_theme_options = {
     "repository_url": "https://github.com/crios1/minions",
-    "announcement": "Status: Pre-alpha (`0.0.x`). APIs and docs are still evolving and may change without notice.",
+    "announcement": (
+        "Status: Pre-alpha (`0.0.x`). APIs and docs are still evolving and may "
+        "change without notice."
+    ),
     "use_repository_button": False,
     "use_issues_button": False,
     "use_edit_page_button": False,

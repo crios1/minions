@@ -169,8 +169,7 @@ class StateStore(AsyncComponent):
         context_cls: type[T_Ctx],
         log_action: str,
         log_kwargs: dict[str, object] | None = ...,
-    ) -> list[MinionWorkflowContext[T_Event, T_Ctx]]:
-        ...
+    ) -> list[MinionWorkflowContext[T_Event, T_Ctx]]: ...
 
     @overload
     async def _mn_decode_stored_contexts(
@@ -181,8 +180,7 @@ class StateStore(AsyncComponent):
         context_cls: None = ...,
         log_action: str,
         log_kwargs: dict[str, object] | None = ...,
-    ) -> list[MinionWorkflowContext[Any, Any]]:
-        ...
+    ) -> list[MinionWorkflowContext[Any, Any]]: ...
 
     async def _mn_decode_stored_contexts(
         self,
@@ -193,7 +191,9 @@ class StateStore(AsyncComponent):
         log_action: str,
         log_kwargs: dict[str, object] | None = None,
     ) -> list[MinionWorkflowContext[T_Event, T_Ctx]] | list[MinionWorkflowContext[Any, Any]]:
-        contexts: list[MinionWorkflowContext[T_Event, T_Ctx]] | list[MinionWorkflowContext[Any, Any]] = []
+        contexts: (
+            list[MinionWorkflowContext[T_Event, T_Ctx]] | list[MinionWorkflowContext[Any, Any]]
+        ) = []
         type_mismatch_workflow_ids: list[str] = []
         for stored_context in stored_contexts:
             try:
@@ -234,8 +234,7 @@ class StateStore(AsyncComponent):
         *,
         event_cls: type[T_Event],
         context_cls: type[T_Ctx],
-    ) -> list[MinionWorkflowContext[T_Event, T_Ctx]]:
-        ...
+    ) -> list[MinionWorkflowContext[T_Event, T_Ctx]]: ...
 
     @overload
     async def _mn_get_decoded_contexts_for_orchestration(
@@ -244,8 +243,7 @@ class StateStore(AsyncComponent):
         *,
         event_cls: None = ...,
         context_cls: None = ...,
-    ) -> list[MinionWorkflowContext[Any, Any]]:
-        ...
+    ) -> list[MinionWorkflowContext[Any, Any]]: ...
 
     async def _mn_get_decoded_contexts_for_orchestration(
         self,

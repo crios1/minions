@@ -11,6 +11,7 @@ class NoOpService(AsyncService):
     async def run(self):
         pass
 
+
 @pytest.mark.asyncio
 async def test_wait_until_started_sets_and_waits():
     logger = NoOpLogger()
@@ -25,6 +26,7 @@ async def test_wait_until_started_sets_and_waits():
     service._mn_started.set()
     await wait_task
     assert wait_task.done()
+
 
 @pytest.mark.asyncio
 async def test_wait_until_started_raises_on_start_error():

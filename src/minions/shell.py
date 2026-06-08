@@ -38,7 +38,8 @@ async def _run_shell(*, show_banner: bool) -> None:
             print(
                 "Starting GruShell (deprecated local helper).\n"
                 "GruShell is retained for experimentation and as serve/attach design material.\n"
-                "For production control, use the planned `minions gru serve` / `minions gru attach` model once available.\n"
+                "For production control, use the planned `minions gru serve` / "
+                "`minions gru attach` model once available.\n"
                 "Type `help` to list commands."
             )
 

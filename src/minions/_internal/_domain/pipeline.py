@@ -43,7 +43,8 @@ class Pipeline(AsyncService, Generic[T_Event]):
 
         bases = get_original_bases(cls)
         pipelineish = [
-            b for b in bases
+            b
+            for b in bases
             if (origin := get_origin(b)) is not None and issubclass(origin, Pipeline)
         ]
 
@@ -71,8 +72,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
 
         if len(args) < 1:
             raise TypeError(
-                f"{cls.__name__} must declare an event type "
-                f"{subclassing_ex}."
+                f"{cls.__name__} must declare an event type {subclassing_ex}."
             )
 
         cls._mn_event_cls = args[0]
@@ -111,7 +111,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
         self._mn_subs: set[Minion[T_Event, Any]] = set()
         self._mn_subs_lock = asyncio.Lock()
         self._mn_event_cls = type(self)._mn_event_cls
-    
+
     async def _mn_startup(
         self,
         *,
@@ -119,12 +119,12 @@ class Pipeline(AsyncService, Generic[T_Event]):
         pre: LifecycleCallback | None = None,
         pre_args: list[object] | None = None,
         post: LifecycleCallback | None = None,
-        post_args: list[object] | None = None
+        post_args: list[object] | None = None,
     ) -> None:
         return await super()._mn_startup(
-            log_kwargs={'pipeline_id': self._mn_pipeline_id},
+            log_kwargs={"pipeline_id": self._mn_pipeline_id},
             pre=self._mn_validate_user_code,
-            pre_args=[self.produce_event, self._mn_pipeline_modpath]
+            pre_args=[self.produce_event, self._mn_pipeline_modpath],
         )
 
     async def _mn_shutdown(
@@ -134,10 +134,10 @@ class Pipeline(AsyncService, Generic[T_Event]):
         pre: LifecycleCallback | None = None,
         pre_args: list[object] | None = None,
         post: LifecycleCallback | None = None,
-        post_args: list[object] | None = None
+        post_args: list[object] | None = None,
     ) -> None:
         return await super()._mn_shutdown(
-            log_kwargs={'pipeline_id': self._mn_pipeline_id}
+            log_kwargs={"pipeline_id": self._mn_pipeline_id}
         )
 
     async def _mn_run(
@@ -147,10 +147,10 @@ class Pipeline(AsyncService, Generic[T_Event]):
         pre: LifecycleCallback | None = None,
         pre_args: list[object] | None = None,
         post: LifecycleCallback | None = None,
-        post_args: list[object] | None = None
+        post_args: list[object] | None = None,
     ) -> None:
         return await super()._mn_run(
-            log_kwargs={'pipeline_id': self._mn_pipeline_id}
+            log_kwargs={"pipeline_id": self._mn_pipeline_id}
         )
 
     async def run(self) -> None:
@@ -187,18 +187,21 @@ class Pipeline(AsyncService, Generic[T_Event]):
                             LABEL_ORCHESTRATION_ID: minion._mn_orchestration_id,
                         },
                     )
-                await asyncio.gather(*[
-                    self._mn_logger._mn_log(
-                        DEBUG,
-                        "Pipeline Fanout: dispatched event to minion",
-                        pipeline_id=self._mn_pipeline_id,
-                        minion_id=minion._mn_minion_id,
-                        minion_instance_id=minion._mn_minion_instance_id,
-                        orchestration_id=minion._mn_orchestration_id,
-                        minion_modpath=minion._mn_minion_modpath,
-                    )
-                    for minion in subs
-                ], return_exceptions=True)
+                await asyncio.gather(
+                    *[
+                        self._mn_logger._mn_log(
+                            DEBUG,
+                            "Pipeline Fanout: dispatched event to minion",
+                            pipeline_id=self._mn_pipeline_id,
+                            minion_id=minion._mn_minion_id,
+                            minion_instance_id=minion._mn_minion_instance_id,
+                            orchestration_id=minion._mn_orchestration_id,
+                            minion_modpath=minion._mn_minion_modpath,
+                        )
+                        for minion in subs
+                    ],
+                    return_exceptions=True,
+                )
         except Exception as e:
             await self._mn_metrics._mn_inc(
                 metric_name=PIPELINE_ERROR_TOTAL,

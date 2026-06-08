@@ -87,7 +87,6 @@ class TestUnit:
         # Left-padding keeps the ID consistently 44 characters long.
         return base62_encode(hashlib.sha256(serialized).digest()).rjust(44, "0")
 
-
     def test_attached_component_ids_are_stable_identities(self) -> None:
         @minion_id(MINION_COMPONENT_ID)
         class StableIdMinion(Minion[SimpleEvent, SimpleContext]):
@@ -105,8 +104,14 @@ class TestUnit:
             pass
 
         assert Gru._get_component_identity(StableIdMinion, "fallback.minion") == MINION_COMPONENT_ID
-        assert Gru._get_component_identity(StableIdPipeline, "fallback.pipeline") == PIPELINE_COMPONENT_ID
-        assert Gru._get_component_identity(StableIdResource, "fallback.resource") == RESOURCE_COMPONENT_ID
+        assert (
+            Gru._get_component_identity(StableIdPipeline, "fallback.pipeline")
+            == PIPELINE_COMPONENT_ID
+        )
+        assert (
+            Gru._get_component_identity(StableIdResource, "fallback.resource")
+            == RESOURCE_COMPONENT_ID
+        )
         assert Gru._get_minion_identity(StableIdMinion, "fallback.minion") == MINION_COMPONENT_ID
 
     def test_component_id_decorators_validate_component_kind(self) -> None:
@@ -154,7 +159,9 @@ class TestUnit:
         try:
             AddressStableResource.__module__ = "moved.module"
             assert (
-                Gru._get_component_identity(AddressStableResource, "moved.module.AddressStableResource")
+                Gru._get_component_identity(
+                    AddressStableResource, "moved.module.AddressStableResource"
+                )
                 == RESOURCE_COMPONENT_ID
             )
         finally:
@@ -189,13 +196,14 @@ class TestUnit:
         )
 
         assert Gru._get_config_identity(str(config_path)) == CONFIG_ID
-        assert (
-            Gru._make_orchestration_id("minion-id", CONFIG_ID, "pipeline-id")
-            == self._expected_orchestration_id(
-                minion_id="minion-id",
-                minion_config_id=CONFIG_ID,
-                pipeline_id="pipeline-id",
-            )
+        assert Gru._make_orchestration_id(
+            "minion-id",
+            CONFIG_ID,
+            "pipeline-id"
+        ) == self._expected_orchestration_id(
+            minion_id="minion-id",
+            minion_config_id=CONFIG_ID,
+            pipeline_id="pipeline-id",
         )
 
     def test_config_id_is_used_for_json_config_identity(self, tmp_path: Path) -> None:
@@ -269,13 +277,16 @@ class TestUnit:
             calls["n"] += 1
             if calls["n"] >= n:
                 raise asyncio.CancelledError
+
         monkeypatch.setattr("asyncio.sleep", sleeper)
 
     @pytest.mark.asyncio
     async def test_monitor_process_resources_healthy(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Single normal iteration: gauges set, counters/histograms untouched."""
 
-        monkeypatch.setattr("psutil.virtual_memory", lambda: types.SimpleNamespace(percent=55, total=10_000))
+        monkeypatch.setattr(
+            "psutil.virtual_memory", lambda: types.SimpleNamespace(percent=55, total=10_000)
+        )
         monkeypatch.setattr("psutil.cpu_percent", _cpu_percent_stub(20))
         monkeypatch.setattr("psutil.cpu_count", _cpu_count_stub(8))
         monkeypatch.setattr("psutil.Process", _process_stub(rss=1234, cpu_percent=16))
@@ -292,14 +303,20 @@ class TestUnit:
         gsnap = metrics.snapshot_gauges()
         assert InMemoryMetrics.find_sample(gsnap[SYSTEM_MEMORY_USED_PERCENT], {})["value"] == 55
         assert InMemoryMetrics.find_sample(gsnap[SYSTEM_CPU_USED_PERCENT], {})["value"] == 20
-        assert InMemoryMetrics.find_sample(gsnap[PROCESS_MEMORY_USED_PERCENT], {})["value"] == 12   # 1234/10000*100
-        assert InMemoryMetrics.find_sample(gsnap[PROCESS_CPU_USED_PERCENT], {})["value"] == 2       # 16/8
+        assert (
+            InMemoryMetrics.find_sample(gsnap[PROCESS_MEMORY_USED_PERCENT], {})["value"] == 12
+        )  # 1234/10000*100
+        assert (
+            InMemoryMetrics.find_sample(gsnap[PROCESS_CPU_USED_PERCENT], {})["value"] == 2
+        )  # 16/8
 
         assert metrics.snapshot_counters() == {}
         assert metrics.snapshot_histograms() == {}
 
     @pytest.mark.asyncio
-    async def test_monitor_high_ram_warn_once_with_reset(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_monitor_high_ram_warn_once_with_reset(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """
         High RAM across two iterations should log exactly one WARNING,
         then drop to normal without logging another warning; also assert kwargs.
@@ -325,9 +342,9 @@ class TestUnit:
 
         # Exactly one warning across two high-usage iterations
         warns = [
-            log for log in logger.logs
-            if log.level == WARNING
-            and "System memory usage is very high" in log.msg
+            log
+            for log in logger.logs
+            if log.level == WARNING and "System memory usage is very high" in log.msg
         ]
         assert len(warns) == 1
         assert warns[0].kwargs.get("system_memory_used_percent") in (95, 96)
@@ -336,15 +353,22 @@ class TestUnit:
         gsnap = metrics.snapshot_gauges()
         assert InMemoryMetrics.find_sample(gsnap[SYSTEM_MEMORY_USED_PERCENT], {})["value"] == 55
         assert InMemoryMetrics.find_sample(gsnap[SYSTEM_CPU_USED_PERCENT], {})["value"] == 20
-        assert InMemoryMetrics.find_sample(gsnap[PROCESS_MEMORY_USED_PERCENT], {})["value"] == 10  # 1000/10000*100
-        assert InMemoryMetrics.find_sample(gsnap[PROCESS_CPU_USED_PERCENT], {})["value"] == 2      # int(8/4)
+        assert (
+            InMemoryMetrics.find_sample(gsnap[PROCESS_MEMORY_USED_PERCENT], {})["value"] == 10
+        )  # 1000/10000*100
+        assert (
+            InMemoryMetrics.find_sample(gsnap[PROCESS_CPU_USED_PERCENT], {})["value"] == 2
+        )  # int(8/4)
 
     @pytest.mark.asyncio
-    async def test_monitor_failure_suppressed_then_recovery(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_monitor_failure_suppressed_then_recovery(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """
         Two failures → one CRITICAL total; next success → one INFO 'recovered'.
         Also assert error payload fields on the CRITICAL log.
         """
+
         def vm_gen() -> Iterator[RuntimeError | types.SimpleNamespace]:
             # Fail twice, then return normal forever
             yield from [RuntimeError("boom1"), RuntimeError("boom2")]
@@ -352,11 +376,13 @@ class TestUnit:
                 yield types.SimpleNamespace(percent=50, total=10_000)
 
         it = vm_gen()
+
         def vm_stub() -> types.SimpleNamespace:
             v = next(it)
             if isinstance(v, Exception):
                 raise v
             return v
+
         monkeypatch.setattr("psutil.virtual_memory", vm_stub)
 
         monkeypatch.setattr("psutil.cpu_percent", _cpu_percent_stub(10))
@@ -404,6 +430,7 @@ class TestUnit:
             metrics=InMemoryMetrics(),
             state_store=NoOpStateStore(),
         ) as gru:
+
             async def failing_shutdown_async_component(
                 _comp: AsyncComponent, log_kwargs: dict[str, object] | None = None
             ) -> None:
@@ -466,9 +493,7 @@ class TestUnit:
             )
             assert result.success
 
-            async def failing_safe_cancel_task(
-                *args: object, **kwargs: object
-            ) -> None:
+            async def failing_safe_cancel_task(*args: object, **kwargs: object):
                 raise RuntimeError("cancel boom")
 
             monkeypatch.setattr(
@@ -549,7 +574,6 @@ class TestUnit:
             assert gru._runtime_state_snapshot() == {}
 
 
-
 class TestUnitUsingNewAssets:
     def patch_sleep_cancel_after(self, monkeypatch: pytest.MonkeyPatch, n: int) -> None:
         calls = {"n": 0}
@@ -558,11 +582,14 @@ class TestUnitUsingNewAssets:
             calls["n"] += 1
             if calls["n"] >= n:
                 raise asyncio.CancelledError
+
         monkeypatch.setattr("asyncio.sleep", sleeper)
 
     @pytest.mark.asyncio
     async def test_monitor_process_resources_healthy(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("psutil.virtual_memory", lambda: types.SimpleNamespace(percent=55, total=10_000))
+        monkeypatch.setattr(
+            "psutil.virtual_memory", lambda: types.SimpleNamespace(percent=55, total=10_000)
+        )
         monkeypatch.setattr("psutil.cpu_percent", _cpu_percent_stub(20))
         monkeypatch.setattr("psutil.cpu_count", _cpu_count_stub(8))
         monkeypatch.setattr("psutil.Process", _process_stub(rss=1234, cpu_percent=16))
@@ -586,7 +613,9 @@ class TestUnitUsingNewAssets:
         assert metrics.snapshot_histograms() == {}
 
     @pytest.mark.asyncio
-    async def test_monitor_high_ram_warn_once_with_reset(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_monitor_high_ram_warn_once_with_reset(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         mem_vals = iter([95, 96, 55])
         monkeypatch.setattr(
             "psutil.virtual_memory",
@@ -606,7 +635,8 @@ class TestUnitUsingNewAssets:
             await monitor._monitor_process_resources(interval=0)
 
         warns = [
-            log for log in logger.logs
+            log
+            for log in logger.logs
             if log.level == WARNING and "System memory usage is very high" in log.msg
         ]
         assert len(warns) == 1
@@ -619,18 +649,22 @@ class TestUnitUsingNewAssets:
         assert InMemoryMetrics.find_sample(gsnap[PROCESS_CPU_USED_PERCENT], {})["value"] == 2
 
     @pytest.mark.asyncio
-    async def test_monitor_failure_suppressed_then_recovery(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_monitor_failure_suppressed_then_recovery(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         def vm_gen() -> Iterator[RuntimeError | types.SimpleNamespace]:
             yield from [RuntimeError("boom1"), RuntimeError("boom2")]
             while True:
                 yield types.SimpleNamespace(percent=50, total=10_000)
 
         it = vm_gen()
+
         def vm_stub() -> types.SimpleNamespace:
             v = next(it)
             if isinstance(v, Exception):
                 raise v
             return v
+
         monkeypatch.setattr("psutil.virtual_memory", vm_stub)
 
         monkeypatch.setattr("psutil.cpu_percent", _cpu_percent_stub(10))

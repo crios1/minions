@@ -92,30 +92,31 @@ class _InMemoryMetricChild:
     """
     A metric bound to a specific label set (label_key).
     """
+
     def __init__(self, parent: "_InMemoryMetric", label_key: LabelKey):
         self._parent = parent
         self._label_key = label_key
 
     def labels(self, **kwargs: str) -> "_InMemoryMetricChild":
         # Already bound; ignore kwargs and return self to satisfy chaining.
-        return self # pragma: no cover
+        return self  # pragma: no cover
 
     def inc(self, amount: float = 1) -> None:
         if self._parent.kind != "counter":
-            raise TypeError("inc() is only valid for counters") # pragma: no cover
+            raise TypeError("inc() is only valid for counters")  # pragma: no cover
         with self._parent._lock:
             current = self._parent._values.get(self._label_key, 0.0)
             self._parent._values[self._label_key] = current + float(amount)
 
     def set(self, value: float) -> None:
         if self._parent.kind != "gauge":
-            raise TypeError("set() is only valid for gauges") # pragma: no cover
+            raise TypeError("set() is only valid for gauges")  # pragma: no cover
         with self._parent._lock:
             self._parent._values[self._label_key] = float(value)
 
     def observe(self, value: float) -> None:
         if self._parent.kind != "histogram":
-            raise TypeError("observe() is only valid for histograms") # pragma: no cover
+            raise TypeError("observe() is only valid for histograms")  # pragma: no cover
         v = float(value)
         with self._parent._lock:
             agg = self._parent._values.get(self._label_key)
@@ -136,6 +137,7 @@ class _InMemoryMetric:
     Registry entry for a single metric (name+kind).
     `.labels(**kwargs)` returns a bound child that conforms to its metric protocol.
     """
+
     def __init__(
         self,
         name: str,
@@ -173,13 +175,13 @@ class _InMemoryMetric:
     # These three satisfy the protocol if someone calls methods directly
     # on the unbound metric (not recommended, but safe):
     def inc(self, amount: float = 1) -> None:
-        raise TypeError("Call .labels(...).inc() on a counter metric") # pragma: no cover
+        raise TypeError("Call .labels(...).inc() on a counter metric")  # pragma: no cover
 
     def set(self, value: float) -> None:
-        raise TypeError("Call .labels(...).set() on a gauge metric") # pragma: no cover
+        raise TypeError("Call .labels(...).set() on a gauge metric")  # pragma: no cover
 
     def observe(self, value: float) -> None:
-        raise TypeError("Call .labels(...).observe() on a histogram metric") # pragma: no cover
+        raise TypeError("Call .labels(...).observe() on a histogram metric")  # pragma: no cover
 
 
 class InMemoryMetrics(SpiedMetrics):
@@ -187,6 +189,7 @@ class InMemoryMetrics(SpiedMetrics):
     In-memory metrics backend.
     Thread-safe, test-friendly; stores per-label values and provides snapshot helpers.
     """
+
     def __init__(self, logger: Logger | None = None):
         super().__init__(logger or NoOpLogger())
         self._snapshot_lock = threading.Lock()
@@ -258,7 +261,8 @@ class InMemoryMetrics(SpiedMetrics):
                     emission.metric_name,
                     emission.labels,
                 )
-            ) is not None
+            )
+            is not None
         ]
         if not violations:
             return

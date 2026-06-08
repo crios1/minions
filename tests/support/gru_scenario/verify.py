@@ -114,7 +114,9 @@ class ScenarioVerifier:
 
         unpin_fns: list[Callable[[], None]] = []
         try:
-            unpin_fns = await self._pin_and_assert_calls(expected.call_counts, expected.allow_unlisted)
+            unpin_fns = await self._pin_and_assert_calls(
+                expected.call_counts, expected.allow_unlisted
+            )
             self._assert_state_store_read_call_bounds()
             self._assert_minion_fanout_delivery()
             self._assert_call_order(expected.call_counts)
@@ -175,7 +177,9 @@ class ScenarioVerifier:
         replayed_step_counts_by_class = self._compute_replayed_step_counts(spies)
         workflow_steps = 0
         for m in spies.minions.values():
-            workflow_steps += len(m._mn_workflow_spec) * expectations.expected_workflows_by_class.get(m, 0)  # type: ignore
+            workflow_steps += len(
+                m._mn_workflow_spec
+            ) * expectations.expected_workflows_by_class.get(m, 0)  # type: ignore
             workflow_steps += sum(replayed_step_counts_by_class.get(m, {}).values())
         total_save_operations = workflows_started + workflow_steps
         checkpoint_reads = len(self._result.checkpoints)
@@ -207,7 +211,9 @@ class ScenarioVerifier:
         self,
         spies: SpyRegistry,
     ) -> dict[type[SpiedMinion[Any, Any]], dict[str, int]]:
-        replayed: defaultdict[type[SpiedMinion[Any, Any]], defaultdict[str, int]] = defaultdict(lambda: defaultdict(int))
+        replayed: defaultdict[type[SpiedMinion[Any, Any]], defaultdict[str, int]] = defaultdict(
+            lambda: defaultdict(int)
+        )
         seen: set[tuple[str, str]] = set()
         for checkpoint in self._result.checkpoints:
             snapshots = checkpoint.persisted_context_snapshots_by_minion_id
@@ -248,10 +254,17 @@ class ScenarioVerifier:
 
     def _count_unresolved_persisted_workflows(self, spies: SpyRegistry) -> int:
         latest_with_persistence = next(
-            (cp for cp in reversed(self._result.checkpoints) if cp.persisted_contexts_by_minion_id is not None),
+            (
+                cp
+                for cp in reversed(self._result.checkpoints)
+                if cp.persisted_contexts_by_minion_id is not None
+            ),
             None,
         )
-        if latest_with_persistence is None or latest_with_persistence.persisted_contexts_by_minion_id is None:
+        if (
+            latest_with_persistence is None
+            or latest_with_persistence.persisted_contexts_by_minion_id is None
+        ):
             return 0
         persisted = latest_with_persistence.persisted_contexts_by_minion_id
         tracked_minion_ids = {
@@ -259,7 +272,9 @@ class ScenarioVerifier:
             for r in self._result.receipts
             if r.success and (r.minion_cls is not None or r.minion_id in persisted)
         }
-        return sum(count for minion_id, count in persisted.items() if minion_id in tracked_minion_ids)
+        return sum(
+            count for minion_id, count in persisted.items() if minion_id in tracked_minion_ids
+        )
 
     def _assert_persisted_context_integrity(self) -> None:
         spies = self._require_spies()
@@ -349,7 +364,9 @@ class ScenarioVerifier:
         receipts: list[OrchestrationStartReceipt],
     ) -> MinionExpectations:
         minion_start_counts: defaultdict[type[SpiedMinion[Any, Any]], int] = defaultdict(int)
-        expected_workflows_by_class: defaultdict[type[SpiedMinion[Any, Any]], int] = defaultdict(int)
+        expected_workflows_by_class: defaultdict[type[SpiedMinion[Any, Any]], int] = defaultdict(
+            int
+        )
 
         for receipt in receipts:
             directive = self._plan.flat_directives[receipt.directive_index]
@@ -409,13 +426,18 @@ class ScenarioVerifier:
                     r for r in window_receipts
                     if r.directive_index in allowed_indexes
                 ]
-            window_expectations = self._compute_minion_expectations_for_receipts(spies, window_receipts)
+            window_expectations = self._compute_minion_expectations_for_receipts(
+                spies, window_receipts
+            )
 
-            for m_cls, expected_workflows in window_expectations.expected_workflows_by_class.items():
+            for (
+                m_cls,
+                expected_workflows,
+            ) in window_expectations.expected_workflows_by_class.items():
                 if expected_workflows < 0:
                     pytest.fail(
-                        f"Invalid expected workflow count for {m_cls.__name__} in checkpoint {cp.order}: "
-                        f"{expected_workflows}"
+                        f"Invalid expected workflow count for {m_cls.__name__} in "
+                        f"checkpoint {cp.order}: {expected_workflows}"
                     )
 
                 key = f"{m_cls.__module__}.{m_cls.__name__}"
@@ -468,15 +490,21 @@ class ScenarioVerifier:
                             curr_by_instance=curr_by_instance,
                             prev_by_instance=prev_by_instance,
                         )
+                        workflow_id_expected = self._format_expected_range(
+                            check.workflow_id_expected_min,
+                            check.workflow_id_expected_max,
+                        )
+                        call_expected = self._format_expected_range(
+                            check.call_expected_min,
+                            check.call_expected_max,
+                        )
                         pytest.fail(
                             "Checkpoint workflow-id progression mismatch for "
                             f"{m_cls.__name__}.{step_name} at checkpoint {cp.order}: "
                             "expected workflow-id delta "
-                            f"{self._format_expected_range(check.workflow_id_expected_min, check.workflow_id_expected_max)}, "
-                            f"got {check.workflow_id_actual}. "
-                            "Call-count delta: "
-                            f"{check.call_actual} (expected "
-                            f"{self._format_expected_range(check.call_expected_min, check.call_expected_max)}). "
+                            f"{workflow_id_expected}, got {check.workflow_id_actual}. "
+                            f"Call-count delta: {check.call_actual} (expected "
+                            f"{call_expected}). "
                             f"Per-instance deltas: {instance_deltas}"
                         )
                     if check.call_mismatch:
@@ -485,15 +513,21 @@ class ScenarioVerifier:
                             curr_by_instance=curr_by_instance,
                             prev_by_instance=prev_by_instance,
                         )
+                        call_expected = self._format_expected_range(
+                            check.call_expected_min,
+                            check.call_expected_max,
+                        )
+                        workflow_id_expected = self._format_expected_range(
+                            check.workflow_id_expected_min,
+                            check.workflow_id_expected_max,
+                        )
                         pytest.fail(
                             "Checkpoint workflow-step progression mismatch for "
                             f"{m_cls.__name__}.{step_name} at checkpoint {cp.order}: "
                             "expected call-count delta "
-                            f"{self._format_expected_range(check.call_expected_min, check.call_expected_max)}, "
-                            f"got {check.call_actual}. "
-                            "Workflow-id delta: "
-                            f"{check.workflow_id_actual} (expected "
-                            f"{self._format_expected_range(check.workflow_id_expected_min, check.workflow_id_expected_max)}). "
+                            f"{call_expected}, got {check.call_actual}. "
+                            f"Workflow-id delta: {check.workflow_id_actual} (expected "
+                            f"{workflow_id_expected}). "
                             f"Per-instance deltas: {instance_deltas}."
                         )
 
@@ -512,7 +546,10 @@ class ScenarioVerifier:
             ),
             None,
         )
-        if latest_checkpoint is None or latest_checkpoint.workflow_step_start_events_by_minion_id is None:
+        if (
+            latest_checkpoint is None
+            or latest_checkpoint.workflow_step_start_events_by_minion_id is None
+        ):
             return
 
         workflow_by_minion_id = latest_checkpoint.workflow_step_start_events_by_minion_id
@@ -563,7 +600,8 @@ class ScenarioVerifier:
 
                     if step_index == previous_index and step_name != previous_step_name:
                         pytest.fail(
-                            "Workflow step start events repeat a step_index with different names for "
+                            "Workflow step start events repeat a step_index with "
+                            "different names for "
                             f"{m_cls.__name__}: workflow_id={workflow_id!r}, "
                             f"previous={previous_index}:{previous_step_name}, "
                             f"current={step_index}:{step_name}."
@@ -671,11 +709,12 @@ class ScenarioVerifier:
             return {}
         merged: defaultdict[str, set[str]] = defaultdict(set)
         for minion_id in minion_ids:
-            for step_name, workflow_ids in workflow_step_ids_by_minion_id.get(minion_id, {}).items():
+            for step_name, workflow_ids in workflow_step_ids_by_minion_id.get(
+                minion_id, {}
+            ).items():
                 merged[step_name].update(workflow_ids)
         return {
-            step_name: tuple(sorted(workflow_ids))
-            for step_name, workflow_ids in merged.items()
+            step_name: tuple(sorted(workflow_ids)) for step_name, workflow_ids in merged.items()
         }
 
     def _merge_workflow_step_events_by_workflow_id(
@@ -759,7 +798,8 @@ class ScenarioVerifier:
                 persisted = target_checkpoint.persisted_contexts_by_orchestration_id
                 if persisted is None:
                     pytest.fail(
-                        "ExpectRuntime.persistence is unsupported with this StateStore snapshot strategy."
+                        "ExpectRuntime.persistence is unsupported with this "
+                        "StateStore snapshot strategy."
                     )
 
                 for start, expected_count in persistence.items():
@@ -771,18 +811,22 @@ class ScenarioVerifier:
                         )
 
                     orchestration_id = receipt.orchestration_id
-                    actual_count = 0 if orchestration_id is None else persisted.get(orchestration_id, 0)
+                    actual_count = (
+                        0 if orchestration_id is None else persisted.get(orchestration_id, 0)
+                    )
                     if actual_count != expected_count:
                         pytest.fail(
-                            f"ExpectRuntime.persistence mismatch for start {receipt.directive_index}: "
-                            f"expected {expected_count}, got {actual_count}."
+                            f"ExpectRuntime.persistence mismatch for start "
+                            f"{receipt.directive_index}: expected {expected_count}, "
+                            f"got {actual_count}."
                         )
 
             if resolutions:
                 counters = target_checkpoint.metrics_counters
                 if counters is None:
                     pytest.fail(
-                        "ExpectRuntime.resolutions is unsupported with this Metrics snapshot strategy."
+                        "ExpectRuntime.resolutions is unsupported with this "
+                        "Metrics snapshot strategy."
                     )
 
                 for start, expected_status_counts in resolutions.items():
@@ -792,17 +836,20 @@ class ScenarioVerifier:
                         "succeeded": sum(
                             self._counter_sample_value(s)
                             for s in counters.get(MINION_WORKFLOW_SUCCEEDED_TOTAL, [])
-                            if self._counter_sample_label(s, LABEL_ORCHESTRATION_ID) == orchestration_id
+                            if self._counter_sample_label(s, LABEL_ORCHESTRATION_ID)
+                            == orchestration_id
                         ),
                         "failed": sum(
                             self._counter_sample_value(s)
                             for s in counters.get(MINION_WORKFLOW_FAILED_TOTAL, [])
-                            if self._counter_sample_label(s, LABEL_ORCHESTRATION_ID) == orchestration_id
+                            if self._counter_sample_label(s, LABEL_ORCHESTRATION_ID)
+                            == orchestration_id
                         ),
                         "aborted": sum(
                             self._counter_sample_value(s)
                             for s in counters.get(MINION_WORKFLOW_ABORTED_TOTAL, [])
-                            if self._counter_sample_label(s, LABEL_ORCHESTRATION_ID) == orchestration_id
+                            if self._counter_sample_label(s, LABEL_ORCHESTRATION_ID)
+                            == orchestration_id
                         ),
                     }
 
@@ -847,7 +894,8 @@ class ScenarioVerifier:
                         if expected_count < 0:
                             pytest.fail(
                                 "ExpectRuntime.workflow_steps counts must be ints >= 0; "
-                                f"got start {receipt.directive_index}.{step_name}={expected_count!r}."
+                                f"got start {receipt.directive_index}.{step_name}="
+                                f"{expected_count!r}."
                             )
                         actual_count = len(
                             workflow_step_ids.get(orchestration_id or "", {}).get(
@@ -884,7 +932,8 @@ class ScenarioVerifier:
             checkpoints = self._result.checkpoints
             if at < 0 or at >= len(checkpoints):
                 pytest.fail(
-                    f"ExpectRuntime.at index {at} is out of range for {len(checkpoints)} checkpoint(s)."
+                    f"ExpectRuntime.at index {at} is out of range for "
+                    f"{len(checkpoints)} checkpoint(s)."
                 )
             return checkpoints[at]
 
@@ -904,7 +953,9 @@ class ScenarioVerifier:
 
         for m_cls, expected_workflows in expectations.expected_workflows_by_class.items():
             if expected_workflows < 0:
-                pytest.fail(f"Invalid expected workflow count for {m_cls.__name__}: {expected_workflows}")
+                pytest.fail(
+                    f"Invalid expected workflow count for {m_cls.__name__}: {expected_workflows}"
+                )
             start_count = expectations.minion_start_counts.get(m_cls, 0)
             max_expected_workflows = expected_workflows + start_count
 
@@ -944,26 +995,30 @@ class ScenarioVerifier:
             max_inits = attempts
             if actual_inits < min_inits or actual_inits > max_inits:
                 pytest.fail(
-                    f"{p_cls.__name__} __init__ mismatch: expected {min_inits}..{max_inits}, got {actual_inits}"
+                    f"{p_cls.__name__} __init__ mismatch: expected "
+                    f"{min_inits}..{max_inits}, got {actual_inits}"
                 )
 
             actual_startup = counts.get("startup", 0)
             if actual_startup < min_started or actual_startup > max_started:
                 pytest.fail(
-                    f"{p_cls.__name__} startup mismatch: expected {min_started}..{max_started}, got {actual_startup}"
+                    f"{p_cls.__name__} startup mismatch: expected "
+                    f"{min_started}..{max_started}, got {actual_startup}"
                 )
 
             actual_run = counts.get("run", 0)
             if actual_run < min_started or actual_run > actual_startup:
                 pytest.fail(
-                    f"{p_cls.__name__} run mismatch: expected {min_started}..{actual_startup}, got {actual_run}"
+                    f"{p_cls.__name__} run mismatch: expected "
+                    f"{min_started}..{actual_startup}, got {actual_run}"
                 )
 
             if self._result.seen_shutdown:
                 actual_shutdown = counts.get("shutdown", 0)
                 if actual_shutdown < 0 or actual_shutdown > actual_startup:
                     pytest.fail(
-                        f"{p_cls.__name__} shutdown mismatch: expected 0..{actual_startup}, got {actual_shutdown}"
+                        f"{p_cls.__name__} shutdown mismatch: expected 0.."
+                        f"{actual_startup}, got {actual_shutdown}"
                     )
 
             if expected_events is not None:
@@ -978,7 +1033,8 @@ class ScenarioVerifier:
                         )
                 elif actual != 0:
                     pytest.fail(
-                        f"{p_cls.__name__} produce_event mismatch: expected 0 when no starts succeeded, got {actual}"
+                        f"{p_cls.__name__} produce_event mismatch: expected 0 when "
+                        f"no starts succeeded, got {actual}"
                     )
 
     def _compute_pipeline_attempt_outcomes(self) -> PipelineAttemptOutcomes:
@@ -1002,15 +1058,17 @@ class ScenarioVerifier:
         allow_unlisted: set[type[SpiedPipeline[Any]] | type[SpiedResource]],
     ) -> list[Callable[[], None]]:
         try:
-            return await asyncio.gather(*[
-                cls.await_and_pin_call_counts(
-                    expected=counts,
-                    on_extra=_ExtraCallRecorder(self._result, cls),
-                    allow_unlisted=(cls in allow_unlisted),
-                    timeout=self._timeout,
-                )
-                for cls, counts in call_counts.items()
-            ])
+            return await asyncio.gather(
+                *[
+                    cls.await_and_pin_call_counts(
+                        expected=counts,
+                        on_extra=_ExtraCallRecorder(self._result, cls),
+                        allow_unlisted=(cls in allow_unlisted),
+                        timeout=self._timeout,
+                    )
+                    for cls, counts in call_counts.items()
+                ]
+            )
         except Exception:
             mismatches: list[str] = []
             for cls, expected in call_counts.items():
@@ -1042,7 +1100,8 @@ class ScenarioVerifier:
                 continue
             expected_calls = call_counts.get(m_cls, {})
             workflow_steps = [
-                name for name in m_cls._mn_workflow_spec  # type: ignore
+                name
+                for name in m_cls._mn_workflow_spec  # type: ignore
                 if expected_calls.get(name, 0) > 0
             ]
             for tag in self._result.instance_tags.get(m_cls, set()):

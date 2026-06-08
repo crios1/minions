@@ -35,9 +35,7 @@ class Event:
 def _make_event() -> Event:
     return Event(
         id="00000000000000000000000000000000",
-        ts=datetime.datetime(
-            2023, 1, 2, 3, 4, 5, 123456, tzinfo=datetime.timezone.utc
-        ),
+        ts=datetime.datetime(2023, 1, 2, 3, 4, 5, 123456, tzinfo=datetime.timezone.utc),
         user_id=42,
         active=False,
         type="test.event",

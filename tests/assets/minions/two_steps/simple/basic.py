@@ -5,7 +5,6 @@ from tests.assets.support.minion_spied import SpiedMinion
 
 
 class SimpleMinion(SpiedMinion[SimpleEvent, SimpleContext]):
-
     @minion_step
     async def step_1(self) -> None:
         self.context.step1 = "step1"

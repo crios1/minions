@@ -27,6 +27,7 @@ T = TypeVar("T")
 P = ParamSpec("P")
 R = TypeVar("R")
 
+
 class Resource(AsyncService):
     """
     A Resource is a shared async service used by multiple minions.
@@ -34,6 +35,7 @@ class Resource(AsyncService):
     All public async methods are wrapped with latency/error tracking by default.
     - Use `@Resource.untracked` as a decorator to opt out of tracking for specific methods.
     """
+
     _mn_user_facing = True
 
     def __init__(
@@ -55,11 +57,11 @@ class Resource(AsyncService):
         pre: LifecycleCallback | None = None,
         pre_args: list[object] | None = None,
         post: LifecycleCallback | None = None,
-        post_args: list[object] | None = None
+        post_args: list[object] | None = None,
     ) -> None:
         return await super()._mn_startup(
-            log_kwargs={'resource_id': self._mn_resource_modpath},
-            pre=self._mn_validate_and_wrap_public_async_methods
+            log_kwargs={"resource_id": self._mn_resource_modpath},
+            pre=self._mn_validate_and_wrap_public_async_methods,
         )
 
     async def _mn_shutdown(
@@ -69,10 +71,10 @@ class Resource(AsyncService):
         pre: LifecycleCallback | None = None,
         pre_args: list[object] | None = None,
         post: LifecycleCallback | None = None,
-        post_args: list[object] | None = None
+        post_args: list[object] | None = None,
     ) -> None:
         return await super()._mn_shutdown(
-            log_kwargs={'resource_id': self._mn_resource_modpath}
+            log_kwargs={"resource_id": self._mn_resource_modpath}
         )
 
     async def _mn_run(
@@ -82,12 +84,16 @@ class Resource(AsyncService):
         pre: LifecycleCallback | None = None,
         pre_args: list[object] | None = None,
         post: LifecycleCallback | None = None,
-        post_args: list[object] | None = None
+        post_args: list[object] | None = None,
     ) -> None:
-        return await super()._mn_run(log_kwargs={'resource_id': self._mn_resource_modpath})
+        return await super()._mn_run(
+            log_kwargs={"resource_id": self._mn_resource_modpath}
+        )
 
     def _mn_validate_and_wrap_public_async_methods(self) -> None:
-        def _is_async_callable(obj: object) -> TypeGuard[Callable[..., Coroutine[Any, Any, object]]]:
+        def _is_async_callable(
+            obj: object,
+        ) -> TypeGuard[Callable[..., Coroutine[Any, Any, object]]]:
             return inspect.iscoroutinefunction(obj)
 
         for attr_name in dir(self):
@@ -123,7 +129,7 @@ class Resource(AsyncService):
         resource_method: str,
         method: Callable[..., Coroutine[Any, Any, T]],
         *args: object,
-        **kwargs: object
+        **kwargs: object,
     ) -> T:
         start = time.monotonic()
         caller_kind, caller = current_resource_metric_caller()
@@ -152,7 +158,7 @@ class Resource(AsyncService):
                     resource=resource_id,
                     resource_method=resource_method,
                     args=args,
-                    kwargs=kwargs
+                    kwargs=kwargs,
                 )
                 raise
             else:
@@ -167,21 +173,25 @@ class Resource(AsyncService):
                     labels=base_labels,
                 )
                 return result
-    
-    @staticmethod
-    @overload
-    def untracked(func: Callable[P, Awaitable[R]], /) -> Callable[P, Awaitable[R]]:
-        ... # pragma: no cover
 
     @staticmethod
     @overload
-    def untracked(**kwargs: Any) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
-        ... # pragma: no cover
+    def untracked(
+        func: Callable[P, Awaitable[R]], /
+    ) -> Callable[P, Awaitable[R]]: ...  # pragma: no cover
+
+    @staticmethod
+    @overload
+    def untracked(
+        **kwargs: Any,
+    ) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]: ...  # pragma: no cover
 
     @staticmethod
     def untracked(
         func: Callable[P, Awaitable[R]] | None = None, /, **kwargs: Any
-    ) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]] | Callable[P, Awaitable[R]]:
+    ) -> (
+        Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]] | Callable[P, Awaitable[R]]
+    ):
         """
         A decorator used to opt out of latency and error tracking on a Resource method.
         """
@@ -197,6 +207,6 @@ class Resource(AsyncService):
         # Support @untracked
         if func is not None:
             return decorator(func)
-    
+
         # Support @untracked() and @untracked(**kwargs) in future
         return decorator

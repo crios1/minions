@@ -88,7 +88,10 @@ class TestInvalidUsage:
     async def test_gru_raises_on_invalid_workflow_persistence_failure_policy(self) -> None:
         with pytest.raises(
             ValueError,
-            match="workflow_persistence_failure_policy must be 'continue-on-failure' or 'idle-until-persisted'",
+            match=(
+                "workflow_persistence_failure_policy must be "
+                "'continue-on-failure' or 'idle-until-persisted'"
+            ),
         ):
             await Gru.create(
                 logger=NoOpLogger(),
@@ -101,20 +104,17 @@ class TestInvalidUsage:
     @pytest.mark.parametrize(
         ("kwarg", "value", "match"),
         [
-            ("workflow_persistence_retry_delay_seconds", 0, "must be a positive number of seconds"),
-            ("workflow_persistence_retry_max_delay_seconds", 0, "must be a positive number of seconds"),
-            ("workflow_persistence_retry_backoff_multiplier", 0.5, "must be a number greater than or equal to 1"),
-            ("workflow_persistence_retry_jitter_ratio", -0.1, "must be a number between 0 and 1"),
-            ("workflow_persistence_retry_jitter_ratio", 1.1, "must be a number between 0 and 1"),
-            ("workflow_persistence_retry_warning_interval_seconds", -1, "must be a positive number of seconds"),
-            ("workflow_persistence_retry_error_after_seconds", -1, "must be None or a non-negative number of seconds"),
+            ("workflow_persistence_retry_delay_seconds", 0, "must be a positive number of seconds"),  # noqa: E501
+            ("workflow_persistence_retry_max_delay_seconds", 0, "must be a positive number of seconds"),  # noqa: E501
+            ("workflow_persistence_retry_backoff_multiplier", 0.5, "must be a number greater than or equal to 1"),  # noqa: E501
+            ("workflow_persistence_retry_jitter_ratio", -0.1, "must be a number between 0 and 1"),  # noqa: E501
+            ("workflow_persistence_retry_jitter_ratio", 1.1, "must be a number between 0 and 1"),  # noqa: E501
+            ("workflow_persistence_retry_warning_interval_seconds", -1, "must be a positive number of seconds"),  # noqa: E501
+            ("workflow_persistence_retry_error_after_seconds", -1, "must be None or a non-negative number of seconds"),  # noqa: E501
         ],
     )
     async def test_gru_raises_on_invalid_workflow_persistence_retry_settings(
-        self,
-        kwarg: str,
-        value: object,
-        match: str
+        self, kwarg: str, value: object, match: str
     ) -> None:
         kwargs: dict[str, Any] = {kwarg: value}
         with pytest.raises(ValueError, match=match):
@@ -126,10 +126,15 @@ class TestInvalidUsage:
             )
 
     @pytest.mark.asyncio
-    async def test_gru_raises_when_workflow_persistence_retry_max_delay_is_below_initial_delay(self) -> None:
+    async def test_gru_raises_when_workflow_persistence_retry_max_delay_is_below_initial_delay(
+        self,
+    ) -> None:
         with pytest.raises(
             ValueError,
-            match="workflow_persistence_retry_max_delay_seconds must be greater than or equal to workflow_persistence_retry_delay_seconds",
+            match=(
+                "workflow_persistence_retry_max_delay_seconds must be greater "
+                "than or equal to workflow_persistence_retry_delay_seconds"
+            ),
         ):
             await Gru.create(
                 logger=NoOpLogger(),
@@ -145,11 +150,12 @@ class TestInvalidUsage:
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
     ) -> None:
         # TODO:
-        # - start 2 minions with the same name (would need to start different minion but give the same name)
+        # - start 2 minions with the same name (would need to start different
+        #   minion but give the same name)
         # - stop minion by id => and get error as a value
         # TODO: but actually runs with events be created and stuff?
 
-        print('--------- start problematic test ---------')
+        print("--------- start problematic test ---------")
 
         minion_modpath = "tests.assets.minions.two_steps.simple.basic"
         pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
@@ -169,7 +175,10 @@ class TestInvalidUsage:
             assert result1.success
             assert result1.orchestration_id is not None
             assert result1.orchestration_id in gru._minions_by_orchestration_id
-            assert gru._minions_by_orchestration_id[result1.orchestration_id]._mn_minion_instance_id in gru._minion_tasks
+            assert (
+                gru._minions_by_orchestration_id[result1.orchestration_id]._mn_minion_instance_id
+                in gru._minion_tasks
+            )
 
             result2 = await gru.start_orchestration(
                 minion=minion_modpath,
@@ -203,7 +212,8 @@ class TestInvalidUsage:
 
             assert not result.success
             assert result.reason == (
-                "Gru.start_orchestration: minion_config type must be a dataclass or msgspec Struct type."
+                "Gru.start_orchestration: minion_config type must be a dataclass "
+                "or msgspec Struct type."
             )
 
     @pytest.mark.asyncio
@@ -216,7 +226,7 @@ class TestInvalidUsage:
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
         ) as gru:
-            result = await gru.stop_orchestration('mock') 
+            result = await gru.stop_orchestration("mock")
 
             print(result)
 
@@ -248,7 +258,6 @@ class TestInvalidUsage:
             assert result.reason
             assert "Incompatible minion and pipeline event types" in result.reason
 
-
     # would need to be run in gru ...
     # def test_invalid_user_code_in_step(self):
     #     with pytest.raises(Exception):
@@ -258,7 +267,6 @@ class TestInvalidUsage:
     #                 import asyncio
     #                 async def _(): ...
     #                 asyncio.create_task(_())
-                    
 
 
 class TestInvalidUsageDSL:
@@ -427,6 +435,8 @@ class TestInvalidUsageUsingNewAssetsDSL:
             directives,
             pipeline_event_counts={},
         )
+
+
 class TestInvalidUsageUsingNewAssets:
     # Legacy/manual baseline during DSL confidence window.
     # Orchestration-invalid coverage should be added/updated in
@@ -496,7 +506,11 @@ class TestInvalidUsageUsingNewAssets:
         minion_modpath = "tests.assets.minions.two_steps.counter.basic"
         pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
 
-        async with gru_factory(state_store=NoOpStateStore(), logger=ConsoleLogger(), metrics=NoOpMetrics()) as gru:
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=ConsoleLogger(),
+            metrics=NoOpMetrics()
+        ) as gru:
             result1 = await gru.start_orchestration(
                 minion=minion_modpath,
                 pipeline=pipeline_modpath,
@@ -505,7 +519,10 @@ class TestInvalidUsageUsingNewAssets:
             assert result1.success
             assert result1.orchestration_id is not None
             assert result1.orchestration_id in gru._minions_by_orchestration_id
-            assert gru._minions_by_orchestration_id[result1.orchestration_id]._mn_minion_instance_id in gru._minion_tasks
+            assert (
+                gru._minions_by_orchestration_id[result1.orchestration_id]._mn_minion_instance_id
+                in gru._minion_tasks
+            )
 
             result2 = await gru.start_orchestration(
                 minion=minion_modpath,
@@ -521,7 +538,11 @@ class TestInvalidUsageUsingNewAssets:
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
     ) -> None:
-        async with gru_factory(state_store=NoOpStateStore(), logger=ConsoleLogger(), metrics=NoOpMetrics()) as gru:
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=ConsoleLogger(),
+            metrics=NoOpMetrics()
+        ) as gru:
             result = await gru.stop_orchestration("mock")
 
             assert not result.success
@@ -530,13 +551,16 @@ class TestInvalidUsageUsingNewAssets:
 
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_mismatched_minion_and_pipeline_event_types(
-        self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
+        self, gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
     ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.counter.basic"
         pipeline_modpath = "tests.assets.pipelines.types.record_event"
 
-        async with gru_factory(state_store=NoOpStateStore(), logger=ConsoleLogger(), metrics=NoOpMetrics()) as gru:
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=ConsoleLogger(),
+            metrics=NoOpMetrics()
+        ) as gru:
             result = await gru.start_orchestration(
                 minion=minion_modpath,
                 pipeline=pipeline_modpath,

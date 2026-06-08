@@ -8,7 +8,8 @@ representative workload.
 Examples:
     python scripts/metrics_cardinality_audit.py snapshot.json
     python scripts/metrics_cardinality_audit.py --format prometheus metrics.txt
-    curl -s http://localhost:8081/metrics | python scripts/metrics_cardinality_audit.py --format prometheus -
+    curl -s http://localhost:8081/metrics | \
+        python scripts/metrics_cardinality_audit.py --format prometheus -
 """
 
 from __future__ import annotations
@@ -216,12 +217,8 @@ def print_table(
     shown = sorted_audits[:limit]
     max_name_len = max([len("metric"), *(len(audit.metric_name) for audit in shown)], default=6)
 
-    print(
-        f"{'metric':<{max_name_len}}  kind       labelsets  est_series  top_label_values"
-    )
-    print(
-        f"{'-' * max_name_len}  {'-' * 9}  {'-' * 9}  {'-' * 10}  {'-' * 16}"
-    )
+    print(f"{'metric':<{max_name_len}}  kind       labelsets  est_series  top_label_values")
+    print(f"{'-' * max_name_len}  {'-' * 9}  {'-' * 9}  {'-' * 10}  {'-' * 16}")
 
     exit_code = 0
     for audit in shown:

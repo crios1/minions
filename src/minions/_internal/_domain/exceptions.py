@@ -8,9 +8,11 @@ class UnsupportedUserCode(Exception):
     """
     pass
 
-class AbortWorkflow(Exception): # minion workflow
+
+class AbortWorkflow(Exception):  # minion workflow
     """Raise this within a workflow step to abort it early."""
     ...
+
 
 class MinionsError(Exception):
     "Exception used to bubble up context about framework exceptions"

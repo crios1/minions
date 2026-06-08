@@ -25,11 +25,13 @@ def reload_wait_for_subs_pipeline() -> Callable[..., None]:
         from tests.assets.pipelines.simple.simple_event import (
             subscriber_ready_fixed_events,
         )
+
         importlib.reload(subscriber_ready_fixed_events)
-        
+
         from tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events import (
             SimpleSubscriberReadyFixedEventsPipeline,
         )
+
         SimpleSubscriberReadyFixedEventsPipeline.reset_gate(expected_subs=expected_subs)
 
     return _reload
@@ -58,6 +60,7 @@ def logger() -> InMemoryLogger:
     InMemoryLogger.reset_spy()
     return InMemoryLogger()
 
+
 @pytest.fixture
 def metrics() -> Generator[InMemoryMetrics, None, None]:
     InMemoryMetrics.enable_spy()
@@ -66,11 +69,13 @@ def metrics() -> Generator[InMemoryMetrics, None, None]:
     yield metrics
     metrics.assert_recorded_labels_match_contract()
 
+
 @pytest.fixture
 def state_store(logger: InMemoryLogger) -> InMemoryStateStore:
     InMemoryStateStore.enable_spy()
     InMemoryStateStore.reset_spy()
     return InMemoryStateStore(logger=logger)
+
 
 @pytest.fixture
 def gru_factory() -> Callable[..., contextlib.AbstractAsyncContextManager[Gru]]:
@@ -94,6 +99,7 @@ def gru_factory() -> Callable[..., contextlib.AbstractAsyncContextManager[Gru]]:
             active_context = False
 
     return _factory
+
 
 @pytest_asyncio.fixture
 async def gru(

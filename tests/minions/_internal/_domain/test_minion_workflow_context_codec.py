@@ -196,7 +196,9 @@ def test_adapter_payload_roundtrips_msgspec_struct_payloads():
     adapter_payload = serialize_workflow_context(ctx)
     loaded_ctx = deserialize_workflow_context(adapter_payload)
 
-    assert adapter_payload["context_cls"] == f"{ContextStruct.__module__}.{ContextStruct.__qualname__}"
+    assert (
+        adapter_payload["context_cls"] == f"{ContextStruct.__module__}.{ContextStruct.__qualname__}"
+    )
     assert loaded_ctx == ctx
 
 

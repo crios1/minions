@@ -12,14 +12,15 @@ async def test_spymixin_denies_instantiation():
     with pytest.raises(TypeError):
         SpyMixin()
 
+
 @pytest.mark.asyncio
 async def test_spymixin_is_order_agnostic():
     class Base:
         async def foo(self): ...
-        
+
     class A(Base, SpyMixin):
         async def bar(self): ...
-    
+
     class B(SpyMixin, Base):
         async def bar(self): ...
 
@@ -42,12 +43,14 @@ async def test_spymixin_is_order_agnostic():
 @pytest.mark.asyncio
 async def test_spymixin_wraps_noncooperative_init():
     class Base:
-        def __init__(self): ... # non-cooperative init (cooperative init call super and pass args and kwargs)
+        def __init__(
+            self,
+        ): ...  # non-cooperative init (cooperative init call super and pass args and kwargs)
         async def foo(self): ...
-        
+
     class A(Base, SpyMixin):
         async def bar(self): ...
-    
+
     class B(SpyMixin, Base):
         async def bar(self): ...
 
@@ -87,7 +90,8 @@ async def test_wraps_class_and_static_methods():
     y = Y()
     y.im()
 
-    assert Y.get_call_counts() == {'__init__': 1, 'cm': 1, 'sm': 1, 'im': 1}
+    assert Y.get_call_counts() == {"__init__": 1, "cm": 1, "sm": 1, "im": 1}
+
 
 @pytest.mark.asyncio
 async def test_property_and_pre_marked_not_wrapped():
@@ -99,8 +103,8 @@ async def test_property_and_pre_marked_not_wrapped():
         def foo(self): ...
 
     # simulate the base already having marked/wrapped functions
-    setattr(Base, '_mspy_wrapped_fns', WeakSet())
-    getattr(Base, '_mspy_wrapped_fns').add(Base.__dict__['foo'])
+    setattr(Base, "_mspy_wrapped_fns", WeakSet())
+    getattr(Base, "_mspy_wrapped_fns").add(Base.__dict__["foo"])
 
     class Z(Base, SpyMixin):
         pass
@@ -112,9 +116,10 @@ async def test_property_and_pre_marked_not_wrapped():
     z.foo()
 
     counts = Z.get_call_counts()
-    assert counts.get('__init__', 0) == 1
-    assert 'p' not in counts
-    assert 'foo' not in counts
+    assert counts.get("__init__", 0) == 1
+    assert "p" not in counts
+    assert "foo" not in counts
+
 
 @pytest.mark.asyncio
 async def test_spymixin_records_call_counts_and_resets():
@@ -122,38 +127,40 @@ async def test_spymixin_records_call_counts_and_resets():
         async def _startup(self): ...
         async def _run(self): ...
         async def _shutdown(self): ...
-    
+
     class Service(LifeCycle, SpyMixin):
         def foo(self): ...
         def bar(self): ...
-    
+
     Service.enable_spy()
 
     srv = Service()
-    await srv._startup() 
+    await srv._startup()
     await srv._run()
     srv.foo()
     srv.bar()
     await srv._shutdown()
 
     assert Service.get_call_counts() == {
-        '__init__': 1,
-        '_startup': 1,
-        '_run': 1,
-        '_shutdown': 1,
-        'foo': 1,
-        'bar': 1,
+        "__init__": 1,
+        "_startup": 1,
+        "_run": 1,
+        "_shutdown": 1,
+        "foo": 1,
+        "bar": 1,
     }
 
     Service.reset_spy()
 
     assert not Service.get_call_counts()
 
+
 @pytest.mark.asyncio
 async def test_idempotent_enable_spy_and_reset():
-    class Base():
-        def foo(self): ...
-    
+    class Base:
+        def foo(self):
+            ...
+
     class X(Base, SpyMixin):
         ...
     
@@ -164,18 +171,20 @@ async def test_idempotent_enable_spy_and_reset():
     x.foo()
     x.foo()
 
-    assert X.get_call_counts() == {'__init__': 1, 'foo': 2}
+    assert X.get_call_counts() == {"__init__": 1, "foo": 2}
 
     X.reset_spy()
     X.reset_spy()
 
     assert not X.get_call_counts()
 
+
 @pytest.mark.asyncio
 async def test_wait_for_call():
-    class Base():
-        async def foo(self): ...
-    
+    class Base:
+        async def foo(self):
+            ...
+
     class X(Base, SpyMixin):
         ...
     
@@ -195,7 +204,7 @@ async def test_wait_for_call():
 
 @pytest.mark.asyncio
 async def test_wait_for_calls():
-    class Base():
+    class Base:
         async def foo(self): ...
         async def bar(self): ...
     
@@ -206,31 +215,38 @@ async def test_wait_for_calls():
 
     x = X()
 
-    await asyncio.gather(*[
+    await asyncio.gather(
+        *[
             x.foo(),
             x.bar(),
             x.wait_for_calls({'foo': 1, 'bar': 1}, timeout=1)
-    ])
+        ]
+    )
 
-    await asyncio.gather(*[
+    await asyncio.gather(
+        *[
             x.foo(),
-            x.wait_for_calls({'foo': 2, 'bar': 2}, timeout=1),
+            x.wait_for_calls({"foo": 2, "bar": 2}, timeout=1),
             x.bar()
-    ])
+        ]
+    )
 
-    assert X.get_call_counts() == {'__init__': 1, 'foo': 2, 'bar': 2}
+    assert X.get_call_counts() == {"__init__": 1, "foo": 2, "bar": 2}
+
 
 @pytest.mark.asyncio
 async def test_multiple_waiters_remaining_behavior():
-    class Base(): ...
+    class Base:
+        ...
+
     class X(Base, SpyMixin):
         async def foo(self): ...
 
     X.enable_spy()
     x = X()
 
-    waiter1 = asyncio.create_task(X.wait_for_call('foo', count=1, timeout=1))
-    waiter2 = asyncio.create_task(X.wait_for_call('foo', count=2, timeout=1))
+    waiter1 = asyncio.create_task(X.wait_for_call("foo", count=1, timeout=1))
+    waiter2 = asyncio.create_task(X.wait_for_call("foo", count=2, timeout=1))
 
     await asyncio.sleep(0)
 
@@ -241,11 +257,12 @@ async def test_multiple_waiters_remaining_behavior():
     await x.foo()
     await asyncio.wait_for(waiter2, timeout=1)
 
-    assert X.get_call_counts() == {'__init__': 1, 'foo': 2}
+    assert X.get_call_counts() == {"__init__": 1, "foo": 2}
+
 
 @pytest.mark.asyncio
 async def test_wait_for_call_uses_absolute_target_count():
-    class Base():
+    class Base:
         async def foo(self): ...
 
     class X(Base, SpyMixin):
@@ -256,12 +273,13 @@ async def test_wait_for_call_uses_absolute_target_count():
 
     await x.foo()  # foo count = 1
 
-    waiter = asyncio.create_task(X.wait_for_call('foo', count=2, timeout=1))
+    waiter = asyncio.create_task(X.wait_for_call("foo", count=2, timeout=1))
     await asyncio.sleep(0)  # let waiter register
     assert not waiter.done()
 
     await x.foo()  # foo count = 2
     await asyncio.wait_for(waiter, timeout=1)
+
 
 @pytest.mark.asyncio
 async def test_wait_for_call_resolves_before_long_running_call_completes():
@@ -269,7 +287,7 @@ async def test_wait_for_call_resolves_before_long_running_call_completes():
     release = asyncio.Event()
     finished = asyncio.Event()
 
-    class Base():
+    class Base:
         async def foo(self):
             started.set()
             await release.wait()
@@ -281,7 +299,7 @@ async def test_wait_for_call_resolves_before_long_running_call_completes():
     X.enable_spy()
     x = X()
 
-    waiter = asyncio.create_task(X.wait_for_call('foo', count=1, timeout=1))
+    waiter = asyncio.create_task(X.wait_for_call("foo", count=1, timeout=1))
     await asyncio.sleep(0)  # ensure waiter task runs
     foo_task = asyncio.create_task(x.foo())
 
@@ -295,6 +313,7 @@ async def test_wait_for_call_resolves_before_long_running_call_completes():
     await asyncio.wait_for(foo_task, timeout=1)
     assert finished.is_set()
     assert X.get_call_counts().get("foo") == 1
+
 
 @pytest.mark.asyncio
 async def test__spy_bump_race_guard_skips_cancelled_waiter():
@@ -314,10 +333,11 @@ async def test__spy_bump_race_guard_skips_cancelled_waiter():
     This test ensures that cancelled Futures are skipped safely and cleaned up
     without exceptions or leaks.
     """
+
     class _S(SpyMixin):
         async def foo(self):
             return
-    
+
     _S.enable_spy()
     _S.reset_spy()
 
@@ -338,6 +358,7 @@ async def test__spy_bump_race_guard_skips_cancelled_waiter():
     # Verify the cancelled waiter was skipped and cleaned up
     with _S._mspy_lock:
         assert "foo" not in _S._mspy_waiters
+
 
 @pytest.mark.asyncio
 async def test_spymixin_records_and_resets_call_history():
@@ -360,13 +381,14 @@ async def test_spymixin_records_and_resets_call_history():
 
     hist = Sub.get_call_history()
 
-    assert [n for n, _ts, _inst_tag in hist] == ['__init__', 'foo', 'sync', 'bar']
+    assert [n for n, _ts, _inst_tag in hist] == ["__init__", "foo", "sync", "bar"]
 
     # timestamps should be non-decreasing
     assert all(t1 <= t2 for (_, t1, _), (_, t2, _) in zip(hist, hist[1:]))
 
     Sub.reset_spy()
     assert Sub.get_call_history() == []
+
 
 @pytest.mark.asyncio
 async def test_spymixin_records_and_resets_call_history_multiple_instances():
@@ -389,13 +411,14 @@ async def test_spymixin_records_and_resets_call_history_multiple_instances():
 
     hist = Sub.get_call_history()
 
-    assert [n for n, _ts, _inst_tag in hist] == ['__init__', '__init__', 'foo', 'foo', 'foo']
+    assert [n for n, _ts, _inst_tag in hist] == ["__init__", "__init__", "foo", "foo", "foo"]
 
     # timestamps should be non-decreasing
     assert all(t1 <= t2 for (_, t1, _), (_, t2, _) in zip(hist, hist[1:]))
 
     Sub.reset_spy()
     assert Sub.get_call_history() == []
+
 
 @pytest.mark.asyncio
 async def test_await_and_pin_default():
@@ -418,13 +441,14 @@ async def test_await_and_pin_default():
 
     with pytest.raises(AssertionError):
         await s.foo()
-    
+
     with pytest.raises(AssertionError):
         await s.bar()
-    
+
     unpin()
     await s.foo()
     await s.bar()
+
 
 @pytest.mark.asyncio
 async def test_await_and_pin_allow_unlisted():
@@ -453,6 +477,7 @@ async def test_await_and_pin_allow_unlisted():
     unpin()
     await s.foo()
     await s.bar()
+
 
 @pytest.mark.asyncio
 async def test_await_and_pin_custom_on_extra():
@@ -483,49 +508,61 @@ async def test_await_and_pin_custom_on_extra():
     with pytest.raises(RuntimeError):
         await s.bar()
 
+
 # ---- Test fixtures ----
+
 
 @pytest.fixture
 def S() -> Any:
     class Base:
         pass
+
     class S(SpyMixin, Base):
         def a(self): return "a"
         def b(self): return "b"
         def c(self): return "c"
         async def aa(self): return "aa"
+
     S.enable_spy()
     yield S
     S.reset_spy()
+
 
 @pytest.fixture
 def T() -> Any:
     class Base:
         pass
+
     class T(SpyMixin, Base):
         def x(self): return "x"
         def y(self): return "y"
+
     T.enable_spy()
     yield T
     T.reset_spy()
 
+
 # ---- Tests ----
+
 
 def test_empty_subsequence_noop(S: Any) -> None:
     S.assert_call_order([])
+
 
 def test_contiguous_in_order(S: Any) -> None:
     s = S()
     s.a()
     s.b()
-    S.assert_call_order(['__init__', 'a', 'b'])
+    S.assert_call_order(["__init__", "a", "b"])
+
 
 def test_noncontiguous_in_order(S: Any) -> None:
     s = S()
     s.a()
     s.c()
     s.b()
-    S.assert_call_order(['__init__', 'a', 'b'])
+    S.assert_call_order(["__init__", "a", "b"])
+
 
 def test_noncontiguous_in_order_multicalls(S: Any) -> None:
     s = S()
@@ -533,17 +570,19 @@ def test_noncontiguous_in_order_multicalls(S: Any) -> None:
     s.a()
     s.c()
     s.b()
-    S.assert_call_order(['__init__', 'a', 'b'])
+    S.assert_call_order(["__init__", "a", "b"])
+
 
 def test_missing_raises_and_message_contains_tail_and_history(S: Any) -> None:
     s = S()
     s.a()
     with pytest.raises(AssertionError) as e:
-        S.assert_call_order(['a', 'b', 'c'])
+        S.assert_call_order(["a", "b", "c"])
     msg = str(e.value)
     assert "Missing from this point: ['b', 'c']" in msg
     assert "Full history names: " in msg
     assert "__init__" in msg and "a" in msg
+
 
 def test_interleaved_histories_are_isolated(S: Any, T: Any) -> None:
     s = S()
@@ -554,12 +593,13 @@ def test_interleaved_histories_are_isolated(S: Any, T: Any) -> None:
     s.b()
     t.y()
 
-    S.assert_call_order(['__init__', 'a', 'b'])
-    T.assert_call_order(['__init__', 'x', 'y'])
+    S.assert_call_order(["__init__", "a", "b"])
+    T.assert_call_order(["__init__", "x", "y"])
+
 
 @pytest.mark.asyncio
 async def test_async_method_participates_in_ordering(S: Any) -> None:
     s = S()
     await s.aa()
     s.a()
-    S.assert_call_order(['__init__', 'aa', 'a'])
+    S.assert_call_order(["__init__", "aa", "a"])

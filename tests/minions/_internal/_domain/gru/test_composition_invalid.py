@@ -39,10 +39,13 @@ class TestInvalidComposition:
 
                 assert not result.success
                 assert result.reason
-                assert "must define a `minion` variable or contain at least one subclass of `Minion`" in result.reason
+                assert (
+                    "must define a `minion` variable or contain at least one subclass of `Minion`"
+                    in result.reason
+                )
 
         @pytest.mark.asyncio
-        async def test_gru_returns_error_on_minion_file_with_multiple_minions_and_no_explicit_minion(
+        async def test_gru_returns_error_on_minion_file_with_multiple_minions_and_no_explicit_minion(  # noqa: E501
             self,
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
             tests_dir: Path,
@@ -65,7 +68,9 @@ class TestInvalidComposition:
 
                 assert not result.success
                 assert result.reason
-                assert "multiple Minion subclasses but no explicit `minion` variable" in result.reason
+                assert (
+                    "multiple Minion subclasses but no explicit `minion` variable" in result.reason
+                )
 
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_minion_file_with_invalid_explicit_minion(
@@ -99,7 +104,9 @@ class TestInvalidComposition:
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
             tests_dir: Path,
         ) -> None:
-            minion_modpath = "tests.assets.entrypoints.invalid.unserializable_workflow_context_minion_simple"
+            minion_modpath = (
+                "tests.assets.entrypoints.invalid.unserializable_workflow_context_minion_simple"
+            )
             pipeline_modpath = "tests.assets.pipeline_single_event"
             config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
@@ -168,10 +175,13 @@ class TestInvalidComposition:
 
                 assert not result.success
                 assert result.reason
-                assert "must define a `pipeline` variable or contain at least one subclass of `Pipeline`" in result.reason
+                assert (
+                    "must define a `pipeline` variable or contain at least one "
+                    "subclass of `Pipeline`" in result.reason
+                )
 
-        @pytest.mark.asyncio 
-        async def test_gru_returns_error_on_pipeline_file_with_multiple_pipelines_and_no_explicit_pipeline(
+        @pytest.mark.asyncio
+        async def test_gru_returns_error_on_pipeline_file_with_multiple_pipelines_and_no_explicit_pipeline(  # noqa: E501
             self,
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
             tests_dir: Path,
@@ -194,7 +204,10 @@ class TestInvalidComposition:
 
                 assert not result.success
                 assert result.reason
-                assert "multiple Pipeline subclasses but no explicit `pipeline` variable" in result.reason
+                assert (
+                    "multiple Pipeline subclasses but no explicit `pipeline` variable"
+                    in result.reason
+                )
 
         @pytest.mark.asyncio
         async def test_gru_returns_error_on_pipeline_file_with_invalid_explicit_pipeline(
@@ -251,7 +264,10 @@ class TestInvalidComposition:
     # because Resources dependencies are declared as type hints
     # when creating Minion and Pipeline subclasses.
 
-    # TODO: ensure gru properly handles Minions and Pipelines with multiple Resource dependency declarations
+    # TODO: ensure gru properly handles Minions and Pipelines with multiple
+    # Resource dependency declarations.
+
+
 class TestInvalidCompositionUsingNewAssets:
     class TestMinionFile:
         @pytest.mark.asyncio
@@ -264,7 +280,11 @@ class TestInvalidCompositionUsingNewAssets:
             pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-            async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
+            async with gru_factory(
+                state_store=NoOpStateStore(),
+                logger=NoOpLogger(),
+                metrics=NoOpMetrics()
+            ) as gru:
                 result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
@@ -276,7 +296,7 @@ class TestInvalidCompositionUsingNewAssets:
                 assert "must define a `minion` variable" in result.reason
 
         @pytest.mark.asyncio
-        async def test_gru_returns_error_on_minion_file_with_multiple_minions_and_no_explicit_minion(
+        async def test_gru_returns_error_on_minion_file_with_multiple_minions_and_no_explicit_minion(  # noqa: E501
             self,
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
             tests_dir: Path,
@@ -285,7 +305,11 @@ class TestInvalidCompositionUsingNewAssets:
             pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-            async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
+            async with gru_factory(
+                state_store=NoOpStateStore(),
+                logger=NoOpLogger(),
+                metrics=NoOpMetrics()
+            ) as gru:
                 result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
@@ -306,7 +330,12 @@ class TestInvalidCompositionUsingNewAssets:
             pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-            async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
+            async with gru_factory(
+                state_store=NoOpStateStore(),
+                logger=NoOpLogger(),
+
+                metrics=NoOpMetrics()
+            ) as gru:
                 result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
@@ -327,7 +356,11 @@ class TestInvalidCompositionUsingNewAssets:
             pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-            async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
+            async with gru_factory(
+                state_store=NoOpStateStore(),
+                logger=NoOpLogger(),
+                metrics=NoOpMetrics()
+            ) as gru:
                 result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
@@ -348,7 +381,11 @@ class TestInvalidCompositionUsingNewAssets:
             pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-            async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
+            async with gru_factory(
+                state_store=NoOpStateStore(),
+                logger=NoOpLogger(),
+                metrics=NoOpMetrics()
+            ) as gru:
                 result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
@@ -370,7 +407,11 @@ class TestInvalidCompositionUsingNewAssets:
             pipeline_modpath = "tests.assets.entrypoints.invalid.empty"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-            async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
+            async with gru_factory(
+                state_store=NoOpStateStore(),
+                logger=NoOpLogger(),
+                metrics=NoOpMetrics()
+            ) as gru:
                 result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
@@ -382,7 +423,7 @@ class TestInvalidCompositionUsingNewAssets:
                 assert "must define a `pipeline` variable" in result.reason
 
         @pytest.mark.asyncio
-        async def test_gru_returns_error_on_pipeline_file_with_multiple_pipelines_and_no_explicit_pipeline(
+        async def test_gru_returns_error_on_pipeline_file_with_multiple_pipelines_and_no_explicit_pipeline(  # noqa: E501
             self,
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
             tests_dir: Path,
@@ -391,7 +432,11 @@ class TestInvalidCompositionUsingNewAssets:
             pipeline_modpath = "tests.assets.entrypoints.invalid.two_pipelines"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-            async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
+            async with gru_factory(
+                state_store=NoOpStateStore(),
+                logger=NoOpLogger(),
+                metrics=NoOpMetrics()
+            ) as gru:
                 result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
@@ -412,7 +457,11 @@ class TestInvalidCompositionUsingNewAssets:
             pipeline_modpath = "tests.assets.entrypoints.invalid.invalid_explicit_pipeline"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-            async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
+            async with gru_factory(
+                state_store=NoOpStateStore(),
+                logger=NoOpLogger(),
+                metrics=NoOpMetrics()
+            ) as gru:
                 result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,
@@ -433,7 +482,11 @@ class TestInvalidCompositionUsingNewAssets:
             pipeline_modpath = "tests.assets.pipelines.invalid.unserializable_event"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-            async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
+            async with gru_factory(
+                state_store=NoOpStateStore(),
+                logger=NoOpLogger(),
+                metrics=NoOpMetrics()
+            ) as gru:
                 result = await gru.start_orchestration(
                     minion=minion_modpath,
                     minion_config_path=config_path,

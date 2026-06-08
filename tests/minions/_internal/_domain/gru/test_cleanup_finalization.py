@@ -16,7 +16,7 @@ FIXED_RESOURCE_ID = "tests.assets.resources.fixed.base.FixedResource"
 
 
 @pytest.mark.asyncio
-async def test_stop_committed_minion_shutdown_failure_discards_runtime_state_when_cleanup_helper_fails(
+async def test_stop_committed_minion_shutdown_failure_discards_runtime_state_when_cleanup_helper_fails(  # noqa: E501
     gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
@@ -24,17 +24,24 @@ async def test_stop_committed_minion_shutdown_failure_discards_runtime_state_whe
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        result = await gru.start_orchestration(GOOD_PIPELINE, "tests.assets.crash.minions.boom_shutdown")
+        result = await gru.start_orchestration(
+            GOOD_PIPELINE, "tests.assets.crash.minions.boom_shutdown"
+        )
         assert result.success
 
         async def failing_stop_orchestration_best_effort(_minion: Minion[Any, Any]) -> None:
             raise RuntimeError("cleanup helper boom")
 
-        monkeypatch.setattr(gru, "_stop_orchestration_best_effort", failing_stop_orchestration_best_effort)
+        monkeypatch.setattr(
+            gru, "_stop_orchestration_best_effort", failing_stop_orchestration_best_effort
+        )
         stop = await gru.stop_orchestration(result.orchestration_id or "")
 
         assert not stop.success
-        assert stop.reason == "BoomShutdownMinion.shutdown failed (tests/assets/crash/minions/boom_shutdown.py)"
+        assert (
+            stop.reason
+            == "BoomShutdownMinion.shutdown failed (tests/assets/crash/minions/boom_shutdown.py)"
+        )
         assert gru._runtime_state_snapshot() == {}
 
 
@@ -76,6 +83,7 @@ async def test_start_resource_startup_failure_discards_runtime_state_when_cleanu
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
+
         async def failing_cleanup_resources(_resource_ids: set[str]) -> None:
             raise RuntimeError("resource cleanup boom")
 
@@ -95,7 +103,10 @@ async def test_start_resource_startup_failure_discards_runtime_state_when_cleanu
         )
 
         assert not result.success
-        assert result.reason == "BoomStartupResource.startup failed (tests/assets/crash/resources/boom_startup.py)"
+        assert (
+            result.reason
+            == "BoomStartupResource.startup failed (tests/assets/crash/resources/boom_startup.py)"
+        )
         assert gru._runtime_state_snapshot() == {}
 
 

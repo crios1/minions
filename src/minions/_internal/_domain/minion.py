@@ -91,21 +91,33 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     _mn_user_facing = True
     _mn_shutdown_grace_seconds: ClassVar[float] = 1.0
 
-    _mn_event_var: contextvars.ContextVar[T_Event] = contextvars.ContextVar("minion_pipeline_event")
-    _mn_context_var: contextvars.ContextVar[T_Ctx] = contextvars.ContextVar("minion_workflow_context")
-    _mn_workflow_handle_var: contextvars.ContextVar[MinionWorkflowHandle] = contextvars.ContextVar(
-        "minion_workflow_handle"
+    _mn_event_var: contextvars.ContextVar[T_Event] = (
+        contextvars.ContextVar(
+            "minion_pipeline_event"
+        )
+    )
+    _mn_context_var: contextvars.ContextVar[T_Ctx] = (
+        contextvars.ContextVar(
+            "minion_workflow_context"
+        )
+    )
+    _mn_workflow_handle_var: contextvars.ContextVar[MinionWorkflowHandle] = (
+        contextvars.ContextVar(
+            "minion_workflow_handle"
+        )
     )
     _mn_event_cls: Type[T_Event]
     _mn_workflow_ctx_cls: Type[T_Ctx]
 
-    _mn_workflow_spec: ClassVar[tuple[str, ...] | None] = None # tuple of ordered workflow step names
+    _mn_workflow_spec: ClassVar[tuple[str, ...] | None] = (
+        None  # tuple of ordered workflow step names
+    )
     _mn_defer_minion_setup: ClassVar[bool] = False
 
     @staticmethod
     def _mn_is_minion_class(typ: type[Any]) -> bool:
         return issubclass(typ, Minion)
-    
+
     @staticmethod
     def _mn_get_descriptor_func(descriptor: Any) -> Any:
         return descriptor.__func__
@@ -125,7 +137,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         )
 
         multi_inheritance_err = TypeError(
-            "When subclassing Minion, declare exactly one Minion[...] base with concrete Event and WorkflowCtx types."
+            "When subclassing Minion, declare exactly one Minion[...] base with "
+            "concrete Event and WorkflowCtx types."
         )
 
         nearest_minion: type[Any] | None = None
@@ -135,7 +148,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 break
         if nearest_minion is None:
             raise TypeError(f"{cls.__name__} must subclass Minion.")
-        if nearest_minion is not Minion and not getattr(nearest_minion, "_mn_defer_minion_setup", False):
+        if nearest_minion is not Minion and not getattr(
+            nearest_minion, "_mn_defer_minion_setup", False
+        ):
             raise TypeError(
                 f"{cls.__name__} must subclass Minion directly. "
                 "Subclasses of Minion subclasses are not supported."
@@ -143,7 +158,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
 
         bases = get_original_bases(cls)
         minionish = [
-            b for b in bases
+            b
+            for b in bases
             if (origin := get_origin(b)) is not None and issubclass(origin, Minion)
         ]
 
@@ -165,7 +181,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             owner=cls.__name__,
             type_label="event type",
         )
-        
+
         require_type_not_primitive(
             cls._mn_event_cls,
             owner=cls.__name__,
@@ -207,7 +223,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         if duplicates:
             details = "; ".join(f"{rid} -> {names!r}" for rid, names in duplicates.items())
             raise TypeError(
-                f"{cls.__name__} declares multiple class attributes with the same Resource type: {details}. "
+                f"{cls.__name__} declares multiple class attributes with the same "
+                f"Resource type: {details}. "
                 "Define only one class-level Resource per Resource type."
             )
 
@@ -237,8 +254,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 if getattr(step, "__minion_step__", False):
                     if step_kind != "instance":
                         raise TypeError(
-                            f"{cls.__name__}.{name}: @minion_step must decorate an **instance** method, "
-                            f"not a {step_kind}."
+                            f"{cls.__name__}.{name}: @minion_step must decorate an "
+                            f"**instance** method, not a {step_kind}."
                         )
                     lineno = inspect.getsourcelines(step)[1]
                     steps.append((lineno, name))
@@ -246,10 +263,12 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     sources.setdefault(source_cls, []).append(name)
 
         if len(sources) > 1:
-            details = ", ".join(f"{c.__name__}: ({', '.join(names)})" for c, names in sources.items())
+            details = ", ".join(
+                f"{c.__name__}: ({', '.join(names)})" for c, names in sources.items()
+            )
             raise TypeError(
-                f"Invalid Minion composition: @minion_step methods found in multiple classes ({details}). "
-                "Exactly one subclass may declare steps."
+                f"Invalid Minion composition: @minion_step methods found in "
+                f"multiple classes ({details}). Exactly one subclass may declare steps."
             )
 
         steps.sort()
@@ -310,7 +329,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         minion_id: str | None = None,
         minion_config_id: str | None = None,
         pipeline_id: str | None = None,
-        workflow_persistence_failure_policy: WorkflowPersistenceFailurePolicy = "continue-on-failure",
+        workflow_persistence_failure_policy: WorkflowPersistenceFailurePolicy = (
+            "continue-on-failure"
+        ),
         workflow_persistence_retry_delay_seconds: float = 1.0,
         workflow_persistence_retry_max_delay_seconds: float = 60.0,
         workflow_persistence_retry_backoff_multiplier: float = 2.0,
@@ -320,11 +341,14 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     ):
         super().__init__(logger)
 
-        # Instance id identifies this live runtime object; minion id identifies the stable component.
+        # Instance id identifies this live runtime object; minion id identifies
+        # the stable component.
         self._mn_minion_instance_id = minion_instance_id
         self._mn_orchestration_id = orchestration_id
         self._mn_minion_id = minion_id if minion_id is not None else minion_modpath
-        self._mn_minion_config_id = minion_config_id if minion_config_id is not None else (config_path or "")
+        self._mn_minion_config_id = (
+            minion_config_id if minion_config_id is not None else (config_path or "")
+        )
         self._mn_pipeline_id = pipeline_id if pipeline_id is not None else ""
         self._mn_minion_modpath = minion_modpath
         self._mn_config_path = config_path
@@ -336,8 +360,10 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         self._mn_metrics = metrics
         self._mn_workflow_persistence_blocked_counts: dict[tuple[tuple[str, str], ...], int] = {}
         self._mn_workflow_persistence_blocked_counts_lock = asyncio.Lock()
-        self._mn_workflow_persistence_failure_policy = self._mn_validate_workflow_persistence_failure_policy(
-            workflow_persistence_failure_policy,
+        self._mn_workflow_persistence_failure_policy = (
+            self._mn_validate_workflow_persistence_failure_policy(
+                workflow_persistence_failure_policy,
+            )
         )
         self._mn_workflow_persistence_retry_delay_seconds = self._mn_validate_positive_seconds(
             "workflow_persistence_retry_delay_seconds",
@@ -347,26 +373,35 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             "workflow_persistence_retry_max_delay_seconds",
             workflow_persistence_retry_max_delay_seconds,
         )
-        if self._mn_workflow_persistence_retry_max_delay_seconds < self._mn_workflow_persistence_retry_delay_seconds:
+        if (
+            self._mn_workflow_persistence_retry_max_delay_seconds
+            < self._mn_workflow_persistence_retry_delay_seconds
+        ):
             raise ValueError(
                 "workflow_persistence_retry_max_delay_seconds must be greater than or equal to "
                 "workflow_persistence_retry_delay_seconds"
             )
-        self._mn_workflow_persistence_retry_backoff_multiplier = self._mn_validate_backoff_multiplier(
-            "workflow_persistence_retry_backoff_multiplier",
-            workflow_persistence_retry_backoff_multiplier,
+        self._mn_workflow_persistence_retry_backoff_multiplier = (
+            self._mn_validate_backoff_multiplier(
+                "workflow_persistence_retry_backoff_multiplier",
+                workflow_persistence_retry_backoff_multiplier,
+            )
         )
         self._mn_workflow_persistence_retry_jitter_ratio = self._mn_validate_jitter_ratio(
             "workflow_persistence_retry_jitter_ratio",
             workflow_persistence_retry_jitter_ratio,
         )
-        self._mn_workflow_persistence_retry_warning_interval_seconds = self._mn_validate_positive_seconds(
-            "workflow_persistence_retry_warning_interval_seconds",
-            workflow_persistence_retry_warning_interval_seconds,
+        self._mn_workflow_persistence_retry_warning_interval_seconds = (
+            self._mn_validate_positive_seconds(
+                "workflow_persistence_retry_warning_interval_seconds",
+                workflow_persistence_retry_warning_interval_seconds,
+            )
         )
-        self._mn_workflow_persistence_retry_error_after_seconds = self._mn_validate_optional_nonnegative_seconds(
-            "workflow_persistence_retry_error_after_seconds",
-            workflow_persistence_retry_error_after_seconds,
+        self._mn_workflow_persistence_retry_error_after_seconds = (
+            self._mn_validate_optional_nonnegative_seconds(
+                "workflow_persistence_retry_error_after_seconds",
+                workflow_persistence_retry_error_after_seconds,
+            )
         )
         self._mn_workflow_tasks: set[asyncio.Task[None]] = set()
         self._mn_shutting_down = False
@@ -375,10 +410,10 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
 
         if cls._mn_defer_minion_setup:
             raise RuntimeError("Minion setup is deferred for this class.")
-        
+
         if cls._mn_workflow_spec is None:
             raise RuntimeError(f"{cls.__name__}: workflow spec missing")
-    
+
         if len(cls._mn_workflow_spec) == 0:
             raise TypeError(
                 f"No @minion_step methods found in {cls.__name__}. "
@@ -408,10 +443,10 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         policy: str,
     ) -> WorkflowPersistenceFailurePolicy:
         if policy not in _ALLOWED_WORKFLOW_PERSISTENCE_FAILURE_POLICIES:
-            policies = " or ".join(f"'{value}'" for value in _ALLOWED_WORKFLOW_PERSISTENCE_FAILURE_POLICIES)
-            raise ValueError(
-                f"workflow_persistence_failure_policy must be {policies}"
+            policies = " or ".join(
+                f"'{value}'" for value in _ALLOWED_WORKFLOW_PERSISTENCE_FAILURE_POLICIES
             )
+            raise ValueError(f"workflow_persistence_failure_policy must be {policies}")
         return policy
 
     @staticmethod
@@ -489,10 +524,12 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             )
 
         if len(sources) > 1:
-            details = ", ".join(f"{c.__name__}: {', '.join(names)}" for c, names in sources.items())
+            details = ", ".join(
+                f"{c.__name__}: {', '.join(names)}" for c, names in sources.items()
+            )
             raise TypeError(
-                f"Invalid Minion composition: @minion_step methods found in multiple classes ({details}). "
-                f"Exactly one subclass may declare steps."
+                f"Invalid Minion composition: @minion_step methods found in "
+                f"multiple classes ({details}). Exactly one subclass may declare steps."
             )
 
         steps.sort()
@@ -510,13 +547,13 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         pre: LifecycleCallback | None = None,
         pre_args: list[object] | None = None,
         post: LifecycleCallback | None = None,
-        post_args: list[object] | None = None
+        post_args: list[object] | None = None,
     ) -> None:
         async def _pre():
             self._mn_validate_user_code(self._mn_load_config, type(self).__module__)
             if self._mn_config_path and self._mn_config is None:
                 await self._mn_load_config(self._mn_config_path)
-        
+
         async def _post():
             contexts = (
                 await self._mn_state_store._mn_get_decoded_contexts_for_orchestration(
@@ -526,13 +563,13 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 )
             )
             if contexts:
-                await asyncio.gather( 
+                await asyncio.gather(
                     *(self._mn_run_workflow(ctx) for ctx in contexts),
                     return_exceptions=True
                 )
 
         return await super()._mn_startup(
-            log_kwargs={'minion_instance_id': self._mn_minion_instance_id},
+            log_kwargs={"minion_instance_id": self._mn_minion_instance_id},
             pre=_pre,
             post=_post
         )
@@ -566,13 +603,11 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             valid_config = isinstance(config, config_hint)
         except TypeError as e:
             raise TypeError(
-                f"{type(self).__name__}.config annotation must support runtime "
-                "config type checks."
+                f"{type(self).__name__}.config annotation must support runtime config type checks."
             ) from e
         if not valid_config:
             raise TypeError(
-                f"{type(self).__name__}.config expects {config_hint!r}, "
-                f"got {config_type.__name__}."
+                f"{type(self).__name__}.config expects {config_hint!r}, got {config_type.__name__}."
             )
 
         self._mn_config = config
@@ -630,15 +665,17 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         await self._mn_logger._mn_log(
                             INFO,
                             "Workflow persistence resumed"
-                            if operation == "save" else
-                            "Workflow checkpoint delete resumed",
+                            if operation == "save"
+                            else "Workflow checkpoint delete resumed",
                             workflow_id=ctx.workflow_id,
                             checkpoint=checkpoint,
                             persistence_operation=operation,
                             persistence_failure_policy=self._mn_workflow_persistence_failure_policy,
                             persistence_retry_attempts=attempts,
                             persistence_retry_elapsed_seconds=(
-                                0.0 if first_failure_at is None else time.monotonic() - first_failure_at
+                                0.0
+                                if first_failure_at is None
+                                else time.monotonic() - first_failure_at
                             ),
                             persistence_retryable=True,
                             minion_instance_id=self._mn_minion_instance_id,
@@ -665,7 +702,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         level=ERROR,
                     )
                     raise WorkflowPersistenceNonRetryableError(
-                        f"Workflow persistence failed during {result.failure_stage or 'unknown'} at {checkpoint}"
+                        f"Workflow persistence failed during {result.failure_stage or 'unknown'} "
+                        f"at {checkpoint}"
                     ) from result.error
 
                 if not block_on_retryable_failure:
@@ -699,15 +737,20 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 should_log = (
                     attempts == 1
                     or last_warning_at is None
-                    or now - last_warning_at >= self._mn_workflow_persistence_retry_warning_interval_seconds
+                    or (
+                        now - last_warning_at
+                        >= self._mn_workflow_persistence_retry_warning_interval_seconds
+                    )
                     or (level == ERROR and last_logged_level != ERROR)
                 )
                 if should_log:
-                    sleep_delay_seconds = self._mn_apply_workflow_persistence_retry_jitter(retry_delay_seconds)
+                    sleep_delay_seconds = self._mn_apply_workflow_persistence_retry_jitter(
+                        retry_delay_seconds
+                    )
                     await self._mn_log_workflow_persistence_failure(
                         "Workflow idled waiting for persistence"
-                        if operation == "save" else
-                        "Workflow idled waiting for checkpoint delete",
+                        if operation == "save"
+                        else "Workflow idled waiting for checkpoint delete",
                         ctx=ctx,
                         checkpoint=checkpoint,
                         operation=operation,
@@ -720,7 +763,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     last_warning_at = now
                     last_logged_level = level
                 else:
-                    sleep_delay_seconds = self._mn_apply_workflow_persistence_retry_jitter(retry_delay_seconds)
+                    sleep_delay_seconds = self._mn_apply_workflow_persistence_retry_jitter(
+                        retry_delay_seconds
+                    )
 
                 await asyncio.sleep(sleep_delay_seconds)
                 retry_delay_seconds = min(
@@ -746,9 +791,18 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     ) -> None:
         error = result.error
         suggestion_by_stage = {
-            "serialize": "Ensure workflow event and context values are supported by the Minions persistence codec.",
-            "save": "Ensure the configured StateStore is available and can persist workflow context blobs.",
-            "delete": "Ensure the configured StateStore is available so completed workflow contexts can be removed.",
+            "serialize": (
+                "Ensure workflow event and context values are supported by the "
+                "Minions persistence codec."
+            ),
+            "save": (
+                "Ensure the configured StateStore is available and can persist "
+                "workflow context blobs."
+            ),
+            "delete": (
+                "Ensure the configured StateStore is available so completed "
+                "workflow contexts can be removed."
+            ),
             None: "Inspect the persistence failure details and runtime configuration.",
         }
         log_kwargs = {
@@ -797,7 +851,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         result: PersistenceOperationResult,
     ) -> dict[str, str]:
         return {
-            **self._mn_workflow_persistence_base_metric_labels(checkpoint=checkpoint, operation=operation),
+            **self._mn_workflow_persistence_base_metric_labels(
+                checkpoint=checkpoint, operation=operation
+            ),
             LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: result.failure_stage or "none",
             LABEL_MINION_WORKFLOW_PERSISTENCE_RETRYABLE: str(result.retryable).lower(),
         }
@@ -876,13 +932,13 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         )
         result_metric_name = (
             MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL
-            if result.persisted else
-            MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL
+            if result.persisted
+            else MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL
         )
         result_labels = (
             base_labels
-            if result.persisted else
-            self._mn_workflow_persistence_failure_metric_labels(
+            if result.persisted
+            else self._mn_workflow_persistence_failure_metric_labels(
                 checkpoint=checkpoint,
                 operation=operation,
                 result=result,
@@ -907,6 +963,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     async def _mn_run_workflow(self, ctx: MinionWorkflowContext[T_Event, T_Ctx]) -> None:
         if self._mn_shutting_down:
             return
+
         async def _shielded_gather(*aws: Awaitable[object]) -> list[object]:
             return await asyncio.shield(asyncio.gather(*aws))
 
@@ -932,22 +989,24 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     caller=self._mn_minion_id,
                 )
             )
-            try: # run workflow (step by step)
+            try:  # run workflow (step by step)
                 if ctx.next_step_index == 0:
-                    await _shielded_gather(*[
-                        self._mn_logger._mn_log(
-                            INFO,
-                            "Workflow started",
-                            workflow_id=ctx.workflow_id,
-                            minion_instance_id=self._mn_minion_instance_id,
-                            **self._mn_orchestration_log_kwargs(),
-                            minion_modpath=self._mn_minion_modpath
-                        ),
-                        self._mn_metrics._mn_inc(
-                            metric_name=MINION_WORKFLOW_STARTED_TOTAL,
-                            labels=self._mn_workflow_base_metric_labels(),
-                        )
-                    ])
+                    await _shielded_gather(
+                        *[
+                            self._mn_logger._mn_log(
+                                INFO,
+                                "Workflow started",
+                                workflow_id=ctx.workflow_id,
+                                minion_instance_id=self._mn_minion_instance_id,
+                                **self._mn_orchestration_log_kwargs(),
+                                minion_modpath=self._mn_minion_modpath,
+                            ),
+                            self._mn_metrics._mn_inc(
+                                metric_name=MINION_WORKFLOW_STARTED_TOTAL,
+                                labels=self._mn_workflow_base_metric_labels(),
+                            ),
+                        ]
+                    )
                 else:
                     await self._mn_logger._mn_log(
                         INFO,
@@ -955,11 +1014,11 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         workflow_id=ctx.workflow_id,
                         minion_instance_id=self._mn_minion_instance_id,
                         **self._mn_orchestration_log_kwargs(),
-                        minion_modpath=self._mn_minion_modpath
+                        minion_modpath=self._mn_minion_modpath,
                     )
 
                 workflow = self._mn_workflow
-                
+
                 for i in range(ctx.next_step_index, len(workflow)):
                     if i == 0:
                         ctx.started_at = time.time()
@@ -970,27 +1029,29 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     step_start = ctx.started_at if i == 0 else time.time()
                     step_status: ExecutionStatus = "undefined"
 
-                    await _shielded_gather(*[
-                        self._mn_logger._mn_log(
-                            DEBUG,
-                            "Workflow Step started",
-                            workflow_id=ctx.workflow_id,
-                            step_name=step_name,
-                            step_index=i,
-                            minion_instance_id=self._mn_minion_instance_id,
-                            **self._mn_orchestration_log_kwargs(),
-                            minion_modpath=self._mn_minion_modpath
-                        ),
-                        self._mn_metrics._mn_inc(
-                            metric_name=MINION_WORKFLOW_STEP_STARTED_TOTAL,
-                            labels={
-                                **self._mn_workflow_base_metric_labels(),
-                                LABEL_MINION_WORKFLOW_STEP: step_name,
-                            },
-                        )
-                    ])
+                    await _shielded_gather(
+                        *[
+                            self._mn_logger._mn_log(
+                                DEBUG,
+                                "Workflow Step started",
+                                workflow_id=ctx.workflow_id,
+                                step_name=step_name,
+                                step_index=i,
+                                minion_instance_id=self._mn_minion_instance_id,
+                                **self._mn_orchestration_log_kwargs(),
+                                minion_modpath=self._mn_minion_modpath,
+                            ),
+                            self._mn_metrics._mn_inc(
+                                metric_name=MINION_WORKFLOW_STEP_STARTED_TOTAL,
+                                labels={
+                                    **self._mn_workflow_base_metric_labels(),
+                                    LABEL_MINION_WORKFLOW_STEP: step_name,
+                                },
+                            ),
+                        ]
+                    )
 
-                    try: # run step / store context
+                    try:  # run step / store context
                         await self._mn_run_workflow_persistence_checkpoint(
                             ctx,
                             checkpoint=f"before_step:{step_name}",
@@ -999,29 +1060,31 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     except asyncio.CancelledError:
                         step_status: ExecutionStatus = "interrupted"
                         raise
-                    except AbortWorkflow: # log / measure step aborted
+                    except AbortWorkflow:  # log / measure step aborted
                         step_status: ExecutionStatus = "aborted"
-                        await _shielded_gather(*[
-                            self._mn_logger._mn_log(
-                                INFO,
-                                "Workflow Step aborted",
-                                workflow_id=ctx.workflow_id,
-                                step_name=step_name,
-                                step_index=i,
-                                minion_instance_id=self._mn_minion_instance_id,
-                                **self._mn_orchestration_log_kwargs(),
-                                minion_modpath=self._mn_minion_modpath
-                            ),
-                            self._mn_metrics._mn_inc(
-                                metric_name=MINION_WORKFLOW_STEP_ABORTED_TOTAL,
-                                labels={
-                                    **self._mn_workflow_base_metric_labels(),
-                                    LABEL_MINION_WORKFLOW_STEP: step_name,
-                                },
-                            )
-                        ])
+                        await _shielded_gather(
+                            *[
+                                self._mn_logger._mn_log(
+                                    INFO,
+                                    "Workflow Step aborted",
+                                    workflow_id=ctx.workflow_id,
+                                    step_name=step_name,
+                                    step_index=i,
+                                    minion_instance_id=self._mn_minion_instance_id,
+                                    **self._mn_orchestration_log_kwargs(),
+                                    minion_modpath=self._mn_minion_modpath,
+                                ),
+                                self._mn_metrics._mn_inc(
+                                    metric_name=MINION_WORKFLOW_STEP_ABORTED_TOTAL,
+                                    labels={
+                                        **self._mn_workflow_base_metric_labels(),
+                                        LABEL_MINION_WORKFLOW_STEP: step_name,
+                                    },
+                                ),
+                            ]
+                        )
                         raise
-                    except Exception as e: # log / measure step failure
+                    except Exception as e:  # log / measure step failure
                         step_status: ExecutionStatus = "failed"
                         log_kwargs: dict[str, object] = {
                             "workflow_id": ctx.workflow_id,
@@ -1029,22 +1092,21 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             "step_index": i,
                             "minion_instance_id": self._mn_minion_instance_id,
                             **self._mn_orchestration_log_kwargs(),
-                            "minion_modpath": self._mn_minion_modpath
+                            "minion_modpath": self._mn_minion_modpath,
                         }
                         tb = sys.exc_info()[2]
                         err_loc = get_user_error_location(tb)
                         if err_loc:
-                            log_kwargs.update({
-                                "filepath": err_loc["filepath"],
-                                "lineno": err_loc["lineno"],
-                                "line": err_loc["line"]
-                            })
+                            log_kwargs.update(
+                                {
+                                    "filepath": err_loc["filepath"],
+                                    "lineno": err_loc["lineno"],
+                                    "line": err_loc["line"],
+                                }
+                            )
                         await _shielded_gather(
                             self._mn_logger._mn_log_exception(
-                                ERROR,
-                                "Workflow Step failed",
-                                e,
-                                **log_kwargs
+                                ERROR, "Workflow Step failed", e, **log_kwargs
                             ),
                             self._mn_metrics._mn_inc(
                                 metric_name=MINION_WORKFLOW_STEP_FAILED_TOTAL,
@@ -1053,31 +1115,33 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                     LABEL_MINION_WORKFLOW_STEP: step_name,
                                     LABEL_ERROR_TYPE: type(e).__name__,
                                 },
-                            )
+                            ),
                         )
                         raise
-                    else: # log / measure step success & update
+                    else:  # log / measure step success & update
                         step_status: ExecutionStatus = "succeeded"
-                        await _shielded_gather(*[
-                            self._mn_logger._mn_log(
-                                DEBUG,
-                                "Workflow Step succeeded",
-                                workflow_id=ctx.workflow_id,
-                                step_name=step_name,
-                                step_index=i,
-                                minion_instance_id=self._mn_minion_instance_id,
-                                **self._mn_orchestration_log_kwargs(),
-                                minion_modpath=self._mn_minion_modpath
-                            ),
-                            self._mn_metrics._mn_inc(
-                                metric_name=MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
-                                labels={
-                                    **self._mn_workflow_base_metric_labels(),
-                                    LABEL_MINION_WORKFLOW_STEP: step_name,
-                                },
-                            )
-                        ])
-                    finally: # measure step duration & update inflight gauge (if aborted or failed)
+                        await _shielded_gather(
+                            *[
+                                self._mn_logger._mn_log(
+                                    DEBUG,
+                                    "Workflow Step succeeded",
+                                    workflow_id=ctx.workflow_id,
+                                    step_name=step_name,
+                                    step_index=i,
+                                    minion_instance_id=self._mn_minion_instance_id,
+                                    **self._mn_orchestration_log_kwargs(),
+                                    minion_modpath=self._mn_minion_modpath,
+                                ),
+                                self._mn_metrics._mn_inc(
+                                    metric_name=MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
+                                    labels={
+                                        **self._mn_workflow_base_metric_labels(),
+                                        LABEL_MINION_WORKFLOW_STEP: step_name,
+                                    },
+                                ),
+                            ]
+                        )
+                    finally:  # measure step duration & update inflight gauge (if aborted or failed)
                         if step_start:
                             duration = time.time() - step_start
                         else:
@@ -1098,23 +1162,26 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             except asyncio.CancelledError:
                 workflow_status: ExecutionStatus = "interrupted"
                 raise
-            except AbortWorkflow: # log / measure workflow aborted
+            except AbortWorkflow:  # log / measure workflow aborted
                 workflow_status: ExecutionStatus = "aborted"
                 terminal_workflow_log_level = INFO
                 terminal_workflow_log_message = "Workflow aborted"
-            except Exception as e: # log / measure workflow failure
+            except Exception as e:  # log / measure workflow failure
                 workflow_status: ExecutionStatus = "failed"
                 if isinstance(e, WorkflowPersistenceNonRetryableError):
                     delete_persisted_context_on_exit = False
                 terminal_workflow_log_level = ERROR
                 terminal_workflow_log_message = "Workflow failed"
                 terminal_workflow_error = e
-            else: # log / measure workflow success
+            else:  # log / measure workflow success
                 workflow_status: ExecutionStatus = "succeeded"
                 terminal_workflow_log_level = INFO
                 terminal_workflow_log_message = "Workflow succeeded"
-            finally: # measure workflow duration, update inflight gauge, remove context from statestore
-                if workflow_status in ("succeeded", "failed", "aborted") and delete_persisted_context_on_exit:
+            finally:  # measure workflow duration, update inflight gauge, remove context from statestore  # noqa: E501
+                if (
+                    workflow_status in ("succeeded", "failed", "aborted")
+                    and delete_persisted_context_on_exit
+                ):
                     try:
                         await self._mn_run_workflow_persistence_checkpoint(
                             ctx,
@@ -1130,57 +1197,63 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         raise
 
                 if workflow_status == "aborted" and terminal_workflow_log_message is not None:
-                    await _shielded_gather(*[
-                        self._mn_logger._mn_log(
-                            terminal_workflow_log_level or INFO,
-                            terminal_workflow_log_message,
-                            workflow_id=ctx.workflow_id,
-                            minion_instance_id=self._mn_minion_instance_id,
-                            **self._mn_orchestration_log_kwargs(),
-                            minion_modpath=self._mn_minion_modpath
-                        ),
-                        self._mn_metrics._mn_inc(
-                            metric_name=MINION_WORKFLOW_ABORTED_TOTAL,
-                            labels=self._mn_workflow_base_metric_labels(),
-                        )
-                    ])
+                    await _shielded_gather(
+                        *[
+                            self._mn_logger._mn_log(
+                                terminal_workflow_log_level or INFO,
+                                terminal_workflow_log_message,
+                                workflow_id=ctx.workflow_id,
+                                minion_instance_id=self._mn_minion_instance_id,
+                                **self._mn_orchestration_log_kwargs(),
+                                minion_modpath=self._mn_minion_modpath,
+                            ),
+                            self._mn_metrics._mn_inc(
+                                metric_name=MINION_WORKFLOW_ABORTED_TOTAL,
+                                labels=self._mn_workflow_base_metric_labels(),
+                            ),
+                        ]
+                    )
                 elif workflow_status == "failed" and terminal_workflow_log_message is not None:
                     failure_error = terminal_workflow_error
                     if failure_error is None:
                         failure_error = RuntimeError("workflow failed")
-                    await _shielded_gather(*[
-                        self._mn_logger._mn_log_exception(
-                            terminal_workflow_log_level or ERROR,
-                            terminal_workflow_log_message,
-                            failure_error,
-                            workflow_id=ctx.workflow_id,
-                            minion_instance_id=self._mn_minion_instance_id,
-                            **self._mn_orchestration_log_kwargs(),
-                            minion_modpath=self._mn_minion_modpath,
-                        ),
-                        self._mn_metrics._mn_inc(
-                            metric_name=MINION_WORKFLOW_FAILED_TOTAL,
-                            labels={
-                                **self._mn_workflow_base_metric_labels(),
-                                LABEL_ERROR_TYPE: type(failure_error).__name__,
-                            },
-                        )
-                    ])
+                    await _shielded_gather(
+                        *[
+                            self._mn_logger._mn_log_exception(
+                                terminal_workflow_log_level or ERROR,
+                                terminal_workflow_log_message,
+                                failure_error,
+                                workflow_id=ctx.workflow_id,
+                                minion_instance_id=self._mn_minion_instance_id,
+                                **self._mn_orchestration_log_kwargs(),
+                                minion_modpath=self._mn_minion_modpath,
+                            ),
+                            self._mn_metrics._mn_inc(
+                                metric_name=MINION_WORKFLOW_FAILED_TOTAL,
+                                labels={
+                                    **self._mn_workflow_base_metric_labels(),
+                                    LABEL_ERROR_TYPE: type(failure_error).__name__,
+                                },
+                            ),
+                        ]
+                    )
                 elif workflow_status == "succeeded" and terminal_workflow_log_message is not None:
-                    await _shielded_gather(*[
-                        self._mn_logger._mn_log(
-                            terminal_workflow_log_level or INFO,
-                            terminal_workflow_log_message,
-                            workflow_id=ctx.workflow_id,
-                            minion_instance_id=self._mn_minion_instance_id,
-                            **self._mn_orchestration_log_kwargs(),
-                            minion_modpath=self._mn_minion_modpath
-                        ),
-                        self._mn_metrics._mn_inc(
-                            metric_name=MINION_WORKFLOW_SUCCEEDED_TOTAL,
-                            labels=self._mn_workflow_base_metric_labels(),
-                        )
-                    ])
+                    await _shielded_gather(
+                        *[
+                            self._mn_logger._mn_log(
+                                terminal_workflow_log_level or INFO,
+                                terminal_workflow_log_message,
+                                workflow_id=ctx.workflow_id,
+                                minion_instance_id=self._mn_minion_instance_id,
+                                **self._mn_orchestration_log_kwargs(),
+                                minion_modpath=self._mn_minion_modpath,
+                            ),
+                            self._mn_metrics._mn_inc(
+                                metric_name=MINION_WORKFLOW_SUCCEEDED_TOTAL,
+                                labels=self._mn_workflow_base_metric_labels(),
+                            ),
+                        ]
+                    )
 
                 started_at = ctx.started_at
                 if started_at is not None:
@@ -1242,9 +1315,10 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         pre: LifecycleCallback | None = None,
         pre_args: list[object] | None = None,
         post: LifecycleCallback | None = None,
-        post_args: list[object] | None = None
+        post_args: list[object] | None = None,
     ) -> None:
         self._mn_shutting_down = True
+
         async def _post():
             async with self._mn_tasks_gate:
                 tasks = list(self._mn_workflow_tasks)
@@ -1258,6 +1332,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 await asyncio.gather(*pending, return_exceptions=True)
             async with self._mn_tasks_gate:
                 self._mn_workflow_tasks.clear()
+
         return await super()._mn_shutdown(
             log_kwargs={"minion_instance_id": self._mn_minion_instance_id},
             post=_post
@@ -1275,7 +1350,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             workflow_id=workflow_id,
             event=t_event,
             context=type(self)._mn_workflow_ctx_cls(),
-            context_cls=type(self)._mn_workflow_ctx_cls
+            context_cls=type(self)._mn_workflow_ctx_cls,
         )
 
         await self._mn_run_workflow_persistence_checkpoint(
@@ -1305,8 +1380,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             async with self._mn_tasks_gate:
                 tasks = tuple(
                     self._mn_workflow_tasks | self._mn_service_tasks
-                    if include_aux_tasks else
-                    self._mn_workflow_tasks
+                    if include_aux_tasks
+                    else self._mn_workflow_tasks
                 )
             if not tasks:
                 return
@@ -1322,7 +1397,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     async def _mn_wait_until_workflows_idle(self, timeout: float = 2.0) -> None:
         await self._mn_wait_until_tasks_idle(
             timeout,
-            timeout_msg=f"{type(self).__name__} workflows did not become idle within {timeout:.2f}s",
+            timeout_msg=(
+                f"{type(self).__name__} workflows did not become idle within {timeout:.2f}s"
+            ),
         )
 
     async def _mn_wait_until_all_tasks_idle(self, timeout: float = 2.0) -> None:

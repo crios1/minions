@@ -32,11 +32,7 @@ _CODEC_METADATA_KEYS = {"schema_version"}
 # Mutable adapter data while decoding/normalizing. `event` and `context` may
 # be live user objects, msgspec structs, dataclasses, or primitive payloads.
 WorkflowContextData: TypeAlias = dict[str, object]
-_MsgspecFieldSpec: TypeAlias = (
-    str
-    | tuple[str, Any]
-    | tuple[str, Any, Any]
-)
+_MsgspecFieldSpec: TypeAlias = str | tuple[str, Any] | tuple[str, Any, Any]
 
 
 class PersistedMinionWorkflowContext(msgspec.Struct, forbid_unknown_fields=True):
@@ -51,6 +47,7 @@ class PersistedMinionWorkflowContext(msgspec.Struct, forbid_unknown_fields=True)
     error_msg: str | None = None
     started_at: float | None = None
     schema_version: int = CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION
+
 
 class WorkflowContextSchemaError(ValueError):
     pass
@@ -74,8 +71,7 @@ def _normalize_workflow_context_data(
         )
     if not isinstance(version, int):
         raise WorkflowContextSchemaError(
-            "Invalid workflow context schema_version type: "
-            f"{type(version).__name__}."
+            f"Invalid workflow context schema_version type: {type(version).__name__}."
         )
     if version > CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION:
         raise WorkflowContextSchemaError(
@@ -103,6 +99,7 @@ def _deserialize_context_cls(s: str) -> type:
 
 def _convert_typed_value(value: object, type_: Any) -> object:
     return msgspec.convert(value, type=type_)
+
 
 def _restore_typed_value(
     value: object,
@@ -322,8 +319,7 @@ def deserialize_workflow_context_blob(
     *,
     event_cls: type[T_Event],
     context_cls: type[T_Ctx],
-) -> MinionWorkflowContext[T_Event, T_Ctx]:
-    ...
+) -> MinionWorkflowContext[T_Event, T_Ctx]: ...
 
 
 @overload
@@ -332,8 +328,7 @@ def deserialize_workflow_context_blob(
     *,
     event_cls: Any | None = ...,
     context_cls: type | None = ...,
-) -> MinionWorkflowContext[Any, Any]:
-    ...
+) -> MinionWorkflowContext[Any, Any]: ...
 
 
 def deserialize_workflow_context_blob(

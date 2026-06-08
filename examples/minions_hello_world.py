@@ -7,17 +7,21 @@ from minions import Gru, Minion, Pipeline, minion_step
 # import uvloop
 # asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
+
 @dataclass
 class MyEvent:
     greeting: str = "hello world"
+
 
 class MyPipeline(Pipeline[MyEvent]):
     async def produce_event(self):
         return MyEvent()
 
+
 @dataclass
 class MyContext:
     last_greeting: str | None = None
+
 
 class MyMinion(Minion[MyEvent, MyContext]):
     @minion_step
@@ -28,9 +32,11 @@ class MyMinion(Minion[MyEvent, MyContext]):
     async def step_2(self):
         print(self.context.last_greeting)
 
+
 async def main():
     gru = await Gru.create()
     await gru.start_orchestration(MyPipeline, MyMinion)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

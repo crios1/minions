@@ -112,7 +112,8 @@ class TestValidUsage:
         ):
             pass
 
-    # Verification ownership: tracked in DSL backlog `tests/support/gru_scenario/VERIFICATION_TODOS.md` (V-001).
+    # Verification ownership: tracked in DSL backlog
+    # `tests/support/gru_scenario/VERIFICATION_TODOS.md` (V-001).
 
     @pytest.mark.asyncio
     async def test_gru_start_stop_orchestration(
@@ -121,8 +122,11 @@ class TestValidUsage:
         reload_wait_for_subs_pipeline: Callable[..., None],
     ) -> None:
         minion_modpath = "tests.assets.minions.two_steps.simple.basic"
-        pipeline_modpath = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
+        pipeline_modpath = (
+            "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
+        )
         from tests.assets.minions.two_steps.simple.basic import SimpleMinion
+
         SimpleMinion.enable_spy()
         SimpleMinion.reset_spy()
         reload_wait_for_subs_pipeline(expected_subs=1)
@@ -138,7 +142,10 @@ class TestValidUsage:
 
             assert result.success
             assert result.orchestration_id in gru._minions_by_orchestration_id
-            assert gru._minions_by_orchestration_id[result.orchestration_id]._mn_minion_instance_id in gru._minion_tasks
+            assert (
+                gru._minions_by_orchestration_id[result.orchestration_id]._mn_minion_instance_id
+                in gru._minion_tasks
+            )
 
             await SimpleMinion.wait_for_calls(
                 expected={"step_1": 1, "step_2": 1},
@@ -168,8 +175,9 @@ class TestValidUsage:
             assert start_result.success
             assert start_result.orchestration_id in gru._minions_by_orchestration_id
             assert (
-                gru._minions_by_orchestration_id[start_result.orchestration_id]
-                ._mn_minion_instance_id
+                gru._minions_by_orchestration_id[
+                    start_result.orchestration_id
+                ]._mn_minion_instance_id
                 in gru._minion_tasks
             )
 
@@ -463,6 +471,7 @@ class TestValidUsage:
             from tests.assets.minions.two_steps.simple.resourced_1 import SimpleResourcedMinion1
             from tests.assets.minions.two_steps.simple.resourced_2 import SimpleResourcedMinion2
             from tests.assets.minions.two_steps.simple.resourced_3 import SimpleResourcedMinion3
+
             for cls in (SimpleResourcedMinion1, SimpleResourcedMinion2, SimpleResourcedMinion3):
                 cls.enable_spy()
                 cls.reset_spy()
@@ -479,9 +488,15 @@ class TestValidUsage:
             # Expect three distinct resource classes started
             assert len(gru._resources) >= 3
 
-            await SimpleResourcedMinion1.wait_for_calls(expected={"step_1": 1, "step_2": 1}, timeout=5.0)
-            await SimpleResourcedMinion2.wait_for_calls(expected={"step_1": 1, "step_2": 1}, timeout=5.0)
-            await SimpleResourcedMinion3.wait_for_calls(expected={"step_1": 1, "step_2": 1}, timeout=5.0)
+            await SimpleResourcedMinion1.wait_for_calls(
+                expected={"step_1": 1, "step_2": 1}, timeout=5.0
+            )
+            await SimpleResourcedMinion2.wait_for_calls(
+                expected={"step_1": 1, "step_2": 1}, timeout=5.0
+            )
+            await SimpleResourcedMinion3.wait_for_calls(
+                expected={"step_1": 1, "step_2": 1}, timeout=5.0
+            )
 
             # stop them
             assert r1.orchestration_id is not None
@@ -491,7 +506,8 @@ class TestValidUsage:
             assert r3.orchestration_id is not None
             await gru.stop_orchestration(r3.orchestration_id)
 
-    # Verification ownership: tracked in DSL backlog `tests/support/gru_scenario/VERIFICATION_TODOS.md` (V-002).
+    # Verification ownership: tracked in DSL backlog
+    # `tests/support/gru_scenario/VERIFICATION_TODOS.md` (V-002).
 
     @pytest.mark.asyncio
     async def test_gru_start_3_minions_1_pipeline_1_resource_sharing(
@@ -505,14 +521,19 @@ class TestValidUsage:
         Verify pipeline and resource are shared and cleaned up after stopping all minions.
         """
         minion_modpath = "tests.assets.minions.two_steps.simple.resourced_1"
-        pipeline_modpath = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
+        pipeline_modpath = (
+            "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
+        )
         reload_wait_for_subs_pipeline(expected_subs=3)
         from tests.assets.minions.two_steps.simple.resourced_1 import SimpleResourcedMinion1
+
         SimpleResourcedMinion1.enable_spy()
         SimpleResourcedMinion1.reset_spy()
 
-        # TODO: i'm testing resource sharing between minions spawned from same minion class but different configs
-        # i should also test the case where i spawn from separate minion classes/files
+        # TODO: I'm testing resource sharing between minions spawned from the
+        # same minion class but different configs.
+        # I should also test the case where I spawn from separate minion
+        # classes/files.
         cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
         cfg2 = str(tests_dir / "assets" / "config/minions/b.toml")
         cfg3 = str(tests_dir / "assets" / "config/minions/c.toml")
@@ -530,9 +551,21 @@ class TestValidUsage:
             logger=logger,
             metrics=InMemoryMetrics()
         ) as gru:
-            r1 = await gru.start_orchestration(minion=minion_modpath, minion_config_path=cfg1, pipeline=pipeline_modpath)
-            r2 = await gru.start_orchestration(minion=minion_modpath, minion_config_path=cfg2, pipeline=pipeline_modpath)
-            r3 = await gru.start_orchestration(minion=minion_modpath, minion_config_path=cfg3, pipeline=pipeline_modpath)
+            r1 = await gru.start_orchestration(
+                minion=minion_modpath,
+                minion_config_path=cfg1,
+                pipeline=pipeline_modpath
+            )
+            r2 = await gru.start_orchestration(
+                minion=minion_modpath,
+                minion_config_path=cfg2,
+                pipeline=pipeline_modpath
+            )
+            r3 = await gru.start_orchestration(
+                minion=minion_modpath,
+                minion_config_path=cfg3,
+                pipeline=pipeline_modpath
+            )
 
             assert r1.success and r2.success and r3.success
 
@@ -580,7 +613,10 @@ class TestValidUsage:
 
             assert result.success
             assert result.orchestration_id in gru._minions_by_orchestration_id
-            assert gru._minions_by_orchestration_id[result.orchestration_id]._mn_minion_instance_id in gru._minion_tasks
+            assert (
+                gru._minions_by_orchestration_id[result.orchestration_id]._mn_minion_instance_id
+                in gru._minion_tasks
+            )
 
     @pytest.mark.asyncio
     async def test_gru_loads_minion_config_into_workflow_context(
@@ -690,6 +726,7 @@ class TestValidUsage:
             assert len(gru._resources) == 0
 
     # TODO: I need tests for gru's default usages to ensure i stay version 1.x.x compliant
+
 
 class TestValidUsageDSL:
     @pytest.mark.asyncio
@@ -825,21 +862,9 @@ class TestValidUsageDSL:
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
-                        start_1: {
-                            "succeeded": 1,
-                            "failed": 0,
-                            "aborted": 0
-                        },
-                        start_2: {
-                            "succeeded": 1,
-                            "failed": 0,
-                            "aborted": 0
-                        },
-                        start_3: {
-                            "succeeded": 1,
-                            "failed": 0,
-                            "aborted": 0
-                        },
+                        start_1: {"succeeded": 1, "failed": 0, "aborted": 0},
+                        start_2: {"succeeded": 1, "failed": 0, "aborted": 0},
+                        start_3: {"succeeded": 1, "failed": 0, "aborted": 0},
                     }
                 ),
             ),
@@ -892,21 +917,9 @@ class TestValidUsageDSL:
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
-                        start_1: {
-                            "succeeded": 1,
-                            "failed": 0,
-                            "aborted": 0
-                        },
-                        start_2: {
-                            "succeeded": 1,
-                            "failed": 0,
-                            "aborted": 0
-                        },
-                        start_3: {
-                            "succeeded": 1,
-                            "failed": 0,
-                            "aborted": 0
-                        },
+                        start_1: {"succeeded": 1, "failed": 0, "aborted": 0},
+                        start_2: {"succeeded": 1, "failed": 0, "aborted": 0},
+                        start_3: {"succeeded": 1, "failed": 0, "aborted": 0},
                     }
                 ),
             ),
@@ -945,11 +958,7 @@ class TestValidUsageDSL:
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
-                        start: {
-                            "succeeded": 1,
-                            "failed": 0,
-                            "aborted": 0
-                        },
+                        start: {"succeeded": 1, "failed": 0, "aborted": 0},
                     }
                 ),
             ),
@@ -1012,11 +1021,7 @@ class TestValidUsageDSL:
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
-                        start: {
-                            "succeeded": 1,
-                            "failed": 0,
-                            "aborted": 0
-                        },
+                        start: {"succeeded": 1, "failed": 0, "aborted": 0},
                     }
                 ),
             ),
@@ -1032,6 +1037,7 @@ class TestValidUsageDSL:
             pipeline_event_counts={pipeline_modpath: 1},
         )
 
+
 class TestValidUsageUsingNewAssetsDSL:
     @pytest.mark.asyncio
     async def test_gru_accepts_none_logger_metrics_state_store(
@@ -1046,7 +1052,11 @@ class TestValidUsageUsingNewAssetsDSL:
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ) -> None:
-        async with gru_factory(state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()):
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=NoOpLogger(),
+            metrics=NoOpMetrics()
+        ):
             pass
 
     @pytest.mark.asyncio
@@ -1066,11 +1076,7 @@ class TestValidUsageUsingNewAssetsDSL:
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
-                        start: {
-                            "succeeded": 1,
-                            "failed": 0,
-                            "aborted": 0
-                        },
+                        start: {"succeeded": 1, "failed": 0, "aborted": 0},
                     }
                 ),
             ),
@@ -1085,7 +1091,7 @@ class TestValidUsageUsingNewAssetsDSL:
             state_store,
             directives,
             pipeline_event_counts={pipeline_modpath: 1},
-            )
+        )
 
     @pytest.mark.asyncio
     async def test_gru_start_orchestration_shutdown_without_stop(
@@ -1104,11 +1110,7 @@ class TestValidUsageUsingNewAssetsDSL:
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
-                        start: {
-                            "succeeded": 1,
-                            "failed": 0,
-                            "aborted": 0
-                        },
+                        start: {"succeeded": 1, "failed": 0, "aborted": 0},
                     }
                 ),
             ),
@@ -1122,7 +1124,7 @@ class TestValidUsageUsingNewAssetsDSL:
             state_store,
             directives,
             pipeline_event_counts={pipeline_modpath: 1},
-            )
+        )
 
     @pytest.mark.asyncio
     async def test_gru_start_3_minions_3_pipelines_3_resources_no_sharing(
@@ -1159,7 +1161,7 @@ class TestValidUsageUsingNewAssetsDSL:
             state_store,
             directives,
             pipeline_event_counts={pipeline1: 1, pipeline2: 1, pipeline3: 1},
-            )
+        )
 
     @pytest.mark.asyncio
     async def test_gru_start_3_minions_1_pipeline_1_resource_sharing(
@@ -1195,7 +1197,7 @@ class TestValidUsageUsingNewAssetsDSL:
             state_store,
             directives,
             pipeline_event_counts={pipeline_modpath: 1},
-            )
+        )
 
     @pytest.mark.asyncio
     async def test_minion_and_pipeline_share_resource_dependency(
@@ -1222,4 +1224,4 @@ class TestValidUsageUsingNewAssetsDSL:
             state_store,
             directives,
             pipeline_event_counts={pipeline_modpath: 1},
-            )
+        )

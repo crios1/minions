@@ -68,7 +68,9 @@ async def test_state_store_get_contexts_for_orchestration_failure_raises_and_log
 
     with pytest.raises(BoomError, match=BOOM_MESSAGE):
         await store._mn_get_contexts_for_orchestration("orch")
-    assert logger.has_log("BoomGetContextsForOrchestrationStateStore.get_contexts_for_orchestration failed")
+    assert logger.has_log(
+        "BoomGetContextsForOrchestrationStateStore.get_contexts_for_orchestration failed"
+    )
 
 
 @pytest.mark.asyncio

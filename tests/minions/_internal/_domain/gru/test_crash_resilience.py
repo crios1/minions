@@ -80,7 +80,10 @@ async def test_start_orchestration_contains_state_store_resume_read_failure(
             "BoomGetContextsForOrchestrationStateStore.get_contexts_for_orchestration failed",
             log_kwargs={"error_type": "BoomError"},
         )
-        assert logger.has_log("Failed to start orchestration", log_kwargs={"error_message": BOOM_MESSAGE})
+        assert logger.has_log(
+            "Failed to start orchestration",
+            log_kwargs={"error_message": BOOM_MESSAGE}
+        )
         assert gru._runtime_state_snapshot() == {}
 
 
@@ -111,11 +114,15 @@ async def test_start_orchestration_fails_closed_on_persisted_workflow_decode_mis
 
         assert not result.success
         assert result.reason is not None
-        assert "could not be decoded with the current Minion event and workflow context types" in result.reason
+        assert (
+            "could not be decoded with the current Minion event and workflow context types"
+            in result.reason
+        )
         assert result.suggestion is not None
         assert "drain the orchestration" in result.suggestion
         assert (
-            f"delete the persisted workflow contexts for orchestration {expected_orchestration_id!r}"
+            "delete the persisted workflow contexts for orchestration "
+            f"{expected_orchestration_id!r}"
             in result.suggestion
         )
         assert logger.has_log(
@@ -157,7 +164,10 @@ async def test_start_orchestration_contains_user_code_startup_failures(
         )
 
         assert not result.success
-        assert logger.has_log("Failed to start orchestration", log_kwargs={"error_message": BOOM_MESSAGE})
+        assert logger.has_log(
+            "Failed to start orchestration",
+            log_kwargs={"error_message": BOOM_MESSAGE}
+        )
         assert gru._runtime_state_snapshot() == {}
         await assert_gru_can_start_and_stop_known_good_minion(gru)
 
@@ -170,7 +180,10 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
     state_store: InMemoryStateStore,
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        result = await gru.start_orchestration(GOOD_PIPELINE, "tests.assets.crash.minions.boom_step")
+        result = await gru.start_orchestration(
+            GOOD_PIPELINE,
+            "tests.assets.crash.minions.boom_step"
+        )
         assert result.success
 
         assert await logger.wait_for_log(
@@ -217,7 +230,10 @@ async def test_pipeline_produce_event_failure_is_logged_measured_and_shutdown_is
     state_store: InMemoryStateStore,
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        result = await gru.start_orchestration("tests.assets.crash.pipelines.boom_produce_event", GOOD_MINION)
+        result = await gru.start_orchestration(
+            "tests.assets.crash.pipelines.boom_produce_event",
+            GOOD_MINION
+        )
         assert result.success
 
         assert await logger.wait_for_log(
@@ -246,7 +262,10 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
     state_store: InMemoryStateStore,
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        result = await gru.start_orchestration(GOOD_PIPELINE, "tests.assets.crash.minions.boom_resource_method")
+        result = await gru.start_orchestration(
+            GOOD_PIPELINE,
+            "tests.assets.crash.minions.boom_resource_method"
+        )
         assert result.success
 
         assert await logger.wait_for_log(

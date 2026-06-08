@@ -34,7 +34,7 @@ class TestInMemoryMetrics:
 
         m = InMemoryMetrics()
         gauge = m._mn_get_metric_unsafe("gauge", "cpu_gauge")
-        gauge.labels().set(10.5)          # region defaults to ""
+        gauge.labels().set(10.5)  # region defaults to ""
         gauge.labels(region="us-east").set(7.0)
         gauge.labels(region="us-east").set(8.0)  # overwrite
 
@@ -114,9 +114,15 @@ class TestInMemoryMetrics:
         ctr.labels(queue="beta", status="ok").inc()
 
         samples = m.snapshot_counters()["jobs_total"]
-        assert InMemoryMetrics.find_sample(samples, {"queue": "alpha", "status": "ok"})["value"] == 5.0
-        assert InMemoryMetrics.find_sample(samples, {"queue": "alpha", "status": "fail"})["value"] == 2.0
-        assert InMemoryMetrics.find_sample(samples, {"queue": "beta", "status": "ok"})["value"] == 1.0
+        assert (
+            InMemoryMetrics.find_sample(samples, {"queue": "alpha", "status": "ok"})["value"] == 5.0
+        )
+        assert (
+            InMemoryMetrics.find_sample(samples, {"queue": "alpha", "status": "fail"})["value"] == 2.0  # noqa: E501
+        )
+        assert (
+            InMemoryMetrics.find_sample(samples, {"queue": "beta", "status": "ok"})["value"] == 1.0
+        )
 
     @pytest.mark.asyncio
     async def test_metrics_async_healthy(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -147,13 +153,19 @@ class TestInMemoryMetrics:
 
         # Assert counters
         csnap = m.snapshot_counters()["jobs_total"]
-        assert InMemoryMetrics.find_sample(csnap, {"queue": "alpha", "status": "ok"})["value"] == 3.0
-        assert InMemoryMetrics.find_sample(csnap, {"queue": "beta", "status": "fail"})["value"] == 5.0
+        assert (
+            InMemoryMetrics.find_sample(csnap, {"queue": "alpha", "status": "ok"})["value"] == 3.0
+        )
+        assert (
+            InMemoryMetrics.find_sample(csnap, {"queue": "beta", "status": "fail"})["value"] == 5.0
+        )
 
         # Assert gauges
         gsnap = m.snapshot_gauges()["cpu_used_percent"]
         assert InMemoryMetrics.find_sample(gsnap, {"region": ""})["value"] == 11.0
-        assert InMemoryMetrics.find_sample(gsnap, {"region": "us"})["value"] == 9.0  # last write wins
+        assert (
+            InMemoryMetrics.find_sample(gsnap, {"region": "us"})["value"] == 9.0
+        )  # last write wins
 
         # Assert histograms
         hsnap = m.snapshot_histograms()["op_latency_seconds"]
@@ -162,7 +174,9 @@ class TestInMemoryMetrics:
         assert abs(stats["sum"] - 0.50) < 1e-9
 
     @pytest.mark.asyncio
-    async def test_metrics_async_label_defaults_and_ordering(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_metrics_async_label_defaults_and_ordering(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """
         Missing expected labels default to "" and ordering follows METRIC_LABEL_NAMES.
         """
@@ -176,7 +190,9 @@ class TestInMemoryMetrics:
 
         gsnap = m.snapshot_gauges()["mem_used_bytes"]
         assert InMemoryMetrics.find_sample(gsnap, {"host": "h1", "region": ""})["value"] == 123.0
-        assert InMemoryMetrics.find_sample(gsnap, {"host": "h1", "region": "us-east"})["value"] == 456.0
+        assert (
+            InMemoryMetrics.find_sample(gsnap, {"host": "h1", "region": "us-east"})["value"] == 456.0  # noqa: E501
+        )
 
     @pytest.mark.asyncio
     async def test_metrics_async_concurrent_updates(self, monkeypatch: pytest.MonkeyPatch) -> None:

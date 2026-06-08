@@ -123,7 +123,9 @@ class BlockedCommitBatchNowGate:
 
 
 class StartupProbeDb:
-    def __init__(self, *, select_row: tuple[str, bytes] | None, delete_error: Exception | None = None):
+    def __init__(
+        self, *, select_row: tuple[str, bytes] | None, delete_error: Exception | None = None
+    ):
         self._select_row = select_row
         self._delete_error = delete_error
 

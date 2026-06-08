@@ -7,7 +7,6 @@ from tests.assets.user_guarantees.persisted_shapes import StructContext, StructE
 
 
 class StructPersistenceGuaranteeMinion(SpiedMinion[StructEvent, StructContext]):
-
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         setattr(self, "_mn_shutdown_grace_seconds", 0.05)

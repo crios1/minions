@@ -10,8 +10,13 @@ from .gru import Gru
 from .gru_result_types import GruResult, StartResult
 
 State = Literal[
-    "starting","running","stopping",
-    "stopped","failed","aborted","unknown"
+    "starting",
+    "running",
+    "stopping",
+    "stopped",
+    "failed",
+    "aborted",
+    "unknown"
 ]
 
 # TODO: add docstrings for each command so the user has useful info when they use the 'help' command
@@ -35,9 +40,10 @@ State = Literal[
 
 # TODO: add 'deps' command to GruShell (make a Gru.get_dependencies method)
 # gru> deps (prints a dependency graph)
-# gru> deps minion MID_OR_MNAME 
-# gru> deps pipeline PID 
+# gru> deps minion MID_OR_MNAME
+# gru> deps pipeline PID
 # gru> deps resource RID
+
 
 class GruShell(cmd.Cmd):
     intro = "Welcome to GruShell. Type 'help' or '?' to list commands."
@@ -48,8 +54,8 @@ class GruShell(cmd.Cmd):
         self._gru = gru
         self._loop = gru._loop
         self._shutdown_done = self._loop.create_future()
-        self._start_ops: dict[str, cf.Future] = {}    # id_or_pending -> future
-        self._stop_ops: dict[str, cf.Future] = {}     # id -> future
+        self._start_ops: dict[str, cf.Future] = {}  # id_or_pending -> future
+        self._stop_ops: dict[str, cf.Future] = {}  # id -> future
         self._last_targets: list[str] = []
 
     # -------- helpers --------
@@ -113,15 +119,22 @@ class GruShell(cmd.Cmd):
     def _compute_state(self, key: str) -> State:
         if key.startswith("pending:"):
             f = self._start_ops.get(key)
-            return "failed" if (f and self._operation_failed(f)) \
-            else ("starting" if f and not f.done() else "unknown")
+            return (
+                "failed"
+                if (f and self._operation_failed(f))
+                else ("starting" if f and not f.done() else "unknown")
+            )
         if key in self._stop_ops:
             f = self._stop_ops[key]
-            if not f.done(): return "stopping"
+            if not f.done():
+                return "stopping"
             try:
-                self._future_result(f); return "stopped"
-            except asyncio.CancelledError: return "aborted"
-            except Exception: return "failed"
+                self._future_result(f)
+                return "stopped"
+            except asyncio.CancelledError:
+                return "aborted"
+            except Exception:
+                return "failed"
         if key in self._gru._minions_by_instance_id:  # running if present
             return "running"
         return "unknown"
@@ -130,7 +143,8 @@ class GruShell(cmd.Cmd):
         counts: dict[State, int] = {}
         keys = set(self._start_ops) | set(self._stop_ops) | set(self._gru._minions_by_instance_id)
         for k in keys:
-            s = self._compute_state(k); counts[s] = counts.get(s, 0) + 1
+            s = self._compute_state(k)
+            counts[s] = counts.get(s, 0) + 1
         print(" ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "(none)")
 
     def _print_failed_start_result(self, result: StartResult) -> None:
@@ -172,7 +186,11 @@ class GruShell(cmd.Cmd):
             except Exception:
                 self._start_ops[pending_id] = f  # keep for status to show 'failed'
                 return
-            if not isinstance(result, StartResult) or not result.success or not result.orchestration_id:
+            if (
+                not isinstance(result, StartResult)
+                or not result.success
+                or not result.orchestration_id
+            ):
                 self._start_ops[pending_id] = f  # keep for status to show 'failed'
                 if isinstance(result, StartResult):
                     self._print_failed_start_result(result)
@@ -210,10 +228,11 @@ class GruShell(cmd.Cmd):
         timeout: Optional[float] = None
         if "--timeout" in argv:
             i = argv.index("--timeout")
-            timeout = float(argv[i+1]) if i + 1 < len(argv) else None
+            timeout = float(argv[i + 1]) if i + 1 < len(argv) else None
         targets = [a for a in argv if not a.startswith("--")] or self._last_targets
         if not targets:
-            self._print_summary(); return
+            self._print_summary()
+            return
 
         if not await_mode:
             for t in targets:
@@ -223,21 +242,25 @@ class GruShell(cmd.Cmd):
         def _wait_on(t: str):
             st = self._compute_state(t)
             if t.startswith("pending:"):
-                f = self._start_ops.get(t);  return f
+                f = self._start_ops.get(t)
+                return f
             if st in ("stopping",):
                 return self._stop_ops.get(t)
             if st in ("starting",):
                 # started but rekeyed: find its real id if available, else pending future
-                f = self._start_ops.get(t); return f
+                f = self._start_ops.get(t)
+                return f
             return None  # running/unknown: nothing to wait on
 
         futs = [f for t in targets if (f := _wait_on(t)) is not None]
         if futs:
             try:
                 if timeout is None:
-                    for f in futs: self._future_result(f)
+                    for f in futs:
+                        self._future_result(f)
                 else:
-                    for f in futs: self._future_result(f, timeout=timeout)
+                    for f in futs:
+                        self._future_result(f, timeout=timeout)
             except Exception as e:
                 print(f"status/await error: {e}")
 
@@ -245,8 +268,9 @@ class GruShell(cmd.Cmd):
             print(f"{t} {self._compute_state(t)}")
 
     def complete_status(self, text: str, line: str, begidx: int, endidx: int):
-        return self._get_minion_ids_and_names() \
-        + [k for k in self._start_ops if k.startswith("pending:")]
+        return self._get_minion_ids_and_names() + [
+            k for k in self._start_ops if k.startswith("pending:")
+        ]
 
     # -------- wait --------
 
@@ -258,7 +282,8 @@ class GruShell(cmd.Cmd):
             print(e)
             return
         if not targets:
-            print("No targets to wait on"); return
+            print("No targets to wait on")
+            return
 
         futs = [f for t in targets if (f := self._wait_on_future_if_any(t)) is not None]
 
@@ -289,8 +314,13 @@ class GruShell(cmd.Cmd):
             return
         pprint(snap)
         # TODO: consider simplifying the metrics printed instead of a full dump
-        # inflights = sum(s["value"] for s in snap["gauges"].get("MINION_WORKFLOW_INFLIGHT_GAUGE", []))
-        # succeeded_workflows = sum(s["value"] for s in snap["counters"].get("MINION_WORKFLOW_SUCCEEDED_TOTAL", []))
+        # inflights = sum(
+        #     s["value"] for s in snap["gauges"].get("MINION_WORKFLOW_INFLIGHT_GAUGE", [])
+        # )
+        # succeeded_workflows = sum(
+        #     s["value"]
+        #     for s in snap["counters"].get("MINION_WORKFLOW_SUCCEEDED_TOTAL", [])
+        # )
 
     # -------- shutdown --------
 
@@ -311,7 +341,7 @@ class GruShell(cmd.Cmd):
     # -------- clear --------
 
     def do_clear(self, line: str):
-        os.system('cls' if os.name == 'nt' else 'clear')
+        os.system("cls" if os.name == "nt" else "clear")
 
     # -------- do i still need the following? maybe... --------
 

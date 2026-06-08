@@ -54,13 +54,16 @@ from .resource import Resource
 from .types import T_Ctx, T_Event
 
 
-class _UnsetType: ...
+class _UnsetType:
+    pass
+
 
 _UNSET = _UnsetType()
 
 ORCHESTRATION_ID_VERSION = 1
 
 _gru_instance: Gru | None = None
+
 
 class Gru:
     """Runtime orchestrator.
@@ -75,6 +78,7 @@ class Gru:
     - `shutdown()` is terminal: it waits for in-flight lifecycle work to drain
       while rejecting new start/stop work.
     """
+
     _allow_direct_init = False
 
     def __init__(
@@ -84,7 +88,9 @@ class Gru:
         logger: Logger | None | _UnsetType = _UNSET,
         metrics: Metrics | None | _UnsetType = _UNSET,
         metrics_port: int = 8081,
-        workflow_persistence_failure_policy: WorkflowPersistenceFailurePolicy = "continue-on-failure",
+        workflow_persistence_failure_policy: WorkflowPersistenceFailurePolicy = (
+            "continue-on-failure"
+        ),
         workflow_persistence_retry_delay_seconds: float = 1.0,
         workflow_persistence_retry_max_delay_seconds: float = 60.0,
         workflow_persistence_retry_backoff_multiplier: float = 2.0,
@@ -95,12 +101,15 @@ class Gru:
         """
         Args:
             loop: The asyncio event loop used to run all services.
-            state_store: Optional StateStore instance. If omitted (left as default), a default SQLiteStateStore is created.
-                        Pass None to disable state persistence entirely.
-            logger: Optional Logger instance. If omitted, a default logger is created. Pass None to disable logging.
-            metrics: Optional Metrics backend. If omitted, PrometheusMetrics is used on the given port.
-                    Pass None to disable metrics collection.
-            metrics_port: The port to expose Prometheus metrics on (only used if default metrics backend is enabled).
+            state_store: Optional StateStore instance. If omitted (left as default),
+                a default SQLiteStateStore is created. Pass None to disable state
+                persistence entirely.
+            logger: Optional Logger instance. If omitted, a default logger is created.
+                Pass None to disable logging.
+            metrics: Optional Metrics backend. If omitted, PrometheusMetrics is used
+                on the given port. Pass None to disable metrics collection.
+            metrics_port: The port to expose Prometheus metrics on (only used if the
+                default metrics backend is enabled).
             workflow_persistence_failure_policy: Behavior to use when a workflow checkpoint
                     cannot be persisted. `"continue-on-failure"` keeps the workflow running
                     and retries at the next checkpoint. `"idle-until-persisted"` pauses
@@ -118,8 +127,10 @@ class Gru:
                     which repeated warnings escalate to error logs. Pass None to disable.
 
         Note:
-            This constructor uses a unique internal sentinel (`_UNSET`) to distinguish between omitted arguments and those explicitly set to None.
-            This avoids Python's common pitfall with mutable default values and allows safe optional dependency injection.
+            This constructor uses a unique internal sentinel (`_UNSET`) to
+            distinguish between omitted arguments and those explicitly set to None.
+            This avoids Python's common pitfall with mutable default values and
+            allows safe optional dependency injection.
             # _UNSET lets us distinguish between:
             #  - omitted: use default
             #  - None: explicitly disable
@@ -147,26 +158,35 @@ class Gru:
             "workflow_persistence_retry_max_delay_seconds",
             workflow_persistence_retry_max_delay_seconds,
         )
-        if self._workflow_persistence_retry_max_delay_seconds < self._workflow_persistence_retry_delay_seconds:
+        if (
+            self._workflow_persistence_retry_max_delay_seconds
+            < self._workflow_persistence_retry_delay_seconds
+        ):
             raise ValueError(
                 "workflow_persistence_retry_max_delay_seconds must be greater than or equal to "
                 "workflow_persistence_retry_delay_seconds"
             )
-        self._workflow_persistence_retry_backoff_multiplier = Minion._mn_validate_backoff_multiplier(
-            "workflow_persistence_retry_backoff_multiplier",
-            workflow_persistence_retry_backoff_multiplier,
+        self._workflow_persistence_retry_backoff_multiplier = (
+            Minion._mn_validate_backoff_multiplier(
+                "workflow_persistence_retry_backoff_multiplier",
+                workflow_persistence_retry_backoff_multiplier,
+            )
         )
         self._workflow_persistence_retry_jitter_ratio = Minion._mn_validate_jitter_ratio(
             "workflow_persistence_retry_jitter_ratio",
             workflow_persistence_retry_jitter_ratio,
         )
-        self._workflow_persistence_retry_warning_interval_seconds = Minion._mn_validate_positive_seconds(
-            "workflow_persistence_retry_warning_interval_seconds",
-            workflow_persistence_retry_warning_interval_seconds,
+        self._workflow_persistence_retry_warning_interval_seconds = (
+            Minion._mn_validate_positive_seconds(
+                "workflow_persistence_retry_warning_interval_seconds",
+                workflow_persistence_retry_warning_interval_seconds,
+            )
         )
-        self._workflow_persistence_retry_error_after_seconds = Minion._mn_validate_optional_nonnegative_seconds(
-            "workflow_persistence_retry_error_after_seconds",
-            workflow_persistence_retry_error_after_seconds,
+        self._workflow_persistence_retry_error_after_seconds = (
+            Minion._mn_validate_optional_nonnegative_seconds(
+                "workflow_persistence_retry_error_after_seconds",
+                workflow_persistence_retry_error_after_seconds,
+            )
         )
 
         if logger is _UNSET:
@@ -186,7 +206,7 @@ class Gru:
             self._state_store = state_store
         else:
             raise TypeError(f"Invalid state_store: {type(state_store).__name__}")
-        
+
         if metrics is _UNSET:
             self._metrics = PrometheusMetrics(logger=self._logger, port=metrics_port)
         elif metrics is None:
@@ -195,7 +215,7 @@ class Gru:
             self._metrics = metrics
         else:
             raise TypeError(f"Invalid metrics: {type(metrics).__name__}")
-        
+
         global _gru_instance
         if _gru_instance is not None:
             raise RuntimeError("Only one Gru instance is allowed per process.")
@@ -221,25 +241,31 @@ class Gru:
         self._resource_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
         # registries
-        self._minions_by_instance_id: dict[str, Minion[Any, Any]] = {}                        # minion_instance_id -> Minion
-        self._minions_by_orchestration_id: dict[str, Minion[Any, Any]] = {}             # orchestration_id -> Minion
-        self._minion_tasks: dict[str, asyncio.Task[None]] = {}             # minion_instance_id -> asyncio.Task
+        self._minions_by_instance_id: dict[str, Minion[Any, Any]] = {} # key = minion_instance_id
+        self._minions_by_orchestration_id: dict[str, Minion[Any, Any]] = {} # key = orchestration_id
+        self._minion_tasks: dict[str, asyncio.Task[None]] = {} # key = minion_instance_id
 
-        self._pipelines: dict[str, Pipeline[Any]] = {}     # pipeline_id -> Pipeline
-        self._pipeline_tasks: dict[str, asyncio.Task[None]] = {} # pipeline_id -> asyncio.Task
+        self._pipelines: dict[str, Pipeline[Any]] = {} # key = pipeline_id
+        self._pipeline_tasks: dict[str, asyncio.Task[None]] = {} # key = pipeline_id
 
-        self._resources: dict[str, Resource] = {}          # resource_id -> Resource
-        self._resource_tasks: dict[str, asyncio.Task[None]] = {} # resource_id -> asyncio.Task
+        self._resources: dict[str, Resource] = {} # key = resource_id
+        self._resource_tasks: dict[str, asyncio.Task[None]] = {} # key = resource_id
 
         # dependency maps used to manage domain object lifecycles
         self._dependency_maps_lock = asyncio.Lock()
-        self._minion_pipeline_map: dict[str, str] = {}        # minion_instance_id -> pipeline_id
-        self._minion_resource_map: dict[str, set[str]] = {}   # minion_instance_id -> set of resource_ids
-        self._pipeline_resource_map: dict[str, set[str]] = {} # pipeline_id -> set of resource_ids
-        self._resource_dependencies: dict[str, set[str]] = defaultdict(set) # resource_id -> set(dep_id)
-        self._resource_dependents: dict[str, set[str]] = defaultdict(set)   # resource_id -> set(parent_id)
-        self._resource_refcounts: dict[str, int] = defaultdict(int)         # total refs (owners + edges)
-        
+        self._minion_pipeline_map: dict[str, str] = {}  # minion_instance_id -> pipeline_id
+        self._minion_resource_map: dict[
+            str, set[str]
+        ] = {}  # minion_instance_id -> set of resource_ids
+        self._pipeline_resource_map: dict[str, set[str]] = {}  # pipeline_id -> set of resource_ids
+        self._resource_dependencies: dict[str, set[str]] = defaultdict(
+            set
+        )  # resource_id -> set(dep_id)
+        self._resource_dependents: dict[str, set[str]] = defaultdict(
+            set
+        )  # resource_id -> set(parent_id)
+        self._resource_refcounts: dict[str, int] = defaultdict(int)  # total refs (owners + edges)
+
         self._resource_monitor_task = safe_create_task(
             self._monitor_process_resources(),
             self._logger,
@@ -253,7 +279,9 @@ class Gru:
         logger: Logger | None | _UnsetType = _UNSET,
         metrics: Metrics | None | _UnsetType = _UNSET,
         metrics_port: int = 8081,
-        workflow_persistence_failure_policy: WorkflowPersistenceFailurePolicy = "continue-on-failure",
+        workflow_persistence_failure_policy: WorkflowPersistenceFailurePolicy = (
+            "continue-on-failure"
+        ),
         workflow_persistence_retry_delay_seconds: float = 1.0,
         workflow_persistence_retry_max_delay_seconds: float = 60.0,
         workflow_persistence_retry_backoff_multiplier: float = 2.0,
@@ -293,13 +321,15 @@ class Gru:
             await self._logger._mn_startup()
         await asyncio.gather(
             self._startup_async_component(self._state_store),
-            self._startup_async_component(self._metrics)
+            self._startup_async_component(self._metrics),
         )
         self._is_started = True
-    
-    async def _startup_async_component(self, comp: AsyncComponent, log_kwargs: dict[str, object] | None = None):
+
+    async def _startup_async_component(
+        self, comp: AsyncComponent, log_kwargs: dict[str, object] | None = None
+    ):
         if not hasattr(comp, "_mn_startup"):
-            return # pragma: no cover
+            return  # pragma: no cover
         log_kwargs = {
             "component": type(comp).__name__,
             **(log_kwargs or {}),
@@ -313,9 +343,11 @@ class Gru:
     async def _shutdown(self):
         ...
 
-    async def _shutdown_async_component(self, comp: AsyncComponent, log_kwargs: dict[str, object] | None = None):
+    async def _shutdown_async_component(
+        self, comp: AsyncComponent, log_kwargs: dict[str, object] | None = None
+    ):
         if not hasattr(comp, "_mn_shutdown"):
-            return # pragma: no cover
+            return  # pragma: no cover
         log_kwargs = {
             "component": type(comp).__name__,
             **(log_kwargs or {}),
@@ -390,7 +422,8 @@ class Gru:
     @staticmethod
     def _get_local_subclasses(mod: ModuleType, base_cls: type[Any]) -> list[type[Any]]:
         return [
-            obj for obj in vars(mod).values()
+            obj
+            for obj in vars(mod).values()
             if (
                 isinstance(obj, type)
                 and issubclass(obj, base_cls)
@@ -413,9 +446,9 @@ class Gru:
         minion_cls: type[Minion[Any, Any]]
 
         if minion_attr is None:
-            
             minion_classes: list[type[Minion[Any, Any]]] = [
-                obj for obj in self._get_local_subclasses(mod, Minion)
+                obj
+                for obj in self._get_local_subclasses(mod, Minion)
                 if is_minion_class(obj)
             ]
 
@@ -423,18 +456,22 @@ class Gru:
                 minion_cls = minion_classes[0]
             elif len(minion_classes) == 0:
                 raise ImportError(
-                    f"Module '{minion_modpath}' must define a `minion` variable or contain at least one subclass of `Minion`."
+                    f"Module '{minion_modpath}' must define a `minion` variable or "
+                    "contain at least one subclass of `Minion`."
                 )
             else:
                 raise ImportError(
-                    f"Module '{minion_modpath}' contains multiple Minion subclasses but no explicit `minion` variable to resolve the entrypoint."
+                    f"Module '{minion_modpath}' contains multiple Minion subclasses "
+                    "but no explicit `minion` variable to resolve the entrypoint."
                 )
 
         elif is_minion_class(minion_attr):
             minion_cls = minion_attr
         else:
-            raise TypeError(f"`minion` attribute in module '{minion_modpath}' is not a subclass of Minion")
-        
+            raise TypeError(
+                f"`minion` attribute in module '{minion_modpath}' is not a subclass of Minion"
+            )
+
         return minion_cls
 
     def _get_minion(
@@ -511,7 +548,9 @@ class Gru:
         fallback = f"{resource_cls.__module__}.{resource_cls.__name__}"
         return self._get_component_identity(resource_cls, fallback)
 
-    def _get_direct_resource_dependencies(self, cls: type[Minion[Any, Any] | Pipeline[Any] | Resource]) -> list[type[Resource]]:
+    def _get_direct_resource_dependencies(
+        self, cls: type[Minion[Any, Any] | Pipeline[Any] | Resource]
+    ) -> list[type[Resource]]:
         classes: list[type[Resource]] = []
         for _attr, hint in get_type_hints(cls).items():
             r_cls = get_type_from_hint(hint)
@@ -519,14 +558,16 @@ class Gru:
                 classes.append(r_cls)
         return classes
 
-    def _get_all_resource_dependencies(self, cls: type[Minion[Any, Any] | Pipeline[Any] | Resource]) -> set[type[Resource]]:
+    def _get_all_resource_dependencies(
+        self, cls: type[Minion[Any, Any] | Pipeline[Any] | Resource]
+    ) -> set[type[Resource]]:
         "get all resource dependencies (direct and indirect)"
         seen: set[type[Resource]] = set()
         stack = list(self._get_direct_resource_dependencies(cls))
         while stack:
             c = stack.pop()
             if c in seen:
-                continue # need to prevent cycles from expanding stack forever
+                continue  # need to prevent cycles from expanding stack forever
             seen.add(c)
             stack.extend(self._get_direct_resource_dependencies(c))
         return seen
@@ -534,7 +575,7 @@ class Gru:
     async def _ensure_resource_tree_started(self, resource_cls: type[Resource]) -> Resource:
         seen: set[type[Resource]] = set()
         onpath: set[str] = set()
-        start_order: list[type[Resource]] = [] # dependencies before dependents
+        start_order: list[type[Resource]] = []  # dependencies before dependents
 
         stack: list[tuple[type[Resource], bool]] = [(resource_cls, False)]
         while stack:
@@ -553,7 +594,7 @@ class Gru:
                 continue
             if rid in onpath:
                 raise RuntimeError("Cycle detected in Resource dependencies")
-            
+
             onpath.add(rid)
             stack.append((cls, True))
 
@@ -625,7 +666,7 @@ class Gru:
     # than 2 or 3.
     # Might have solved this already
     # in the sense that cycles are handled gracefully and there is not resource dep depth limit ...
-    
+
     def _get_resource(self):
         ...
 
@@ -693,7 +734,9 @@ class Gru:
         """idempotently make pipeline id"""
         return pipeline_modpath
 
-    def _get_pipeline_identity(self, pipeline_cls: type[Pipeline[Any]], pipeline_modpath: str) -> str:
+    def _get_pipeline_identity(
+        self, pipeline_cls: type[Pipeline[Any]], pipeline_modpath: str
+    ) -> str:
         return self._get_component_identity(pipeline_cls, pipeline_modpath)
 
     def _get_pipeline_class(self, pipeline_modpath: str) -> type[Pipeline[Any]]:
@@ -706,9 +749,9 @@ class Gru:
         pipeline_cls: type[Pipeline[Any]]
 
         if pipeline_attr is None:
-
             pipeline_classes: list[type[Pipeline[Any]]] = [
-                obj for obj in self._get_local_subclasses(mod, Pipeline)
+                obj
+                for obj in self._get_local_subclasses(mod, Pipeline)
                 if is_pipeline_class(obj)
             ]
 
@@ -716,18 +759,23 @@ class Gru:
                 pipeline_cls = pipeline_classes[0]
             elif len(pipeline_classes) == 0:
                 raise ImportError(
-                    f"Module '{pipeline_modpath}' must define a `pipeline` variable or contain at least one subclass of `Pipeline`."
+                    f"Module '{pipeline_modpath}' must define a `pipeline` variable "
+                    "or contain at least one subclass of `Pipeline`."
                 )
             else:
                 raise ImportError(
-                    f"Module '{pipeline_modpath}' contains multiple Pipeline subclasses but no explicit `pipeline` variable to resolve the entrypoint."
+                    f"Module '{pipeline_modpath}' contains multiple Pipeline "
+                    "subclasses but no explicit `pipeline` variable to resolve the "
+                    "entrypoint."
                 )
 
         elif is_pipeline_class(pipeline_attr):
             pipeline_cls = pipeline_attr
         else:
-            raise TypeError(f"`pipeline` attribute in module '{pipeline_modpath}' is not a subclass of Pipeline")
-        
+            raise TypeError(
+                f"`pipeline` attribute in module '{pipeline_modpath}' is not a subclass of Pipeline"
+            )
+
         return pipeline_cls
 
     def _get_pipeline(
@@ -738,7 +786,7 @@ class Gru:
     ) -> Pipeline[Any]:
         if pipeline_id in self._pipelines:
             return self._pipelines[pipeline_id]
-        
+
         if pipeline_cls is None:
             pipeline_cls = self._get_pipeline_class(pipeline_modpath)
 
@@ -746,7 +794,7 @@ class Gru:
             pipeline_id=pipeline_id,
             pipeline_modpath=pipeline_modpath,
             metrics=self._metrics,
-            logger=self._logger
+            logger=self._logger,
         )
 
     async def _start_pipeline(self, pipeline_id: str, pipeline: Pipeline[Any]):
@@ -1146,9 +1194,10 @@ class Gru:
             )
         if not self._is_started:
             raise RuntimeError(
-                "Gru is not started. Either use `await Gru.create(...)` to construct and start it in one step, "
-                "or call `await gru._startup()` manually after instantiating it with `Gru(...)`."
-            ) # pragma: no cover
+                "Gru is not started. Either use `await Gru.create(...)` to construct "
+                "and start it in one step, or call `await gru._startup()` manually "
+                "after instantiating it with `Gru(...)`."
+            )  # pragma: no cover
 
     @asynccontextmanager
     async def _reserve_lifecycle_op(self):
@@ -1222,20 +1271,29 @@ class Gru:
                 if minion_config is not None:
                     return StartResult(
                         success=False,
-                        reason="minion_config is only allowed when using Minion and Pipeline subclasses",
-                        suggestion="use minion_config_path instead"
+                        reason=(
+                            "minion_config is only allowed when using Minion and "
+                            "Pipeline subclasses"
+                        ),
+                        suggestion="use minion_config_path instead",
                     )
                 minion_modpath = minion.strip()
                 pipeline_modpath = pipeline.strip()
-                minion_config_path = \
-                    None if not minion_config_path \
+                minion_config_path = (
+                    None
+                    if not minion_config_path
                     else str(Path(minion_config_path.strip()).resolve())
+                )
                 try:
-                    minion_cls: type[Minion[Any, Any]] | None = self._get_minion_class(minion_modpath)
+                    minion_cls: type[Minion[Any, Any]] | None = self._get_minion_class(
+                        minion_modpath
+                    )
                 except Exception:
                     minion_cls = None
                 try:
-                    pipeline_cls: type[Pipeline[Any]] | None = self._get_pipeline_class(pipeline_modpath)
+                    pipeline_cls: type[Pipeline[Any]] | None = self._get_pipeline_class(
+                        pipeline_modpath
+                    )
                 except Exception:
                     pipeline_cls = None
 
@@ -1244,14 +1302,19 @@ class Gru:
                 if not (isinstance(pipeline, type) and issubclass(pipeline, Pipeline)):
                     return StartResult(
                         success=False,
-                        reason="pipeline must be a Pipeline subclass when minion is a Minion subclass"
+                        reason=(
+                            "pipeline must be a Pipeline subclass when minion is a Minion subclass"
+                        ),
                     )
                 if minion_config_path is not None:
                     return StartResult(
                         success=False,
-                        reason="minion_config_path is only allowed when using module path strings for minion and pipeline",
-                        suggestion="use minion_config instead"
-                )
+                        reason=(
+                            "minion_config_path is only allowed when using module path "
+                            "strings for minion and pipeline"
+                        ),
+                        suggestion="use minion_config instead",
+                    )
                 minion_cls = cast(type[Minion[Any, Any]], minion)
                 pipeline_cls = cast(type[Pipeline[Any]], pipeline)
                 minion_modpath = minion_cls.__module__
@@ -1314,7 +1377,9 @@ class Gru:
                         minion_inst = self._minions_by_orchestration_id.get(orchestration_id)
                     if minion_inst:
                         reason = "Orchestration already running - start request was rejected."
-                        suggestion = "Use a different config file if you want to launch another instance."
+                        suggestion = (
+                            "Use a different config file if you want to launch another instance."
+                        )
                         minion_instance_id = minion_inst._mn_minion_instance_id
                         await self._logger._mn_log(
                             INFO,
@@ -1347,7 +1412,9 @@ class Gru:
                         minion_cls=minion_cls,
                     )
                     pipeline_id = pipeline_identity
-                    pipeline_inst = self._get_pipeline(pipeline_id, pipeline_modpath, pipeline_cls=pipeline_cls)
+                    pipeline_inst = self._get_pipeline(
+                        pipeline_id, pipeline_modpath, pipeline_cls=pipeline_cls
+                    )
 
                     if minion_inst._mn_event_cls != pipeline_inst._mn_event_cls:
                         reason = (
@@ -1355,7 +1422,9 @@ class Gru:
                             f"pipeline_emits={pipeline_inst._mn_event_cls.__name__}; "
                             f"minion_expects={minion_inst._mn_event_cls.__name__}"
                         )
-                        suggestion = "Update the minion or pipeline so they use the same event type."
+                        suggestion = (
+                            "Update the minion or pipeline so they use the same event type."
+                        )
                         minion_instance_id = minion_inst._mn_minion_instance_id
                         await self._logger._mn_log(
                             INFO,
@@ -1400,10 +1469,12 @@ class Gru:
                                 else:
                                     resources_not_running.append(item)
 
-                    await asyncio.gather(*[
-                        self._ensure_resource_tree_started(cls)
-                        for _resource_id, _name, cls in resources_not_running
-                    ])
+                    await asyncio.gather(
+                        *[
+                            self._ensure_resource_tree_started(cls)
+                            for _resource_id, _name, cls in resources_not_running
+                        ]
+                    )
 
                     for resource_id, name, cls in resources_running + resources_not_running:
                         resource = self._resources.get(resource_id)
@@ -1412,7 +1483,9 @@ class Gru:
                         async with self._runtime_state_lock:
                             resource = self._resources.get(resource_id, resource)
                             setattr(minion_inst, name, resource)
-                            self._minion_resource_map.setdefault(minion_instance_id, set()).add(resource_id)
+                            self._minion_resource_map.setdefault(minion_instance_id, set()).add(
+                                resource_id
+                            )
                             self._resource_refcounts[resource_id] += 1
 
                     async with self._runtime_state_lock:
@@ -1432,12 +1505,16 @@ class Gru:
                                     else:
                                         pipeline_resources_not_running.append(item)
 
-                        await asyncio.gather(*[
-                            self._ensure_resource_tree_started(cls)
-                            for _resource_id, _name, cls in pipeline_resources_not_running
-                        ])
+                        await asyncio.gather(
+                            *[
+                                self._ensure_resource_tree_started(cls)
+                                for _resource_id, _name, cls in pipeline_resources_not_running
+                            ]
+                        )
 
-                        for resource_id, name, cls in pipeline_resources_running + pipeline_resources_not_running:
+                        for resource_id, name, cls in (
+                            pipeline_resources_running + pipeline_resources_not_running
+                        ):
                             resource = self._resources.get(resource_id)
                             if resource is None:
                                 resource = await self._ensure_resource_tree_started(cls)
@@ -1611,7 +1688,7 @@ class Gru:
                         attempted_key=orchestration_id,
                     )
                     return result
-            
+
                 minion = minion_or_result
 
                 async with self._orchestration_locks[orchestration_id]:
@@ -1656,11 +1733,13 @@ class Gru:
 
                     # manage resource lifecycle(s)
                     async with self._runtime_state_lock:
-                        resource_ids = self._minion_resource_map.pop(minion._mn_minion_instance_id, None)
+                        resource_ids = self._minion_resource_map.pop(
+                            minion._mn_minion_instance_id, None
+                        )
                         if resource_ids:
                             released_resource_ids = set(resource_ids)
                             for r_id in resource_ids:
-                                self._resource_refcounts[r_id] -= 1 # remove owner ref from minion
+                                self._resource_refcounts[r_id] -= 1  # remove owner ref from minion
                     if resource_ids:
                         resource_owner_refs_released = True
                         await self._cleanup_resources(resource_ids)
@@ -1734,8 +1813,9 @@ class Gru:
             async with self._lifecycle_ops_state_lock:
                 await self._lifecycle_ops_drained.wait_for(lambda: self._is_shutdown)
             return ShutdownResult(success=True)
-        
+
         self._is_shutting_down = True
+
         async with self._lifecycle_ops_state_lock:
             await self._lifecycle_ops_drained.wait_for(lambda: self._lifecycle_ops_active == 0)
 
@@ -1743,8 +1823,10 @@ class Gru:
         try:
             await self._logger._mn_log(INFO, "Gru shutting down...")
             shutdown_errors: list[ShutdownError] = []
-            
-            async def _collect_phase_errors(phase: str, targets: list[tuple[str, Any]]) -> list[ShutdownError]:
+
+            async def _collect_phase_errors(
+                phase: str, targets: list[tuple[str, Any]]
+            ) -> list[ShutdownError]:
                 results = await asyncio.gather(
                     *[op for _, op in targets],
                     return_exceptions=True,
@@ -1774,8 +1856,10 @@ class Gru:
                 ("state_store", self._shutdown_async_component(self._state_store)),
                 ("metrics", self._shutdown_async_component(self._metrics)),
             ]
-            shutdown_errors.extend(await _collect_phase_errors("shutdown_component", component_targets))
-            
+            shutdown_errors.extend(
+                await _collect_phase_errors("shutdown_component", component_targets)
+            )
+
             if shutdown_errors:
                 await self._logger._mn_log(
                     ERROR,
@@ -1831,11 +1915,12 @@ class Gru:
         warned_ram_high = False
         warned_monitoring_failed = False
 
-        if not cpu_count: # pragma: no cover
+        if not cpu_count:  # pragma: no cover
             cpu_count = 1
             await self._logger._mn_log(
                 WARNING,
-                "Unable to determine CPU count. Defaulting to single-core normalization for monitoring CPU usage."
+                "Unable to determine CPU count. Defaulting to single-core "
+                "normalization for monitoring CPU usage.",
             )
 
         while True:
@@ -1852,8 +1937,9 @@ class Gru:
                     if not warned_ram_high:
                         await self._logger._mn_log(
                             WARNING,
-                            "System memory usage is very high. This may impact Gru performance or stability.",
-                            system_memory_used_percent=sys_mem_used_pct
+                            "System memory usage is very high. This may impact Gru "
+                            "performance or stability.",
+                            system_memory_used_percent=sys_mem_used_pct,
                         )
                         warned_ram_high = True
                 else:

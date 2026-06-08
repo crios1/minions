@@ -72,7 +72,9 @@ def stamp_file(path: Path, *, dry_run: bool = False) -> bool:
     elif suffix == ".json":
         updated, changed = _stamp_json(source, config_id)
     else:
-        raise ValueError(f"Unsupported config file type for {path}: expected .toml, .yaml, .yml, or .json")
+        raise ValueError(
+            f"Unsupported config file type for {path}: expected .toml, .yaml, .yml, or .json"
+        )
     if changed and not dry_run:
         path.write_text(updated)
     return changed
@@ -92,7 +94,9 @@ def _iter_config_files(root: Path) -> list[Path]:
     for path in root.rglob("*"):
         if not path.is_file() or path.suffix.lower() not in _SUPPORTED_SUFFIXES:
             continue
-        if any(part.startswith(".") or part in _SKIP_DIRS for part in path.relative_to(root).parts[:-1]):
+        if any(
+            part.startswith(".") or part in _SKIP_DIRS for part in path.relative_to(root).parts[:-1]
+        ):
             continue
         files.append(path)
     return sorted(files)
@@ -110,8 +114,15 @@ def build_parser(*, prog: str) -> argparse.ArgumentParser:
         prog=prog,
         description="Stamp durable UUID config ids into TOML, YAML, and JSON config files.",
     )
-    parser.add_argument("paths", nargs="+", type=Path, help="TOML, YAML, or JSON config files or directories to update.")
-    parser.add_argument("--dry-run", action="store_true", help="Show what would be stamped without writing files.")
+    parser.add_argument(
+        "paths",
+        nargs="+",
+        type=Path,
+        help="TOML, YAML, or JSON config files or directories to update.",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show what would be stamped without writing files."
+    )
     return parser
 
 

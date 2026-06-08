@@ -158,8 +158,12 @@ async def test_gru_serializes_concurrent_stops_for_same_orchestration(
         orchestration_gated_lock = gru._orchestration_locks[orchestration_id]
         assert isinstance(orchestration_gated_lock, GatedLock)
 
-        stop_task_1 = asyncio.create_task(gru.stop_orchestration(start_result.orchestration_id or ""))
-        stop_task_2 = asyncio.create_task(gru.stop_orchestration(start_result.orchestration_id or ""))
+        stop_task_1 = asyncio.create_task(
+            gru.stop_orchestration(start_result.orchestration_id or "")
+        )
+        stop_task_2 = asyncio.create_task(
+            gru.stop_orchestration(start_result.orchestration_id or "")
+        )
 
         await asyncio.wait_for(orchestration_gated_lock.entered.wait(), timeout=1.0)
         await asyncio.sleep(0)
@@ -270,7 +274,10 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations(
             )
         )
 
-        await asyncio.wait_for(asyncio.gather(gate1.entered.wait(), gate2.entered.wait()), timeout=1.0)
+        await asyncio.wait_for(
+            asyncio.gather(gate1.entered.wait(), gate2.entered.wait()),
+            timeout=1.0
+        )
         await asyncio.sleep(0)
         assert gate1.enter_count == 1
         assert gate2.enter_count == 1
@@ -547,7 +554,9 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations_while_s
         orchestration1_stop_gate = GatedAsyncCallable[None]()
         monkeypatch.setattr(gru, "_stop_orchestration_minion", orchestration1_stop_gate)
 
-        orchestration1_stop_task = asyncio.create_task(gru.stop_orchestration(orchestration1_start_result.orchestration_id or ""))
+        orchestration1_stop_task = asyncio.create_task(
+            gru.stop_orchestration(orchestration1_start_result.orchestration_id or "")
+        )
         await asyncio.wait_for(orchestration1_stop_gate.entered.wait(), timeout=1.0)
 
         orchestration2_start_task = asyncio.create_task(
@@ -755,7 +764,9 @@ async def test_gru_shutdown_rejects_new_lifecycle_work_during_shutdown_in_progre
                 pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
             )
         )
-        new_stop_task = asyncio.create_task(gru.stop_orchestration(start_result.orchestration_id or ""))
+        new_stop_task = asyncio.create_task(
+            gru.stop_orchestration(start_result.orchestration_id or "")
+        )
 
         start_result2, stop_result2 = await asyncio.gather(new_start_task, new_stop_task)
         assert not start_result2.success

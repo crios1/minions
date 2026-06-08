@@ -5,7 +5,6 @@ from tests.assets.support.minion_spied import SpiedMinion
 
 
 class GoodMinion(SpiedMinion[CounterEvent, CounterContext]):
-
     @minion_step
     async def step_1(self) -> None:
         self.context.seq = self.event.seq

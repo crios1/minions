@@ -111,9 +111,7 @@ def test_serializable_primitive_types_are_rejected_as_top_level_contracts(
 ) -> None:
     with pytest.raises(
         TypeError,
-        match=(
-            r"MyOwner: event type must be a structured type, not a primitive"
-        ),
+        match=r"MyOwner: event type must be a structured type, not a primitive"
     ):
         require_type_not_primitive(primitive_type, owner="MyOwner", type_label="event type")
 
@@ -125,9 +123,7 @@ def test_require_type_not_primitive_accepts_structured_type():
 def test_require_type_model_rejects_mapping_contracts():
     with pytest.raises(
         TypeError,
-        match=(
-            r"MyOwner: event type must be a dataclass or msgspec Struct type\."
-        ),
+        match=r"MyOwner: event type must be a dataclass or msgspec Struct type\."
     ):
         require_type_model(dict[str, int], owner="MyOwner", type_label="event type")
 

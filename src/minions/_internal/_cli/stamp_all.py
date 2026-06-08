@@ -39,7 +39,8 @@ def _split_paths(paths: list[Path]) -> tuple[list[Path], list[Path]]:
             config_paths.append(path)
         else:
             raise ValueError(
-                f"Unsupported stamp all path for {path}: expected a directory, .py, .toml, .yaml, .yml, or .json"
+                f"Unsupported stamp all path for {path}: expected a directory, "
+                ".py, .toml, .yaml, .yml, or .json"
             )
     return component_paths, config_paths
 
@@ -50,7 +51,9 @@ def build_parser(*, prog: str) -> argparse.ArgumentParser:
         description="Stamp durable component and config UUIDs under files or directories.",
     )
     parser.add_argument("paths", nargs="+", type=Path, help="Files or directories to update.")
-    parser.add_argument("--dry-run", action="store_true", help="Show what would be stamped without writing files.")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show what would be stamped without writing files."
+    )
     return parser
 
 

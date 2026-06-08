@@ -9,4 +9,5 @@ class UnserializableContext:
 class BadContextMinion(SpiedMinion[CounterEvent, UnserializableContext]):
     pass
 
+
 minion = BadContextMinion

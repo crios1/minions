@@ -21,12 +21,14 @@ from tests.assets.support.state_store_inmemory import InMemoryStateStore
 # compositional validation happens on instantiation of each domain object
 # so each domain object has it's own test
 
-T_E = TypeVar('T_E')
-T_C = TypeVar('T_C')
+T_E = TypeVar("T_E")
+T_C = TypeVar("T_C")
+
 
 @dataclass
 class MyEvent:
     ts: int
+
 
 @dataclass
 class MyContext:
@@ -65,7 +67,7 @@ class TestMinionSubclassingValid:
         class MyMinion(Minion[MyEvent, MyContext]):
             r1: MyResource1
             r2: MyResource2
- 
+
     def test_mixins_allowed_in_any_order(self):
         'mixins are used in testing suite, not intended for end user use'
         class MyMinion1(Mixin, Minion[MyEvent, MyContext]):
@@ -85,9 +87,9 @@ class TestMinionSubclassingValid:
                 ...
         assert MyMinion._mn_workflow_spec
         assert len(MyMinion._mn_workflow_spec) == 2
-        assert MyMinion._mn_workflow_spec == ('step_1', 'step_2')
+        assert MyMinion._mn_workflow_spec == ("step_1", "step_2")
 
-        m = MyMinion('','','','',NoOpStateStore(),NoOpMetrics(),NoOpLogger())
+        m = MyMinion("", "", "", "", NoOpStateStore(), NoOpMetrics(), NoOpLogger())
 
         assert len(m._mn_workflow) == 2
 
@@ -185,7 +187,7 @@ class TestMinionSubclassingValid:
         )
 
         with pytest.raises(FrozenInstanceError):
-            handle.workflow_id = "workflow-2" # pyright: ignore[reportAttributeAccessIssue]
+            handle.workflow_id = "workflow-2"  # pyright: ignore[reportAttributeAccessIssue]
 
     def test_workflow_handle_outside_active_workflow_raises_clear_error(self):
         class MyMinion(Minion[MyEvent, MyContext]):
@@ -247,7 +249,7 @@ class TestMinionSubclassingValid:
         class MyMinion(Minion[MyEvent, MyContext]):
             async def load_config(self, config_path: str) -> MyConfig:
                 return MyConfig(name=config_path)
-            
+
             @minion_step
             async def step_1(self):
                 ...
@@ -353,6 +355,7 @@ class TestMinionSubclassingValid:
         ):
             await m.load_config("mock")
 
+
 class TestMinionSubclassingInvalid:
     def test_missing_event_and_context_types(self):
         with pytest.raises(TypeError) as excinfo:
@@ -368,20 +371,26 @@ class TestMinionSubclassingInvalid:
         with pytest.raises(TypeError) as excinfo:
             class MyMinion(Minion[event_type, MyContext]):
                 ...
-        assert str(excinfo.value) == "MyMinion: event type must be a structured type, not a primitive"
+        assert str(excinfo.value) == (
+            "MyMinion: event type must be a structured type, not a primitive"
+        )
 
     @pytest.mark.parametrize("context_type", SERIALIZABLE_PRIMITIVE_TYPES)
     def test_reject_primitive_context_type(self, context_type: type[object]):
         with pytest.raises(TypeError) as excinfo:
             class MyMinion(Minion[MyEvent, context_type]):
                 ...
-        assert str(excinfo.value) == "MyMinion: workflow context type must be a structured type, not a primitive"
+        assert str(excinfo.value) == (
+            "MyMinion: workflow context type must be a structured type, not a primitive"
+        )
 
     def test_invalid_event_and_context_types(self):
         with pytest.raises(TypeError) as excinfo:
             class MyMinion(Minion[int, int]):
                 ...
-        assert str(excinfo.value) == "MyMinion: event type must be a structured type, not a primitive"
+        assert str(excinfo.value) == (
+            "MyMinion: event type must be a structured type, not a primitive"
+        )
 
     def test_reject_bare_dict_event_type(self):
         with pytest.raises(TypeError) as excinfo:
@@ -448,6 +457,7 @@ class TestMinionSubclassingInvalid:
 
     def test_reject_direct_step_to_step_call_on_self(self):
         with pytest.raises(TypeError) as excinfo:
+
             class MyMinion(Minion[MyEvent, MyContext]):
                 @minion_step
                 async def step_1(self):
@@ -464,6 +474,7 @@ class TestMinionSubclassingInvalid:
 
     def test_reject_direct_raise_asyncio_cancelled_error_in_step(self):
         with pytest.raises(UnsupportedUserCode) as excinfo:
+
             class MyMinion(Minion[MyEvent, MyContext]):
                 @minion_step
                 async def step_1(self):

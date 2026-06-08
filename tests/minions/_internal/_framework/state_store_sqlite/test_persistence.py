@@ -14,7 +14,9 @@ from tests.minions._internal._framework.state_store_sqlite.conftest import MakeS
 pytestmark = pytest.mark.asyncio
 
 
-async def test_save_context_persists_before_returning(make_state_store_and_logger: MakeStateStoreAndLogger):
+async def test_save_context_persists_before_returning(
+    make_state_store_and_logger: MakeStateStoreAndLogger,
+):
     s, _ = await make_state_store_and_logger()
     ctx = mk_ctx(i=1, size=16)
     expected_blob = blob_for(ctx)
@@ -30,7 +32,9 @@ async def test_save_context_persists_before_returning(make_state_store_and_logge
     assert row == (ctx.orchestration_id, expected_blob)
 
 
-async def test_framework_serialized_context_remains_hydratable(make_state_store_and_logger: MakeStateStoreAndLogger):
+async def test_framework_serialized_context_remains_hydratable(
+    make_state_store_and_logger: MakeStateStoreAndLogger,
+):
     s, _ = await make_state_store_and_logger()
     ctx = mk_ctx(i=77, size=16)
 

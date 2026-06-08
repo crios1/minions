@@ -11,7 +11,6 @@ SLOW_STEP_MINION_ID = "42345678-1234-5678-9234-567812345678"
 
 @minion_id(SLOW_STEP_MINION_ID)
 class SlowStepMinion(SpiedMinion[CounterEvent, CounterContext]):
-
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         # Instance-level override for this test fixture.

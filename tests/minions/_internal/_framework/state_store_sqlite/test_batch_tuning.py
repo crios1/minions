@@ -90,7 +90,10 @@ async def test_init_rejects_explicit_batch_config_in_calibrated_mode(
 ) -> None:
     with pytest.raises(
         ValueError,
-        match="batch_max_queued_writes and batch_max_flush_delay_ms cannot be set when batch_tuning='calibrated'",
+        match=(
+            "batch_max_queued_writes and batch_max_flush_delay_ms cannot be set "
+            "when batch_tuning='calibrated'"
+        ),
     ):
         SQLiteStateStore(
             db_path=":memory:",

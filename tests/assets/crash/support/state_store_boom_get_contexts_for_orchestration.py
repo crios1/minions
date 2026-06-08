@@ -4,5 +4,7 @@ from tests.assets.crash.boom import boom
 
 
 class BoomGetContextsForOrchestrationStateStore(NoOpStateStore):
-    async def get_contexts_for_orchestration(self, orchestration_id: str) -> list[StoredWorkflowContext]: # pyright: ignore[reportReturnType]
+    async def get_contexts_for_orchestration(
+        self, orchestration_id: str
+    ) -> list[StoredWorkflowContext]:  # pyright: ignore[reportReturnType]
         boom()

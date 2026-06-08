@@ -54,9 +54,7 @@ class resource_metric_context:
         if self._caller_kind is not None or self._caller is not None:
             caller_kind = self._caller_kind or "unknown"
             caller = self._caller if self._caller is not None else ""
-            self._caller_token = _resource_metric_caller.set(
-                (caller_kind, caller)
-            )
+            self._caller_token = _resource_metric_caller.set((caller_kind, caller))
 
         return self
 

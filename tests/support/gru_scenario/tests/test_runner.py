@@ -65,7 +65,9 @@ async def test_runner_require_result_invariant_message_is_actionable(gru: Gru) -
 
 
 @pytest.mark.asyncio
-async def test_runner_validates_missing_pipeline_event_count_after_resolving_identity(gru: Gru) -> None:
+async def test_runner_validates_missing_pipeline_event_count_after_resolving_identity(
+    gru: Gru,
+) -> None:
     plan = ScenarioPlan(
         [
             OrchestrationStart(
@@ -81,7 +83,9 @@ async def test_runner_validates_missing_pipeline_event_count_after_resolving_ide
 
 
 @pytest.mark.asyncio
-async def test_runner_validates_unused_pipeline_event_count_after_resolving_identity(gru: Gru) -> None:
+async def test_runner_validates_unused_pipeline_event_count_after_resolving_identity(
+    gru: Gru,
+) -> None:
     plan = ScenarioPlan(
         [
             OrchestrationStart(
@@ -222,7 +226,9 @@ async def test_runner_tracks_durable_minion_pipeline_and_resource_ids(
     assert gru._minion_resource_map[minion._mn_minion_instance_id] == {IDENTIFIED_FIXED_RESOURCE_ID}
 
     assert result.spies is not None
-    assert result.spies.pipelines[IDENTIFIED_COUNTER_PIPELINE_ID].__name__ == "IdentifiedEmit1Pipeline"
+    assert (
+        result.spies.pipelines[IDENTIFIED_COUNTER_PIPELINE_ID].__name__ == "IdentifiedEmit1Pipeline"
+    )
     assert result.spies.minions[IDENTIFIED_COUNTER_MINION_ID] is IdentifiedResourcedMinion
     assert IdentifiedFixedResource in result.spies.resources
 
@@ -402,7 +408,10 @@ async def test_runner_wait_workflow_step_starts_then_rejects_unknown_steps(gru: 
     plan = ScenarioPlan(directives, pipeline_event_counts={pipeline_id: 1})
     runner = ScenarioRunner(gru, plan, per_verification_timeout=0.1)
 
-    with pytest.raises(pytest.fail.Exception, match="Unknown workflow step in AfterWorkflowStepStarts.expected"):
+    with pytest.raises(
+        pytest.fail.Exception,
+        match="Unknown workflow step in AfterWorkflowStepStarts.expected"
+    ):
         await runner.run()
 
 
@@ -524,8 +533,12 @@ async def test_runner_restart_flow_checkpoints_separate_pre_stop_and_post_restar
     post_by_instance = post_restart_cp.spy_call_counts_by_instance.get(class_key, {})
     assert len(pre_by_instance) >= 1
     assert len(post_by_instance) >= 1
-    pre_workflows = pre_stop_cp.workflow_step_started_ids_by_minion_id.get(minion_id, {}).get("step_1", ())
-    post_workflows = post_restart_cp.workflow_step_started_ids_by_minion_id.get(minion_id, {}).get("step_1", ())
+    pre_workflows = pre_stop_cp.workflow_step_started_ids_by_minion_id.get(minion_id, {}).get(
+        "step_1", ()
+    )
+    post_workflows = post_restart_cp.workflow_step_started_ids_by_minion_id.get(minion_id, {}).get(
+        "step_1", ()
+    )
     assert len(post_workflows) >= len(pre_workflows)
 
 

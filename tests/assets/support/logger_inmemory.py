@@ -13,6 +13,7 @@ class Log:
     msg: str
     kwargs: dict[str, Any]
 
+
 class InMemoryLogger(SpiedLogger):
     """In-memory implementation of Logger for testing."""
 

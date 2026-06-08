@@ -21,34 +21,46 @@ def run(cmd: list[str]) -> None:
     print("$", " ".join(cmd), flush=True)
     subprocess.check_call(cmd)
 
+
 def cov_test_support(html_dir: str = "htmlcov/test_support") -> None:
     if os.path.exists(html_dir):
         shutil.rmtree(html_dir)
     run(["coverage", "erase"])
-    run([
-        "pytest", "tests/assets/support",
-        "--cov=tests/assets/support", "--cov-branch",
-        "--cov-report=term-missing",
-        f"--cov-report=html:{html_dir}",
-    ])
+    run(
+        [
+            "pytest",
+            "tests/assets/support",
+            "--cov=tests/assets/support",
+            "--cov-branch",
+            "--cov-report=term-missing",
+            f"--cov-report=html:{html_dir}",
+        ]
+    )
     run(["coverage", "erase"])
+
 
 def cov_minions(html_dir: str = "htmlcov/minions") -> None:
     if os.path.exists(html_dir):
         shutil.rmtree(html_dir)
     run(["coverage", "erase"])
-    run([
-        "pytest", "tests",
-        "--cov=minions", "--cov-branch",
-        "--cov-report=term-missing",
-        f"--cov-report=html:{html_dir}",
-        "--cov-config=.coveragerc",
-    ])
+    run(
+        [
+            "pytest",
+            "tests",
+            "--cov=minions",
+            "--cov-branch",
+            "--cov-report=term-missing",
+            f"--cov-report=html:{html_dir}",
+            "--cov-config=.coveragerc",
+        ]
+    )
     run(["coverage", "erase"])
+
 
 def cov_all() -> None:
     cov_test_support()
     cov_minions()
+
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Test/coverage orchestration")
@@ -59,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
 
     s2 = sub.add_parser("cov-minions")
     s2.add_argument("--out", default="htmlcov/minions")
-    
+
     sub.add_parser("cov-all")
 
     args = p.parse_args(argv)
@@ -78,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
         p.print_help()
 
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

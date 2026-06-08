@@ -78,7 +78,10 @@ def main(argv: list[str] | None = None) -> int:
         target, *_ = rest
         if target not in {"component-ids", "config-ids", "all"}:
             parser.error(f"Unknown stamp target: {target}")
-        parser.error("Use `minions stamp component-ids ...`, `minions stamp config-ids ...`, or `minions stamp all ...`")
+        parser.error(
+            "Use `minions stamp component-ids ...`, `minions stamp config-ids ...`, "
+            "or `minions stamp all ...`"
+        )
     if args.command == "doctor":
         if not rest:
             parser.error("doctor requires a target (currently: ids)")

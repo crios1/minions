@@ -4,6 +4,8 @@ from .logger import Logger
 
 
 class NoOpLogger(Logger):
-    def __init__(self): ...
+    def __init__(self):
+        pass
 
-    async def log(self, level: int, msg: str, **kwargs: Any) -> None: ...
+    async def log(self, level: int, msg: str, **kwargs: Any) -> None:
+        pass

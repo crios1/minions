@@ -50,7 +50,9 @@ def _assert_factory_kwargs_match_state_store_constructor() -> None:
     for name in sorted(constructor_kwargs - snapshot_kwargs):
         mismatches.append(f"{name}: missing from make_state_store_and_logger kwarg snapshot")
     for name in sorted(snapshot_kwargs - constructor_kwargs):
-        mismatches.append(f"{name}: not present as a keyword-only SQLiteStateStore.__init__ parameter")
+        mismatches.append(
+            f"{name}: not present as a keyword-only SQLiteStateStore.__init__ parameter"
+        )
 
     for name, snapshot in _SQLITE_STATE_STORE_FACTORY_KWARG_SNAPSHOT.items():
         parameter = signature.parameters.get(name)

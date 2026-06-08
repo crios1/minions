@@ -66,7 +66,7 @@ class PrometheusMetrics(Metrics):
         logger: Logger,
         port: int = 8081,
         addr: str = "",
-        registry: CollectorRegistry = REGISTRY
+        registry: CollectorRegistry = REGISTRY,
     ):
         super().__init__(logger)
         self._port = port
@@ -86,7 +86,7 @@ class PrometheusMetrics(Metrics):
                 ERROR,
                 "[Prometheus] Failed to start metrics HTTP server",
                 e,
-    )
+            )
 
     @overload
     def create_metric(
@@ -112,10 +112,10 @@ class PrometheusMetrics(Metrics):
         kind: Literal["histogram"],
     ) -> LabelledHistogram: ...
 
-    def create_metric(self, metric_name: str, label_names: list[str], kind: Kind) -> LabelledMetric:
-        """
-        Create and return a Prometheus metric (Counter, Gauge, or Histogram) with the given name and labels.
-        """
+    def create_metric(
+        self, metric_name: str, label_names: list[str], kind: Kind
+    ) -> LabelledMetric:
+        """Create and return a Prometheus metric with the given name and labels."""
 
         if kind == "counter":
             return _PrometheusCounter(
@@ -123,7 +123,7 @@ class PrometheusMetrics(Metrics):
                     metric_name,
                     f"{metric_name} ({kind})",
                     labelnames=label_names,
-                    registry=self._registry
+                    registry=self._registry,
                 )
             )
         if kind == "gauge":
@@ -132,7 +132,7 @@ class PrometheusMetrics(Metrics):
                     metric_name,
                     f"{metric_name} ({kind})",
                     labelnames=label_names,
-                    registry=self._registry
+                    registry=self._registry,
                 )
             )
         if kind == "histogram":
@@ -141,7 +141,7 @@ class PrometheusMetrics(Metrics):
                     metric_name,
                     f"{metric_name} ({kind})",
                     labelnames=label_names,
-                    registry=self._registry
+                    registry=self._registry,
                 )
             )
 
@@ -150,12 +150,12 @@ class PrometheusMetrics(Metrics):
     def snapshot_counters(self) -> SnapshotCounters:
         out: SnapshotCounters = {}
         for mf in self._registry.collect():
-            if mf.type != 'counter':
+            if mf.type != "counter":
                 continue
             for s in mf.samples:
-                if s.name.endswith('_created'):
+                if s.name.endswith("_created"):
                     continue
-                name = s.name[:-6] if s.name.endswith('_total') else s.name
+                name = s.name[:-6] if s.name.endswith("_total") else s.name
                 out.setdefault(name, []).append(
                     {"labels": dict(s.labels or {}), "value": float(s.value)}
                 )
@@ -164,11 +164,11 @@ class PrometheusMetrics(Metrics):
     def snapshot_gauges(self) -> SnapshotGauges:
         out: SnapshotGauges = {}
         for mf in self._registry.collect():
-            if mf.type != 'gauge':
+            if mf.type != "gauge":
                 continue
             for s in mf.samples:
                 out.setdefault(s.name, []).append(
-                    {'labels': dict(s.labels or {}), 'value': float(s.value)}
+                    {"labels": dict(s.labels or {}), "value": float(s.value)}
                 )
         return out
 
@@ -185,16 +185,20 @@ class PrometheusMetrics(Metrics):
                 key = (mf.name, lbls)
                 rec = tmp.get(key)
                 if rec is None:
-                    new_rec: HistogramSample = {"labels": dict(s.labels or {}), "count": 0.0, "sum": 0.0}
+                    new_rec: HistogramSample = {
+                        "labels": dict(s.labels or {}),
+                        "count": 0.0,
+                        "sum": 0.0,
+                    }
                     tmp[key] = new_rec
                     rec = new_rec
                 n = s.name
                 v = float(s.value)
-                if n.endswith('_count'):
-                    rec['count'] = v
-                elif n.endswith('_sum'):
-                    rec['sum'] = v
-        
+                if n.endswith("_count"):
+                    rec["count"] = v
+                elif n.endswith("_sum"):
+                    rec["sum"] = v
+
         # flatten grouped series into per metric lists
         for (metric_name, _), rec in tmp.items():
             out.setdefault(metric_name, []).append(rec)

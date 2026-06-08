@@ -55,9 +55,7 @@ def test_start_prints_failed_start_result_with_recovery_guidance() -> None:
     )
     shell = GruShell(gru)  # type: ignore[arg-type]
 
-    def submit(
-        coro: Coroutine[Any, Any, StartResult]
-    ) -> cf.Future[StartResult]:
+    def submit(coro: Coroutine[Any, Any, StartResult]) -> cf.Future[StartResult]:
         fut: cf.Future[StartResult] = cf.Future()
         fut.set_result(gru._start_result)
         coro.close()
@@ -67,7 +65,10 @@ def test_start_prints_failed_start_result_with_recovery_guidance() -> None:
 
     out = io.StringIO()
     with redirect_stdout(out):
-        shell.do_start("tests.assets.minions.two_steps.simple.basic config.toml tests.assets.pipelines.simple.record_event")
+        shell.do_start(
+            "tests.assets.minions.two_steps.simple.basic config.toml "
+            "tests.assets.pipelines.simple.record_event"
+        )
 
     output = out.getvalue()
     assert "start queued" in output
@@ -107,9 +108,7 @@ def test_start_calls_current_gru_signature_and_rekeys_successful_result() -> Non
     shell = GruShell(gru)  # type: ignore[arg-type]
     submitted: list[Coroutine[Any, Any, StartResult]] = []
 
-    def submit(
-        coro: Coroutine[Any, Any, StartResult]
-    ) -> cf.Future[StartResult]:
+    def submit(coro: Coroutine[Any, Any, StartResult]) -> cf.Future[StartResult]:
         submitted.append(coro)
         fut: cf.Future[StartResult] = cf.Future()
         fut.set_result(StartResult(success=True, orchestration_id="minion-1"))
@@ -120,7 +119,10 @@ def test_start_calls_current_gru_signature_and_rekeys_successful_result() -> Non
 
     out = io.StringIO()
     with redirect_stdout(out):
-        shell.do_start("tests.assets.minions.two_steps.simple.basic config.toml tests.assets.pipelines.simple.record_event")
+        shell.do_start(
+            "tests.assets.minions.two_steps.simple.basic config.toml "
+            "tests.assets.pipelines.simple.record_event"
+        )
 
     assert submitted
     assert gru.start_calls == [

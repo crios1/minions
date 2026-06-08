@@ -8,9 +8,15 @@ from .metrics_interface import LabelledCounter, LabelledGauge, LabelledHistogram
 class _NoOpMetric:
     def labels(self, **kwargs: str) -> "_NoOpMetric":
         return self
-    def inc(self, amount: float = 1): pass
-    def set(self, value: float): pass
-    def observe(self, value: float): pass
+
+    def inc(self, amount: float = 1):
+        pass
+
+    def set(self, value: float):
+        pass
+
+    def observe(self, value: float):
+        pass
 
 
 class NoOpMetrics(Metrics):
@@ -20,7 +26,7 @@ class NoOpMetrics(Metrics):
     """
 
     def __init__(self):
-        super().__init__(NoOpLogger()) 
+        super().__init__(NoOpLogger())
         self._noop_metric = _NoOpMetric()
 
     @overload
@@ -55,6 +61,6 @@ class NoOpMetrics(Metrics):
 
     def snapshot_gauges(self) -> SnapshotGauges:
         return {}
-    
+
     def snapshot_histograms(self) -> SnapshotHistograms:
         return {}

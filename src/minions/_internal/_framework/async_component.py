@@ -9,6 +9,7 @@ from .logger import ERROR, Logger
 T = TypeVar("T")
 P = ParamSpec("P")
 
+
 class AsyncComponent(AsyncLifecycle):
     def __init__(self, logger: Logger):
         self._mn_logger = logger
@@ -63,7 +64,7 @@ class AsyncComponent(AsyncLifecycle):
         method_args: Sequence[object] | None = ...,
         method_kwargs: Mapping[str, object] | None = ...,
         log_msg: str | None = ...,
-        log_kwargs: Mapping[str, object] | None = ...
+        log_kwargs: Mapping[str, object] | None = ...,
     ) -> T:
         ...
 
@@ -74,9 +75,8 @@ class AsyncComponent(AsyncLifecycle):
         method_args: Sequence[object] | None = ...,
         method_kwargs: Mapping[str, object] | None = ...,
         log_msg: str | None = ...,
-        log_kwargs: Mapping[str, object] | None = ...
-    ) -> T:
-        ...
+        log_kwargs: Mapping[str, object] | None = ...,
+    ) -> T: ...
 
     async def _mn_run_and_log_failure(
         self,
@@ -105,10 +105,9 @@ class AsyncComponent(AsyncLifecycle):
         method_args: Sequence[object] | None = ...,
         method_kwargs: Mapping[str, object] | None = ...,
         log_msg: str | None = ...,
-        log_kwargs: Mapping[str, object] | None = ...
-    ) -> T | None:
-        ...
-    
+        log_kwargs: Mapping[str, object] | None = ...,
+    ) -> T | None: ...
+
     @overload
     async def _mn_safe_run_and_log_failure(
         self,
@@ -116,9 +115,8 @@ class AsyncComponent(AsyncLifecycle):
         method_args: Sequence[object] | None = ...,
         method_kwargs: Mapping[str, object] | None = ...,
         log_msg: str | None = ...,
-        log_kwargs: Mapping[str, object] | None = ...
-    ) -> T | None:
-        ...
+        log_kwargs: Mapping[str, object] | None = ...,
+    ) -> T | None: ...
 
     async def _mn_safe_run_and_log_failure(
         self,

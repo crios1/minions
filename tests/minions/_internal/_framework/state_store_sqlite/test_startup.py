@@ -240,7 +240,7 @@ async def test_startup_uses_fallback_measurements_when_commit_timing_fails_witho
 # Probe Cleanup Failure Policy
 
 
-async def test_measure_commit_latency_percentiles_raises_when_probe_cleanup_delete_fails_after_measurement(
+async def test_measure_commit_latency_percentiles_raises_when_probe_cleanup_delete_fails_after_measurement(  # noqa: E501
     make_state_store_and_logger: MakeStateStoreAndLogger,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -258,7 +258,10 @@ async def test_measure_commit_latency_percentiles_raises_when_probe_cleanup_dele
 
     monkeypatch.setattr(s._db, "execute", failing_execute)
 
-    with pytest.raises(CommitMeasurementProbeCleanupError, match="commit measurement probe cleanup failed"):
+    with pytest.raises(
+        CommitMeasurementProbeCleanupError,
+        match="commit measurement probe cleanup failed"
+    ):
         await s._measure_commit_latency_percentiles(4096)
 
 
@@ -282,7 +285,10 @@ async def test_measure_commit_latency_percentiles_raises_when_measurement_and_pr
 
     monkeypatch.setattr(s._db, "execute", failing_execute)
 
-    with pytest.raises(CommitMeasurementProbeCleanupError, match="commit measurement probe cleanup failed") as exc:
+    with pytest.raises(
+        CommitMeasurementProbeCleanupError,
+        match="commit measurement probe cleanup failed"
+    ) as exc:
         await s._measure_commit_latency_percentiles(4096)
 
     assert isinstance(exc.value.__cause__, RuntimeError)
@@ -353,10 +359,13 @@ async def test_startup_propagates_commit_measurement_probe_cleanup_failure(
     try:
         with pytest.raises(CommitMeasurementProbeCleanupError, match="cleanup boom"):
             await s.startup()
-        assert not any("startup measurements failed; using fallback values" in log.msg for log in logger.logs)
+        assert not any(
+            "startup measurements failed; using fallback values" in log.msg for log in logger.logs
+        )
     finally:
         if s._db is not None:
-            # Startup failed before normal shutdown ownership, so close the private connection manually.
+            # Startup failed before normal shutdown ownership, so close the
+            # private connection manually.
             await s._db.close()
             s._db = None
 
@@ -387,7 +396,10 @@ async def test_startup_probe_preserves_primary_failure_when_cleanup_delete_also_
     # Inject a fake private DB adapter to force both probe mismatch and cleanup failure.
     monkeypatch.setattr(s, "_require_db", lambda: fake_db)
 
-    with pytest.raises(RuntimeError, match="startup probe failed to round-trip persisted workflow state"):
+    with pytest.raises(
+        RuntimeError,
+        match="startup probe failed to round-trip persisted workflow state"
+    ):
         await s._run_startup_probe()
 
     assert any(

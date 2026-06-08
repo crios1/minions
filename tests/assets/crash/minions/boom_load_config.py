@@ -6,7 +6,6 @@ from tests.assets.support.minion_spied import SpiedMinion
 
 
 class BoomLoadConfigMinion(SpiedMinion[CounterEvent, CounterContext]):
-
     async def load_config(self, config_path: str):
         boom()
 

@@ -39,7 +39,9 @@ class SpyMixin(Mixin):
         cls._mspy_lock = threading.RLock()
         cls._mspy_wrapped_fns: WeakSet[FunctionType] = WeakSet()
         cls._mspy_counts: dict[str, int] = {}
-        cls._mspy_waiters: dict[str, list[tuple[int, asyncio.Future[None]]]] = {} # (mapping name -> list[(target_count, Future)])
+        cls._mspy_waiters: dict[
+            str, list[tuple[int, asyncio.Future[None]]]
+        ] = {}  # (mapping name -> list[(target_count, Future)])
         cls._mspy_next_instance_id = itertools.count(1)
         cls._mspy_count_history: list[tuple[str, int, int | None]] = []
         # _mspy_count_history is in chronological order
@@ -50,10 +52,12 @@ class SpyMixin(Mixin):
 
         # --- Eager-wrap ONLY __init__ as a pure passthrough anchor ---
         orig_init = cls.__dict__.get("__init__", getattr(cls, "__init__", object.__init__))
+
         @wraps(orig_init)
         def _mspy_init_anchor(self: object, *a: Any, **k: Any) -> Any:
             # no counting here; just preserve a stable __wrapped__ chain
             return orig_init(self, *a, **k)
+
         setattr(cls, "__init__", _mspy_init_anchor)
 
     @classmethod
@@ -74,7 +78,7 @@ class SpyMixin(Mixin):
             if lim is not None:
                 if cls._mspy_fail_on_unlisted and name not in lim:
                     cb = cls._mspy_on_extra
-                    if cb: 
+                    if cb:
                         cb(name, current, 0)
                     raise AssertionError(f"{cls.__name__}: unexpected call {name}")
                 allowed = lim.get(name, float("inf"))
@@ -92,8 +96,10 @@ class SpyMixin(Mixin):
 
             remaining: list[tuple[int, asyncio.Future[None]]] = []
             for target, fut in waiters:
-                # A waiter can be cancelled/completed just before wait_for_call()'s finally removes it.
-                # _spy_bump may run from another task/thread; skip stale futures to avoid set_result() on done/cancelled.
+                # A waiter can be cancelled/completed just before
+                # wait_for_call()'s finally removes it.
+                # _spy_bump may run from another task/thread; skip stale
+                # futures to avoid set_result() on done/cancelled.
                 if fut.done() or fut.cancelled():
                     continue
                 if current >= target:
@@ -198,6 +204,7 @@ class SpyMixin(Mixin):
                 rewrap, is_static = None, False
 
             if inspect.iscoroutinefunction(fn):
+
                 @wraps(fn)
                 async def _async_wrapper(*args: Any, **kwargs: Any) -> Any:
                     owner = cls if is_static else (args[0] if args else cls)
@@ -285,7 +292,7 @@ class SpyMixin(Mixin):
             raise AssertionError(
                 f"Expected subsequence {sub} not found in call history.\n"
                 f"Missing from this point: {sub[i:]}\nFull history names: {names}"
-        )
+            )
 
     @classmethod
     def assert_call_order_for_instance(cls, instance_tag: int, sub_seq: Iterable[str]) -> None:
@@ -311,7 +318,8 @@ class SpyMixin(Mixin):
                 continue
             raise AssertionError(
                 f"Expected subsequence {sub} not found for tag {instance_tag}.\n"
-                f"Missing from this point: {sub[i:]}\nFull history names for tag {instance_tag}: {names}"
+                f"Missing from this point: {sub[i:]}\nFull history names for tag "
+                f"{instance_tag}: {names}"
             )
 
     @classmethod
@@ -330,7 +338,7 @@ class SpyMixin(Mixin):
         fut = loop.create_future()
 
         with cls._mspy_lock:
-            current = getattr(cls, '_mspy_counts', {}).get(name, 0)
+            current = getattr(cls, "_mspy_counts", {}).get(name, 0)
             if current >= count:
                 return
             target = count
@@ -352,10 +360,12 @@ class SpyMixin(Mixin):
         counts = cls.get_call_counts()
         if all(counts.get(name, 0) >= count for name, count in expected.items()):
             return
-        await asyncio.gather(*[
-            cls.wait_for_call(name, count=count, timeout=timeout)
-            for name, count in expected.items()
-        ])
+        await asyncio.gather(
+            *[
+                cls.wait_for_call(name, count=count, timeout=timeout)
+                for name, count in expected.items()
+            ]
+        )
 
     @classmethod
     async def await_and_pin_call_counts(

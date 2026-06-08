@@ -139,7 +139,7 @@ def _apply_stamps(source: str, stamps: tuple[Stamp, ...]) -> str:
     lines = source.splitlines(keepends=True)
     needs_import = sorted({stamp.decorator for stamp in stamps if stamp.decorator not in source})
     for stamp in sorted(stamps, key=lambda item: item.lineno, reverse=True):
-        lines.insert(stamp.lineno - 1, f"@{stamp.decorator}(\"{stamp.component_id}\")\n")
+        lines.insert(stamp.lineno - 1, f'@{stamp.decorator}("{stamp.component_id}")\n')
 
     if needs_import:
         import_line = f"from minions import {', '.join(needs_import)}\n"
@@ -171,7 +171,9 @@ def _iter_python_files(root: Path) -> list[Path]:
 
     files: list[Path] = []
     for path in root.rglob("*.py"):
-        if any(part.startswith(".") or part in _SKIP_DIRS for part in path.relative_to(root).parts[:-1]):
+        if any(
+            part.startswith(".") or part in _SKIP_DIRS for part in path.relative_to(root).parts[:-1]
+        ):
             continue
         files.append(path)
     return sorted(files)
@@ -189,12 +191,18 @@ def build_parser(*, prog: str) -> argparse.ArgumentParser:
         prog=prog,
         description="Stamp durable UUID component ids on Minion, Pipeline, and Resource classes.",
     )
-    parser.add_argument("paths", nargs="+", type=Path, help="Python source files or directories to update.")
-    parser.add_argument("--dry-run", action="store_true", help="Show what would be stamped without writing files.")
+    parser.add_argument(
+        "paths", nargs="+", type=Path, help="Python source files or directories to update."
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show what would be stamped without writing files."
+    )
     return parser
 
 
-def main(argv: list[str] | None = None, *, prog: str = "python -m minions stamp component-ids") -> int:
+def main(
+    argv: list[str] | None = None, *, prog: str = "python -m minions stamp component-ids"
+) -> int:
     parser = build_parser(prog=prog)
     args = parser.parse_args(argv)
     for path in expand_paths(args.paths):

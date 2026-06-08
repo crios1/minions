@@ -6,7 +6,8 @@ cost can be measured separately from Gru orchestration cost.
 
 Examples:
     python scripts/metrics_runtime_perf.py
-    python scripts/metrics_runtime_perf.py --backend prometheus --scenario persistence-mixed --iterations 100000
+    python scripts/metrics_runtime_perf.py --backend prometheus --scenario \
+        persistence-mixed --iterations 100000
     python scripts/metrics_runtime_perf.py --backend all --scenario all --cardinality 1000
 """
 
@@ -216,27 +217,41 @@ SCENARIOS: dict[ScenarioName, Callable[[int, int], Iterable[Operation]]] = {
 
 def emit_unsafe(metrics: Metrics, operation: Operation) -> None:
     if operation.kind == "counter":
-        metrics._inc_unsafe(operation.metric_name, amount=operation.value, labels=operation.labels)
+        metrics._inc_unsafe(
+            operation.metric_name, amount=operation.value, labels=operation.labels
+        )
     elif operation.kind == "gauge":
-        metrics._set_unsafe(operation.metric_name, value=operation.value, labels=operation.labels)
+        metrics._set_unsafe(
+            operation.metric_name, value=operation.value, labels=operation.labels
+        )
     elif operation.kind == "histogram":
-        metrics._observe_unsafe(operation.metric_name, value=operation.value, labels=operation.labels)
+        metrics._observe_unsafe(
+            operation.metric_name, value=operation.value, labels=operation.labels
+        )
     else:
         raise ValueError(f"Unknown operation kind: {operation.kind}")
 
 
 async def emit_async(metrics: Metrics, operation: Operation) -> None:
     if operation.kind == "counter":
-        await metrics._inc(operation.metric_name, amount=operation.value, labels=operation.labels)
+        await metrics._inc(
+            operation.metric_name, amount=operation.value, labels=operation.labels
+        )
     elif operation.kind == "gauge":
-        await metrics._set(operation.metric_name, value=operation.value, labels=operation.labels)
+        await metrics._set(
+            operation.metric_name, value=operation.value, labels=operation.labels
+        )
     elif operation.kind == "histogram":
-        await metrics._observe(operation.metric_name, value=operation.value, labels=operation.labels)
+        await metrics._observe(
+            operation.metric_name, value=operation.value, labels=operation.labels
+        )
     else:
         raise ValueError(f"Unknown operation kind: {operation.kind}")
 
 
-def estimate_series(label_sets_by_metric: dict[tuple[str, MetricKind], set[tuple[tuple[str, str], ...]]]) -> int:
+def estimate_series(
+    label_sets_by_metric: dict[tuple[str, MetricKind], set[tuple[tuple[str, str], ...]]],
+) -> int:
     total = 0
     for (_metric_name, kind), label_sets in label_sets_by_metric.items():
         multiplier = 17 if kind == "histogram" else 1
@@ -286,8 +301,8 @@ async def run_benchmark(
     tracemalloc.stop()
     scrape_bytes = (
         len(generate_latest(backend_runtime.registry))
-        if backend_runtime.registry is not None else
-        None
+        if backend_runtime.registry is not None
+        else None
     )
 
     return BenchmarkResult(

@@ -22,12 +22,14 @@ def _is_typed_dict_type(tp: Any) -> bool:
         and hasattr(tp, "__optional_keys__")
     )
 
+
 def _is_mapping_type(tp: Any) -> bool:
     origin = get_origin(tp) or tp
     try:
         return origin is dict or issubclass(origin, Mapping)
     except TypeError:  # pragma: no cover
         return False
+
 
 def _is_dataclass_type(tp: Any) -> bool:
     return isinstance(tp, type) and is_dataclass(tp)
@@ -46,6 +48,7 @@ def _normalize_origin_args(tp: Any) -> tuple[Any, tuple[Any, ...]]:
     args = get_args(tp)
     return origin, args
 
+
 def _mapping_value_type_if_str_key(origin: Any, args: tuple[Any, ...]) -> tuple[bool, Any]:
     """Return `(ok, value_type)` for mapping annotations using `str` keys."""
     if not args:
@@ -57,8 +60,10 @@ def _mapping_value_type_if_str_key(origin: Any, args: tuple[Any, ...]) -> tuple[
         return False, None
     return True, v
 
+
 def _is_serializable_leaf_type(tp: Any) -> bool:
     return tp in SERIALIZABLE_PRIMITIVE_TYPES
+
 
 def _is_serializable_field_type(tp: Any) -> bool:
     """Return whether a field type is representable by msgspec msgpack."""
@@ -135,6 +140,7 @@ def _is_serializable_field_type(tp: Any) -> bool:
         return False
 
     return True
+
 
 def is_type_serializable(tp: Any) -> bool:
     """Return True when a type is likely serializable by msgspec/msgpack.

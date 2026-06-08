@@ -12,4 +12,3 @@ class BoomStartupPipeline(SpiedPipeline[CounterEvent]):
 
 
 pipeline = BoomStartupPipeline
-

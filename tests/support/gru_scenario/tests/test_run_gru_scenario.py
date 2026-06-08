@@ -87,6 +87,7 @@ async def test_run_gru_scenario_with_new_assets(
         pipeline_event_counts={pipeline_id: 2},
     )
 
+
 @pytest.mark.asyncio
 async def test_run_gru_scenario_helper_basic(
     gru: Gru,
@@ -247,7 +248,7 @@ async def test_run_gru_scenario_expect_runtime_resolutions_after_completion(
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
-                    resolutions={start: {"succeeded": 1, "failed": 0, "aborted": 0}}
+                resolutions={start: {"succeeded": 1, "failed": 0, "aborted": 0}}
             ),
         ),
         GruShutdown(expect_success=True),
@@ -321,10 +322,10 @@ async def test_run_gru_scenario_mixed_wait_workflow_step_modes_end_to_end(
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
-                    resolutions={
-                        start_a: {"succeeded": 1, "failed": 0, "aborted": 0},
-                        start_b: {"succeeded": 1, "failed": 0, "aborted": 0},
-                    },
+                resolutions={
+                    start_a: {"succeeded": 1, "failed": 0, "aborted": 0},
+                    start_b: {"succeeded": 1, "failed": 0, "aborted": 0},
+                },
                 workflow_steps={
                     start_a: {"step_1": 1, "step_2": 1},
                     start_b: {"step_1": 1, "step_2": 1},
@@ -555,8 +556,14 @@ async def test_run_gru_scenario_batches_stops_serial(
     pipeline_ref = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
     pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
-    start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_ref)
-    start_2 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.resourced_2", pipeline=pipeline_ref)
+    start_1 = OrchestrationStart(
+        pipeline=pipeline_ref,
+        minion="tests.assets.minions.two_steps.simple.basic"
+    )
+    start_2 = OrchestrationStart(
+        pipeline=pipeline_ref,
+        minion="tests.assets.minions.two_steps.simple.resourced_2"
+    )
 
     directives: list[Directive] = [
         start_1,
@@ -575,6 +582,7 @@ async def test_run_gru_scenario_batches_stops_serial(
         directives,
         pipeline_event_counts={pipeline_id: 1},
     )
+
 
 @pytest.mark.asyncio
 async def test_run_gru_scenario_duplicate_start_fails(
@@ -609,6 +617,7 @@ async def test_run_gru_scenario_duplicate_start_fails(
         pipeline_event_counts={pipeline_id: 1},
     )
 
+
 @pytest.mark.asyncio
 async def test_run_gru_scenario_failed_start_does_not_require_minion_startup(
     gru: Gru,
@@ -636,6 +645,7 @@ async def test_run_gru_scenario_failed_start_does_not_require_minion_startup(
         directives,
         pipeline_event_counts={},
     )
+
 
 @pytest.mark.asyncio
 async def test_run_gru_scenario_stop_unknown_fails(
@@ -666,6 +676,7 @@ async def test_run_gru_scenario_stop_unknown_fails(
         pipeline_event_counts={pipeline_id: 1},
     )
 
+
 @pytest.mark.asyncio
 async def test_run_gru_scenario_parallel_starts(
     gru: Gru,
@@ -677,8 +688,14 @@ async def test_run_gru_scenario_parallel_starts(
     pipeline_ref = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
     pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
-    start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_ref)
-    start_2 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.resourced_2", pipeline=pipeline_ref)
+    start_1 = OrchestrationStart(
+        pipeline=pipeline_ref,
+        minion="tests.assets.minions.two_steps.simple.basic"
+    )
+    start_2 = OrchestrationStart(
+        pipeline=pipeline_ref,
+        minion="tests.assets.minions.two_steps.simple.resourced_2"
+    )
 
     directives: list[Directive] = [
         Concurrent(start_1, start_2),
@@ -697,6 +714,7 @@ async def test_run_gru_scenario_parallel_starts(
         pipeline_event_counts={pipeline_id: 1},
     )
 
+
 @pytest.mark.asyncio
 async def test_run_gru_scenario_wait_workflows_subset(
     gru: Gru,
@@ -708,8 +726,14 @@ async def test_run_gru_scenario_wait_workflows_subset(
     pipeline_ref = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
     pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
-    start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_ref)
-    start_2 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.resourced_2", pipeline=pipeline_ref)
+    start_1 = OrchestrationStart(
+        pipeline=pipeline_ref,
+        minion="tests.assets.minions.two_steps.simple.basic"
+    )
+    start_2 = OrchestrationStart(
+        pipeline=pipeline_ref,
+        minion="tests.assets.minions.two_steps.simple.resourced_2"
+    )
 
     directives: list[Directive] = [
         start_1,
@@ -728,6 +752,7 @@ async def test_run_gru_scenario_wait_workflows_subset(
         directives,
         pipeline_event_counts={pipeline_id: 1},
     )
+
 
 @pytest.mark.asyncio
 async def test_run_gru_scenario_wait_workflows_unknown_start_fails(
@@ -762,6 +787,7 @@ async def test_run_gru_scenario_wait_workflows_unknown_start_fails(
             pipeline_event_counts={pipeline_id: 1},
         )
 
+
 @pytest.mark.asyncio
 async def test_run_gru_scenario_expect_runtime_exact_reports_mismatch(
     gru: Gru,
@@ -784,24 +810,24 @@ async def test_run_gru_scenario_expect_runtime_exact_reports_mismatch(
 
     directives: list[Directive] = [
         Concurrent(
-                    start,
-                    start_other,
+            start,
+            start_other,
+        ),
+        WaitWorkflowCompletions(workflow_steps_mode="exact"),
+        ExpectRuntime(
+            expect=RuntimeExpectSpec(
+                workflow_steps={start: {"step_1": 0, "step_2": 0}},
+                workflow_steps_mode="exact",
             ),
-            WaitWorkflowCompletions(workflow_steps_mode="exact"),
-            ExpectRuntime(
-                expect=RuntimeExpectSpec(
-                    workflow_steps={start: {"step_1": 0, "step_2": 0}},
-                    workflow_steps_mode="exact",
-                ),
-            ),
-            GruShutdown(expect_success=True),
-        ]
+        ),
+        GruShutdown(expect_success=True),
+    ]
 
     with pytest.raises(
         pytest.fail.Exception,
         match=(
             r"ExpectRuntime\.workflow_steps mismatch for "
-                r"start 0\.step_1: expected 0, got 1"
+            r"start 0\.step_1: expected 0, got 1"
         ),
     ):
         await run_gru_scenario(
@@ -847,7 +873,10 @@ async def test_run_gru_scenario_strict_wait_workflow_window_overlap_mismatch(
     # workflow-id mismatch must surface first, and include bounded call-count context.
     with pytest.raises(
         pytest.fail.Exception,
-        match=r"Checkpoint workflow-id progression mismatch.*expected workflow-id delta 1, got 2\..*Call-count delta: 2 \(expected 1\.\.2\)",
+        match=(
+            r"Checkpoint workflow-id progression mismatch.*expected workflow-id "
+            r"delta 1, got 2\..*Call-count delta: 2 \(expected 1\.\.2\)"
+        ),
     ):
         await run_gru_scenario(
             gru,
@@ -868,7 +897,10 @@ async def test_run_gru_scenario_wait_workflows_empty_is_noop(
 ) -> None:
     pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
     pipeline_id = pipeline_ref
-    start = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_ref)
+    start = OrchestrationStart(
+        pipeline=pipeline_ref,
+        minion="tests.assets.minions.two_steps.simple.basic"
+    )
 
     directives: list[Directive] = [
         start,
@@ -888,6 +920,7 @@ async def test_run_gru_scenario_wait_workflows_empty_is_noop(
         pipeline_event_counts={pipeline_id: 1},
     )
 
+
 @pytest.mark.asyncio
 async def test_run_gru_scenario_parallel_mixed_directives(
     gru: Gru,
@@ -899,8 +932,14 @@ async def test_run_gru_scenario_parallel_mixed_directives(
     pipeline_ref = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
     pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
-    start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_ref)
-    start_2 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.resourced_2", pipeline=pipeline_ref)
+    start_1 = OrchestrationStart(
+        pipeline=pipeline_ref,
+        minion="tests.assets.minions.two_steps.simple.basic"
+    )
+    start_2 = OrchestrationStart(
+        pipeline=pipeline_ref,
+        minion="tests.assets.minions.two_steps.simple.resourced_2"
+    )
 
     directives: list[Directive] = [
         Concurrent(start_1, start_2),
@@ -921,6 +960,7 @@ async def test_run_gru_scenario_parallel_mixed_directives(
         directives,
         pipeline_event_counts={pipeline_id: 1},
     )
+
 
 @pytest.mark.asyncio
 async def test_run_gru_scenario_simple_start_wait_shutdown(
@@ -951,7 +991,6 @@ async def test_run_gru_scenario_simple_start_wait_shutdown(
     )
 
 
-
 @pytest.mark.asyncio
 async def test_dsl_exploration(
     gru: Gru,
@@ -963,8 +1002,14 @@ async def test_dsl_exploration(
     pipeline_ref = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
     pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
-    start_1 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.basic", pipeline=pipeline_ref)
-    start_2 = OrchestrationStart(minion="tests.assets.minions.two_steps.simple.resourced_2", pipeline=pipeline_ref)
+    start_1 = OrchestrationStart(
+        pipeline=pipeline_ref,
+        minion="tests.assets.minions.two_steps.simple.basic"
+    )
+    start_2 = OrchestrationStart(
+        pipeline=pipeline_ref,
+        minion="tests.assets.minions.two_steps.simple.resourced_2"
+    )
 
     directives: list[Directive] = [
         Concurrent(start_1, start_2),

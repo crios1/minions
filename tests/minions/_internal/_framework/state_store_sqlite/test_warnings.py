@@ -20,10 +20,14 @@ async def test_large_state_warning(make_state_store_and_logger: MakeStateStoreAn
     s._sqlite_page_size = 4096
     big = mk_ctx(i=10, size=8192)
     await s.save_context(big.workflow_id, big.orchestration_id, blob_for(big))
-    assert await logger.wait_for_log("Large workflow context blob detected"), "expected large-state warning"
+    assert await logger.wait_for_log("Large workflow context blob detected"), (
+        "expected large-state warning"
+    )
 
 
-async def test_large_state_warning_is_disabled_without_page_size(make_state_store_and_logger: MakeStateStoreAndLogger):
+async def test_large_state_warning_is_disabled_without_page_size(
+    make_state_store_and_logger: MakeStateStoreAndLogger,
+):
     s, logger = await make_state_store_and_logger(warn_size_pages=1)
     # Simulate startup being unable to determine page size; size warnings must stay disabled.
     s._sqlite_page_size = None
@@ -32,7 +36,9 @@ async def test_large_state_warning_is_disabled_without_page_size(make_state_stor
     assert not await logger.wait_for_log("Large workflow context blob detected", timeout=0.05)
 
 
-async def test_save_context_records_commit_latency_metric(make_state_store_and_logger: MakeStateStoreAndLogger):
+async def test_save_context_records_commit_latency_metric(
+    make_state_store_and_logger: MakeStateStoreAndLogger,
+):
     s, _ = await make_state_store_and_logger()
     for i in range(5):
         ctx = mk_ctx(i=i)
@@ -67,7 +73,8 @@ async def test_queued_writes_warning_counts_batch_buffer(
     try:
         assert await logger.wait_for_log("queued_writes="), "expected queued-writes warning"
         assert any(
-            "queued_writes=3>warn(2)" in log.msg and log.level == WARNING
+            "queued_writes=3>warn(2)" in log.msg
+            and log.level == WARNING
             for log in logger.logs
         )
     finally:
@@ -87,9 +94,13 @@ async def test_queued_writes_critical_counts_batch_buffer(
 
     tasks = await _queue_three_writes(s)
     try:
-        assert await logger.wait_for_log("queued_writes="), "expected queued-writes critical warning"
+        assert await logger.wait_for_log("queued_writes="), (
+            "expected queued-writes critical warning"
+        )
         assert any(
-            "queued_writes=3>warn(2)" in log.msg and log.level == CRITICAL
+            "queued_writes=3>warn(2)"
+            in log.msg
+            and log.level == CRITICAL
             for log in logger.logs
         )
     finally:
@@ -112,16 +123,18 @@ async def test_queued_writes_critical_bypasses_warning_cooldown(
 
     tasks = await _queue_three_writes(s)
     try:
-        assert await logger.wait_for_log("queued_writes=2>warn(1)"), "expected queued-writes warning"
+        assert await logger.wait_for_log("queued_writes=2>warn(1)"), (
+            "expected queued-writes warning"
+        )
         assert any(
-            "queued_writes=2>warn(1)" in log.msg and log.level == WARNING
-            for log in logger.logs
+            "queued_writes=2>warn(1)" in log.msg and log.level == WARNING for log in logger.logs
         )
 
-        assert await logger.wait_for_log("queued_writes=3>warn(1)"), "expected queued-writes critical"
+        assert await logger.wait_for_log("queued_writes=3>warn(1)"), (
+            "expected queued-writes critical"
+        )
         assert any(
-            "queued_writes=3>warn(1)" in log.msg and log.level == CRITICAL
-            for log in logger.logs
+            "queued_writes=3>warn(1)" in log.msg and log.level == CRITICAL for log in logger.logs
         )
     finally:
         await s._flush()
@@ -168,7 +181,9 @@ async def test_commit_p95_warning(make_state_store_and_logger: MakeStateStoreAnd
     s._metric_commit_latency_ms_hist.extend([10.0] * 22)
 
     s._check_perf_signals()
-    assert await logger.wait_for_log("commit_p95=", timeout=1.0), "expected commit_p95 warning to fire"
+    assert await logger.wait_for_log("commit_p95=", timeout=1.0), (
+        "expected commit_p95 warning to fire"
+    )
 
 
 async def test_rows_per_sec_warning(make_state_store_and_logger: MakeStateStoreAndLogger):
@@ -179,14 +194,19 @@ async def test_rows_per_sec_warning(make_state_store_and_logger: MakeStateStoreA
 
     s._check_perf_signals()
 
-    assert await logger.wait_for_log("rows_per_sec=", timeout=1.0), "expected rows/sec warning to fire"
+    assert await logger.wait_for_log("rows_per_sec=", timeout=1.0), (
+        "expected rows/sec warning to fire"
+    )
     assert any(
-        "rows_per_sec=10>warn(5)" in log.msg and log.level == WARNING
+        "rows_per_sec=10>warn(5)" in log.msg
+        and log.level == WARNING
         for log in logger.logs
     )
 
 
-async def test_write_pressure_logs_warning_and_escalates_critical_during_cooldown(make_state_store_and_logger: MakeStateStoreAndLogger):
+async def test_write_pressure_logs_warning_and_escalates_critical_during_cooldown(
+    make_state_store_and_logger: MakeStateStoreAndLogger,
+):
     s, logger = await make_state_store_and_logger(warn_write_cooldown_s=60.0)
 
     s._maybe_warn_write_pressure("warn-path")

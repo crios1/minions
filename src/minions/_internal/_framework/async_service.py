@@ -15,11 +15,21 @@ class AsyncService(AsyncComponent):
         super().__init__(logger)
         self._mn_started = asyncio.Event()
         self._mn_start_error: BaseException | None = None
-        self._mn_service_tasks: set[asyncio.Task[None]] = set()  # canonical task registry for this service; subclasses may keep narrower domain-specific task views when they need isolated lifecycle control
-        self._mn_tasks_gate = asyncio.Lock()  # serializes access to domain-level tasks owned by subclasses; serializes reads and shutdown cleanup of service-level tasks while creates and deletes happen sync on-loop
+        self._mn_service_tasks: set[asyncio.Task[None]] = (
+            set()
+        )  # canonical task registry for this service; subclasses may keep
+        # narrower domain-specific task views when they need isolated lifecycle
+        # control
+        self._mn_tasks_gate = (
+            asyncio.Lock()
+        )  # serializes access to domain-level tasks owned by subclasses
+        # serializes reads and shutdown cleanup of service-level tasks while
+        # creates and deletes happen sync on-loop
         self._mn_shutdown_grace_seconds = 1.0
 
-    async def _mn_on_service_task_failure(self, exception: BaseException, task_name: str | None) -> None:
+    async def _mn_on_service_task_failure(
+        self, exception: BaseException, task_name: str | None
+    ) -> None:
         await self._mn_logger._mn_log_exception(
             ERROR,
             f"{type(self).__name__} service task failed",
@@ -39,16 +49,17 @@ class AsyncService(AsyncComponent):
         pre: LifecycleCallback | None = None,
         pre_args: list[object] | None = None,
         post: LifecycleCallback | None = None,
-        post_args: list[object] | None = None
+        post_args: list[object] | None = None,
     ) -> None:
         pre_args = pre_args or []
+
         async def _pre() -> None:
             self._mn_validate_user_code(self.run, type(self).__module__)
             if pre:
                 result = pre(*pre_args)
                 if inspect.isawaitable(result):
                     await result
-        
+
         await self._mn_run_lifecycle_phase(
             name="run",
             lifecycle_method=self.run,
@@ -88,7 +99,7 @@ class AsyncService(AsyncComponent):
         pre: LifecycleCallback | None = None,
         pre_args: list[object] | None = None,
         post: LifecycleCallback | None = None,
-        post_args: list[object] | None = None
+        post_args: list[object] | None = None,
     ) -> None:
         async def _post() -> None:
             if post:

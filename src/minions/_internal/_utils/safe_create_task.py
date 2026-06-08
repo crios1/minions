@@ -15,8 +15,7 @@ class TaskFailureHandler(Protocol):
 
     def __call__(
         self, exception: BaseException, task_name: str | None
-    ) -> Awaitable[None] | None:
-        ...
+    ) -> Awaitable[None] | None: ...
 
 
 def safe_create_task(
@@ -58,8 +57,9 @@ def safe_create_task(
             if inspect.isawaitable(maybe_awaitable):
                 await maybe_awaitable
         except Exception as notify_error:
+            fname = f" ({name})" if name else ""
             await _safe_log_exception(
-                f"[safe_create_task on_failure failed]{f' ({name})' if name else ''}: {notify_error}",
+                f"[safe_create_task on_failure failed]{fname}: {notify_error}",
                 notify_error,
             )
 

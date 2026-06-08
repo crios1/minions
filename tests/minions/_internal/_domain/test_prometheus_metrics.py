@@ -39,6 +39,7 @@ async def poll_read_metrics_from_http(
                 raise
             await asyncio.sleep(poll_interval)
 
+
 def extract_metric_value(text: str, name: str, labels: dict[str, str]) -> float:
     """
     handles 'some_metric{label1="foo",label2="bar"} 42.0'
@@ -46,26 +47,30 @@ def extract_metric_value(text: str, name: str, labels: dict[str, str]) -> float:
     """
     for line in text.splitlines():
         if labels:
-            match = re.match(rf'^{re.escape(name)}{{([^}}]*)}} ([0-9\.e+-]+)$', line)
+            match = re.match(rf"^{re.escape(name)}{{([^}}]*)}} ([0-9\.e+-]+)$", line)
             if not match:
                 continue
             actual_labels = dict(re.findall(r'([^=,]+)="([^"]*)"', match.group(1)))
             if actual_labels == labels:
                 return float(match.group(2))
         else:
-            match = re.match(rf'^{re.escape(name)} ([0-9\.e+-]+)$', line)
+            match = re.match(rf"^{re.escape(name)} ([0-9\.e+-]+)$", line)
             if match:
                 return float(match.group(1))
 
     raise KeyError(f"{name} with labels {labels} not found")
 
+
 def find_unused_port():
     import socket
+
     with socket.socket() as s:
-        s.bind(('', 0))
+        s.bind(("", 0))
         return s.getsockname()[1]
 
+
 # Success Cases
+
 
 @pytest.mark.asyncio
 async def test_counter_exposed_on_http():
@@ -74,8 +79,12 @@ async def test_counter_exposed_on_http():
     metrics = PrometheusMetrics(logger=NoOpLogger(), port=port, registry=registry)
     await metrics.startup()
 
-    counter = metrics.create_metric(MINION_WORKFLOW_STARTED_TOTAL, [LABEL_ORCHESTRATION_ID, LABEL_MINION], "counter")
-    counter.labels(**{LABEL_ORCHESTRATION_ID: "minion|config|pipeline", LABEL_MINION: "minion"}).inc()
+    counter = metrics.create_metric(
+        MINION_WORKFLOW_STARTED_TOTAL, [LABEL_ORCHESTRATION_ID, LABEL_MINION], "counter"
+    )
+    counter.labels(
+        **{LABEL_ORCHESTRATION_ID: "minion|config|pipeline", LABEL_MINION: "minion"}
+    ).inc()
 
     page = await poll_read_metrics_from_http(port)
     value = extract_metric_value(
@@ -84,6 +93,7 @@ async def test_counter_exposed_on_http():
         {LABEL_ORCHESTRATION_ID: "minion|config|pipeline", LABEL_MINION: "minion"},
     )
     assert value == 1.0
+
 
 @pytest.mark.asyncio
 async def test_gauge_exposed_on_http():
@@ -99,6 +109,7 @@ async def test_gauge_exposed_on_http():
     value = extract_metric_value(page, SYSTEM_MEMORY_USED_PERCENT, {})
     assert value == 42.5
 
+
 @pytest.mark.asyncio
 async def test_histogram_exposed_on_http():
     port = find_unused_port()
@@ -111,11 +122,13 @@ async def test_histogram_exposed_on_http():
         [LABEL_ORCHESTRATION_ID, LABEL_MINION, LABEL_MINION_WORKFLOW_STEP],
         "histogram",
     )
-    histogram.labels(**{
-        LABEL_ORCHESTRATION_ID: "orchestration123",
-        LABEL_MINION: "minion123",
-        LABEL_MINION_WORKFLOW_STEP: "step_xyz",
-    }).observe(0.75)
+    histogram.labels(
+        **{
+            LABEL_ORCHESTRATION_ID: "orchestration123",
+            LABEL_MINION: "minion123",
+            LABEL_MINION_WORKFLOW_STEP: "step_xyz",
+        }
+    ).observe(0.75)
 
     page = await poll_read_metrics_from_http(port)
     labels = {
@@ -130,7 +143,9 @@ async def test_histogram_exposed_on_http():
     assert count_val == 1.0
     assert sum_val == 0.75
 
+
 # Failure Cases
+
 
 def test_unknown_metric_kind_raises_value_error():
     port = find_unused_port()
@@ -138,9 +153,10 @@ def test_unknown_metric_kind_raises_value_error():
     metrics = PrometheusMetrics(logger=NoOpLogger(), port=port, registry=registry)
 
     with pytest.raises(ValueError) as exc_info:
-        metrics.create_metric("invalid_metric", [], "bogus_kind") # type: ignore
+        metrics.create_metric("invalid_metric", [], "bogus_kind")  # type: ignore
 
     assert "Unknown metric kind" in str(exc_info.value)
+
 
 @pytest.mark.asyncio
 async def test_http_server_start_failure_logs_error():

@@ -33,7 +33,8 @@ class ScenarioPlan:
         for pipeline, count in pipeline_event_counts.items():
             if not isinstance(count, int):
                 raise ValueError(
-                    f"pipeline_event_counts[{pipeline!r}] must be an int, got {type(count).__name__}."
+                    f"pipeline_event_counts[{pipeline!r}] must be an int, got "
+                    f"{type(count).__name__}."
                 )
             self.pipeline_event_targets[pipeline] = count
         self._validate()

@@ -1,4 +1,3 @@
-
 import importlib
 import sys
 import types
@@ -18,10 +17,7 @@ def test_returns_relative_path_when_module_file_under_cwd(
 
     # Arrange: create a real module under the working directory
     monkeypatch.chdir(tmp_path)
-    (tmp_path / f"{mod_name}.py").write_text(
-        "class C:\n"
-        "    pass\n"
-    )
+    (tmp_path / f"{mod_name}.py").write_text("class C:\n    pass\n")
     monkeypatch.syspath_prepend(str(tmp_path))  # pyright: ignore[reportUnknownMemberType]
 
     try:
@@ -70,10 +66,7 @@ def test_fallback_when_module_path_not_under_cwd(
     mod_dir.mkdir()
     cwd_dir.mkdir()
 
-    (mod_dir / f"{mod_name}.py").write_text(
-        "class C2:\n"
-        "    pass\n"
-    )
+    (mod_dir / f"{mod_name}.py").write_text("class C2:\n    pass\n")
 
     monkeypatch.syspath_prepend(str(mod_dir))  # pyright: ignore[reportUnknownMemberType]
     monkeypatch.chdir(cwd_dir)

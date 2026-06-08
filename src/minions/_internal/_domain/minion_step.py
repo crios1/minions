@@ -9,17 +9,25 @@ _mn_step_active_var: contextvars.ContextVar[bool] = contextvars.ContextVar(
     default=False,
 )
 
+
 @overload
 def minion_step(fn: Callable[P, Awaitable[None]]) -> Callable[P, Awaitable[None]]: ...
 
+
 @overload
-def minion_step(*, name: str | None = None) -> Callable[[Callable[P, Awaitable[None]]], Callable[P, Awaitable[None]]]: ...
+def minion_step(
+    *, name: str | None = None
+) -> Callable[[Callable[P, Awaitable[None]]], Callable[P, Awaitable[None]]]: ...
+
 
 def minion_step(
     fn: Callable[P, Awaitable[None]] | None = None,
     *,
     name: str | None = None,
-) -> Callable[[Callable[P, Awaitable[None]]], Callable[P, Awaitable[None]]] | Callable[P, Awaitable[None]]:
+) -> (
+    Callable[[Callable[P, Awaitable[None]]], Callable[P, Awaitable[None]]]
+    | Callable[P, Awaitable[None]]
+):
     def decorator(f: Callable[P, Awaitable[None]]) -> Callable[P, Awaitable[None]]:
         if not inspect.iscoroutinefunction(f):
             raise TypeError(f"minion_step must decorate async functions, got: {f.__name__}")
@@ -30,8 +38,9 @@ def minion_step(
             owner = args[0] if args else None
             if _mn_step_active_var.get():
                 raise RuntimeError(
-                    f"{type(owner).__name__}.{step_name} cannot be called from within another @minion_step; "
-                    "workflow step sequencing is owned by the runtime workflow engine."
+                    f"{type(owner).__name__}.{step_name} cannot be called from within "
+                    "another @minion_step; workflow step sequencing is owned by the "
+                    "runtime workflow engine."
                 )
             token = _mn_step_active_var.set(True)
             try:
