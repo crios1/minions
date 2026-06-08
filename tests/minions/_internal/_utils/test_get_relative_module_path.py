@@ -9,6 +9,7 @@ import pytest
 
 from minions._internal._utils.get_relative_module_path import get_relative_module_path
 
+
 def test_returns_relative_path_when_module_file_under_cwd(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

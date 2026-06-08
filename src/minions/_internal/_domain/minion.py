@@ -1,5 +1,5 @@
-import asyncio
 import ast
+import asyncio
 import contextvars
 import inspect
 import random
@@ -13,53 +13,64 @@ from contextlib import ExitStack
 from pathlib import Path
 from types import TracebackType
 from typing import (
-    Any, Callable, ClassVar,
-    Generic, Literal, Type,
-    get_args, get_origin, get_type_hints
+    Any,
+    Callable,
+    ClassVar,
+    Generic,
+    Literal,
+    Type,
+    get_args,
+    get_origin,
+    get_type_hints,
 )
 
-from .types import T_Event, T_Ctx
-from .minion_workflow_context import MinionWorkflowContext
-from .minion_workflow_handle import MinionWorkflowHandle
-from .exceptions import AbortWorkflow
-from .resource import Resource
 from .._framework.async_lifecycle import LifecycleCallback
 from .._framework.async_service import AsyncService
-from .._framework.logger import Logger, DEBUG, INFO, WARNING, ERROR
+from .._framework.logger import DEBUG, ERROR, INFO, WARNING, Logger
 from .._framework.metrics import Metrics
 from .._framework.metrics_constants import (
-    MINION_WORKFLOW_STARTED_TOTAL, MINION_WORKFLOW_INFLIGHT_GAUGE,
-    MINION_WORKFLOW_ABORTED_TOTAL, MINION_WORKFLOW_FAILED_TOTAL,
-    MINION_WORKFLOW_SUCCEEDED_TOTAL,
-    MINION_WORKFLOW_DURATION_SECONDS,
-    MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL,
-    MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL,
-    MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL,
-    MINION_WORKFLOW_PERSISTENCE_DURATION_SECONDS,
-    MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
-    MINION_WORKFLOW_STEP_STARTED_TOTAL,
-    MINION_WORKFLOW_STEP_ABORTED_TOTAL, MINION_WORKFLOW_STEP_FAILED_TOTAL,
-    MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
-    MINION_WORKFLOW_STEP_DURATION_SECONDS,
-    LABEL_ORCHESTRATION_ID, LABEL_MINION, LABEL_MINION_WORKFLOW_STEP,
     LABEL_ERROR_TYPE,
+    LABEL_MINION,
     LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE,
     LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE,
     LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION,
     LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY,
     LABEL_MINION_WORKFLOW_PERSISTENCE_RETRYABLE,
+    LABEL_MINION_WORKFLOW_STEP,
+    LABEL_ORCHESTRATION_ID,
     LABEL_STATE_STORE,
     LABEL_STATUS,
+    MINION_WORKFLOW_ABORTED_TOTAL,
+    MINION_WORKFLOW_DURATION_SECONDS,
+    MINION_WORKFLOW_FAILED_TOTAL,
+    MINION_WORKFLOW_INFLIGHT_GAUGE,
+    MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL,
+    MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
+    MINION_WORKFLOW_PERSISTENCE_DURATION_SECONDS,
+    MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL,
+    MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL,
+    MINION_WORKFLOW_STARTED_TOTAL,
+    MINION_WORKFLOW_STEP_ABORTED_TOTAL,
+    MINION_WORKFLOW_STEP_DURATION_SECONDS,
+    MINION_WORKFLOW_STEP_FAILED_TOTAL,
+    MINION_WORKFLOW_STEP_STARTED_TOTAL,
+    MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
+    MINION_WORKFLOW_SUCCEEDED_TOTAL,
 )
 from .._framework.metrics_context import resource_metric_context
 from .._framework.state_store import PersistenceOperationResult, StateStore
+from .._utils.get_original_bases import get_original_bases
 from .._utils.get_type_from_hint import get_type_from_hint
 from .._utils.serialization import (
     require_type_model,
     require_type_not_primitive,
     require_type_serializable,
 )
-from .._utils.get_original_bases import get_original_bases
+from .exceptions import AbortWorkflow
+from .minion_workflow_context import MinionWorkflowContext
+from .minion_workflow_handle import MinionWorkflowHandle
+from .resource import Resource
+from .types import T_Ctx, T_Event
 
 ExecutionStatus = Literal["undefined", "interrupted", "aborted", "failed", "succeeded"]
 WorkflowPersistenceFailurePolicy = Literal[

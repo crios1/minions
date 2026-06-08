@@ -1,5 +1,4 @@
 from minions import Minion, minion_step
-
 from tests.assets.contexts.counter import CounterContext
 from tests.assets.events.record import RecordEvent
 from tests.assets.events.simple import SimpleEvent

@@ -1,9 +1,11 @@
 import inspect
-import pytest
 from collections.abc import Callable
 from typing import Any
 
+import pytest
+
 from minions._internal._domain.minion_step import minion_step
+
 
 def is_minion_step(fn: Callable[..., Any]) -> bool:
     attr = getattr(fn, "__minion_step__", None)

@@ -22,7 +22,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Literal
 
-
 MetricKind = Literal["counter", "gauge", "histogram", "unknown"]
 LabelSet = tuple[tuple[str, str], ...]
 

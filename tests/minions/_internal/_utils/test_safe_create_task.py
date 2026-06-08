@@ -4,9 +4,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from minions._internal._utils.safe_create_task import safe_create_task
 from minions._internal._framework.logger import ERROR
+from minions._internal._utils.safe_create_task import safe_create_task
 from tests.assets.support.logger_inmemory import InMemoryLogger
+
 
 class FailingLogger(InMemoryLogger):
     async def log(self, level: int, msg: str, **kwargs: Any) -> None:

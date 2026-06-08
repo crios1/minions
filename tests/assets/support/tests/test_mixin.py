@@ -2,6 +2,7 @@ import pytest
 
 from tests.assets.support.mixin import Mixin
 
+
 def test_mixin_itself_cannot_be_instantiated():
     class A(Mixin): ...
     with pytest.raises(TypeError):

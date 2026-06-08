@@ -25,10 +25,6 @@ from typing import Literal
 
 from prometheus_client import CollectorRegistry, generate_latest
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics import Metrics
 from minions._internal._framework.metrics_constants import (
@@ -52,6 +48,9 @@ from minions._internal._framework.metrics_constants import (
 from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.metrics_prometheus import PrometheusMetrics
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 BackendName = Literal["noop", "inmemory", "prometheus"]
 ModeName = Literal["async", "unsafe"]

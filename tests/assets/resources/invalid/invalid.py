@@ -1,5 +1,6 @@
 from tests.assets.support.resource_spied import SpiedResource
 
+
 class InvalidResource(SpiedResource):
     name = "invalid-resource"
     

@@ -1,9 +1,25 @@
 import asyncio
+from pprint import pprint
 from typing import Any, Callable
 
 import msgspec
 import pytest
+
+from minions import Minion, minion_step
+from minions._internal._domain.exceptions import AbortWorkflow
+from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
+from minions._internal._framework.logger import ERROR
 from minions._internal._framework.metrics_constants import (
+    LABEL_MINION,
+    LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE,
+    LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE,
+    LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION,
+    LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY,
+    LABEL_MINION_WORKFLOW_PERSISTENCE_RETRYABLE,
+    LABEL_MINION_WORKFLOW_STEP,
+    LABEL_ORCHESTRATION_ID,
+    LABEL_STATE_STORE,
+    LABEL_STATUS,
     MINION_WORKFLOW_ABORTED_TOTAL,
     MINION_WORKFLOW_DURATION_SECONDS,
     MINION_WORKFLOW_FAILED_TOTAL,
@@ -13,29 +29,10 @@ from minions._internal._framework.metrics_constants import (
     MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL,
     MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL,
     MINION_WORKFLOW_STARTED_TOTAL,
-    MINION_WORKFLOW_SUCCEEDED_TOTAL,
     MINION_WORKFLOW_STEP_DURATION_SECONDS,
     MINION_WORKFLOW_STEP_FAILED_TOTAL,
-    LABEL_ORCHESTRATION_ID,
-    LABEL_MINION,
-    LABEL_MINION_WORKFLOW_STEP,
-    LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE,
-    LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE,
-    LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION,
-    LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY,
-    LABEL_MINION_WORKFLOW_PERSISTENCE_RETRYABLE,
-    LABEL_STATUS,
-    LABEL_STATE_STORE,
+    MINION_WORKFLOW_SUCCEEDED_TOTAL,
 )
-from minions._internal._framework.logger import ERROR
-
-from tests.assets.support.logger_inmemory import InMemoryLogger
-from tests.assets.support.metrics_inmemory import InMemoryMetrics
-from tests.assets.support.state_store_inmemory import InMemoryStateStore
-
-from minions import minion_step, Minion
-from minions._internal._domain.exceptions import AbortWorkflow
-from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.minion_workflow_context_codec import (
     PersistedMinionWorkflowContext,
     WorkflowContextTypeMismatchError,
@@ -44,8 +41,9 @@ from minions._internal._framework.minion_workflow_context_codec import (
 )
 from minions._internal._framework.state_store import StoredWorkflowContext
 from minions._internal._utils.serialization import serialize
-
-from pprint import pprint
+from tests.assets.support.logger_inmemory import InMemoryLogger
+from tests.assets.support.metrics_inmemory import InMemoryMetrics
+from tests.assets.support.state_store_inmemory import InMemoryStateStore
 
 
 class ReplayEvent(msgspec.Struct):

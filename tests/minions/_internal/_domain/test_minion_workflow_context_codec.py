@@ -1,19 +1,19 @@
 from dataclasses import dataclass
 from typing import Any
 
-import pytest
 import msgspec
+import pytest
 
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.minion_workflow_context_codec import (
-    _normalize_workflow_context_data,
     CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION,
     PersistedMinionWorkflowContext,
     WorkflowContextData,
     WorkflowContextSchemaError,
+    _normalize_workflow_context_data,
     decode_persisted_workflow_context_typed,
-    deserialize_workflow_context_blob,
     deserialize_workflow_context,
+    deserialize_workflow_context_blob,
     serialize_persisted_workflow_context,
     serialize_workflow_context,
 )

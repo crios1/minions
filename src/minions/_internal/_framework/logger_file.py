@@ -1,12 +1,12 @@
 import asyncio
-import msgspec
 import sys
-
 from pathlib import Path
 from typing import Any
 
-from .logger import Logger, INFO, LEVEL_NAMES
+import msgspec
+
 from .._utils.serialization.constants import SUPPORTED_TYPES_MSG
+from .logger import INFO, LEVEL_NAMES, Logger
 
 MIN_LOG_FILE_BYTES = 1024    # 1 KB
 MIN_LOG_STORAGE_BYTES = 1024 # 1 KB

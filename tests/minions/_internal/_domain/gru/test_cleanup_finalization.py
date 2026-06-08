@@ -6,7 +6,6 @@ import pytest
 
 from minions._internal._domain.gru import Gru
 from minions._internal._domain.minion import Minion
-
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore

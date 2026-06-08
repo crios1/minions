@@ -1,5 +1,6 @@
 from typing import Literal, overload
 
+from minions._internal._framework.logger import Logger
 from minions._internal._framework.metrics import (
     Kind,
     SnapshotCounters,
@@ -12,8 +13,6 @@ from minions._internal._framework.metrics_interface import (
     LabelledHistogram,
     LabelledMetric,
 )
-from minions._internal._framework.logger import Logger
-
 from tests.assets.crash.boom import boom
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 

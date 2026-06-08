@@ -1,5 +1,4 @@
 from minions import Pipeline
-
 from tests.assets.events.record import RecordEvent
 
 

@@ -1,6 +1,5 @@
 from typing import Any, TypeVar
 
-
 T_Mixin = TypeVar("T_Mixin", bound="Mixin")
 
 

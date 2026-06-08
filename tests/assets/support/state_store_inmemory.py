@@ -2,7 +2,6 @@ import asyncio
 
 from minions._internal._framework.logger import Logger
 from minions._internal._framework.state_store import StoredWorkflowContext
-
 from tests.assets.support.state_store_spied import SpiedStateStore
 
 

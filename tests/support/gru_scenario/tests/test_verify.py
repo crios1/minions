@@ -1,21 +1,22 @@
-import pytest
 from typing import Any
 
+import pytest
+
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
-from minions._internal._framework.state_store import StoredWorkflowContext
 from minions._internal._framework.metrics_constants import LABEL_ORCHESTRATION_ID
+from minions._internal._framework.state_store import StoredWorkflowContext
 from tests.assets.contexts.counter import CounterContext
 from tests.assets.events.counter import CounterEvent
-from tests.assets.support.logger_inmemory import InMemoryLogger
-from tests.assets.support.metrics_inmemory import InMemoryMetrics
-from tests.assets.support.state_store_inmemory import InMemoryStateStore
+from tests.assets.minions.two_steps.counter.basic import TwoStepMinion
 from tests.assets.minions.two_steps.counter.identified_resourced import (
     IDENTIFIED_COUNTER_MINION_ID,
     IdentifiedResourcedMinion,
 )
-from tests.assets.minions.two_steps.counter.basic import TwoStepMinion
 from tests.assets.minions.two_steps.counter.resourced import TwoStepResourcedMinion
 from tests.assets.pipelines.emit1.counter.emit_1 import Emit1Pipeline
+from tests.assets.support.logger_inmemory import InMemoryLogger
+from tests.assets.support.metrics_inmemory import InMemoryMetrics
+from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.support.gru_scenario.directives import (
     ExpectRuntime,
     OrchestrationStart,
@@ -23,10 +24,10 @@ from tests.support.gru_scenario.directives import (
 )
 from tests.support.gru_scenario.plan import ScenarioPlan
 from tests.support.gru_scenario.runner import (
+    OrchestrationStartReceipt,
     ScenarioCheckpoint,
     ScenarioRunResult,
     SpyRegistry,
-    OrchestrationStartReceipt,
 )
 from tests.support.gru_scenario.verify import ScenarioVerifier
 

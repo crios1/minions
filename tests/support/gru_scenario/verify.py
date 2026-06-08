@@ -3,16 +3,14 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Callable, cast
 
-
 import pytest
 
 from minions._internal._framework.metrics_constants import (
+    LABEL_ORCHESTRATION_ID,
     MINION_WORKFLOW_ABORTED_TOTAL,
     MINION_WORKFLOW_FAILED_TOTAL,
     MINION_WORKFLOW_SUCCEEDED_TOTAL,
-    LABEL_ORCHESTRATION_ID,
 )
-
 from tests.assets.support.logger_spied import SpiedLogger
 from tests.assets.support.metrics_spied import SpiedMetrics
 from tests.assets.support.minion_spied import SpiedMinion
@@ -24,10 +22,10 @@ from tests.assets.support.state_store_spied import SpiedStateStore
 from .directives import ExpectRuntime, OrchestrationStart
 from .plan import ScenarioPlan
 from .runner import (
+    OrchestrationStartReceipt,
     ScenarioCheckpoint,
     ScenarioRunResult,
     SpyRegistry,
-    OrchestrationStartReceipt,
     _get_minion_event_and_context_types,
 )
 

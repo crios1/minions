@@ -1,4 +1,5 @@
 from .directives import (
+    AfterWorkflowStepStarts,
     Concurrent,
     Directive,
     ExpectRuntime,
@@ -7,10 +8,8 @@ from .directives import (
     OrchestrationStop,
     RuntimeExpectSpec,
     WaitWorkflowCompletions,
-    AfterWorkflowStepStarts,
 )
 from .run_gru_scenario import run_gru_scenario
-
 
 __all__ = [
     "Directive",

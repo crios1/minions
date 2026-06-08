@@ -15,12 +15,12 @@ from minions._internal._framework.logger_console import ConsoleLogger
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_noop import NoOpStateStore
+from tests.assets.contexts.simple import SimpleContext
+from tests.assets.events.simple import SimpleEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.minion_spied_configed import AssetMinionConfig
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
-from tests.assets.contexts.simple import SimpleContext
-from tests.assets.events.simple import SimpleEvent
 from tests.support.gru_scenario import (
     AfterWorkflowStepStarts,
     Concurrent,
@@ -33,7 +33,6 @@ from tests.support.gru_scenario import (
     WaitWorkflowCompletions,
     run_gru_scenario,
 )
-
 
 FIXED_RESOURCE_ID = "tests.assets.resources.fixed.base.FixedResource"
 MINION_COMPONENT_ID = "77777777-7777-4777-8777-77777777777a"

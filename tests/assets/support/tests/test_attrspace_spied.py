@@ -11,11 +11,11 @@ from minions._internal._framework.async_service import AsyncService
 from minions._internal._framework.logger import Logger
 from minions._internal._framework.metrics import Metrics
 from minions._internal._framework.state_store import StateStore
+from tests.assets.contexts.counter import CounterContext
+from tests.assets.events.record import RecordEvent
 from tests.assets.support.minion_spied import SpiedMinion
 from tests.assets.support.pipeline_spied import SpiedPipeline
 from tests.assets.support.resource_spied import SpiedResource
-from tests.assets.contexts.counter import CounterContext
-from tests.assets.events.record import RecordEvent
 
 
 def test_spied_minion_attrspace_rejects_mn_class_attr():

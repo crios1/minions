@@ -1,10 +1,9 @@
 import asyncio
 import inspect
-from collections.abc import Awaitable
-from collections.abc import Coroutine
+from collections.abc import Awaitable, Coroutine
 from typing import Any, Protocol
 
-from .._framework.logger import Logger, ERROR
+from .._framework.logger import ERROR, Logger
 
 
 class TaskFailureHandler(Protocol):

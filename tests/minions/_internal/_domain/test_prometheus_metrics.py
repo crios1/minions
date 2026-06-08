@@ -1,21 +1,23 @@
 import asyncio
-import pytest
 import re
 import urllib.error
 import urllib.request
 
+import pytest
 from prometheus_client import CollectorRegistry
-from minions._internal._framework.metrics_prometheus import PrometheusMetrics
+
 from minions._internal._framework.logger_noop import NoOpLogger
-from tests.assets.support.logger_inmemory import InMemoryLogger
 from minions._internal._framework.metrics_constants import (
     LABEL_MINION,
-    LABEL_ORCHESTRATION_ID,
     LABEL_MINION_WORKFLOW_STEP,
+    LABEL_ORCHESTRATION_ID,
     MINION_WORKFLOW_STARTED_TOTAL,
-    SYSTEM_MEMORY_USED_PERCENT,
     MINION_WORKFLOW_STEP_DURATION_SECONDS,
+    SYSTEM_MEMORY_USED_PERCENT,
 )
+from minions._internal._framework.metrics_prometheus import PrometheusMetrics
+from tests.assets.support.logger_inmemory import InMemoryLogger
+
 
 def read_metrics_from_http(port: int) -> str:
     with urllib.request.urlopen(f"http://localhost:{port}/metrics") as response:

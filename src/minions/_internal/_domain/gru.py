@@ -4,56 +4,55 @@ import asyncio
 import hashlib
 import importlib
 import json
-import psutil
 import uuid
-
-from contextlib import asynccontextmanager
 from collections import defaultdict, deque
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Iterable, TypeGuard, cast, get_type_hints, overload
 
-from .minion import Minion, WorkflowPersistenceFailurePolicy
-from .pipeline import Pipeline
-from .resource import Resource
-from .types import T_Event, T_Ctx
-from .component_identity import get_component_id
-from .config_identity import get_config_id
-from .gru_result_types import (
-    StartResult,
-    StopResult,
-    ShutdownResult,
-    ShutdownError,
-)
-
-from .._framework.logger import Logger, DEBUG, INFO, WARNING, ERROR, CRITICAL
-from .._framework.logger_noop import NoOpLogger
-from .._framework.logger_file import FileLogger
-
-from .._framework.metrics import Metrics
-from .._framework.metrics_noop import NoOpMetrics
-from .._framework.metrics_prometheus import PrometheusMetrics
-from .._framework.metrics_constants import (
-    SYSTEM_MEMORY_USED_PERCENT, SYSTEM_CPU_USED_PERCENT,
-    PROCESS_MEMORY_USED_PERCENT, PROCESS_CPU_USED_PERCENT
-)
+import psutil
 
 from .._framework.async_component import AsyncComponent
+from .._framework.logger import CRITICAL, DEBUG, ERROR, INFO, WARNING, Logger
+from .._framework.logger_file import FileLogger
+from .._framework.logger_noop import NoOpLogger
+from .._framework.metrics import Metrics
+from .._framework.metrics_constants import (
+    PROCESS_CPU_USED_PERCENT,
+    PROCESS_MEMORY_USED_PERCENT,
+    SYSTEM_CPU_USED_PERCENT,
+    SYSTEM_MEMORY_USED_PERCENT,
+)
+from .._framework.metrics_noop import NoOpMetrics
+from .._framework.metrics_prometheus import PrometheusMetrics
 from .._framework.minion_workflow_context_codec import WorkflowContextTypeMismatchError
 from .._framework.state_store import StateStore
 from .._framework.state_store_noop import NoOpStateStore
 from .._framework.state_store_sqlite import SQLiteStateStore
-
-from .._utils.safe_cancel_task import safe_cancel_task
+from .._utils.base62_encode import base62_encode
 from .._utils.get_type_from_hint import get_type_from_hint
+from .._utils.safe_cancel_task import safe_cancel_task
 from .._utils.safe_create_task import safe_create_task
 from .._utils.serialization import (
     require_type_model,
     require_type_serializable,
     serialize,
 )
-from .._utils.base62_encode import base62_encode
+from .component_identity import get_component_id
+from .config_identity import get_config_id
+from .gru_result_types import (
+    ShutdownError,
+    ShutdownResult,
+    StartResult,
+    StopResult,
+)
+from .minion import Minion, WorkflowPersistenceFailurePolicy
+from .pipeline import Pipeline
+from .resource import Resource
+from .types import T_Ctx, T_Event
+
 
 class _UnsetType: ...
 

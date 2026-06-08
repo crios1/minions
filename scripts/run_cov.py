@@ -16,6 +16,7 @@ import os
 import shutil
 import subprocess
 
+
 def run(cmd: list[str]) -> None:
     print("$", " ".join(cmd), flush=True)
     subprocess.check_call(cmd)
@@ -53,8 +54,12 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Test/coverage orchestration")
     sub = p.add_subparsers(dest="cmd")
 
-    s1 = sub.add_parser("cov-test-support");  s1.add_argument("--out", default="htmlcov/test_support")
-    s2 = sub.add_parser("cov-minions"); s2.add_argument("--out", default="htmlcov/minions")
+    s1 = sub.add_parser("cov-test-support")
+    s1.add_argument("--out", default="htmlcov/test_support")
+
+    s2 = sub.add_parser("cov-minions")
+    s2.add_argument("--out", default="htmlcov/minions")
+    
     sub.add_parser("cov-all")
 
     args = p.parse_args(argv)

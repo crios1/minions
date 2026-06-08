@@ -1,8 +1,8 @@
 from typing import Literal, overload
 
+from .logger_noop import NoOpLogger
 from .metrics import Kind, Metrics, SnapshotCounters, SnapshotGauges, SnapshotHistograms
 from .metrics_interface import LabelledCounter, LabelledGauge, LabelledHistogram, LabelledMetric
-from .logger_noop import NoOpLogger
 
 
 class _NoOpMetric:

@@ -9,12 +9,12 @@ import pytest
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.minion_workflow_context_codec import persist_workflow_context
 from minions._internal._framework.state_store_sqlite import (
-    PendingWrite,
     SQL_WORKFLOW_DELETE,
     SQL_WORKFLOW_SELECT_BY_ID,
     SQL_WORKFLOW_UPSERT,
-    SQLiteStateStore,
     WORKFLOW_ID_STARTUP_PROBE,
+    PendingWrite,
+    SQLiteStateStore,
 )
 from minions._internal._utils.serialization import serialize
 

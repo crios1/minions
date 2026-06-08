@@ -13,13 +13,13 @@ from minions._internal._framework.minion_workflow_context_codec import (
     deserialize_workflow_context_blob,
 )
 from minions._internal._framework.state_store import StateStore
-
-from tests.assets.support.mixin_spy import SpyMixin
 from tests.assets.support.minion_spied import SpiedMinion
+from tests.assets.support.mixin_spy import SpyMixin
 from tests.assets.support.pipeline_spied import SpiedPipeline
 from tests.assets.support.resource_spied import SpiedResource
 
 from .directives import (
+    AfterWorkflowStepStarts,
     Concurrent,
     Directive,
     ExpectRuntime,
@@ -27,7 +27,6 @@ from .directives import (
     OrchestrationStart,
     OrchestrationStop,
     WaitWorkflowCompletions,
-    AfterWorkflowStepStarts,
     iter_directives_flat,
 )
 from .introspect import GruIntrospector

@@ -1,16 +1,16 @@
-import aiosqlite
 import asyncio
 import statistics
 import time
-
-from collections.abc import Iterable
 from collections import deque
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from typing import Literal
 
+import aiosqlite
+
+from .._utils.safe_create_task import safe_create_task
 from .logger import CRITICAL, DEBUG, ERROR, WARNING, Logger
 from .state_store import StateStore, StoredWorkflowContext
-from .._utils.safe_create_task import safe_create_task
 
 SQL_WORKFLOWS_TABLE_CREATE_IF_NOT_EXISTS = """
     CREATE TABLE IF NOT EXISTS workflows(

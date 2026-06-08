@@ -1,4 +1,5 @@
 from tests.support.gru_scenario.directives import (
+    AfterWorkflowStepStarts,
     Concurrent,
     ExpectRuntime,
     GruShutdown,
@@ -6,7 +7,6 @@ from tests.support.gru_scenario.directives import (
     OrchestrationStop,
     RuntimeExpectSpec,
     WaitWorkflowCompletions,
-    AfterWorkflowStepStarts,
     iter_directives_flat,
 )
 

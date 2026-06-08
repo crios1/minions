@@ -6,13 +6,11 @@ import pytest
 
 from minions._internal._domain.gru import Gru
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
-from minions._internal._framework.minion_workflow_context_codec import serialize_persisted_workflow_context
-from minions._internal._framework.state_store import StoredWorkflowContext
 from minions._internal._framework.metrics_constants import (
     LABEL_ERROR_TYPE,
-    LABEL_ORCHESTRATION_ID,
     LABEL_MINION,
     LABEL_MINION_WORKFLOW_STEP,
+    LABEL_ORCHESTRATION_ID,
     LABEL_PIPELINE,
     LABEL_RESOURCE,
     LABEL_RESOURCE_CALLER,
@@ -23,16 +21,19 @@ from minions._internal._framework.metrics_constants import (
     PIPELINE_ERROR_TOTAL,
     RESOURCE_ERROR_TOTAL,
 )
-from tests.assets.crash.boom import BOOM_MESSAGE
+from minions._internal._framework.minion_workflow_context_codec import (
+    serialize_persisted_workflow_context,
+)
+from minions._internal._framework.state_store import StoredWorkflowContext
 from tests.assets.contexts.simple import SimpleContext
-from tests.assets.events.simple import SimpleEvent
+from tests.assets.crash.boom import BOOM_MESSAGE
 from tests.assets.crash.support.state_store_boom_get_contexts_for_orchestration import (
     BoomGetContextsForOrchestrationStateStore,
 )
+from tests.assets.events.simple import SimpleEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
-
 
 GOOD_MINION = "tests.assets.crash.minions.good"
 GOOD_PIPELINE = "tests.assets.crash.pipelines.healthy_counter"

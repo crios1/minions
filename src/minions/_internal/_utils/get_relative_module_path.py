@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 
+
 def get_relative_module_path(cls: type) -> Path | str:
     "Gets relative module path to current working directory, falling back to module.ClassName."
     fallback = f"{cls.__module__}.{cls.__name__}"

@@ -16,8 +16,10 @@ import threading
 from abc import abstractmethod
 from typing import Literal, TypedDict, overload
 
+from minions._internal._utils.safe_create_task import safe_create_task
+
 from .async_component import AsyncComponent
-from .logger import Logger, WARNING
+from .logger import WARNING, Logger
 from .metrics_constants import METRIC_LABEL_NAMES
 from .metrics_interface import (
     LabelledCounter,
@@ -25,8 +27,6 @@ from .metrics_interface import (
     LabelledHistogram,
     LabelledMetric,
 )
-
-from minions._internal._utils.safe_create_task import safe_create_task
 
 Kind = Literal["counter", "gauge", "histogram"]
 Labels = dict[str, str]

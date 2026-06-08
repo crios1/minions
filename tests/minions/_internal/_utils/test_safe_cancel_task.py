@@ -1,10 +1,12 @@
 import asyncio
 import inspect
+
 import pytest
 
-from minions._internal._utils.safe_cancel_task import safe_cancel_task
 from minions._internal._framework.logger import ERROR
+from minions._internal._utils.safe_cancel_task import safe_cancel_task
 from tests.assets.support.logger_inmemory import InMemoryLogger
+
 
 @pytest.mark.asyncio
 async def test_returns_early_on_falsy_task():

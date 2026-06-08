@@ -1,7 +1,7 @@
-from dataclasses import dataclass
 import os
 import time
 from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +21,6 @@ from minions._internal._framework.state_store_sqlite import SQLiteStateStore
 from minions._internal._utils.serialization import serialize
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
-
 
 pytestmark = pytest.mark.asyncio
 

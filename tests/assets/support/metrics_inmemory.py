@@ -2,6 +2,8 @@ import threading
 from dataclasses import dataclass
 from typing import Any, Callable, Literal, TypeVar, overload
 
+from minions._internal._framework.logger import Logger
+from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics import (
     CounterSample,
     GaugeSample,
@@ -12,18 +14,15 @@ from minions._internal._framework.metrics import (
     SnapshotHistograms,
     SnapshotResult,
 )
-from minions._internal._framework.logger import Logger
+from minions._internal._framework.metrics_constants import METRIC_LABEL_NAMES
 from minions._internal._framework.metrics_interface import (
     LabelledCounter,
     LabelledGauge,
     LabelledHistogram,
     LabelledMetric,
 )
-from minions._internal._framework.logger_noop import NoOpLogger
-from minions._internal._framework.metrics_constants import METRIC_LABEL_NAMES
 
 from .metrics_spied import SpiedMetrics
-
 
 LabelKey = tuple[tuple[str, str], ...]  # sorted (name, value) pairs for hashing
 

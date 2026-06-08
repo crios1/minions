@@ -10,7 +10,6 @@ import pytest_asyncio
 from minions._internal._framework.state_store_sqlite import SQLiteStateStore
 from tests.assets.support.logger_inmemory import InMemoryLogger
 
-
 StoreAndLogger = tuple[SQLiteStateStore, InMemoryLogger]
 BatchTuning = Literal["manual", "calibrated"]
 

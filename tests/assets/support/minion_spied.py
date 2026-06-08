@@ -1,7 +1,7 @@
 from minions._internal._domain.minion import Minion
-from .mixin_spy import SpyMixin
+from minions._internal._domain.types import T_Ctx, T_Event
 
-from minions._internal._domain.types import T_Event, T_Ctx
+from .mixin_spy import SpyMixin
 
 
 class SpiedMinion(SpyMixin, Minion[T_Event, T_Ctx], defer_minion_setup=True):

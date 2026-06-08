@@ -1,5 +1,4 @@
 from minions._internal._domain.gru import Gru
-
 from tests.assets.support.logger_spied import SpiedLogger
 from tests.assets.support.metrics_spied import SpiedMetrics
 from tests.assets.support.state_store_spied import SpiedStateStore

@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures as cf
 import io
-import pytest
-from contextlib import redirect_stdout
 from collections.abc import Coroutine
+from contextlib import redirect_stdout
 from typing import Any
+
+import pytest
 
 from minions._internal._domain.gru_result_types import StartResult
 from minions._internal._domain.gru_shell import GruShell

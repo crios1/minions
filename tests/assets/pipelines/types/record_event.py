@@ -1,5 +1,5 @@
-from tests.assets.support.pipeline_spied import SpiedPipeline
 from tests.assets.events.record import RecordEvent
+from tests.assets.support.pipeline_spied import SpiedPipeline
 
 
 class RecordEventPipeline(SpiedPipeline[RecordEvent]):

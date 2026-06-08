@@ -1,9 +1,8 @@
 import asyncio
 import cmd
+import concurrent.futures as cf
 import os
 import shlex
-import concurrent.futures as cf
-
 from pprint import pprint
 from typing import Literal, Optional
 

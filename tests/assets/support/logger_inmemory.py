@@ -1,10 +1,11 @@
-from dataclasses import dataclass
 import asyncio
+from dataclasses import dataclass
 from typing import Any
 
 from minions._internal._framework.logger import DEBUG, INFO
 
 from .logger_spied import SpiedLogger
+
 
 @dataclass
 class Log:

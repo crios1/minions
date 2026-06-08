@@ -2,7 +2,6 @@ import asyncio
 from types import TracebackType
 from typing import Any, Generic, TypeVar
 
-
 T_Result = TypeVar("T_Result")
 
 

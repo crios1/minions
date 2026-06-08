@@ -1,8 +1,9 @@
 import sys
-from typing import Any
 from datetime import datetime, timezone
+from typing import Any
 
 from .logger import Logger
+
 
 class ConsoleLogger(Logger):
     def __init__(self): pass

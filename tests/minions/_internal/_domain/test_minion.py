@@ -1,22 +1,23 @@
 # pyright: reportUnusedClass=false
 
 import asyncio
-import pytest
 from dataclasses import FrozenInstanceError, dataclass
 from typing import Any, TypedDict, TypeVar
-import msgspec
-from minions import Minion, Resource, minion_step
-from minions.types import MinionWorkflowHandle
-from minions._internal._domain.exceptions import UnsupportedUserCode
 
+import msgspec
+import pytest
+
+from minions import Minion, Resource, minion_step
+from minions._internal._domain.exceptions import UnsupportedUserCode
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_noop import NoOpStateStore
 from minions._internal._utils.serialization import SERIALIZABLE_PRIMITIVE_TYPES
-
+from minions.types import MinionWorkflowHandle
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.mixin import Mixin
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
+
 # compositional validation happens on instantiation of each domain object
 # so each domain object has it's own test
 

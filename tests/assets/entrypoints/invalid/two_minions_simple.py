@@ -1,5 +1,4 @@
 from minions import Minion
-
 from tests.assets.contexts.counter import CounterContext
 from tests.assets.events.record import RecordEvent
 

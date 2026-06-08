@@ -1,7 +1,7 @@
 import contextvars
 import inspect
 from functools import wraps
-from typing import Callable, ParamSpec, Awaitable, overload
+from typing import Awaitable, Callable, ParamSpec, overload
 
 P = ParamSpec("P")
 _mn_step_active_var: contextvars.ContextVar[bool] = contextvars.ContextVar(

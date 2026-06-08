@@ -4,7 +4,7 @@ import textwrap
 from abc import ABC
 from typing import Awaitable, Callable, TypeAlias
 
-from .._domain.exceptions import UnsupportedUserCode, MinionsError
+from .._domain.exceptions import MinionsError, UnsupportedUserCode
 from .._utils.get_relative_module_path import get_relative_module_path
 
 LifecycleCallback: TypeAlias = Callable[..., object | Awaitable[object]]

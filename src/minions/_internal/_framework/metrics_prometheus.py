@@ -2,16 +2,23 @@ import threading
 from typing import Literal, overload
 
 from prometheus_client import (
-    CollectorRegistry, REGISTRY,
-    Counter, Gauge, Histogram, start_http_server
+    REGISTRY,
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    start_http_server,
 )
 
+from .logger import ERROR, Logger
 from .metrics import (
-    Metrics, Kind,
-    SnapshotCounters, SnapshotGauges, SnapshotHistograms,
-    HistogramSample
+    HistogramSample,
+    Kind,
+    Metrics,
+    SnapshotCounters,
+    SnapshotGauges,
+    SnapshotHistograms,
 )
-from .logger import Logger, ERROR
 from .metrics_interface import LabelledCounter, LabelledGauge, LabelledHistogram, LabelledMetric
 
 

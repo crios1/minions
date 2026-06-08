@@ -1,10 +1,10 @@
 import inspect
 from collections.abc import Mapping, Sequence
-from typing import ParamSpec, TypeVar, Callable, Awaitable, overload
+from typing import Awaitable, Callable, ParamSpec, TypeVar, overload
 
-from .async_lifecycle import AsyncLifecycle
-from .logger import Logger, ERROR
 from .._utils.get_relative_module_path import get_relative_module_path
+from .async_lifecycle import AsyncLifecycle
+from .logger import ERROR, Logger
 
 T = TypeVar("T")
 P = ParamSpec("P")

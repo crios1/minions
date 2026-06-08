@@ -2,7 +2,6 @@ import threading
 from dataclasses import dataclass, field
 
 from minions import Minion, minion_step
-
 from tests.assets.events.simple import SimpleEvent
 
 

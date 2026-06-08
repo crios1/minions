@@ -4,11 +4,13 @@ from typing import Any
 
 import pytest
 
-from minions._internal._framework.minion_workflow_context_codec import deserialize_workflow_context_blob
+from minions._internal._framework.minion_workflow_context_codec import (
+    deserialize_workflow_context_blob,
+)
 from minions._internal._framework.state_store import StoredWorkflowContext
 from minions._internal._framework.state_store_sqlite import (
-    PendingWrite,
     SQL_WORKFLOW_UPSERT,
+    PendingWrite,
     SQLiteStateStore,
 )
 from tests.assets.support.logger_inmemory import InMemoryLogger
@@ -18,7 +20,6 @@ from tests.minions._internal._framework.state_store_sqlite._support import (
     mk_ctx,
 )
 from tests.minions._internal._framework.state_store_sqlite.conftest import MakeStateStoreAndLogger
-
 
 pytestmark = pytest.mark.asyncio
 

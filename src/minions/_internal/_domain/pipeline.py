@@ -1,26 +1,29 @@
 import asyncio
-
 from abc import abstractmethod
 from typing import Any, Generic, get_args, get_origin
 
-from .types import T_Event
-from .minion import Minion
 from .._framework.async_lifecycle import LifecycleCallback
 from .._framework.async_service import AsyncService
-from .._framework.logger import Logger, DEBUG
+from .._framework.logger import DEBUG, Logger
 from .._framework.metrics import Metrics
 from .._framework.metrics_constants import (
-    LABEL_ERROR_TYPE, LABEL_ORCHESTRATION_ID, LABEL_PIPELINE,
-    PIPELINE_ERROR_TOTAL, PIPELINE_EVENT_PRODUCED_TOTAL,
-    PIPELINE_EVENT_FANOUT_TOTAL
+    LABEL_ERROR_TYPE,
+    LABEL_ORCHESTRATION_ID,
+    LABEL_PIPELINE,
+    PIPELINE_ERROR_TOTAL,
+    PIPELINE_EVENT_FANOUT_TOTAL,
+    PIPELINE_EVENT_PRODUCED_TOTAL,
 )
 from .._framework.metrics_context import resource_metric_context
+from .._utils.get_original_bases import get_original_bases
 from .._utils.serialization import (
     require_type_model,
     require_type_not_primitive,
     require_type_serializable,
 )
-from .._utils.get_original_bases import get_original_bases
+from .minion import Minion
+from .types import T_Event
+
 
 class Pipeline(AsyncService, Generic[T_Event]):
     _mn_user_facing = True

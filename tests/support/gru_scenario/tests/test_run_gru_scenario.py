@@ -4,19 +4,18 @@ from pathlib import Path
 import pytest
 
 from minions._internal._domain.gru import Gru
-
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.support.gru_scenario import (
+    AfterWorkflowStepStarts,
+    Concurrent,
     Directive,
     ExpectRuntime,
     GruShutdown,
     OrchestrationStart,
     OrchestrationStop,
-    Concurrent,
     RuntimeExpectSpec,
-    AfterWorkflowStepStarts,
     WaitWorkflowCompletions,
     run_gru_scenario,
 )

@@ -5,7 +5,6 @@ import sys
 import uuid
 from pathlib import Path
 
-
 # Note: if this module keeps growing, extract small CLI subprocess/assert helpers
 # to keep command setup and output checks consistent across entrypoint tests.
 

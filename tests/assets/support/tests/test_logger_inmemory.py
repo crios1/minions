@@ -1,7 +1,8 @@
 import pytest
 
+from minions._internal._framework.logger import CRITICAL, DEBUG, ERROR, INFO, WARNING
 from tests.assets.support.logger_inmemory import InMemoryLogger
-from minions._internal._framework.logger import DEBUG, INFO, WARNING, ERROR, CRITICAL
+
 
 @pytest.mark.asyncio
 async def test_inmemory_logger_logs_and_queries():

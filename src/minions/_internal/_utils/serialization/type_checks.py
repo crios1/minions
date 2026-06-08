@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import typing
 import types
+import typing
 from collections.abc import Mapping
 from dataclasses import fields, is_dataclass
 from typing import Any, get_args, get_origin, get_type_hints

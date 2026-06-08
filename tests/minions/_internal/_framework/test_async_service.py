@@ -1,9 +1,11 @@
 import asyncio
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 
 from minions._internal._framework.async_service import AsyncService
 from minions._internal._framework.logger_noop import NoOpLogger
+
 
 class NoOpService(AsyncService):
     async def run(self):

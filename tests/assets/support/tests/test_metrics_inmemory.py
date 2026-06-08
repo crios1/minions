@@ -1,4 +1,5 @@
 import asyncio
+
 import pytest
 
 from minions._internal._framework.metrics_constants import METRIC_LABEL_NAMES

@@ -4,7 +4,7 @@ import traceback
 import types
 from typing import Any
 
-from .._framework.logger import Logger, ERROR
+from .._framework.logger import ERROR, Logger
 
 
 def _format_task_stack(task: asyncio.Task[Any]) -> str:

@@ -3,8 +3,8 @@
 import pytest
 
 from minions import Resource
-
 from minions._internal._domain.exceptions import UnsupportedUserCode
+
 
 class TestMinionSubclassingInvalid:
 

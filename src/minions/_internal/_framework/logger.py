@@ -4,8 +4,8 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
-from .async_lifecycle import AsyncLifecycle
 from .._utils.format_exception_traceback import format_exception_traceback
+from .async_lifecycle import AsyncLifecycle
 
 DEBUG = 10
 INFO = 20

@@ -1,8 +1,8 @@
 import asyncio
 import inspect
-import time
-import threading
 import itertools
+import threading
+import time
 from functools import wraps
 from types import FunctionType
 from typing import Any, Callable, Iterable

@@ -1,5 +1,5 @@
-from tests.assets.support.pipeline_spied import SpiedPipeline
 from tests.assets.events.counter import CounterEvent
+from tests.assets.support.pipeline_spied import SpiedPipeline
 
 
 class FirstPipeline(SpiedPipeline[CounterEvent]):

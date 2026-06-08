@@ -1,8 +1,8 @@
 import pytest
 
 from minions._internal._framework.metrics_constants import MINION_WORKFLOW_STARTED_TOTAL
-from tests.assets.crash.support.metrics_boom_create_metric import BoomCreateMetricMetrics
 from tests.assets.crash.support.boom_metrics import BoomMetrics
+from tests.assets.crash.support.metrics_boom_create_metric import BoomCreateMetricMetrics
 from tests.assets.support.logger_inmemory import InMemoryLogger
 
 

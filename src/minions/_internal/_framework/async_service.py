@@ -1,15 +1,13 @@
 import asyncio
 import inspect
-
 from collections.abc import Coroutine
 from typing import Any
 
-from .async_component import AsyncComponent
-from .async_lifecycle import LifecycleCallback
-from .logger import Logger, ERROR
-
 from .._utils.safe_cancel_task import safe_cancel_task
 from .._utils.safe_create_task import safe_create_task
+from .async_component import AsyncComponent
+from .async_lifecycle import LifecycleCallback
+from .logger import ERROR, Logger
 
 
 class AsyncService(AsyncComponent):

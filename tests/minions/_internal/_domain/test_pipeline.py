@@ -1,8 +1,10 @@
 # pyright: reportUnusedClass=false
 
+from typing import TypedDict
+
 import msgspec
 import pytest
-from typing import TypedDict
+
 from minions import Pipeline
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_constants import (

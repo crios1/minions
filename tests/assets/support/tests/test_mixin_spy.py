@@ -1,9 +1,11 @@
 import asyncio
 from typing import Any
+from weakref import WeakSet
 
 import pytest
-from weakref import WeakSet
+
 from tests.assets.support.mixin_spy import SpyMixin
+
 
 @pytest.mark.asyncio
 async def test_spymixin_denies_instantiation():

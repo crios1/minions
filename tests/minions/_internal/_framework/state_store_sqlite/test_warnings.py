@@ -11,7 +11,6 @@ from tests.minions._internal._framework.state_store_sqlite._support import (
 )
 from tests.minions._internal._framework.state_store_sqlite.conftest import MakeStateStoreAndLogger
 
-
 pytestmark = pytest.mark.asyncio
 
 

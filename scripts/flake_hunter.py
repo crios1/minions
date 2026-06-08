@@ -28,7 +28,6 @@ from pathlib import Path
 
 import psutil
 
-
 PARALLEL_UNSAFE_TEST_PATHS: tuple[str, ...] = (
     "tests/minions/_internal/_domain/test_prometheus_metrics.py",
 )
@@ -141,7 +140,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--retain-passing-artifacts",
         action="store_true",
-        help="Keep logs, junitxml, and basetemp for passing runs. Default deletes passing run artifacts.",
+        help=(
+            "Keep logs, junitxml, and basetemp for passing runs. "
+            "Default deletes passing run artifacts."
+        )
     )
     parser.add_argument(
         "--run-timeout-seconds",
@@ -722,7 +724,10 @@ def run_job_diagnostic(
     print(f"  stop reason: {stop_reason}")
     print(f"  tested levels: {sorted(tested_levels_in_order)}")
     print("  recommendation basis: measured throughput, with memory-pressure guardrails")
-    # print("  note: higher concurrency may fit in RAM and still be slower due to CPU, disk, or scheduler contention")
+    # print(
+    #     "  note: higher concurrency may fit in RAM and still be slower "
+    #     "due to CPU, disk, or scheduler contention"
+    # )
 
     if not cleanup.retain_passing_artifacts:
         had_failures = any(sample.failures > 0 for sample in samples)
@@ -778,7 +783,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"run timeout seconds: {args.run_timeout_seconds}")
 
     if args.diagnose_jobs:
-        print(f"diagnose jobs: true")
+        print("diagnose jobs: true")
         print(
             "diagnose max jobs: "
             + (

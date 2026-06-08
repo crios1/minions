@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from typing import Generic
 
-from .types import T_Event, T_Ctx
+from .types import T_Ctx, T_Event
+
 
 @dataclass
 class MinionWorkflowContext(Generic[T_Event, T_Ctx]):

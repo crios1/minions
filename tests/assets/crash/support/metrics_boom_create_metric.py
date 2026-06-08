@@ -7,7 +7,6 @@ from minions._internal._framework.metrics_interface import (
     LabelledHistogram,
     LabelledMetric,
 )
-
 from tests.assets.crash.boom import boom
 from tests.assets.crash.support.boom_metrics import BoomMetrics
 
