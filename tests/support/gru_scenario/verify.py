@@ -103,6 +103,23 @@ class ScenarioVerifier:
         self._state_store = state_store
         self._timeout = per_verification_timeout
 
+    @staticmethod
+    def _require_workflow_spec(
+        m_cls: type[SpiedMinion[Any, Any]],
+    ) -> tuple[str, ...]:
+        workflow = m_cls._mn_workflow_spec
+        if workflow is None:
+            pytest.fail(
+                f"{m_cls.__name__}: workflow spec missing; "
+                "Minion setup is deferred or incomplete."
+            )
+        if not workflow:
+            pytest.fail(
+                f"{m_cls.__name__}: workflow spec is empty; "
+                "a valid Minion must define at least one @minion_step."
+            )
+        return workflow
+
     async def verify(self) -> None:
         expected = self._build_expected_call_counts()
         self._assert_metrics_label_contract()
@@ -156,6 +173,7 @@ class ScenarioVerifier:
         for m_cls in spies.minions.values():
             starts = expectations.minion_start_counts.get(m_cls, 0)
             replayed_step_counts = self._compute_replayed_step_counts(spies).get(m_cls, {})
+            workflow = self._require_workflow_spec(m_cls)
             base = {
                 "__init__": starts,
                 "startup": starts,
@@ -165,7 +183,7 @@ class ScenarioVerifier:
                         expectations.expected_workflows_by_class.get(m_cls, 0)
                         + replayed_step_counts.get(name, 0)
                     )
-                    for name in m_cls._mn_workflow_spec  # type: ignore
+                    for name in workflow
                 },
             }
             call_counts[m_cls] = base
@@ -177,9 +195,8 @@ class ScenarioVerifier:
         replayed_step_counts_by_class = self._compute_replayed_step_counts(spies)
         workflow_steps = 0
         for m in spies.minions.values():
-            workflow_steps += len(
-                m._mn_workflow_spec
-            ) * expectations.expected_workflows_by_class.get(m, 0)  # type: ignore
+            workflow = self._require_workflow_spec(m)
+            workflow_steps += len(workflow) * expectations.expected_workflows_by_class.get(m, 0)
             workflow_steps += sum(replayed_step_counts_by_class.get(m, {}).values())
         total_save_operations = workflows_started + workflow_steps
         checkpoint_reads = len(self._result.checkpoints)
@@ -239,7 +256,7 @@ class ScenarioVerifier:
                     m_cls = spies.minions.get(receipt.minion_id)
                 if m_cls is None:
                     continue
-                workflow = tuple(m_cls._mn_workflow_spec or ())
+                workflow = self._require_workflow_spec(m_cls)
                 for ctx in contexts:
                     for step_name in workflow[ctx.next_step_index:]:
                         key = (ctx.workflow_id, step_name)
@@ -310,7 +327,7 @@ class ScenarioVerifier:
                             "Persisted context snapshot references unknown minion_id "
                             f"{minion_id!r} at checkpoint {checkpoint.order}."
                         )
-                    workflow_len = len(m_cls._mn_workflow_spec or ())
+                    workflow_len = len(self._require_workflow_spec(m_cls))
                     event_cls, context_cls = _get_minion_event_and_context_types(m_cls)
                     if not isinstance(ctx.event, event_cls):
                         pytest.fail(
@@ -463,10 +480,8 @@ class ScenarioVerifier:
                     minion_ids,
                 )
 
-                if not m_cls._mn_workflow_spec:
-                    continue
-
-                for step_name in m_cls._mn_workflow_spec:
+                workflow = self._require_workflow_spec(m_cls)
+                for step_name in workflow:
                     expected_delta = expected_workflows
                     start_count_in_window = window_expectations.minion_start_counts.get(m_cls, 0)
                     max_tolerated_delta = expected_delta + start_count_in_window
@@ -554,9 +569,7 @@ class ScenarioVerifier:
 
         workflow_by_minion_id = latest_checkpoint.workflow_step_start_events_by_minion_id
         for m_cls in spies.minions.values():
-            workflow = tuple(m_cls._mn_workflow_spec or ())
-            if not workflow:
-                continue
+            workflow = self._require_workflow_spec(m_cls)
 
             minion_ids = {
                 r.minion_id
@@ -961,10 +974,8 @@ class ScenarioVerifier:
 
             actual_counts = m_cls.get_call_counts()
 
-            if not m_cls._mn_workflow_spec:
-                continue
-
-            for step_name in m_cls._mn_workflow_spec:
+            workflow = self._require_workflow_spec(m_cls)
+            for step_name in workflow:
                 actual = actual_counts.get(step_name, 0)
                 if actual < expected_workflows or actual > max_expected_workflows:
                     pytest.fail(
@@ -1099,9 +1110,10 @@ class ScenarioVerifier:
             if minion_start_counts.get(m_cls, 0) <= 0:
                 continue
             expected_calls = call_counts.get(m_cls, {})
+            workflow = self._require_workflow_spec(m_cls)
             workflow_steps = [
                 name
-                for name in m_cls._mn_workflow_spec  # type: ignore
+                for name in workflow
                 if expected_calls.get(name, 0) > 0
             ]
             for tag in self._result.instance_tags.get(m_cls, set()):

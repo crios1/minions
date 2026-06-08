@@ -70,6 +70,26 @@ def test_verifier_require_spies_invariant_message_is_actionable():
         verifier._require_spies()
 
 
+def test_require_workflow_spec_rejects_missing_spec(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(TwoStepMinion, "_mn_workflow_spec", None)
+
+    with pytest.raises(
+        pytest.fail.Exception,
+        match="workflow spec missing; Minion setup is deferred or incomplete",
+    ):
+        ScenarioVerifier._require_workflow_spec(TwoStepMinion)
+
+
+def test_require_workflow_spec_rejects_empty_spec(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(TwoStepMinion, "_mn_workflow_spec", ())
+
+    with pytest.raises(
+        pytest.fail.Exception,
+        match="workflow spec is empty; a valid Minion must define at least one @minion_step",
+    ):
+        ScenarioVerifier._require_workflow_spec(TwoStepMinion)
+
+
 def test_assert_metrics_label_contract_reports_recorded_mismatches():
     verifier = _mk_verifier(
         ScenarioPlan([], pipeline_event_counts={}),

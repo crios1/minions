@@ -17,7 +17,7 @@ async def test_inmemory_logger_logs_and_queries():
     assert len(logger.logs) == 5
 
     # level filtering check without get_logs
-    info_logs = [l for l in logger.logs if l.level == INFO]
+    info_logs = [log for log in logger.logs if log.level == INFO]
     assert len(info_logs) == 1
 
     # content checks

@@ -13,6 +13,7 @@ from minions._internal._framework.minion_workflow_context_codec import (
     deserialize_workflow_context_blob,
 )
 from minions._internal._framework.state_store import StateStore
+from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.minion_spied import SpiedMinion
 from tests.assets.support.mixin_spy import SpyMixin
 from tests.assets.support.pipeline_spied import SpiedPipeline
@@ -591,24 +592,20 @@ class ScenarioRunner:
 
     def _snapshot_workflow_step_started_ids_by_orchestration_id(
         self,
-    ) -> dict[str, dict[str, tuple[str, ...]]] | None:
-        logger = getattr(self._gru, "_logger", None)
-        logs = getattr(logger, "logs", None)
-        if not isinstance(logs, list):
-            return None
+    ) -> dict[str, dict[str, tuple[str, ...]]]:
+        logger = self._gru._logger
+
+        assert isinstance(logger, InMemoryLogger), "InMemoryLogger required"
 
         by_orchestration_step: defaultdict[str, defaultdict[str, set[str]]] = defaultdict(
             lambda: defaultdict(set)
         )
-        for log in cast(list[object], logs):
-            if getattr(log, "msg", None) != "Workflow Step started":
+        for log in logger.logs:
+            if log.msg != "Workflow Step started":
                 continue
-            kwargs = getattr(log, "kwargs", None)
-            if not isinstance(kwargs, dict):
-                continue
-            orchestration_id = kwargs.get("orchestration_id")
-            step_name = kwargs.get("step_name")
-            workflow_id = kwargs.get("workflow_id")
+            orchestration_id = log.kwargs.get("orchestration_id")
+            step_name = log.kwargs.get("step_name")
+            workflow_id = log.kwargs.get("workflow_id")
             if (
                 not isinstance(orchestration_id, str)
                 or not isinstance(step_name, str)

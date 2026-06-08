@@ -6,7 +6,6 @@ from .directives import (
     Concurrent,
     Directive,
     ExpectRuntime,
-    OrchestrationStart,
     WaitWorkflowCompletions,
     iter_directives_flat,
 )
@@ -56,11 +55,6 @@ class ScenarioPlan:
             wait_index = self.directive_index(directive)
             seen_start_ids: set[int] = set()
             for start in directive.orchestrations:
-                if not isinstance(start, OrchestrationStart):
-                    raise ValueError(
-                        "WaitWorkflowCompletions.orchestrations must contain "
-                        "OrchestrationStart directives."
-                    )
                 start_id = id(start)
                 if start_id in seen_start_ids:
                     raise ValueError(
@@ -113,10 +107,6 @@ class ScenarioPlan:
             if references is None:
                 continue
             for start in references:
-                if not isinstance(start, OrchestrationStart):
-                    raise ValueError(
-                        f"{owner} expectations must be keyed by OrchestrationStart directives."
-                    )
                 start_index = self.directive_index_map.get(id(start))
                 if start_index is None:
                     raise ValueError(
