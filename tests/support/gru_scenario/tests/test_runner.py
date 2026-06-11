@@ -14,6 +14,7 @@ from tests.support.gru_scenario.directives import (
     RuntimeExpectSpec,
     WaitWorkflowCompletions,
 )
+from tests.support.gru_scenario.introspect import GruRuntimeStateSnapshot
 from tests.support.gru_scenario.plan import ScenarioPlan
 from tests.support.gru_scenario.runner import (
     OrchestrationStartReceipt,
@@ -446,6 +447,57 @@ async def test_runner_records_checkpoints_for_wait_workflow_completions_and_shut
     assert result.checkpoints[0].workflow_step_started_ids_by_minion_id is not None
     assert result.checkpoints[1].directive_type == "GruShutdown"
     assert result.checkpoints[1].seen_shutdown is True
+
+
+@pytest.mark.asyncio
+async def test_runner_records_lifecycle_observations_after_start_stop_and_shutdown(
+    gru: Gru,
+) -> None:
+    pipeline_ref = "tests.assets.pipelines.emit1.counter.emit_1"
+    start = OrchestrationStart(
+        minion="tests.assets.minions.two_steps.counter.basic",
+        pipeline=pipeline_ref,
+    )
+    directives = [
+        start,
+        WaitWorkflowCompletions(workflow_steps_mode="exact"),
+        OrchestrationStop(id=start, expect_success=True),
+        GruShutdown(expect_success=True),
+    ]
+    plan = ScenarioPlan(
+        directives,
+        pipeline_event_counts={pipeline_ref: 1},
+    )
+
+    result = await ScenarioRunner(gru, plan, per_verification_timeout=5.0).run()
+
+    assert [
+        observation.directive_type for observation in result.lifecycle_observations
+    ] == [
+        OrchestrationStart,
+        OrchestrationStop,
+        GruShutdown,
+    ]
+    start_observation, stop_observation, shutdown_observation = (
+        result.lifecycle_observations
+    )
+    receipt = result.receipts[0]
+    assert start_observation.gru_runtime_state.minions_by_orchestration_id == {
+        receipt.orchestration_id
+    }
+    assert stop_observation.active_orchestration_start_indexes == frozenset()
+    empty_runtime = GruRuntimeStateSnapshot(
+        minions_by_instance_id=frozenset(),
+        minions_by_orchestration_id=frozenset(),
+        minion_tasks=frozenset(),
+        pipelines=frozenset(),
+        pipeline_tasks=frozenset(),
+        resources=frozenset(),
+        resource_tasks=frozenset(),
+    )
+    assert stop_observation.gru_runtime_state == empty_runtime
+    assert shutdown_observation.seen_shutdown
+    assert shutdown_observation.gru_runtime_state == empty_runtime
 
 
 @pytest.mark.asyncio

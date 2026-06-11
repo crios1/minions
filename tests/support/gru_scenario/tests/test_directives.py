@@ -1,3 +1,5 @@
+import pytest
+
 from tests.support.gru_scenario.directives import (
     AfterWorkflowStepStarts,
     Concurrent,
@@ -95,3 +97,25 @@ def test_expect_runtime_defaults():
     assert directive.at == "latest"
     assert isinstance(directive.expect, RuntimeExpectSpec)
     assert directive.expect.persistence is None
+
+
+@pytest.mark.parametrize("mode", ["strictly", ""])
+def test_wait_workflow_completions_rejects_invalid_workflow_steps_mode(
+    mode: str,
+):
+    with pytest.raises(
+        ValueError,
+        match="WaitWorkflowCompletions.workflow_steps_mode must be",
+    ):
+        WaitWorkflowCompletions(workflow_steps_mode=mode)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("mode", ["strictly", ""])
+def test_runtime_expect_spec_rejects_invalid_workflow_steps_mode(
+    mode: str,
+):
+    with pytest.raises(
+        ValueError,
+        match="RuntimeExpectSpec.workflow_steps_mode must be",
+    ):
+        RuntimeExpectSpec(workflow_steps_mode=mode)  # type: ignore[arg-type]

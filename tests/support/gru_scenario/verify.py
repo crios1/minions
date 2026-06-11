@@ -1,6 +1,6 @@
 import asyncio
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import Any, Callable, cast
 
 import pytest
@@ -20,6 +20,7 @@ from tests.assets.support.resource_spied import SpiedResource
 from tests.assets.support.state_store_spied import SpiedStateStore
 
 from .directives import ExpectRuntime, OrchestrationStart
+from .introspect import GruRuntimeStateSnapshot
 from .plan import ScenarioPlan
 from .runner import (
     OrchestrationStartReceipt,
@@ -124,6 +125,7 @@ class ScenarioVerifier:
         expected = self._build_expected_call_counts()
         self._assert_metrics_label_contract()
         self._assert_runtime_expectations()
+        self._assert_lifecycle_tracking()
         self._assert_persisted_context_integrity()
         self._assert_pipeline_events()
         self._assert_workflow_step_start_events_are_monotonic()
@@ -368,6 +370,82 @@ class ScenarioVerifier:
                 "(minion starts + checkpoint snapshots): "
                 f"{get_all_calls} > {allowed_reads}"
             )
+
+    def _assert_lifecycle_tracking(self) -> None:
+        spies = self._require_spies()
+        empty_runtime = GruRuntimeStateSnapshot(
+            minions_by_instance_id=frozenset(),
+            minions_by_orchestration_id=frozenset(),
+            minion_tasks=frozenset(),
+            pipelines=frozenset(),
+            pipeline_tasks=frozenset(),
+            resources=frozenset(),
+            resource_tasks=frozenset(),
+        )
+
+        for observation_index, observation in enumerate(
+            self._result.lifecycle_observations
+        ):
+            if observation.seen_shutdown:
+                expected = empty_runtime
+            else:
+                active_receipts = [
+                    receipt
+                    for receipt in self._result.receipts[:observation.receipt_count]
+                    if (
+                        receipt.success
+                        and receipt.orchestration_id is not None
+                        and receipt.instance_id is not None
+                        and receipt.directive_index
+                        in observation.active_orchestration_start_indexes
+                    )
+                ]
+                orchestration_ids = frozenset(
+                    receipt.orchestration_id
+                    for receipt in active_receipts
+                    if receipt.orchestration_id is not None
+                )
+                instance_ids = frozenset(
+                    receipt.instance_id
+                    for receipt in active_receipts
+                    if receipt.instance_id is not None
+                )
+                pipeline_ids = frozenset(
+                    receipt.pipeline_id for receipt in active_receipts
+                )
+                resource_ids = frozenset(
+                    resource_id
+                    for receipt in active_receipts
+                    for resource_id in (
+                        spies.resource_ids_by_minion_id.get(receipt.minion_id, frozenset())
+                        | spies.resource_ids_by_pipeline_id.get(
+                            receipt.pipeline_id, frozenset()
+                        )
+                    )
+                )
+                expected = GruRuntimeStateSnapshot(
+                    minions_by_instance_id=instance_ids,
+                    minions_by_orchestration_id=orchestration_ids,
+                    minion_tasks=instance_ids,
+                    pipelines=pipeline_ids,
+                    pipeline_tasks=pipeline_ids,
+                    resources=resource_ids,
+                    resource_tasks=resource_ids,
+                )
+
+            for state_field in fields(GruRuntimeStateSnapshot):
+                state_name = state_field.name
+                expected_ids = getattr(expected, state_name)
+                actual_ids = getattr(observation.gru_runtime_state, state_name)
+                if actual_ids != expected_ids:
+                    pytest.fail(
+                        "Gru lifecycle tracking mismatch: "
+                        f"directive={observation.directive_type.__name__}, "
+                        f"observation_index={observation_index}, "
+                        f"state={state_name}, "
+                        f"expected={sorted(expected_ids)!r}, "
+                        f"actual={sorted(actual_ids)!r}."
+                    )
 
     def _compute_minion_expectations(
         self,

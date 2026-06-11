@@ -1,9 +1,22 @@
-from typing import Any
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any, cast
 
 from minions._internal._domain.gru import Gru
 from minions._internal._domain.minion import Minion
 from minions._internal._domain.pipeline import Pipeline
 from minions._internal._domain.resource import Resource
+
+
+@dataclass(frozen=True)
+class GruRuntimeStateSnapshot:
+    minions_by_instance_id: frozenset[str]
+    minions_by_orchestration_id: frozenset[str]
+    minion_tasks: frozenset[str]
+    pipelines: frozenset[str]
+    pipeline_tasks: frozenset[str]
+    resources: frozenset[str]
+    resource_tasks: frozenset[str]
 
 
 class GruIntrospector:
@@ -40,6 +53,9 @@ class GruIntrospector:
     ) -> set[type[Resource]]:
         return self._gru._get_all_resource_dependencies(cls)
 
+    def get_resource_identity(self, resource_cls: type[Resource]) -> str:
+        return self._gru._make_resource_id(resource_cls)
+
     def get_minion_instance(self, instance_id: str) -> Minion[Any, Any] | None:
         return self._gru._minions_by_instance_id.get(instance_id)
 
@@ -67,3 +83,43 @@ class GruIntrospector:
 
     def get_resource_instance(self, rid: str) -> object | None:
         return self._gru._resources.get(rid)
+
+    def runtime_state_snapshot(self) -> GruRuntimeStateSnapshot:
+        state = self._gru._runtime_state_snapshot()
+        return GruRuntimeStateSnapshot(
+            minions_by_instance_id=self._runtime_state_keys(
+                state, "minions_by_instance_id"
+            ),
+            minions_by_orchestration_id=self._runtime_state_keys(
+                state, "minions_by_orchestration_id"
+            ),
+            minion_tasks=self._runtime_state_keys(state, "minion_tasks"),
+            pipelines=self._runtime_state_keys(state, "pipelines"),
+            pipeline_tasks=self._runtime_state_keys(state, "pipeline_tasks"),
+            resources=self._runtime_state_keys(state, "resources"),
+            resource_tasks=self._runtime_state_keys(state, "resource_tasks"),
+        )
+
+    @staticmethod
+    def _runtime_state_keys(
+        state: dict[str, object],
+        name: str,
+    ) -> frozenset[str]:
+        if name not in state:
+            return frozenset()
+        value = state[name]
+        if not isinstance(value, Mapping):
+            raise TypeError(
+                "Gru runtime state snapshot field must be a mapping: "
+                f"field={name!r}, actual_type={type(value).__name__}."
+            )
+        mapping = cast(Mapping[object, object], value)
+        keys: set[str] = set()
+        for key in mapping:
+            if not isinstance(key, str):
+                raise TypeError(
+                    "Gru runtime state snapshot field keys must be strings: "
+                    f"field={name!r}."
+                )
+            keys.add(key)
+        return frozenset(keys)

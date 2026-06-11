@@ -1,6 +1,6 @@
 import inspect
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Iterator
+from typing import Any, Iterable, Iterator, Literal
 
 from minions._internal._domain.gru import Gru
 from minions._internal._domain.minion import Minion
@@ -58,7 +58,14 @@ class Concurrent(Directive):
 @dataclass(frozen=True, eq=False)
 class WaitWorkflowCompletions(Directive):
     orchestrations: tuple[OrchestrationStart, ...] | None = None
-    workflow_steps_mode: str = "at_least"
+    workflow_steps_mode: Literal["at_least", "exact"] = "at_least"
+
+    def __post_init__(self) -> None:
+        if self.workflow_steps_mode not in ("at_least", "exact"):
+            raise ValueError(
+                "WaitWorkflowCompletions.workflow_steps_mode must be "
+                f"'at_least' or 'exact', got {self.workflow_steps_mode!r}."
+            )
 
 
 @dataclass(frozen=True, eq=False)
@@ -72,7 +79,14 @@ class RuntimeExpectSpec:
     persistence: dict[OrchestrationStart, int] | None = None
     resolutions: dict[OrchestrationStart, dict[str, int]] | None = None
     workflow_steps: dict[OrchestrationStart, dict[str, int]] | None = None
-    workflow_steps_mode: str = "at_least"
+    workflow_steps_mode: Literal["at_least", "exact"] = "at_least"
+
+    def __post_init__(self) -> None:
+        if self.workflow_steps_mode not in ("at_least", "exact"):
+            raise ValueError(
+                "RuntimeExpectSpec.workflow_steps_mode must be "
+                f"'at_least' or 'exact', got {self.workflow_steps_mode!r}."
+            )
 
 
 @dataclass(frozen=True, eq=False)

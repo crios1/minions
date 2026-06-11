@@ -242,10 +242,11 @@ Expected workflow counts are derived from `pipeline_event_counts`:
 - Resource classes allow unlisted calls when pinning counts.
 - Unexpected extra calls during pinning are collected and reported after call-order checks.
 
-## Verification Backlog
-- Verification-specific TODOs live in `tests/support/gru_scenario/VERIFICATION_TODOS.md`.
-- Usage tests may reference backlog IDs, but verification capability work should be implemented and tested in this DSL package.
-- Backlog implementation must preserve the Official Contract and Synchronization Invariant above.
+## Automatic Lifecycle Verification
+- Scenario authors declare lifecycle actions; they do not declare Gru registry or task counts.
+- The runner records stable lifecycle observations after top-level start, stop, concurrent, wrapped-stop, and shutdown boundaries.
+- The verifier derives expected active orchestration, minion, pipeline, resource, and task identities from successful start receipts, resolved dependencies, and stop history.
+- This verifies shared pipeline/resource retention, per-start tracking, cleanup after the last owner stops, and empty runtime state after successful shutdown.
 
 ## Runtime-Dependent Notes
 - Some tolerances intentionally reflect current runtime behavior under concurrency (attempt/success bounds), not idealized singleton assumptions.

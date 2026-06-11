@@ -22,8 +22,10 @@ from tests.support.gru_scenario.directives import (
     OrchestrationStart,
     RuntimeExpectSpec,
 )
+from tests.support.gru_scenario.introspect import GruRuntimeStateSnapshot
 from tests.support.gru_scenario.plan import ScenarioPlan
 from tests.support.gru_scenario.runner import (
+    LifecycleObservation,
     OrchestrationStartReceipt,
     ScenarioCheckpoint,
     ScenarioRunResult,
@@ -1045,64 +1047,6 @@ def test_checkpoint_window_workflow_step_progression_exact_fails_on_overage():
         verifier._assert_checkpoint_window_workflow_step_progression()
 
 
-def test_checkpoint_window_workflow_step_progression_rejects_invalid_mode():
-    directives = [
-        OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-        ),
-    ]
-    plan = ScenarioPlan(
-        directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
-    )
-    spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
-    )
-    result = ScenarioRunResult(
-        spies=spies,
-        receipts=[
-            OrchestrationStartReceipt(
-                directive_index=0,
-                minion_modpath="tests.assets.minions.two_steps.counter.basic",
-                pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
-                instance_id="id-ok",
-                minion_cls=TwoStepMinion,
-                success=True,
-                orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
-            ),
-        ],
-        checkpoints=[
-            ScenarioCheckpoint(
-                order=0,
-                kind="wait_workflow_completions",
-                directive_type="WaitWorkflowCompletions",
-                receipt_count=1,
-                successful_receipt_count=1,
-                seen_shutdown=False,
-                orchestration_directive_indexes=None,
-                workflow_steps_mode="strictly",
-                spy_call_counts={
-                    "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
-                        "step_1": 1,
-                        "step_2": 1,
-                    }
-                },
-            ),
-        ],
-    )
-    verifier = _mk_verifier(plan, result)
-
-    with pytest.raises(
-        pytest.fail.Exception,
-        match="WaitWorkflowCompletions.workflow_steps_mode='strictly' is unsupported",
-    ):
-        verifier._assert_checkpoint_window_workflow_step_progression()
-
-
 def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_window():
     directives = [
         OrchestrationStart(
@@ -1708,6 +1652,69 @@ def test_assert_runtime_expectations_persistence_at_latest_checkpoint():
     verifier._assert_runtime_expectations()
 
 
+def test_assert_lifecycle_tracking_reports_untracked_successful_start():
+    plan = ScenarioPlan(
+        [
+            OrchestrationStart(
+                minion="tests.assets.minions.two_steps.counter.basic",
+                pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            )
+        ],
+        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+    )
+    spies = SpyRegistry(
+        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
+        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+    )
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            OrchestrationStartReceipt(
+                directive_index=0,
+                minion_modpath="tests.assets.minions.two_steps.counter.basic",
+                pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
+                instance_id="minion-instance-1",
+                minion_cls=TwoStepMinion,
+                success=True,
+                orchestration_id="orchestration-1",
+                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_id="tests.assets.minions.two_steps.counter.basic",
+            ),
+        ],
+        lifecycle_observations=[
+            LifecycleObservation(
+                directive_type=OrchestrationStart,
+                receipt_count=1,
+                active_orchestration_start_indexes=frozenset({0}),
+                seen_shutdown=False,
+                gru_runtime_state=GruRuntimeStateSnapshot(
+                    minions_by_instance_id=frozenset({"minion-instance-1"}),
+                    minions_by_orchestration_id=frozenset(),
+                    minion_tasks=frozenset({"minion-instance-1"}),
+                    pipelines=frozenset(
+                        {"tests.assets.pipelines.emit1.counter.emit_1"}
+                    ),
+                    pipeline_tasks=frozenset(
+                        {"tests.assets.pipelines.emit1.counter.emit_1"}
+                    ),
+                    resources=frozenset(),
+                    resource_tasks=frozenset(),
+                ),
+            ),
+        ],
+    )
+
+    with pytest.raises(
+        pytest.fail.Exception,
+        match=(
+            "Gru lifecycle tracking mismatch: "
+            "directive=OrchestrationStart, observation_index=0, "
+            "state=minions_by_orchestration_id"
+        ),
+    ):
+        _mk_verifier(plan, result)._assert_lifecycle_tracking()
+
+
 def test_assert_persisted_context_integrity_accepts_matching_snapshot():
     directives = [
         OrchestrationStart(
@@ -1937,64 +1944,6 @@ def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage():
     )
     verifier = _mk_verifier(plan, result)
     verifier._assert_runtime_expectations()
-
-
-def test_assert_runtime_expectations_workflow_steps_rejects_invalid_mode():
-    directives = [
-        start := OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-        ),
-        ExpectRuntime(
-            expect=RuntimeExpectSpec(
-                workflow_steps={start: {"step_1": 1}},
-                workflow_steps_mode="strictly",
-            ),
-        ),
-    ]
-    plan = ScenarioPlan(
-        directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
-    )
-    spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
-    )
-    result = ScenarioRunResult(
-        spies=spies,
-        receipts=[
-            OrchestrationStartReceipt(
-                directive_index=0,
-                minion_modpath="tests.assets.minions.two_steps.counter.basic",
-                pipeline_modpath="tests.assets.pipelines.emit1.counter.emit_1",
-                instance_id="instance-1",
-                minion_cls=TwoStepMinion,
-                success=True,
-                orchestration_id="instance-1",
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
-            ),
-        ],
-        checkpoints=[
-            ScenarioCheckpoint(
-                order=0,
-                kind="expect_runtime",
-                directive_type="ExpectRuntime",
-                receipt_count=1,
-                successful_receipt_count=1,
-                seen_shutdown=False,
-                workflow_step_started_ids_by_orchestration_id={
-                    "instance-1": {"step_1": ("workflow-1",)}
-                },
-            ),
-        ],
-    )
-    verifier = _mk_verifier(plan, result)
-    with pytest.raises(
-        pytest.fail.Exception,
-        match="ExpectRuntime.workflow_steps_mode='strictly' is unsupported",
-    ):
-        verifier._assert_runtime_expectations()
 
 
 def test_assert_runtime_expectations_persistence_at_checkpoint_index():

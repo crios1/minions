@@ -2,7 +2,7 @@ import asyncio
 from collections import defaultdict
 from collections.abc import Awaitable
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import pytest
 
@@ -30,7 +30,7 @@ from .directives import (
     WaitWorkflowCompletions,
     iter_directives_flat,
 )
-from .introspect import GruIntrospector
+from .introspect import GruIntrospector, GruRuntimeStateSnapshot
 from .plan import ScenarioPlan
 
 
@@ -43,12 +43,22 @@ def _get_minion_event_and_context_types(
         raise TypeError(f"{minion_cls.__name__} is missing runtime Minion types.")
     return event_cls, context_cls
 
-
+# This class name could use a better name,
+# assuming it doesn't get replaced after a through audit/review of the gru scenario DSL.
+# SpyRegistry seems kind of like a duplicated of the tracking done in Gru.
+# So maybe Gru can be used directly to some extent knowing it only has Spied components.
+# Have to consider more.
 @dataclass
 class SpyRegistry:
     minions: dict[str, type[SpiedMinion[Any, Any]]] = field(default_factory=lambda: dict())
     pipelines: dict[str, type[SpiedPipeline[Any]]] = field(default_factory=lambda: dict())
     resources: set[type[SpiedResource]] = field(default_factory=lambda: set())
+    resource_ids_by_minion_id: dict[str, frozenset[str]] = field(
+        default_factory=lambda: dict()
+    )
+    resource_ids_by_pipeline_id: dict[str, frozenset[str]] = field(
+        default_factory=lambda: dict()
+    )
     pipeline_start_attempt_counts: defaultdict[str, int] = field(
         default_factory=lambda: defaultdict(int)
     )
@@ -84,21 +94,6 @@ class OrchestrationStartReceipt:
             raise ValueError("OrchestrationStartReceipt.minion_id is required.")
 
 
-@dataclass
-class ScenarioRunResult:
-    seen_shutdown: bool = False
-    spies: SpyRegistry | None = None
-    started_minions: set[SpiedMinion[Any, Any]] = field(default_factory=lambda: set())
-    instance_tags: defaultdict[type[SpyMixin], set[int]] = field(
-        default_factory=lambda: defaultdict(set)
-    )
-    extra_calls: list[tuple[type[SpyMixin], tuple[object, ...], dict[str, object]]] = field(
-        default_factory=lambda: list()
-    )
-    receipts: list[OrchestrationStartReceipt] = field(default_factory=lambda: list())
-    checkpoints: list["ScenarioCheckpoint"] = field(default_factory=lambda: list())
-
-
 @dataclass(frozen=True)
 class ScenarioCheckpoint:
     order: int
@@ -108,7 +103,7 @@ class ScenarioCheckpoint:
     successful_receipt_count: int
     seen_shutdown: bool
     orchestration_directive_indexes: tuple[int, ...] | None = None
-    workflow_steps_mode: str | None = None
+    workflow_steps_mode: Literal["at_least", "exact"] | None = None
     expected_step_starts: dict[int, dict[str, int]] | None = None
     wrapped_directive_type: str | None = None
     spy_call_counts: dict[str, dict[str, int]] | None = None
@@ -128,6 +123,33 @@ class ScenarioCheckpoint:
     metrics_counters: dict[str, list[dict[str, object]]] | None = None
 
 
+@dataclass(frozen=True)
+class LifecycleObservation:
+    directive_type: type[Directive]
+    receipt_count: int
+    active_orchestration_start_indexes: frozenset[int]
+    seen_shutdown: bool
+    gru_runtime_state: GruRuntimeStateSnapshot
+
+
+@dataclass
+class ScenarioRunResult:
+    seen_shutdown: bool = False
+    spies: SpyRegistry | None = None
+    started_minions: set[SpiedMinion[Any, Any]] = field(default_factory=lambda: set())
+    instance_tags: defaultdict[type[SpyMixin], set[int]] = field(
+        default_factory=lambda: defaultdict(set)
+    )
+    extra_calls: list[tuple[type[SpyMixin], tuple[object, ...], dict[str, object]]] = field(
+        default_factory=lambda: list()
+    )
+    receipts: list[OrchestrationStartReceipt] = field(default_factory=lambda: list())
+    checkpoints: list[ScenarioCheckpoint] = field(default_factory=lambda: list())
+    lifecycle_observations: list[LifecycleObservation] = field(
+        default_factory=lambda: list()
+    )
+
+
 class ScenarioRunner:
     def __init__(
         self,
@@ -145,6 +167,7 @@ class ScenarioRunner:
         self._orchestration_start_receipts_by_directive_id: dict[
             int, OrchestrationStartReceipt
         ] = {}
+        self._active_orchestration_start_indexes: set[int] = set()
 
     async def run(self) -> ScenarioRunResult:
         self._discover_spies()
@@ -154,7 +177,20 @@ class ScenarioRunner:
         self._result.spies = self._spies
         for d in self._plan.directives:
             await self._execute(d)
+            if self._contains_lifecycle_command(d):
+                self._record_lifecycle_observation(d)
         return self._result
+
+    # should probably make the idea of "lifecycle directive" official
+    # and express that a quality of Directive in some way
+    def _contains_lifecycle_command(self, d: Directive) -> bool:
+        if isinstance(d, (OrchestrationStart, OrchestrationStop, GruShutdown)):
+            return True
+        if isinstance(d, Concurrent):
+            return any(self._contains_lifecycle_command(child) for child in d.directives)
+        if isinstance(d, AfterWorkflowStepStarts):
+            return self._contains_lifecycle_command(d.directive)
+        return False
 
     def _discover_spies(self) -> None:
         for d in iter_directives_flat(self._plan.directives):
@@ -178,6 +214,7 @@ class ScenarioRunner:
                     )
                 self._spies.minions[minion_id] = m_cls
 
+                resource_ids: set[str] = set()
                 for r_cls in self._insp.get_all_resource_dependencies(m_cls):
                     if not issubclass(r_cls, SpiedResource):
                         pytest.fail(
@@ -185,6 +222,10 @@ class ScenarioRunner:
                             f"got {r_cls!r} while resolving '{minion_modpath}'"
                         )
                     self._spies.resources.add(r_cls)
+                    resource_ids.add(self._insp.get_resource_identity(r_cls))
+                self._spies.resource_ids_by_minion_id[minion_id] = frozenset(
+                    resource_ids
+                )
 
             p_cls = (
                 d.pipeline
@@ -202,6 +243,7 @@ class ScenarioRunner:
                     )
                 self._spies.pipelines[pipeline_id] = p_cls
 
+                resource_ids = set()
                 for r_cls in self._insp.get_all_resource_dependencies(p_cls):
                     if not issubclass(r_cls, SpiedResource):
                         pytest.fail(
@@ -209,6 +251,10 @@ class ScenarioRunner:
                             f"got {r_cls!r} while resolving '{pipeline_modpath}'"
                         )
                     self._spies.resources.add(r_cls)
+                    resource_ids.add(self._insp.get_resource_identity(r_cls))
+                self._spies.resource_ids_by_pipeline_id[pipeline_id] = frozenset(
+                    resource_ids
+                )
 
     def _validate_pipeline_event_targets(self) -> None:
         expected_success_pipeline_ids: set[str] = set()
@@ -345,6 +391,7 @@ class ScenarioRunner:
 
         result.receipts.append(receipt)
         self._orchestration_start_receipts_by_directive_id[id(d)] = receipt
+        self._active_orchestration_start_indexes.add(receipt.directive_index)
         self._record_instance_tags(minion_inst, receipt.pipeline_id, receipt.instance_id)
 
     async def _run_stop(self, d: OrchestrationStop) -> None:
@@ -354,6 +401,12 @@ class ScenarioRunner:
         r = await self._gru.stop_orchestration(orchestration_id=target_id)
         if r.success != d.expect_success:
             pytest.fail(f"stop_orchestration mismatch: {d} -> {r}")
+        if r.success:
+            stopped_receipt = self._resolve_stop_target_receipt(d.id, target_id)
+            if stopped_receipt is not None:
+                self._active_orchestration_start_indexes.discard(
+                    stopped_receipt.directive_index
+                )
 
     def _resolve_stop_target_id(self, target: str | OrchestrationStart) -> str | None:
         if isinstance(target, str):
@@ -364,12 +417,35 @@ class ScenarioRunner:
             return None
         return receipt.orchestration_id
 
+    def _resolve_stop_target_receipt(
+        self,
+        target: str | OrchestrationStart,
+        target_id: str,
+    ) -> OrchestrationStartReceipt | None:
+        if isinstance(target, OrchestrationStart):
+            return self._orchestration_start_receipts_by_directive_id.get(id(target))
+        return next(
+            (
+                receipt
+                for receipt in reversed(self._require_result().receipts)
+                if (
+                    receipt.success
+                    and receipt.orchestration_id == target_id
+                    and receipt.directive_index
+                    in self._active_orchestration_start_indexes
+                )
+            ),
+            None,
+        )
+
     async def _run_shutdown(self, d: GruShutdown) -> None:
         result = self._require_result()
         r = await self._gru.shutdown()
         if r.success != d.expect_success:
             pytest.fail(f"shutdown mismatch: expected {d.expect_success}, got {r}")
         result.seen_shutdown = r.success
+        if r.success:
+            self._active_orchestration_start_indexes.clear()
         await self._record_checkpoint(kind="gru_shutdown", directive=d)
 
     async def _wait_workflows(self, d: WaitWorkflowCompletions) -> None:
@@ -463,7 +539,7 @@ class ScenarioRunner:
         kind: str,
         directive: Directive,
         orchestrations: tuple[OrchestrationStart, ...] | None = None,
-        workflow_steps_mode: str | None = None,
+        workflow_steps_mode: Literal["at_least", "exact"] | None = None,
         expected_step_starts: dict[OrchestrationStart, dict[str, int]] | None = None,
         wrapped_directive_type: str | None = None,
     ) -> None:
@@ -510,6 +586,20 @@ class ScenarioRunner:
             metrics_counters=self._snapshot_metrics_counters(),
         )
         result.checkpoints.append(checkpoint)
+
+    def _record_lifecycle_observation(self, directive: Directive) -> None:
+        result = self._require_result()
+        result.lifecycle_observations.append(
+            LifecycleObservation(
+                directive_type=type(directive),
+                receipt_count=len(result.receipts),
+                active_orchestration_start_indexes=frozenset(
+                    self._active_orchestration_start_indexes
+                ),
+                seen_shutdown=result.seen_shutdown,
+                gru_runtime_state=self._insp.runtime_state_snapshot(),
+            )
+        )
 
     def _snapshot_spy_call_counts(self) -> dict[str, dict[str, int]]:
         classes: set[type[SpyMixin]] = set()

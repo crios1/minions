@@ -112,9 +112,6 @@ class TestValidUsage:
         ):
             pass
 
-    # Verification ownership: tracked in DSL backlog
-    # `tests/support/gru_scenario/VERIFICATION_TODOS.md` (V-001).
-
     @pytest.mark.asyncio
     async def test_gru_start_stop_orchestration(
         self,
@@ -505,9 +502,6 @@ class TestValidUsage:
             await gru.stop_orchestration(r2.orchestration_id)
             assert r3.orchestration_id is not None
             await gru.stop_orchestration(r3.orchestration_id)
-
-    # Verification ownership: tracked in DSL backlog
-    # `tests/support/gru_scenario/VERIFICATION_TODOS.md` (V-002).
 
     @pytest.mark.asyncio
     async def test_gru_start_3_minions_1_pipeline_1_resource_sharing(
