@@ -993,7 +993,7 @@ class TestValidUsageDSL:
 
         second_stop = await gru.stop_orchestration(second.orchestration_id or "")
         assert second_stop.success
-        assert gru._runtime_state_snapshot() == {}
+        assert gru._runtime_state_snapshot().is_empty
 
     @pytest.mark.asyncio
     async def test_gru_start_orchestration_shutdown_without_stop(

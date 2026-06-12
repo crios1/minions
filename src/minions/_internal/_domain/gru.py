@@ -6,10 +6,11 @@ import importlib
 import json
 import uuid
 from collections import defaultdict, deque
+from collections.abc import Mapping
 from contextlib import asynccontextmanager
-from dataclasses import asdict
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
-from types import ModuleType
+from types import MappingProxyType, ModuleType
 from typing import Any, Iterable, TypeGuard, cast, get_type_hints, overload
 
 import psutil
@@ -63,6 +64,27 @@ _UNSET = _UnsetType()
 ORCHESTRATION_ID_VERSION = 1
 
 _gru_instance: Gru | None = None
+
+
+@dataclass(frozen=True)
+class GruRuntimeStateSnapshot:
+    minion_instance_ids: frozenset[str]
+    orchestration_ids: frozenset[str]
+    minion_task_ids: frozenset[str]
+    pipeline_ids: frozenset[str]
+    pipeline_task_ids: frozenset[str]
+    resource_ids: frozenset[str]
+    resource_task_ids: frozenset[str]
+    pipeline_id_by_minion_instance_id: Mapping[str, str]
+    resource_ids_by_minion_instance_id: Mapping[str, frozenset[str]]
+    resource_ids_by_pipeline_id: Mapping[str, frozenset[str]]
+    dependency_ids_by_resource_id: Mapping[str, frozenset[str]]
+    dependent_ids_by_resource_id: Mapping[str, frozenset[str]]
+    refcount_by_resource_id: Mapping[str, int]
+
+    @property
+    def is_empty(self) -> bool:
+        return all(not getattr(self, field.name) for field in fields(self))
 
 
 class Gru:
@@ -1135,23 +1157,47 @@ class Gru:
             if isinstance(val, (dict, set)):
                 val.clear()
 
-    def _runtime_state_snapshot(self) -> dict[str, object]:
-        runtime_state = {
-            "minions_by_instance_id": self._minions_by_instance_id,
-            "minions_by_orchestration_id": self._minions_by_orchestration_id,
-            "minion_tasks": self._minion_tasks,
-            "pipelines": self._pipelines,
-            "pipeline_tasks": self._pipeline_tasks,
-            "resources": self._resources,
-            "resource_tasks": self._resource_tasks,
-            "minion_pipeline_map": self._minion_pipeline_map,
-            "minion_resource_map": self._minion_resource_map,
-            "pipeline_resource_map": self._pipeline_resource_map,
-            "resource_dependencies": dict(self._resource_dependencies),
-            "resource_dependents": dict(self._resource_dependents),
-            "resource_refcounts": dict(self._resource_refcounts),
-        }
-        return {name: value for name, value in runtime_state.items() if value}
+    def _runtime_state_snapshot(self) -> GruRuntimeStateSnapshot:
+        # Registries of live components/tasks snapshot only their identity keys because
+        # MappingProxyType would not make their mutable values immutable; relationship
+        # maps preserve copied values as immutable point-in-time state.
+        return GruRuntimeStateSnapshot(
+            minion_instance_ids=frozenset(self._minions_by_instance_id),
+            orchestration_ids=frozenset(self._minions_by_orchestration_id),
+            minion_task_ids=frozenset(self._minion_tasks),
+            pipeline_ids=frozenset(self._pipelines),
+            pipeline_task_ids=frozenset(self._pipeline_tasks),
+            resource_ids=frozenset(self._resources),
+            resource_task_ids=frozenset(self._resource_tasks),
+            pipeline_id_by_minion_instance_id=MappingProxyType(
+                dict(self._minion_pipeline_map)
+            ),
+            resource_ids_by_minion_instance_id=MappingProxyType(
+                {
+                    minion_instance_id: frozenset(resource_ids)
+                    for minion_instance_id, resource_ids in self._minion_resource_map.items()
+                }
+            ),
+            resource_ids_by_pipeline_id=MappingProxyType(
+                {
+                    pipeline_id: frozenset(resource_ids)
+                    for pipeline_id, resource_ids in self._pipeline_resource_map.items()
+                }
+            ),
+            dependency_ids_by_resource_id=MappingProxyType(
+                {
+                    resource_id: frozenset(dependency_ids)
+                    for resource_id, dependency_ids in self._resource_dependencies.items()
+                }
+            ),
+            dependent_ids_by_resource_id=MappingProxyType(
+                {
+                    resource_id: frozenset(dependent_ids)
+                    for resource_id, dependent_ids in self._resource_dependents.items()
+                }
+            ),
+            refcount_by_resource_id=MappingProxyType(dict(self._resource_refcounts)),
+        )
 
     def _runtime_tasks_snapshot(self) -> list[asyncio.Task[None]]:
         return [

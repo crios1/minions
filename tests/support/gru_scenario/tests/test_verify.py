@@ -2,6 +2,7 @@ from typing import Any
 
 import pytest
 
+from minions._internal._domain.gru import GruRuntimeStateSnapshot
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.metrics_constants import LABEL_ORCHESTRATION_ID
 from minions._internal._framework.state_store import StoredWorkflowContext
@@ -22,7 +23,6 @@ from tests.support.gru_scenario.directives import (
     OrchestrationStart,
     RuntimeExpectSpec,
 )
-from tests.support.gru_scenario.introspect import GruRuntimeStateSnapshot
 from tests.support.gru_scenario.plan import ScenarioPlan
 from tests.support.gru_scenario.runner import (
     LifecycleObservation,
@@ -1688,17 +1688,23 @@ def test_assert_lifecycle_tracking_reports_untracked_successful_start():
                 active_orchestration_start_indexes=frozenset({0}),
                 seen_shutdown=False,
                 gru_runtime_state=GruRuntimeStateSnapshot(
-                    minions_by_instance_id=frozenset({"minion-instance-1"}),
-                    minions_by_orchestration_id=frozenset(),
-                    minion_tasks=frozenset({"minion-instance-1"}),
-                    pipelines=frozenset(
+                    minion_instance_ids=frozenset({"minion-instance-1"}),
+                    orchestration_ids=frozenset(),
+                    minion_task_ids=frozenset({"minion-instance-1"}),
+                    pipeline_ids=frozenset(
                         {"tests.assets.pipelines.emit1.counter.emit_1"}
                     ),
-                    pipeline_tasks=frozenset(
+                    pipeline_task_ids=frozenset(
                         {"tests.assets.pipelines.emit1.counter.emit_1"}
                     ),
-                    resources=frozenset(),
-                    resource_tasks=frozenset(),
+                    resource_ids=frozenset(),
+                    resource_task_ids=frozenset(),
+                    pipeline_id_by_minion_instance_id={},
+                    resource_ids_by_minion_instance_id={},
+                    resource_ids_by_pipeline_id={},
+                    dependency_ids_by_resource_id={},
+                    dependent_ids_by_resource_id={},
+                    refcount_by_resource_id={},
                 ),
             ),
         ],
@@ -1709,7 +1715,7 @@ def test_assert_lifecycle_tracking_reports_untracked_successful_start():
         match=(
             "Gru lifecycle tracking mismatch: "
             "directive=OrchestrationStart, observation_index=0, "
-            "state=minions_by_orchestration_id"
+            "state=orchestration_ids"
         ),
     ):
         _mk_verifier(plan, result)._assert_lifecycle_tracking()

@@ -3,7 +3,7 @@ from collections.abc import Callable
 
 import pytest
 
-from minions._internal._domain.gru import Gru
+from minions._internal._domain.gru import Gru, GruRuntimeStateSnapshot
 from tests.support.gru_scenario.directives import (
     AfterWorkflowStepStarts,
     Concurrent,
@@ -14,7 +14,6 @@ from tests.support.gru_scenario.directives import (
     RuntimeExpectSpec,
     WaitWorkflowCompletions,
 )
-from tests.support.gru_scenario.introspect import GruRuntimeStateSnapshot
 from tests.support.gru_scenario.plan import ScenarioPlan
 from tests.support.gru_scenario.runner import (
     OrchestrationStartReceipt,
@@ -482,18 +481,24 @@ async def test_runner_records_lifecycle_observations_after_start_stop_and_shutdo
         result.lifecycle_observations
     )
     receipt = result.receipts[0]
-    assert start_observation.gru_runtime_state.minions_by_orchestration_id == {
+    assert start_observation.gru_runtime_state.orchestration_ids == {
         receipt.orchestration_id
     }
     assert stop_observation.active_orchestration_start_indexes == frozenset()
     empty_runtime = GruRuntimeStateSnapshot(
-        minions_by_instance_id=frozenset(),
-        minions_by_orchestration_id=frozenset(),
-        minion_tasks=frozenset(),
-        pipelines=frozenset(),
-        pipeline_tasks=frozenset(),
-        resources=frozenset(),
-        resource_tasks=frozenset(),
+        minion_instance_ids=frozenset(),
+        orchestration_ids=frozenset(),
+        minion_task_ids=frozenset(),
+        pipeline_ids=frozenset(),
+        pipeline_task_ids=frozenset(),
+        resource_ids=frozenset(),
+        resource_task_ids=frozenset(),
+        pipeline_id_by_minion_instance_id={},
+        resource_ids_by_minion_instance_id={},
+        resource_ids_by_pipeline_id={},
+        dependency_ids_by_resource_id={},
+        dependent_ids_by_resource_id={},
+        refcount_by_resource_id={},
     )
     assert stop_observation.gru_runtime_state == empty_runtime
     assert shutdown_observation.seen_shutdown

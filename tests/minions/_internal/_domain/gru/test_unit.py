@@ -474,7 +474,67 @@ class TestUnit:
             shutdown = await gru.shutdown()
 
             assert not shutdown.success
-            assert gru._runtime_state_snapshot() == {}
+            assert gru._runtime_state_snapshot().is_empty
+
+    @pytest.mark.asyncio
+    async def test_runtime_state_snapshot_is_exact_detached_and_immutable(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    ) -> None:
+        from tests.assets.minions.two_steps.counter.identified_resourced import (
+            IdentifiedResourcedMinion,
+        )
+        from tests.assets.pipelines.emit1.counter.identified import (
+            IDENTIFIED_COUNTER_PIPELINE_ID,
+            IdentifiedEmit1Pipeline,
+        )
+        from tests.assets.resources.fixed.identified import (
+            IDENTIFIED_FIXED_RESOURCE_ID,
+        )
+
+        async with gru_factory(
+            logger=InMemoryLogger(),
+            metrics=InMemoryMetrics(),
+            state_store=NoOpStateStore(),
+        ) as gru:
+            result = await gru.start_orchestration(
+                IdentifiedEmit1Pipeline,
+                IdentifiedResourcedMinion,
+            )
+            assert result.success
+            assert result.orchestration_id is not None
+            minion = gru._minions_by_orchestration_id[result.orchestration_id]
+            minion_instance_id = minion._mn_minion_instance_id
+
+            snapshot = gru._runtime_state_snapshot()
+            assert snapshot.minion_instance_ids == {minion_instance_id}
+            assert snapshot.orchestration_ids == {result.orchestration_id}
+            assert snapshot.minion_task_ids == {minion_instance_id}
+            assert snapshot.pipeline_ids == {IDENTIFIED_COUNTER_PIPELINE_ID}
+            assert snapshot.pipeline_task_ids == {IDENTIFIED_COUNTER_PIPELINE_ID}
+            assert snapshot.resource_ids == {IDENTIFIED_FIXED_RESOURCE_ID}
+            assert snapshot.resource_task_ids == {IDENTIFIED_FIXED_RESOURCE_ID}
+            assert snapshot.pipeline_id_by_minion_instance_id == {
+                minion_instance_id: IDENTIFIED_COUNTER_PIPELINE_ID
+            }
+            assert snapshot.resource_ids_by_minion_instance_id == {
+                minion_instance_id: frozenset({IDENTIFIED_FIXED_RESOURCE_ID})
+            }
+            assert snapshot.resource_ids_by_pipeline_id == {}
+            assert snapshot.dependency_ids_by_resource_id == {}
+            assert snapshot.dependent_ids_by_resource_id == {}
+            assert snapshot.refcount_by_resource_id == {IDENTIFIED_FIXED_RESOURCE_ID: 1}
+
+            with pytest.raises(TypeError):
+                snapshot.pipeline_id_by_minion_instance_id["other"] = "pipeline"  # type: ignore[index]
+
+            # Mutating Gru after capture must not change the point-in-time snapshot.
+            snapshot_pipeline_map = dict(snapshot.pipeline_id_by_minion_instance_id)
+            gru._minion_pipeline_map["other"] = "pipeline"
+            try:
+                assert snapshot.pipeline_id_by_minion_instance_id == snapshot_pipeline_map
+            finally:
+                gru._minion_pipeline_map.pop("other")
 
     @pytest.mark.asyncio
     async def test_shutdown_reports_task_cancel_errors_and_clears_runtime_state(
@@ -507,7 +567,7 @@ class TestUnit:
             assert len(shutdown.errors) == 3
             assert all(error.phase == "cancel_task" for error in shutdown.errors)
             assert all(error.error_message == "cancel boom" for error in shutdown.errors)
-            assert gru._runtime_state_snapshot() == {}
+            assert gru._runtime_state_snapshot().is_empty
 
     @pytest.mark.asyncio
     async def test_shutdown_clears_runtime_state_when_initial_log_fails(
@@ -544,7 +604,7 @@ class TestUnit:
             assert shutdown_components == [gru._state_store, gru._metrics]
             assert monitor_task.done()
             assert monitor_task.cancelled()
-            assert gru._runtime_state_snapshot() == {}
+            assert gru._runtime_state_snapshot().is_empty
 
     @pytest.mark.asyncio
     async def test_shutdown_clears_runtime_state_when_logger_shutdown_fails(
@@ -571,7 +631,7 @@ class TestUnit:
 
             assert not shutdown.success
             assert shutdown.reason == "logger shutdown boom"
-            assert gru._runtime_state_snapshot() == {}
+            assert gru._runtime_state_snapshot().is_empty
 
 
 class TestUnitUsingNewAssets:

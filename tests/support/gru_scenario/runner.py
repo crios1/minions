@@ -6,7 +6,7 @@ from typing import Any, Literal, cast
 
 import pytest
 
-from minions._internal._domain.gru import Gru
+from minions._internal._domain.gru import Gru, GruRuntimeStateSnapshot
 from minions._internal._domain.minion import Minion
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.minion_workflow_context_codec import (
@@ -30,7 +30,7 @@ from .directives import (
     WaitWorkflowCompletions,
     iter_directives_flat,
 )
-from .introspect import GruIntrospector, GruRuntimeStateSnapshot
+from .introspect import GruIntrospector
 from .plan import ScenarioPlan
 
 

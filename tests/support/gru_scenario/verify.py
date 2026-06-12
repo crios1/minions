@@ -1,6 +1,6 @@
 import asyncio
 from collections import defaultdict
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from typing import Any, Callable, cast
 
 import pytest
@@ -20,7 +20,6 @@ from tests.assets.support.resource_spied import SpiedResource
 from tests.assets.support.state_store_spied import SpiedStateStore
 
 from .directives import ExpectRuntime, OrchestrationStart
-from .introspect import GruRuntimeStateSnapshot
 from .plan import ScenarioPlan
 from .runner import (
     OrchestrationStartReceipt,
@@ -373,21 +372,20 @@ class ScenarioVerifier:
 
     def _assert_lifecycle_tracking(self) -> None:
         spies = self._require_spies()
-        empty_runtime = GruRuntimeStateSnapshot(
-            minions_by_instance_id=frozenset(),
-            minions_by_orchestration_id=frozenset(),
-            minion_tasks=frozenset(),
-            pipelines=frozenset(),
-            pipeline_tasks=frozenset(),
-            resources=frozenset(),
-            resource_tasks=frozenset(),
-        )
-
         for observation_index, observation in enumerate(
             self._result.lifecycle_observations
         ):
+            expected_ids_by_state: dict[str, frozenset[str]]
             if observation.seen_shutdown:
-                expected = empty_runtime
+                expected_ids_by_state = {
+                    "minion_instance_ids": frozenset(),
+                    "orchestration_ids": frozenset(),
+                    "minion_task_ids": frozenset(),
+                    "pipeline_ids": frozenset(),
+                    "pipeline_task_ids": frozenset(),
+                    "resource_ids": frozenset(),
+                    "resource_task_ids": frozenset(),
+                }
             else:
                 active_receipts = [
                     receipt
@@ -423,19 +421,17 @@ class ScenarioVerifier:
                         )
                     )
                 )
-                expected = GruRuntimeStateSnapshot(
-                    minions_by_instance_id=instance_ids,
-                    minions_by_orchestration_id=orchestration_ids,
-                    minion_tasks=instance_ids,
-                    pipelines=pipeline_ids,
-                    pipeline_tasks=pipeline_ids,
-                    resources=resource_ids,
-                    resource_tasks=resource_ids,
-                )
+                expected_ids_by_state = {
+                    "minion_instance_ids": instance_ids,
+                    "orchestration_ids": orchestration_ids,
+                    "minion_task_ids": instance_ids,
+                    "pipeline_ids": pipeline_ids,
+                    "pipeline_task_ids": pipeline_ids,
+                    "resource_ids": resource_ids,
+                    "resource_task_ids": resource_ids,
+                }
 
-            for state_field in fields(GruRuntimeStateSnapshot):
-                state_name = state_field.name
-                expected_ids = getattr(expected, state_name)
+            for state_name, expected_ids in expected_ids_by_state.items():
                 actual_ids = getattr(observation.gru_runtime_state, state_name)
                 if actual_ids != expected_ids:
                     pytest.fail(

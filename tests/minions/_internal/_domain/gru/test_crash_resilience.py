@@ -46,8 +46,7 @@ def orchestration_id(minion_modpath: str, pipeline_modpath: str, config: str = "
         pipeline_id=pipeline_modpath,
     )
 
-
-async def assert_gru_can_start_and_stop_known_good_minion(gru: Gru) -> None:
+async def assert_gru_can_start_and_stop_known_good_orchestration(gru: Gru) -> None:
     result = await gru.start_orchestration(GOOD_PIPELINE, GOOD_MINION)
     assert result.success
     assert result.orchestration_id is not None
@@ -55,7 +54,7 @@ async def assert_gru_can_start_and_stop_known_good_minion(gru: Gru) -> None:
     assert await gru._logger.wait_for_log("Workflow succeeded", timeout=1.0, poll_interval=0.01)
     stop = await gru.stop_orchestration(result.orchestration_id)
     assert stop.success
-    assert gru._runtime_state_snapshot() == {}
+    assert gru._runtime_state_snapshot().is_empty
 
 
 def assert_counter(metrics: InMemoryMetrics, metric_name: str, labels: dict[str, str]) -> None:
@@ -84,7 +83,7 @@ async def test_start_orchestration_contains_state_store_resume_read_failure(
             "Failed to start orchestration",
             log_kwargs={"error_message": BOOM_MESSAGE}
         )
-        assert gru._runtime_state_snapshot() == {}
+        assert gru._runtime_state_snapshot().is_empty
 
 
 @pytest.mark.asyncio
@@ -133,7 +132,7 @@ async def test_start_orchestration_fails_closed_on_persisted_workflow_decode_mis
             },
         )
         assert logger.has_log("Failed to start orchestration")
-        assert gru._runtime_state_snapshot() == {}
+        assert gru._runtime_state_snapshot().is_empty
 
 
 @pytest.mark.asyncio
@@ -168,8 +167,8 @@ async def test_start_orchestration_contains_user_code_startup_failures(
             "Failed to start orchestration",
             log_kwargs={"error_message": BOOM_MESSAGE}
         )
-        assert gru._runtime_state_snapshot() == {}
-        await assert_gru_can_start_and_stop_known_good_minion(gru)
+        assert gru._runtime_state_snapshot().is_empty
+        await assert_gru_can_start_and_stop_known_good_orchestration(gru)
 
 
 @pytest.mark.asyncio
@@ -219,7 +218,7 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
         )
         stop = await gru.stop_orchestration(result.orchestration_id or "")
         assert stop.success
-        assert gru._runtime_state_snapshot() == {}
+        assert gru._runtime_state_snapshot().is_empty
 
 
 @pytest.mark.asyncio
@@ -292,7 +291,7 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
         )
         stop = await gru.stop_orchestration(result.orchestration_id or "")
         assert stop.success
-        assert gru._runtime_state_snapshot() == {}
+        assert gru._runtime_state_snapshot().is_empty
 
 
 @pytest.mark.asyncio
@@ -320,11 +319,11 @@ async def test_shutdown_failures_are_reported_and_singleton_is_released(
         if minion_modpath.endswith(".boom_shutdown"):
             assert not stop.success
             assert logger.has_log("Failed to stop orchestration")
-            assert gru._runtime_state_snapshot() == {}
+            assert gru._runtime_state_snapshot().is_empty
         else:
             assert stop.success
             assert logger.has_log("shutdown failed during startup error recovery")
-            assert gru._runtime_state_snapshot() == {}
+            assert gru._runtime_state_snapshot().is_empty
 
     # The factory shutdown must release the global singleton even after a failed stop path.
     async with gru_factory(
@@ -332,4 +331,4 @@ async def test_shutdown_failures_are_reported_and_singleton_is_released(
         metrics=InMemoryMetrics(),
         state_store=InMemoryStateStore(logger=InMemoryLogger()),
     ) as fresh_gru:
-        await assert_gru_can_start_and_stop_known_good_minion(fresh_gru)
+        await assert_gru_can_start_and_stop_known_good_orchestration(fresh_gru)
