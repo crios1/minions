@@ -184,7 +184,7 @@ async def test_runner_concurrent_starts_capture_started_minions_and_instance_tag
 
 
 @pytest.mark.asyncio
-async def test_runner_tracks_durable_minion_pipeline_and_resource_ids(
+async def test_runner_tracks_durable_minion_pipeline_and_resources(
     gru: Gru,
 ) -> None:
     from tests.assets.minions.two_steps.counter.identified_resourced import (
@@ -481,24 +481,24 @@ async def test_runner_records_lifecycle_observations_after_start_stop_and_shutdo
         result.lifecycle_observations
     )
     receipt = result.receipts[0]
-    assert start_observation.gru_runtime_state.orchestration_ids == {
+    assert start_observation.gru_runtime_state.orchestrations == {
         receipt.orchestration_id
     }
     assert stop_observation.active_orchestration_start_indexes == frozenset()
     empty_runtime = GruRuntimeStateSnapshot(
-        minion_instance_ids=frozenset(),
-        orchestration_ids=frozenset(),
-        minion_task_ids=frozenset(),
-        pipeline_ids=frozenset(),
-        pipeline_task_ids=frozenset(),
-        resource_ids=frozenset(),
-        resource_task_ids=frozenset(),
-        pipeline_id_by_minion_instance_id={},
-        resource_ids_by_minion_instance_id={},
-        resource_ids_by_pipeline_id={},
-        dependency_ids_by_resource_id={},
-        dependent_ids_by_resource_id={},
-        refcount_by_resource_id={},
+        minion_instances=frozenset(),
+        orchestrations=frozenset(),
+        minion_tasks=frozenset(),
+        pipelines=frozenset(),
+        pipeline_tasks=frozenset(),
+        resources=frozenset(),
+        resource_tasks=frozenset(),
+        pipeline_by_minion_instance={},
+        resources_by_minion_instance={},
+        resources_by_pipeline={},
+        resource_dependencies_by_dependent_resource={},
+        resource_dependents_by_dependency_resource={},
+        resource_reference_counts={},
     )
     assert stop_observation.gru_runtime_state == empty_runtime
     assert shutdown_observation.seen_shutdown

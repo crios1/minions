@@ -43,6 +43,7 @@ def _get_minion_event_and_context_types(
         raise TypeError(f"{minion_cls.__name__} is missing runtime Minion types.")
     return event_cls, context_cls
 
+
 # This class name could use a better name,
 # assuming it doesn't get replaced after a through audit/review of the gru scenario DSL.
 # SpyRegistry seems kind of like a duplicated of the tracking done in Gru.
@@ -53,10 +54,9 @@ class SpyRegistry:
     minions: dict[str, type[SpiedMinion[Any, Any]]] = field(default_factory=lambda: dict())
     pipelines: dict[str, type[SpiedPipeline[Any]]] = field(default_factory=lambda: dict())
     resources: set[type[SpiedResource]] = field(default_factory=lambda: set())
-    resource_ids_by_minion_id: dict[str, frozenset[str]] = field(
-        default_factory=lambda: dict()
-    )
-    resource_ids_by_pipeline_id: dict[str, frozenset[str]] = field(
+    resources_by_minion_id: dict[str, frozenset[str]] = field(default_factory=lambda: dict())
+    resources_by_pipeline: dict[str, frozenset[str]] = field(default_factory=lambda: dict())
+    resource_dependencies_by_dependent_resource: dict[str, frozenset[str]] = field(
         default_factory=lambda: dict()
     )
     pipeline_start_attempt_counts: defaultdict[str, int] = field(
@@ -214,7 +214,7 @@ class ScenarioRunner:
                     )
                 self._spies.minions[minion_id] = m_cls
 
-                resource_ids: set[str] = set()
+                resources: set[str] = set()
                 for r_cls in self._insp.get_all_resource_dependencies(m_cls):
                     if not issubclass(r_cls, SpiedResource):
                         pytest.fail(
@@ -222,10 +222,20 @@ class ScenarioRunner:
                             f"got {r_cls!r} while resolving '{minion_modpath}'"
                         )
                     self._spies.resources.add(r_cls)
-                    resource_ids.add(self._insp.get_resource_identity(r_cls))
-                self._spies.resource_ids_by_minion_id[minion_id] = frozenset(
-                    resource_ids
+                    resource_id = self._insp.get_resource_identity(r_cls)
+                    self._spies.resource_dependencies_by_dependent_resource[resource_id] = (
+                        frozenset(
+                            self._insp.get_resource_identity(dependency_cls)
+                            for dependency_cls in (
+                                self._insp.get_direct_resource_dependencies(r_cls)
+                            )
+                        )
+                    )
+                resources.update(
+                    self._insp.get_resource_identity(r_cls)
+                    for r_cls in self._insp.get_direct_resource_dependencies(m_cls)
                 )
+                self._spies.resources_by_minion_id[minion_id] = frozenset(resources)
 
             p_cls = (
                 d.pipeline
@@ -243,7 +253,7 @@ class ScenarioRunner:
                     )
                 self._spies.pipelines[pipeline_id] = p_cls
 
-                resource_ids = set()
+                resources = set()
                 for r_cls in self._insp.get_all_resource_dependencies(p_cls):
                     if not issubclass(r_cls, SpiedResource):
                         pytest.fail(
@@ -251,13 +261,23 @@ class ScenarioRunner:
                             f"got {r_cls!r} while resolving '{pipeline_modpath}'"
                         )
                     self._spies.resources.add(r_cls)
-                    resource_ids.add(self._insp.get_resource_identity(r_cls))
-                self._spies.resource_ids_by_pipeline_id[pipeline_id] = frozenset(
-                    resource_ids
+                    resource_id = self._insp.get_resource_identity(r_cls)
+                    self._spies.resource_dependencies_by_dependent_resource[resource_id] = (
+                        frozenset(
+                            self._insp.get_resource_identity(dependency_cls)
+                            for dependency_cls in (
+                                self._insp.get_direct_resource_dependencies(r_cls)
+                            )
+                        )
+                    )
+                resources.update(
+                    self._insp.get_resource_identity(r_cls)
+                    for r_cls in self._insp.get_direct_resource_dependencies(p_cls)
                 )
+                self._spies.resources_by_pipeline[pipeline_id] = frozenset(resources)
 
     def _validate_pipeline_event_targets(self) -> None:
-        expected_success_pipeline_ids: set[str] = set()
+        expected_success_pipelines: set[str] = set()
         for d in iter_directives_flat(self._plan.directives):
             if not isinstance(d, OrchestrationStart) or not d.expect_success:
                 continue
@@ -267,18 +287,18 @@ class ScenarioRunner:
                 if isinstance(d.pipeline, type)
                 else self._insp.get_pipeline_class(pipeline_modpath)
             )
-            expected_success_pipeline_ids.add(
+            expected_success_pipelines.add(
                 self._insp.get_pipeline_identity(pipeline_modpath, p_cls)
             )
 
-        configured_pipeline_ids = set(self._plan.pipeline_event_targets)
-        missing = sorted(expected_success_pipeline_ids - configured_pipeline_ids)
+        configured_pipelines = set(self._plan.pipeline_event_targets)
+        missing = sorted(expected_success_pipelines - configured_pipelines)
         if missing:
             pytest.fail(
                 "Missing pipeline_event_counts entries for started pipelines: " + ", ".join(missing)
             )
 
-        unused = sorted(configured_pipeline_ids - expected_success_pipeline_ids)
+        unused = sorted(configured_pipelines - expected_success_pipelines)
         if unused:
             pytest.fail(
                 "pipeline_event_counts contains entries for pipelines not started in directives: "
@@ -431,8 +451,7 @@ class ScenarioRunner:
                 if (
                     receipt.success
                     and receipt.orchestration_id == target_id
-                    and receipt.directive_index
-                    in self._active_orchestration_start_indexes
+                    and receipt.directive_index in self._active_orchestration_start_indexes
                 )
             ),
             None,

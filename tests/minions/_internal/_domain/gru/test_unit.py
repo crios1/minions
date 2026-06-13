@@ -507,32 +507,32 @@ class TestUnit:
             minion_instance_id = minion._mn_minion_instance_id
 
             snapshot = gru._runtime_state_snapshot()
-            assert snapshot.minion_instance_ids == {minion_instance_id}
-            assert snapshot.orchestration_ids == {result.orchestration_id}
-            assert snapshot.minion_task_ids == {minion_instance_id}
-            assert snapshot.pipeline_ids == {IDENTIFIED_COUNTER_PIPELINE_ID}
-            assert snapshot.pipeline_task_ids == {IDENTIFIED_COUNTER_PIPELINE_ID}
-            assert snapshot.resource_ids == {IDENTIFIED_FIXED_RESOURCE_ID}
-            assert snapshot.resource_task_ids == {IDENTIFIED_FIXED_RESOURCE_ID}
-            assert snapshot.pipeline_id_by_minion_instance_id == {
+            assert snapshot.minion_instances == {minion_instance_id}
+            assert snapshot.orchestrations == {result.orchestration_id}
+            assert snapshot.minion_tasks == {minion_instance_id}
+            assert snapshot.pipelines == {IDENTIFIED_COUNTER_PIPELINE_ID}
+            assert snapshot.pipeline_tasks == {IDENTIFIED_COUNTER_PIPELINE_ID}
+            assert snapshot.resources == {IDENTIFIED_FIXED_RESOURCE_ID}
+            assert snapshot.resource_tasks == {IDENTIFIED_FIXED_RESOURCE_ID}
+            assert snapshot.pipeline_by_minion_instance == {
                 minion_instance_id: IDENTIFIED_COUNTER_PIPELINE_ID
             }
-            assert snapshot.resource_ids_by_minion_instance_id == {
+            assert snapshot.resources_by_minion_instance == {
                 minion_instance_id: frozenset({IDENTIFIED_FIXED_RESOURCE_ID})
             }
-            assert snapshot.resource_ids_by_pipeline_id == {}
-            assert snapshot.dependency_ids_by_resource_id == {}
-            assert snapshot.dependent_ids_by_resource_id == {}
-            assert snapshot.refcount_by_resource_id == {IDENTIFIED_FIXED_RESOURCE_ID: 1}
+            assert snapshot.resources_by_pipeline == {}
+            assert snapshot.resource_dependencies_by_dependent_resource == {}
+            assert snapshot.resource_dependents_by_dependency_resource == {}
+            assert snapshot.resource_reference_counts == {IDENTIFIED_FIXED_RESOURCE_ID: 1}
 
             with pytest.raises(TypeError):
-                snapshot.pipeline_id_by_minion_instance_id["other"] = "pipeline"  # type: ignore[index]
+                snapshot.pipeline_by_minion_instance["other"] = "pipeline"  # type: ignore[index]
 
             # Mutating Gru after capture must not change the point-in-time snapshot.
-            snapshot_pipeline_map = dict(snapshot.pipeline_id_by_minion_instance_id)
+            snapshot_pipeline_map = dict(snapshot.pipeline_by_minion_instance)
             gru._minion_pipeline_map["other"] = "pipeline"
             try:
-                assert snapshot.pipeline_id_by_minion_instance_id == snapshot_pipeline_map
+                assert snapshot.pipeline_by_minion_instance == snapshot_pipeline_map
             finally:
                 gru._minion_pipeline_map.pop("other")
 

@@ -155,7 +155,7 @@ async def test_stop_resource_cleanup_failure_preserves_shared_runtime_state_for_
         )
         assert first.success
         assert second.success
-        assert gru._resource_refcounts[FIXED_RESOURCE_ID] == 2
+        assert gru._resource_reference_counts[FIXED_RESOURCE_ID] == 2
 
         async def failing_cleanup_resources(_resource_ids: set[str]) -> None:
             raise RuntimeError("resource cleanup boom")
@@ -166,7 +166,7 @@ async def test_stop_resource_cleanup_failure_preserves_shared_runtime_state_for_
         assert not stop.success
         assert stop.reason == "resource cleanup boom"
         assert FIXED_RESOURCE_ID in gru._resources
-        assert gru._resource_refcounts[FIXED_RESOURCE_ID] == 1
+        assert gru._resource_reference_counts[FIXED_RESOURCE_ID] == 1
         assert len(gru._minions_by_instance_id) == 1
         assert second.orchestration_id in gru._minions_by_orchestration_id
 
@@ -212,7 +212,7 @@ async def test_start_subscribe_failure_preserves_shared_runtime_state_for_live_o
         )
         assert first.success
         assert FIXED_RESOURCE_ID in gru._resources
-        assert gru._resource_refcounts[FIXED_RESOURCE_ID] == 1
+        assert gru._resource_reference_counts[FIXED_RESOURCE_ID] == 1
 
         async def failing_cleanup_resources(_resource_ids: set[str]) -> None:
             raise RuntimeError("resource cleanup boom")
@@ -232,7 +232,7 @@ async def test_start_subscribe_failure_preserves_shared_runtime_state_for_live_o
         assert not second.success
         assert second.reason == "subscribe boom"
         assert FIXED_RESOURCE_ID in gru._resources
-        assert gru._resource_refcounts[FIXED_RESOURCE_ID] == 1
+        assert gru._resource_reference_counts[FIXED_RESOURCE_ID] == 1
         assert len(gru._minions_by_instance_id) == 1
         assert first.orchestration_id in gru._minions_by_orchestration_id
 
@@ -255,12 +255,12 @@ async def test_forced_resource_discard_releases_dependency_refcounts(
 
         gru._resource_dependencies[parent_id].add(dep_id)
         gru._resource_dependents[dep_id].add(parent_id)
-        gru._resource_refcounts[parent_id] = 0
-        gru._resource_refcounts[dep_id] = 1
+        gru._resource_reference_counts[parent_id] = 0
+        gru._resource_reference_counts[dep_id] = 1
 
         await gru._discard_resource_runtime_state(parent_id)
 
         assert parent_id not in gru._resources
         assert dep_id not in gru._resources
-        assert parent_id not in gru._resource_refcounts
-        assert dep_id not in gru._resource_refcounts
+        assert parent_id not in gru._resource_reference_counts
+        assert dep_id not in gru._resource_reference_counts

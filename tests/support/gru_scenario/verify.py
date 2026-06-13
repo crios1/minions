@@ -375,21 +375,27 @@ class ScenarioVerifier:
         for observation_index, observation in enumerate(
             self._result.lifecycle_observations
         ):
-            expected_ids_by_state: dict[str, frozenset[str]]
+            expected_by_state: dict[str, object]
             if observation.seen_shutdown:
-                expected_ids_by_state = {
-                    "minion_instance_ids": frozenset(),
-                    "orchestration_ids": frozenset(),
-                    "minion_task_ids": frozenset(),
-                    "pipeline_ids": frozenset(),
-                    "pipeline_task_ids": frozenset(),
-                    "resource_ids": frozenset(),
-                    "resource_task_ids": frozenset(),
+                expected_by_state = {
+                    "minion_instances": frozenset(),
+                    "orchestrations": frozenset(),
+                    "minion_tasks": frozenset(),
+                    "pipelines": frozenset(),
+                    "pipeline_tasks": frozenset(),
+                    "resources": frozenset(),
+                    "resource_tasks": frozenset(),
+                    "pipeline_by_minion_instance": {},
+                    "resources_by_minion_instance": {},
+                    "resources_by_pipeline": {},
+                    "resource_dependencies_by_dependent_resource": {},
+                    "resource_dependents_by_dependency_resource": {},
+                    "resource_reference_counts": {},
                 }
             else:
                 active_receipts = [
                     receipt
-                    for receipt in self._result.receipts[:observation.receipt_count]
+                    for receipt in self._result.receipts[: observation.receipt_count]
                     if (
                         receipt.success
                         and receipt.orchestration_id is not None
@@ -398,7 +404,7 @@ class ScenarioVerifier:
                         in observation.active_orchestration_start_indexes
                     )
                 ]
-                orchestration_ids = frozenset(
+                orchestrations = frozenset(
                     receipt.orchestration_id
                     for receipt in active_receipts
                     if receipt.orchestration_id is not None
@@ -408,39 +414,117 @@ class ScenarioVerifier:
                     for receipt in active_receipts
                     if receipt.instance_id is not None
                 )
-                pipeline_ids = frozenset(
-                    receipt.pipeline_id for receipt in active_receipts
-                )
-                resource_ids = frozenset(
+                pipelines = frozenset(receipt.pipeline_id for receipt in active_receipts)
+                directly_owned_resources = {
                     resource_id
                     for receipt in active_receipts
                     for resource_id in (
-                        spies.resource_ids_by_minion_id.get(receipt.minion_id, frozenset())
-                        | spies.resource_ids_by_pipeline_id.get(
-                            receipt.pipeline_id, frozenset()
+                        spies.resources_by_minion_id.get(receipt.minion_id, frozenset())
+                        | spies.resources_by_pipeline.get(receipt.pipeline_id, frozenset())
+                    )
+                }
+                resources_with_dependencies = set(directly_owned_resources)
+                pending_resources = list(directly_owned_resources)
+                while pending_resources:
+                    resource_id = pending_resources.pop()
+                    for dependency_id in spies.resource_dependencies_by_dependent_resource.get(
+                        resource_id, frozenset()
+                    ):
+                        if dependency_id in resources_with_dependencies:
+                            continue
+                        resources_with_dependencies.add(dependency_id)
+                        pending_resources.append(dependency_id)
+                resources = frozenset(resources_with_dependencies)
+                pipeline_by_minion_instance = {
+                    receipt.instance_id: receipt.pipeline_id
+                    for receipt in active_receipts
+                    if receipt.instance_id is not None
+                }
+                resources_by_minion_instance = {
+                    receipt.instance_id: spies.resources_by_minion_id.get(
+                        receipt.minion_id, frozenset()
+                    )
+                    for receipt in active_receipts
+                    if (
+                        receipt.instance_id is not None
+                        and spies.resources_by_minion_id.get(receipt.minion_id, frozenset())
+                    )
+                }
+                resources_by_pipeline = {
+                    pipeline_id: pipeline_resources
+                    for pipeline_id in pipelines
+                    if (
+                        pipeline_resources := spies.resources_by_pipeline.get(
+                            pipeline_id, frozenset()
                         )
                     )
+                }
+                resource_dependencies_by_dependent_resource = {
+                    resource_id: dependency_ids
+                    for resource_id in resources
+                    if (
+                        dependency_ids := (
+                            spies.resource_dependencies_by_dependent_resource.get(
+                                resource_id, frozenset()
+                            )
+                        )
+                    )
+                }
+                resource_dependents_by_dependency_resource: defaultdict[str, set[str]] = (
+                    defaultdict(set)
                 )
-                expected_ids_by_state = {
-                    "minion_instance_ids": instance_ids,
-                    "orchestration_ids": orchestration_ids,
-                    "minion_task_ids": instance_ids,
-                    "pipeline_ids": pipeline_ids,
-                    "pipeline_task_ids": pipeline_ids,
-                    "resource_ids": resource_ids,
-                    "resource_task_ids": resource_ids,
+                for (
+                    resource_id,
+                    dependency_ids,
+                ) in resource_dependencies_by_dependent_resource.items():
+                    for dependency_id in dependency_ids:
+                        resource_dependents_by_dependency_resource[dependency_id].add(resource_id)
+
+                resource_reference_counts = {resource_id: 0 for resource_id in resources}
+                for owner_resources in resources_by_minion_instance.values():
+                    for resource_id in owner_resources:
+                        resource_reference_counts[resource_id] += 1
+                for owner_resources in resources_by_pipeline.values():
+                    for resource_id in owner_resources:
+                        resource_reference_counts[resource_id] += 1
+                for dependency_ids in resource_dependencies_by_dependent_resource.values():
+                    for dependency_id in dependency_ids:
+                        resource_reference_counts[dependency_id] += 1
+
+                expected_by_state = {
+                    "minion_instances": instance_ids,
+                    "orchestrations": orchestrations,
+                    "minion_tasks": instance_ids,
+                    "pipelines": pipelines,
+                    "pipeline_tasks": pipelines,
+                    "resources": resources,
+                    "resource_tasks": resources,
+                    "pipeline_by_minion_instance": pipeline_by_minion_instance,
+                    "resources_by_minion_instance": (resources_by_minion_instance),
+                    "resources_by_pipeline": resources_by_pipeline,
+                    "resource_dependencies_by_dependent_resource": (
+                        resource_dependencies_by_dependent_resource
+                    ),
+                    "resource_dependents_by_dependency_resource": {
+                        resource_id: frozenset(dependent_ids)
+                        for resource_id, dependent_ids in (
+                            resource_dependents_by_dependency_resource.items()
+                        )
+                        if dependent_ids
+                    },
+                    "resource_reference_counts": resource_reference_counts,
                 }
 
-            for state_name, expected_ids in expected_ids_by_state.items():
-                actual_ids = getattr(observation.gru_runtime_state, state_name)
-                if actual_ids != expected_ids:
+            for state_name, expected in expected_by_state.items():
+                actual = getattr(observation.gru_runtime_state, state_name)
+                if actual != expected:
                     pytest.fail(
                         "Gru lifecycle tracking mismatch: "
                         f"directive={observation.directive_type.__name__}, "
                         f"observation_index={observation_index}, "
                         f"state={state_name}, "
-                        f"expected={sorted(expected_ids)!r}, "
-                        f"actual={sorted(actual_ids)!r}."
+                        f"expected={expected!r}, "
+                        f"actual={actual!r}."
                     )
 
     def _compute_minion_expectations(

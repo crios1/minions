@@ -40,6 +40,12 @@ class GruIntrospector:
     ) -> set[type[Resource]]:
         return self._gru._get_all_resource_dependencies(cls)
 
+    def get_direct_resource_dependencies(
+        self,
+        cls: type[Minion[Any, Any]] | type[Pipeline[Any]] | type[Resource],
+    ) -> list[type[Resource]]:
+        return self._gru._get_direct_resource_dependencies(cls)
+
     def get_resource_identity(self, resource_cls: type[Resource]) -> str:
         return self._gru._make_resource_id(resource_cls)
 

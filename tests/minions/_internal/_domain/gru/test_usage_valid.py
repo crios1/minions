@@ -34,7 +34,6 @@ from tests.support.gru_scenario import (
     run_gru_scenario,
 )
 
-FIXED_RESOURCE_ID = "tests.assets.resources.fixed.base.FixedResource"
 MINION_COMPONENT_ID = "77777777-7777-4777-8777-77777777777a"
 PIPELINE_COMPONENT_ID = "88888888-8888-4888-8888-88888888888b"
 CONFIG_ID = "99999999-9999-4999-8999-99999999999c"
@@ -973,27 +972,34 @@ class TestValidUsageDSL:
     async def test_minion_and_pipeline_share_resource_without_duplicate_owner_ref(
         self,
         gru: Gru,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
     ) -> None:
-        # Exact owner-ref counts are not currently expressible through the scenario DSL.
-        first = await gru.start_orchestration(
-            "tests.assets.pipelines.resourced.counter.with_fixed_resource",
-            "tests.assets.minions.two_steps.counter.resourced",
+        pipeline_modpath = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
+        first = OrchestrationStart(
+            pipeline=pipeline_modpath,
+            minion="tests.assets.minions.two_steps.counter.resourced",
         )
-        second = await gru.start_orchestration(
-            "tests.assets.pipelines.resourced.counter.with_fixed_resource",
-            "tests.assets.minions.two_steps.counter.resourced_shared_b",
+        second = OrchestrationStart(
+            pipeline=pipeline_modpath,
+            minion="tests.assets.minions.two_steps.counter.resourced_shared_b",
         )
-        assert first.success
-        assert second.success
-        assert gru._resource_refcounts[FIXED_RESOURCE_ID] == 3
-
-        first_stop = await gru.stop_orchestration(first.orchestration_id or "")
-        assert first_stop.success
-        assert gru._resource_refcounts[FIXED_RESOURCE_ID] == 2
-
-        second_stop = await gru.stop_orchestration(second.orchestration_id or "")
-        assert second_stop.success
-        assert gru._runtime_state_snapshot().is_empty
+        await run_gru_scenario(
+            gru,
+            logger,
+            metrics,
+            state_store,
+            [
+                first,
+                second,
+                WaitWorkflowCompletions(workflow_steps_mode="exact"),
+                OrchestrationStop(id=first, expect_success=True),
+                OrchestrationStop(id=second, expect_success=True),
+                GruShutdown(expect_success=True),
+            ],
+            pipeline_event_counts={pipeline_modpath: 1},
+        )
 
     @pytest.mark.asyncio
     async def test_gru_start_orchestration_shutdown_without_stop(

@@ -102,7 +102,7 @@ def test_assert_metrics_label_contract_reports_recorded_mismatches():
 
     with pytest.raises(pytest.fail.Exception, match="Metrics label contract mismatch"):
         verifier._assert_metrics_label_contract()
-    
+
     assert isinstance(verifier._metrics, InMemoryMetrics)
 
     verifier._metrics.clear_metric_label_emissions()
@@ -1688,23 +1688,19 @@ def test_assert_lifecycle_tracking_reports_untracked_successful_start():
                 active_orchestration_start_indexes=frozenset({0}),
                 seen_shutdown=False,
                 gru_runtime_state=GruRuntimeStateSnapshot(
-                    minion_instance_ids=frozenset({"minion-instance-1"}),
-                    orchestration_ids=frozenset(),
-                    minion_task_ids=frozenset({"minion-instance-1"}),
-                    pipeline_ids=frozenset(
-                        {"tests.assets.pipelines.emit1.counter.emit_1"}
-                    ),
-                    pipeline_task_ids=frozenset(
-                        {"tests.assets.pipelines.emit1.counter.emit_1"}
-                    ),
-                    resource_ids=frozenset(),
-                    resource_task_ids=frozenset(),
-                    pipeline_id_by_minion_instance_id={},
-                    resource_ids_by_minion_instance_id={},
-                    resource_ids_by_pipeline_id={},
-                    dependency_ids_by_resource_id={},
-                    dependent_ids_by_resource_id={},
-                    refcount_by_resource_id={},
+                    minion_instances=frozenset({"minion-instance-1"}),
+                    orchestrations=frozenset(),
+                    minion_tasks=frozenset({"minion-instance-1"}),
+                    pipelines=frozenset({"tests.assets.pipelines.emit1.counter.emit_1"}),
+                    pipeline_tasks=frozenset({"tests.assets.pipelines.emit1.counter.emit_1"}),
+                    resources=frozenset(),
+                    resource_tasks=frozenset(),
+                    pipeline_by_minion_instance={},
+                    resources_by_minion_instance={},
+                    resources_by_pipeline={},
+                    resource_dependencies_by_dependent_resource={},
+                    resource_dependents_by_dependency_resource={},
+                    resource_reference_counts={},
                 ),
             ),
         ],
@@ -1715,8 +1711,68 @@ def test_assert_lifecycle_tracking_reports_untracked_successful_start():
         match=(
             "Gru lifecycle tracking mismatch: "
             "directive=OrchestrationStart, observation_index=0, "
-            "state=orchestration_ids"
+            "state=orchestrations"
         ),
+    ):
+        _mk_verifier(plan, result)._assert_lifecycle_tracking()
+
+
+def test_assert_lifecycle_tracking_reports_resource_refcount_mismatch():
+    minion_id = "tests.assets.minions.two_steps.counter.resourced"
+    pipeline_id = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
+    resource_id = "tests.assets.resources.fixed.base.FixedResource"
+    plan = ScenarioPlan(
+        [OrchestrationStart(minion=minion_id, pipeline=pipeline_id)],
+        pipeline_event_counts={pipeline_id: 1},
+    )
+    result = ScenarioRunResult(
+        spies=SpyRegistry(
+            minions={minion_id: TwoStepMinion},
+            pipelines={pipeline_id: Emit1Pipeline},
+            resources_by_minion_id={minion_id: frozenset({resource_id})},
+            resources_by_pipeline={pipeline_id: frozenset({resource_id})},
+        ),
+        receipts=[
+            OrchestrationStartReceipt(
+                directive_index=0,
+                minion_modpath=minion_id,
+                pipeline_modpath=pipeline_id,
+                instance_id="minion-instance-1",
+                minion_cls=TwoStepMinion,
+                success=True,
+                orchestration_id="orchestration-1",
+                pipeline_id=pipeline_id,
+                minion_id=minion_id,
+            ),
+        ],
+        lifecycle_observations=[
+            LifecycleObservation(
+                directive_type=OrchestrationStart,
+                receipt_count=1,
+                active_orchestration_start_indexes=frozenset({0}),
+                seen_shutdown=False,
+                gru_runtime_state=GruRuntimeStateSnapshot(
+                    minion_instances=frozenset({"minion-instance-1"}),
+                    orchestrations=frozenset({"orchestration-1"}),
+                    minion_tasks=frozenset({"minion-instance-1"}),
+                    pipelines=frozenset({pipeline_id}),
+                    pipeline_tasks=frozenset({pipeline_id}),
+                    resources=frozenset({resource_id}),
+                    resource_tasks=frozenset({resource_id}),
+                    pipeline_by_minion_instance={"minion-instance-1": pipeline_id},
+                    resources_by_minion_instance={"minion-instance-1": frozenset({resource_id})},
+                    resources_by_pipeline={pipeline_id: frozenset({resource_id})},
+                    resource_dependencies_by_dependent_resource={},
+                    resource_dependents_by_dependency_resource={},
+                    resource_reference_counts={resource_id: 3},
+                ),
+            ),
+        ],
+    )
+
+    with pytest.raises(
+        pytest.fail.Exception,
+        match="state=resource_reference_counts",
     ):
         _mk_verifier(plan, result)._assert_lifecycle_tracking()
 
@@ -1998,9 +2054,7 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                persisted_contexts_by_orchestration_id={
-                    "instance-1": 3
-                },
+                persisted_contexts_by_orchestration_id={"instance-1": 3},
             ),
             ScenarioCheckpoint(
                 order=1,
@@ -2009,9 +2063,7 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                persisted_contexts_by_orchestration_id={
-                    "instance-1": 99
-                },
+                persisted_contexts_by_orchestration_id={"instance-1": 99},
             ),
         ],
     )
@@ -2144,9 +2196,7 @@ def test_assert_runtime_expectations_fails_for_out_of_range_checkpoint_index():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                persisted_contexts_by_orchestration_id={
-                    "instance-1": 1
-                },
+                persisted_contexts_by_orchestration_id={"instance-1": 1},
             ),
         ],
     )

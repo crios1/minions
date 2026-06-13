@@ -68,19 +68,21 @@ _gru_instance: Gru | None = None
 
 @dataclass(frozen=True)
 class GruRuntimeStateSnapshot:
-    minion_instance_ids: frozenset[str]
-    orchestration_ids: frozenset[str]
-    minion_task_ids: frozenset[str]
-    pipeline_ids: frozenset[str]
-    pipeline_task_ids: frozenset[str]
-    resource_ids: frozenset[str]
-    resource_task_ids: frozenset[str]
-    pipeline_id_by_minion_instance_id: Mapping[str, str]
-    resource_ids_by_minion_instance_id: Mapping[str, frozenset[str]]
-    resource_ids_by_pipeline_id: Mapping[str, frozenset[str]]
-    dependency_ids_by_resource_id: Mapping[str, frozenset[str]]
-    dependent_ids_by_resource_id: Mapping[str, frozenset[str]]
-    refcount_by_resource_id: Mapping[str, int]
+    """Immutable runtime relationships represented entirely by stable identifiers."""
+
+    minion_instances: frozenset[str]
+    orchestrations: frozenset[str]
+    minion_tasks: frozenset[str]
+    pipelines: frozenset[str]
+    pipeline_tasks: frozenset[str]
+    resources: frozenset[str]
+    resource_tasks: frozenset[str]
+    pipeline_by_minion_instance: Mapping[str, str]
+    resources_by_minion_instance: Mapping[str, frozenset[str]]
+    resources_by_pipeline: Mapping[str, frozenset[str]]
+    resource_dependencies_by_dependent_resource: Mapping[str, frozenset[str]]
+    resource_dependents_by_dependency_resource: Mapping[str, frozenset[str]]
+    resource_reference_counts: Mapping[str, int]
 
     @property
     def is_empty(self) -> bool:
@@ -265,13 +267,13 @@ class Gru:
         # registries
         self._minions_by_instance_id: dict[str, Minion[Any, Any]] = {} # key = minion_instance_id
         self._minions_by_orchestration_id: dict[str, Minion[Any, Any]] = {} # key = orchestration_id
-        self._minion_tasks: dict[str, asyncio.Task[None]] = {} # key = minion_instance_id
+        self._minion_tasks: dict[str, asyncio.Task[None]] = {}  # key = minion_instance_id
 
-        self._pipelines: dict[str, Pipeline[Any]] = {} # key = pipeline_id
-        self._pipeline_tasks: dict[str, asyncio.Task[None]] = {} # key = pipeline_id
+        self._pipelines: dict[str, Pipeline[Any]] = {}  # key = pipeline_id
+        self._pipeline_tasks: dict[str, asyncio.Task[None]] = {}  # key = pipeline_id
 
-        self._resources: dict[str, Resource] = {} # key = resource_id
-        self._resource_tasks: dict[str, asyncio.Task[None]] = {} # key = resource_id
+        self._resources: dict[str, Resource] = {}  # key = resource_id
+        self._resource_tasks: dict[str, asyncio.Task[None]] = {}  # key = resource_id
 
         # dependency maps used to manage domain object lifecycles
         self._dependency_maps_lock = asyncio.Lock()
@@ -286,7 +288,9 @@ class Gru:
         self._resource_dependents: dict[str, set[str]] = defaultdict(
             set
         )  # resource_id -> set(parent_id)
-        self._resource_refcounts: dict[str, int] = defaultdict(int)  # total refs (owners + edges)
+        self._resource_reference_counts: dict[str, int] = defaultdict(
+            int
+        )  # total refs (owners + edges)
 
         self._resource_monitor_task = safe_create_task(
             self._monitor_process_resources(),
@@ -632,7 +636,6 @@ class Gru:
                 cls,
                 dependency_resource_classes=dependency_resource_classes,
             )
-            
             async with self._runtime_state_lock:
                 for dependency_resource_cls in dependency_resource_classes:
                     dep_id = self._make_resource_id(dependency_resource_cls)
@@ -640,7 +643,7 @@ class Gru:
                         continue
                     self._resource_dependencies[rid].add(dep_id)
                     self._resource_dependents[dep_id].add(rid)
-                    self._resource_refcounts[dep_id] += 1
+                    self._resource_reference_counts[dep_id] += 1
 
         async with self._runtime_state_lock:
             return self._resources[self._make_resource_id(resource_cls)]
@@ -662,7 +665,7 @@ class Gru:
                 # only attempt stop if running and unreferenced
                 if rid not in self._resources:
                     continue
-                if self._resource_refcounts.get(rid, 0) > 0:
+                if self._resource_reference_counts.get(rid, 0) > 0:
                     continue
 
                 deps = list(self._resource_dependencies.get(rid, ()))
@@ -673,12 +676,12 @@ class Gru:
                 for dep_id in deps:
                     self._resource_dependencies[rid].discard(dep_id)
                     self._resource_dependents[dep_id].discard(rid)
-                    self._resource_refcounts[dep_id] -= 1
-                    if self._resource_refcounts[dep_id] == 0:
+                    self._resource_reference_counts[dep_id] -= 1
+                    if self._resource_reference_counts[dep_id] == 0:
                         queue.append(dep_id)
                 self._resource_dependencies.pop(rid, None)
                 self._resource_dependents.pop(rid, None)
-                self._resource_refcounts.pop(rid, None)
+                self._resource_reference_counts.pop(rid, None)
 
     # TODO: in start and stop minion,
     # i need to start resources of resources
@@ -747,7 +750,7 @@ class Gru:
 
     def _is_resource_in_use(self, resource_id: str) -> bool:
         # A resource is considered in use if its total reference count is > 0
-        return self._resource_refcounts.get(resource_id, 0) > 0
+        return self._resource_reference_counts.get(resource_id, 0) > 0
 
 
     # Pipeline Methods
@@ -862,7 +865,7 @@ class Gru:
                     # Decrement owner refs and cleanup
                     async with self._runtime_state_lock:
                         for r_id in resource_ids:
-                            self._resource_refcounts[r_id] -= 1
+                            self._resource_reference_counts[r_id] -= 1
                     resource_owner_refs_released = True
                     await self._cleanup_resources(resource_ids)
                     resources_cleaned = True
@@ -917,7 +920,7 @@ class Gru:
                 resource_ids = self._minion_resource_map.pop(instance_id, None)
                 if resource_ids:
                     for resource_id in resource_ids:
-                        self._resource_refcounts[resource_id] -= 1
+                        self._resource_reference_counts[resource_id] -= 1
             if resource_ids:
                 await self._cleanup_resources_best_effort(resource_ids)
 
@@ -929,7 +932,7 @@ class Gru:
         async with self._runtime_state_lock:
             new_resource_ids = set(self._resources) - preexisting_resource_ids
             for resource_id in list(new_resource_ids):
-                self._resource_refcounts[resource_id] = 0
+                self._resource_reference_counts[resource_id] = 0
         await self._cleanup_resources_best_effort(new_resource_ids)
 
         self._prune_resource_maps()
@@ -999,7 +1002,7 @@ class Gru:
 
             if resource_ids and not resource_owner_refs_released:
                 for resource_id in resource_ids:
-                    self._resource_refcounts[resource_id] -= 1
+                    self._resource_reference_counts[resource_id] -= 1
                 resource_owner_refs_released = True
 
             if resource_ids and resource_owner_refs_released and not resources_cleaned:
@@ -1042,13 +1045,13 @@ class Gru:
             deps = set(self._resource_dependencies.pop(resource_id, ()))
             for dep_id in deps:
                 self._resource_dependents[dep_id].discard(resource_id)
-                if dep_id in self._resource_refcounts:
-                    self._resource_refcounts[dep_id] -= 1
-                    if self._resource_refcounts[dep_id] <= 0 and dep_id in self._resources:
+                if dep_id in self._resource_reference_counts:
+                    self._resource_reference_counts[dep_id] -= 1
+                    if self._resource_reference_counts[dep_id] <= 0 and dep_id in self._resources:
                         cascade_discard_ids.append(dep_id)
 
             self._resource_dependents.pop(resource_id, None)
-            self._resource_refcounts.pop(resource_id, None)
+            self._resource_reference_counts.pop(resource_id, None)
             for dependencies in self._resource_dependencies.values():
                 dependencies.discard(resource_id)
             for dependents in self._resource_dependents.values():
@@ -1076,7 +1079,7 @@ class Gru:
             except Exception:
                 pass
             for resource_id in resource_id_list:
-                if self._resource_refcounts.get(resource_id, 0) <= 0:
+                if self._resource_reference_counts.get(resource_id, 0) <= 0:
                     await self._discard_resource_runtime_state(resource_id)
             self._prune_resource_maps()
 
@@ -1084,7 +1087,7 @@ class Gru:
         for mapping in (
             self._resource_dependencies,
             self._resource_dependents,
-            self._resource_refcounts,
+            self._resource_reference_counts,
         ):
             for resource_id in list(mapping):
                 if resource_id not in self._resources:
@@ -1140,7 +1143,7 @@ class Gru:
         if resource_ids and not resource_owner_refs_released:
             async with self._runtime_state_lock:
                 for resource_id in resource_ids:
-                    self._resource_refcounts[resource_id] -= 1
+                    self._resource_reference_counts[resource_id] -= 1
             resource_owner_refs_released = True
 
         if resource_ids and resource_owner_refs_released and not resources_cleaned:
@@ -1162,41 +1165,43 @@ class Gru:
         # MappingProxyType would not make their mutable values immutable; relationship
         # maps preserve copied values as immutable point-in-time state.
         return GruRuntimeStateSnapshot(
-            minion_instance_ids=frozenset(self._minions_by_instance_id),
-            orchestration_ids=frozenset(self._minions_by_orchestration_id),
-            minion_task_ids=frozenset(self._minion_tasks),
-            pipeline_ids=frozenset(self._pipelines),
-            pipeline_task_ids=frozenset(self._pipeline_tasks),
-            resource_ids=frozenset(self._resources),
-            resource_task_ids=frozenset(self._resource_tasks),
-            pipeline_id_by_minion_instance_id=MappingProxyType(
-                dict(self._minion_pipeline_map)
-            ),
-            resource_ids_by_minion_instance_id=MappingProxyType(
+            minion_instances=frozenset(self._minions_by_instance_id),
+            orchestrations=frozenset(self._minions_by_orchestration_id),
+            minion_tasks=frozenset(self._minion_tasks),
+            pipelines=frozenset(self._pipelines),
+            pipeline_tasks=frozenset(self._pipeline_tasks),
+            resources=frozenset(self._resources),
+            resource_tasks=frozenset(self._resource_tasks),
+            pipeline_by_minion_instance=MappingProxyType(dict(self._minion_pipeline_map)),
+            resources_by_minion_instance=MappingProxyType(
                 {
                     minion_instance_id: frozenset(resource_ids)
                     for minion_instance_id, resource_ids in self._minion_resource_map.items()
                 }
             ),
-            resource_ids_by_pipeline_id=MappingProxyType(
+            resources_by_pipeline=MappingProxyType(
                 {
                     pipeline_id: frozenset(resource_ids)
                     for pipeline_id, resource_ids in self._pipeline_resource_map.items()
                 }
             ),
-            dependency_ids_by_resource_id=MappingProxyType(
+            resource_dependencies_by_dependent_resource=MappingProxyType(
                 {
-                    resource_id: frozenset(dependency_ids)
-                    for resource_id, dependency_ids in self._resource_dependencies.items()
+                    parent_resource_id: frozenset(child_resource_ids)
+                    for parent_resource_id, child_resource_ids in (
+                        self._resource_dependencies.items()
+                    )
                 }
             ),
-            dependent_ids_by_resource_id=MappingProxyType(
+            resource_dependents_by_dependency_resource=MappingProxyType(
                 {
-                    resource_id: frozenset(dependent_ids)
-                    for resource_id, dependent_ids in self._resource_dependents.items()
+                    child_resource_id: frozenset(parent_resource_ids)
+                    for child_resource_id, parent_resource_ids in (
+                        self._resource_dependents.items()
+                    )
                 }
             ),
-            refcount_by_resource_id=MappingProxyType(dict(self._resource_refcounts)),
+            resource_reference_counts=MappingProxyType(dict(self._resource_reference_counts)),
         )
 
     def _runtime_tasks_snapshot(self) -> list[asyncio.Task[None]]:
@@ -1532,7 +1537,7 @@ class Gru:
                             self._minion_resource_map.setdefault(minion_instance_id, set()).add(
                                 resource_id
                             )
-                            self._resource_refcounts[resource_id] += 1
+                            self._resource_reference_counts[resource_id] += 1
 
                     async with self._runtime_state_lock:
                         pipeline_running = pipeline_id in self._pipelines
@@ -1573,7 +1578,7 @@ class Gru:
                                 )
                                 if resource_id not in pipeline_resource_ids:
                                     pipeline_resource_ids.add(resource_id)
-                                    self._resource_refcounts[resource_id] += 1
+                                    self._resource_reference_counts[resource_id] += 1
 
                         await self._start_pipeline(pipeline_id, pipeline_inst)
                     else:
@@ -1785,7 +1790,8 @@ class Gru:
                         if resource_ids:
                             released_resource_ids = set(resource_ids)
                             for r_id in resource_ids:
-                                self._resource_refcounts[r_id] -= 1  # remove owner ref from minion
+                                # remove owner ref from minion
+                                self._resource_reference_counts[r_id] -= 1
                     if resource_ids:
                         resource_owner_refs_released = True
                         await self._cleanup_resources(resource_ids)

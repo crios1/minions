@@ -351,7 +351,7 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
 
         resource_id = gru._make_resource_id(fixed_resource.FixedResource)
         assert gru._pipeline_resource_map[pipeline_modpath] == {resource_id}
-        assert gru._resource_refcounts[resource_id] == 1
+        assert gru._resource_reference_counts[resource_id] == 1
 
         stop1 = await gru.stop_orchestration(result1.orchestration_id or "")
         stop2 = await gru.stop_orchestration(result2.orchestration_id or "")
@@ -403,8 +403,8 @@ async def test_gru_injects_resource_dependencies_before_resource_startup(
         depends_on_fixed_resource_inst = gru._resources[depends_on_fixed_resource_id]
         assert gru._pipeline_resource_map[pipeline_modpath] == {depends_on_fixed_resource_id}
         assert gru._resource_dependencies[depends_on_fixed_resource_id] == {fixed_resource_id}
-        assert gru._resource_refcounts[depends_on_fixed_resource_id] == 1
-        assert gru._resource_refcounts[fixed_resource_id] == 1
+        assert gru._resource_reference_counts[depends_on_fixed_resource_id] == 1
+        assert gru._resource_reference_counts[fixed_resource_id] == 1
         assert getattr(depends_on_fixed_resource_inst, "startup_value") == 123
 
         stop = await gru.stop_orchestration(result.orchestration_id or "")
@@ -478,9 +478,9 @@ async def test_gru_starts_resource_with_multiple_resource_dependencies(
         assert compound.second is gru._resources[second_id]
         assert gru._pipeline_resource_map[CompoundDependencyPipeline.__module__] == {compound_id}
         assert gru._resource_dependencies[compound_id] == {first_id, second_id}
-        assert gru._resource_refcounts[compound_id] == 1
-        assert gru._resource_refcounts[first_id] == 1
-        assert gru._resource_refcounts[second_id] == 1
+        assert gru._resource_reference_counts[compound_id] == 1
+        assert gru._resource_reference_counts[first_id] == 1
+        assert gru._resource_reference_counts[second_id] == 1
 
         stop = await gru.stop_orchestration(result.orchestration_id or "")
 
