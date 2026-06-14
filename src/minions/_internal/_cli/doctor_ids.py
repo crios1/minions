@@ -8,24 +8,21 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-from minions._internal._cli.component_id_stamp import (
-    _component_kind,
-    _decorator_name,
+from minions._internal._cli.component_id_source import (
+    DECORATOR_BY_KIND,
+    component_id_for_class,
+    component_kind,
+    module_string_constants,
 )
 from minions._internal._cli.component_id_stamp import (
     expand_paths as expand_component_paths,
 )
 from minions._internal._cli.config_id_stamp import expand_paths as expand_config_paths
-from minions._internal._domain.component_identity import _validate_component_id
+from minions._internal._domain.component_identity import validate_component_id
 from minions._internal._domain.config_identity import get_config_id
 
 __all__ = ["main"]
 
-_COMPONENT_ID_DECORATOR_BY_KIND = {
-    "minion": "minion_id",
-    "pipeline": "pipeline_id",
-    "resource": "resource_id",
-}
 _CONFIG_SUFFIXES = {".toml", ".yaml", ".yml", ".json"}
 
 
@@ -75,47 +72,31 @@ def _split_paths(paths: list[Path]) -> tuple[list[Path], list[Path]]:
     return component_paths, config_paths
 
 
-def _literal_string_arg(node: ast.AST) -> str | None:
-    if not isinstance(node, ast.Call) or not node.args:
-        return None
-    arg = node.args[0]
-    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-        return arg.value
-    return None
-
-
-def _component_id_for_class(node: ast.ClassDef, kind: str) -> tuple[str | None, int | None]:
-    decorator_name = _COMPONENT_ID_DECORATOR_BY_KIND[kind]
-    for decorator in node.decorator_list:
-        if _decorator_name(decorator) == decorator_name:
-            return _literal_string_arg(decorator), decorator.lineno
-    return None, None
-
-
 def inspect_component_file(path: Path) -> tuple[list[ComponentIdentity], list[Issue]]:
     source = path.read_text()
     tree = ast.parse(source)
+    constants = module_string_constants(tree)
     identities: list[ComponentIdentity] = []
     issues: list[Issue] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.ClassDef):
             continue
-        kind = _component_kind(node)
+        kind = component_kind(node)
         if kind is None:
             continue
-        component_id, decorator_lineno = _component_id_for_class(node, kind)
+        component_id, decorator_lineno = component_id_for_class(node, kind, constants)
         if component_id is None:
             issues.append(
                 Issue(
                     path=path,
                     lineno=node.lineno,
                     code="missing-component-id",
-                    message=f"{node.name} is missing @{_COMPONENT_ID_DECORATOR_BY_KIND[kind]}",
+                    message=f"{node.name} is missing @{DECORATOR_BY_KIND[kind]}",
                 )
             )
             continue
         try:
-            component_id = _validate_component_id(component_id)
+            component_id = validate_component_id(component_id)
         except Exception as e:
             issues.append(
                 Issue(

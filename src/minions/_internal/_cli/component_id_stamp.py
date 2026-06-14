@@ -4,23 +4,19 @@ from __future__ import annotations
 
 import argparse
 import ast
-import uuid
 from dataclasses import dataclass
 from pathlib import Path
+
+from minions._internal._cli.component_id_source import (
+    DECORATOR_BY_KIND,
+    component_kind,
+    has_component_id_decorator,
+)
+from minions._internal._domain.component_identity import generate_component_id
 
 __all__ = ["main"]
 
 
-_DECORATOR_BY_KIND = {
-    "minion": "minion_id",
-    "pipeline": "pipeline_id",
-    "resource": "resource_id",
-}
-_BASE_KIND_BY_NAME = {
-    "Minion": "minion",
-    "Pipeline": "pipeline",
-    "Resource": "resource",
-}
 _SKIP_DIRS = {
     ".git",
     ".mypy_cache",
@@ -51,53 +47,21 @@ class StampResult:
     stamps: tuple[Stamp, ...]
 
 
-def _name_from_expr(node: ast.AST) -> str | None:
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Attribute):
-        return node.attr
-    if isinstance(node, ast.Subscript):
-        return _name_from_expr(node.value)
-    return None
-
-
-def _decorator_name(node: ast.AST) -> str | None:
-    if isinstance(node, ast.Call):
-        return _name_from_expr(node.func)
-    return _name_from_expr(node)
-
-
-def _component_kind(node: ast.ClassDef) -> str | None:
-    kinds = {
-        _BASE_KIND_BY_NAME[base_name]
-        for base in node.bases
-        if (base_name := _name_from_expr(base)) in _BASE_KIND_BY_NAME
-    }
-    if len(kinds) == 1:
-        return next(iter(kinds))
-    return None
-
-
-def _has_component_id_decorator(node: ast.ClassDef, kind: str) -> bool:
-    expected = _DECORATOR_BY_KIND[kind]
-    return any(_decorator_name(decorator) == expected for decorator in node.decorator_list)
-
-
 def _stamps_for_source(source: str) -> tuple[Stamp, ...]:
     tree = ast.parse(source)
     stamps: list[Stamp] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.ClassDef):
             continue
-        kind = _component_kind(node)
-        if kind is None or _has_component_id_decorator(node, kind):
+        kind = component_kind(node)
+        if kind is None or has_component_id_decorator(node, kind):
             continue
         insert_lineno = node.decorator_list[0].lineno if node.decorator_list else node.lineno
         stamps.append(
             Stamp(
                 lineno=insert_lineno,
-                decorator=_DECORATOR_BY_KIND[kind],
-                component_id=str(uuid.uuid4()),
+                decorator=DECORATOR_BY_KIND[kind],
+                component_id=generate_component_id(),
                 class_name=node.name,
             )
         )

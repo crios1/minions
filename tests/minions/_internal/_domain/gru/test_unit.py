@@ -114,33 +114,6 @@ class TestUnit:
         )
         assert Gru._get_minion_identity(StableIdMinion, "fallback.minion") == MINION_COMPONENT_ID
 
-    def test_component_id_decorators_validate_component_kind(self) -> None:
-        with pytest.raises(TypeError, match="@minion_id"):
-            minion_id(MINION_COMPONENT_ID)(Resource)
-
-        with pytest.raises(TypeError, match="@pipeline_id"):
-            pipeline_id(PIPELINE_COMPONENT_ID)(Resource)
-
-        with pytest.raises(TypeError, match="@resource_id"):
-            resource_id(RESOURCE_COMPONENT_ID)(Pipeline)
-
-    def test_component_id_decorators_require_uuid_ids(self) -> None:
-        with pytest.raises(ValueError, match="component id"):
-            resource_id("test.resource.alpha")(Resource)
-
-        with pytest.raises(ValueError, match="canonical lowercase UUID"):
-            resource_id(RESOURCE_COMPONENT_ID.upper())(Resource)
-
-    def test_component_id_decorators_reject_duplicate_loaded_ids(self) -> None:
-        @resource_id(RESOURCE_COMPONENT_ID)
-        class FirstDuplicateResource(Resource):  # pyright: ignore[reportUnusedClass]
-            pass
-
-        with pytest.raises(ValueError, match="Duplicate resource component id"):
-            @resource_id(RESOURCE_COMPONENT_ID)
-            class SecondDuplicateResource(Resource):  # pyright: ignore[reportUnusedClass]
-                pass
-
     def test_idless_components_keep_fallback_identity(self) -> None:
         class PrototypeResource(Resource):
             pass

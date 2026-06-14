@@ -3,8 +3,7 @@
 The file lives outside gru.py so the public decorators and registry logic stay
 small and importable, but the concept currently belongs to Gru's identity
 boundary. Gru is the runtime consumer that turns these component IDs into stable
-minion, pipeline, and resource identities; the tests intentionally live with the
-Gru unit tests for that reason.
+minion, pipeline, and resource identities.
 
 If Gru is later split into a package/module hierarchy, this module should likely
 move under that identity boundary instead of remaining as general domain code.
@@ -27,11 +26,11 @@ ComponentKind = Literal["minion", "pipeline", "resource"]
 _COMPONENT_ID_REGISTRY: dict[tuple[ComponentKind, str], weakref.ReferenceType[type[Any]]] = {}
 
 
-def _component_ref(cls: type[Any]) -> str:
-    return f"{cls.__module__}:{cls.__qualname__}"
+def generate_component_id() -> str:
+    return str(uuid.uuid4())
 
 
-def _validate_component_id(component_id: object) -> str:
+def validate_component_id(component_id: object) -> str:
     if not isinstance(component_id, str):
         raise TypeError("component id must be a string")
     component_id = component_id.strip()
@@ -44,6 +43,10 @@ def _validate_component_id(component_id: object) -> str:
     if str(parsed) != component_id:
         raise ValueError("component id must be a canonical lowercase UUID string")
     return component_id
+
+
+def _component_ref(cls: type[Any]) -> str:
+    return f"{cls.__module__}:{cls.__qualname__}"
 
 
 def _register_component_id(kind: ComponentKind, component_id: str, cls: type[Any]) -> None:
@@ -72,7 +75,7 @@ def _attach_component_id(kind: ComponentKind, component_id: str, cls: T_Componen
     if not issubclass(cls, expected_cls):
         raise TypeError(f"@{kind}_id can only decorate {expected_cls.__name__} subclasses")
 
-    normalized_id = _validate_component_id(component_id)
+    normalized_id = validate_component_id(component_id)
     existing_kind = cls.__dict__.get("_mn_component_kind")
     existing_id = cls.__dict__.get("_mn_component_id")
     if existing_kind is not None and existing_kind != kind:

@@ -494,3 +494,40 @@ def test_python_m_minions_doctor_ids_reports_missing_invalid_and_duplicate_ids(
     assert "missing-config-id" in completed.stdout
     assert "invalid-config-id" in completed.stdout
     assert "duplicate-config-id" in completed.stdout
+
+
+def test_python_m_minions_doctor_ids_resolves_module_level_component_id_constants(
+    tmp_path: Path,
+) -> None:
+    source_path = tmp_path / "components.py"
+    duplicate_component_id = "55555555-5555-4555-8555-55555555555e"
+    source_path.write_text(
+        "\n".join(
+            [
+                "from minions import Resource, resource_id",
+                "",
+                f'FIRST_RESOURCE_ID = "{duplicate_component_id}"',
+                f'SECOND_RESOURCE_ID = "{duplicate_component_id}"',
+                "",
+                "@resource_id(FIRST_RESOURCE_ID)",
+                "class FirstResource(Resource):",
+                "    pass",
+                "",
+                "@resource_id(SECOND_RESOURCE_ID)",
+                "class SecondResource(Resource):",
+                "    pass",
+                "",
+            ]
+        )
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "minions", "doctor", "ids", str(source_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert completed.stdout.count("duplicate-component-id") == 2
+    assert "missing-component-id" not in completed.stdout
