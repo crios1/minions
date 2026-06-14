@@ -4,6 +4,7 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
+from textwrap import dedent
 
 # Note: if this module keeps growing, extract small CLI subprocess/assert helpers
 # to keep command setup and output checks consistent across entrypoint tests.
@@ -123,26 +124,25 @@ def test_python_m_minions_doctor_ids_help() -> None:
 def test_python_m_minions_stamp_component_ids_smoke(tmp_path: Path) -> None:
     source_path = tmp_path / "components.py"
     source_path.write_text(
-        "\n".join(
-            [
-                "from minions import Minion, Pipeline, Resource",
-                "",
-                "class Event:",
-                "    pass",
-                "",
-                "class Ctx:",
-                "    pass",
-                "",
-                "class MyMinion(Minion[Event, Ctx]):",
-                "    pass",
-                "",
-                "class MyPipeline(Pipeline[Event]):",
-                "    pass",
-                "",
-                "class MyResource(Resource):",
-                "    pass",
-                "",
-            ]
+        dedent(
+            """\
+            from minions import Minion, Pipeline, Resource
+
+            class Event:
+                pass
+
+            class Ctx:
+                pass
+
+            class MyMinion(Minion[Event, Ctx]):
+                pass
+
+            class MyPipeline(Pipeline[Event]):
+                pass
+
+            class MyResource(Resource):
+                pass
+            """
         )
     )
 
@@ -186,25 +186,23 @@ def test_python_m_minions_stamp_component_ids_recurses_directories(tmp_path: Pat
     nested_dir.mkdir(parents=True)
     hidden_dir.mkdir()
     (nested_dir / "components.py").write_text(
-        "\n".join(
-            [
-                "from minions import Resource",
-                "",
-                "class MyResource(Resource):",
-                "    pass",
-                "",
-            ]
+        dedent(
+            """\
+            from minions import Resource
+
+            class MyResource(Resource):
+                pass
+            """
         )
     )
     (hidden_dir / "ignored.py").write_text(
-        "\n".join(
-            [
-                "from minions import Resource",
-                "",
-                "class IgnoredResource(Resource):",
-                "    pass",
-                "",
-            ]
+        dedent(
+            """\
+            from minions import Resource
+
+            class IgnoredResource(Resource):
+                pass
+            """
         )
     )
     (source_dir / "notes.txt").write_text("not python")
@@ -353,14 +351,13 @@ def test_python_m_minions_stamp_all_recurses_components_and_configs(tmp_path: Pa
     component_path = src_dir / "components.py"
     config_path = config_dir / "minion.toml"
     component_path.write_text(
-        "\n".join(
-            [
-                "from minions import Resource",
-                "",
-                "class MyResource(Resource):",
-                "    pass",
-                "",
-            ]
+        dedent(
+            """\
+            from minions import Resource
+
+            class MyResource(Resource):
+                pass
+            """
         )
     )
     config_path.write_text('[config]\nname = "alpha"\n')
@@ -383,14 +380,13 @@ def test_python_m_minions_stamp_all_accepts_mixed_explicit_files(tmp_path: Path)
     component_path = tmp_path / "components.py"
     config_path = tmp_path / "minion.yaml"
     component_path.write_text(
-        "\n".join(
-            [
-                "from minions import Resource",
-                "",
-                "class MyResource(Resource):",
-                "    pass",
-                "",
-            ]
+        dedent(
+            """\
+            from minions import Resource
+
+            class MyResource(Resource):
+                pass
+            """
         )
     )
     config_path.write_text("config:\n  name: alpha\n")
@@ -421,15 +417,14 @@ def test_python_m_minions_doctor_ids_passes_clean_project(tmp_path: Path) -> Non
     component_id = "11111111-1111-4111-8111-11111111111a"
     config_id = "22222222-2222-4222-8222-22222222222b"
     (project_dir / "components.py").write_text(
-        "\n".join(
-            [
-                "from minions import Resource, resource_id",
-                "",
-                f'@resource_id("{component_id}")',
-                "class MyResource(Resource):",
-                "    pass",
-                "",
-            ]
+        dedent(
+            f"""\
+            from minions import Resource, resource_id
+
+            @resource_id("{component_id}")
+            class MyResource(Resource):
+                pass
+            """
         )
     )
     (project_dir / "minion.toml").write_text(f'_minions_config_id = "{config_id}"\n')
@@ -453,26 +448,25 @@ def test_python_m_minions_doctor_ids_reports_missing_invalid_and_duplicate_ids(
     duplicate_component_id = "33333333-3333-4333-8333-33333333333c"
     duplicate_config_id = "44444444-4444-4444-8444-44444444444d"
     (project_dir / "components.py").write_text(
-        "\n".join(
-            [
-                "from minions import Resource, resource_id",
-                "",
-                "class MissingResource(Resource):",
-                "    pass",
-                "",
-                '@resource_id("not-a-uuid")',
-                "class InvalidResource(Resource):",
-                "    pass",
-                "",
-                f'@resource_id("{duplicate_component_id}")',
-                "class FirstResource(Resource):",
-                "    pass",
-                "",
-                f'@resource_id("{duplicate_component_id}")',
-                "class SecondResource(Resource):",
-                "    pass",
-                "",
-            ]
+        dedent(
+            f"""\
+            from minions import Resource, resource_id
+
+            class MissingResource(Resource):
+                pass
+
+            @resource_id("not-a-uuid")
+            class InvalidResource(Resource):
+                pass
+
+            @resource_id("{duplicate_component_id}")
+            class FirstResource(Resource):
+                pass
+
+            @resource_id("{duplicate_component_id}")
+            class SecondResource(Resource):
+                pass
+            """
         )
     )
     (project_dir / "missing.toml").write_text('[config]\nname = "missing"\n')
@@ -502,22 +496,21 @@ def test_python_m_minions_doctor_ids_resolves_module_level_component_id_constant
     source_path = tmp_path / "components.py"
     duplicate_component_id = "55555555-5555-4555-8555-55555555555e"
     source_path.write_text(
-        "\n".join(
-            [
-                "from minions import Resource, resource_id",
-                "",
-                f'FIRST_RESOURCE_ID = "{duplicate_component_id}"',
-                f'SECOND_RESOURCE_ID = "{duplicate_component_id}"',
-                "",
-                "@resource_id(FIRST_RESOURCE_ID)",
-                "class FirstResource(Resource):",
-                "    pass",
-                "",
-                "@resource_id(SECOND_RESOURCE_ID)",
-                "class SecondResource(Resource):",
-                "    pass",
-                "",
-            ]
+        dedent(
+            f"""\
+            from minions import Resource, resource_id
+
+            FIRST_RESOURCE_ID = "{duplicate_component_id}"
+            SECOND_RESOURCE_ID = "{duplicate_component_id}"
+
+            @resource_id(FIRST_RESOURCE_ID)
+            class FirstResource(Resource):
+                pass
+
+            @resource_id(SECOND_RESOURCE_ID)
+            class SecondResource(Resource):
+                pass
+            """
         )
     )
 

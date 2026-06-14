@@ -3,6 +3,7 @@ import contextlib
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from textwrap import dedent
 from typing import Protocol, cast
 
 import pytest
@@ -237,43 +238,47 @@ class TestValidUsage:
         package_dir.mkdir()
         (package_dir / "__init__.py").write_text("")
         (package_dir / "pipeline.py").write_text(
-            "\n".join(
-                [
-                    "import asyncio",
-                    "from minions import Pipeline, pipeline_id",
-                    "from tests.assets.events.simple import SimpleEvent",
-                    f"@pipeline_id({PIPELINE_COMPONENT_ID!r})",
-                    "class DurablePipeline(Pipeline[SimpleEvent]):",
-                    "    async def produce_event(self) -> SimpleEvent:",
-                    "        await asyncio.sleep(3600)",
-                    "        return SimpleEvent(timestamp=0)",
-                    "",
-                ]
+            dedent(
+                f"""\
+                import asyncio
+                from minions import Pipeline, pipeline_id
+                from tests.assets.events.simple import SimpleEvent
+
+                @pipeline_id({PIPELINE_COMPONENT_ID!r})
+                class DurablePipeline(Pipeline[SimpleEvent]):
+                    async def produce_event(self) -> SimpleEvent:
+                        await asyncio.sleep(3600)
+                        return SimpleEvent(timestamp=0)
+                """
             )
         )
         (package_dir / "minion.py").write_text(
-            "\n".join(
-                [
-                    "import tomllib",
-                    "from dataclasses import dataclass",
-                    "from pathlib import Path",
-                    "from minions import Minion, minion_id, minion_step",
-                    "from tests.assets.contexts.simple import SimpleContext",
-                    "from tests.assets.events.simple import SimpleEvent",
-                    "@dataclass",
-                    "class DurableConfig:",
-                    "    name: str",
-                    f"@minion_id({MINION_COMPONENT_ID!r})",
-                    "class DurableMinion(Minion[SimpleEvent, SimpleContext]):",
-                    "    config: DurableConfig",
-                    "    async def load_config(self, config_path: str) -> DurableConfig:",
-                    "        parsed = tomllib.loads(Path(config_path).read_text())",
-                    "        return DurableConfig(name=parsed['config']['name'])",
-                    "    @minion_step",
-                    "    async def step_1(self) -> None:",
-                    "        self.context.step1 = self.config.name",
-                    "",
-                ]
+            dedent(
+                f"""\
+                import tomllib
+                from dataclasses import dataclass
+                from pathlib import Path
+
+                from minions import Minion, minion_id, minion_step
+                from tests.assets.contexts.simple import SimpleContext
+                from tests.assets.events.simple import SimpleEvent
+
+                @dataclass
+                class DurableConfig:
+                    name: str
+
+                @minion_id({MINION_COMPONENT_ID!r})
+                class DurableMinion(Minion[SimpleEvent, SimpleContext]):
+                    config: DurableConfig
+
+                    async def load_config(self, config_path: str) -> DurableConfig:
+                        parsed = tomllib.loads(Path(config_path).read_text())
+                        return DurableConfig(name=parsed['config']['name'])
+
+                    @minion_step
+                    async def step_1(self) -> None:
+                        self.context.step1 = self.config.name
+                """
             )
         )
         config_path = tmp_path / "minion.toml"
@@ -328,46 +333,51 @@ class TestValidUsage:
         moved_package_dir.mkdir()
         (moved_package_dir / "__init__.py").write_text("")
         (moved_package_dir / "pipeline.py").write_text(
-            "\n".join(
-                [
-                    "import asyncio",
-                    "from minions import Pipeline, pipeline_id",
-                    "from tests.assets.events.simple import SimpleEvent",
-                    f"@pipeline_id({PIPELINE_COMPONENT_ID!r})",
-                    "class MovedPipeline(Pipeline[SimpleEvent]):",
-                    "    async def produce_event(self) -> SimpleEvent:",
-                    "        await asyncio.sleep(3600)",
-                    "        return SimpleEvent(timestamp=0)",
-                    "",
-                ]
+            dedent(
+                f"""\
+                import asyncio
+                from minions import Pipeline, pipeline_id
+                from tests.assets.events.simple import SimpleEvent
+
+                @pipeline_id({PIPELINE_COMPONENT_ID!r})
+                class MovedPipeline(Pipeline[SimpleEvent]):
+                    async def produce_event(self) -> SimpleEvent:
+                        await asyncio.sleep(3600)
+                        return SimpleEvent(timestamp=0)
+                """
             )
         )
         (moved_package_dir / "minion.py").write_text(
-            "\n".join(
-                [
-                    "import tomllib",
-                    "from dataclasses import dataclass",
-                    "from pathlib import Path",
-                    "from minions import Minion, minion_id, minion_step",
-                    "from tests.assets.contexts.simple import SimpleContext",
-                    "from tests.assets.events.simple import SimpleEvent",
-                    "@dataclass",
-                    "class MovedConfig:",
-                    "    name: str",
-                    f"@minion_id({MINION_COMPONENT_ID!r})",
-                    "class MovedMinion(Minion[SimpleEvent, SimpleContext]):",
-                    "    config: MovedConfig",
-                    "    async def load_config(self, config_path: str) -> MovedConfig:",
-                    "        parsed = tomllib.loads(Path(config_path).read_text())",
-                    "        return MovedConfig(name=parsed['config']['name'])",
-                    "    @minion_step",
-                    "    async def step_1(self) -> None:",
-                    "        raise AssertionError('step_1 should not replay after resume')",
-                    "    @minion_step",
-                    "    async def step_2(self) -> None:",
-                    "        self.context.step2 = self.config.name",
-                    "",
-                ]
+            dedent(
+                f"""\
+                import tomllib
+                from dataclasses import dataclass
+                from pathlib import Path
+
+                from minions import Minion, minion_id, minion_step
+                from tests.assets.contexts.simple import SimpleContext
+                from tests.assets.events.simple import SimpleEvent
+
+                @dataclass
+                class MovedConfig:
+                    name: str
+
+                @minion_id({MINION_COMPONENT_ID!r})
+                class MovedMinion(Minion[SimpleEvent, SimpleContext]):
+                    config: MovedConfig
+
+                    async def load_config(self, config_path: str) -> MovedConfig:
+                        parsed = tomllib.loads(Path(config_path).read_text())
+                        return MovedConfig(name=parsed['config']['name'])
+
+                    @minion_step
+                    async def step_1(self) -> None:
+                        raise AssertionError('step_1 should not replay after resume')
+
+                    @minion_step
+                    async def step_2(self) -> None:
+                        self.context.step2 = self.config.name
+                """
             )
         )
         moved_config_path = tmp_path / "renamed" / "minion.toml"
