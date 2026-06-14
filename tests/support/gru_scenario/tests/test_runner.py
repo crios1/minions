@@ -3,6 +3,7 @@ from collections.abc import Callable
 
 import pytest
 
+from minions._internal._domain.component_identity import get_component_id
 from minions._internal._domain.gru import Gru, GruRuntimeStateSnapshot
 from tests.support.gru_scenario.directives import (
     AfterWorkflowStepStarts,
@@ -188,16 +189,21 @@ async def test_runner_tracks_durable_minion_pipeline_and_resources(
     gru: Gru,
 ) -> None:
     from tests.assets.minions.two_steps.counter.identified_resourced import (
-        IDENTIFIED_COUNTER_MINION_ID,
         IdentifiedResourcedMinion,
     )
     from tests.assets.pipelines.emit1.counter.identified import (
-        IDENTIFIED_COUNTER_PIPELINE_ID,
+        IdentifiedEmit1Pipeline,
     )
     from tests.assets.resources.fixed.identified import (
-        IDENTIFIED_FIXED_RESOURCE_ID,
         IdentifiedFixedResource,
     )
+
+    minion_id = get_component_id(IdentifiedResourcedMinion)
+    pipeline_id = get_component_id(IdentifiedEmit1Pipeline)
+    resource_id = get_component_id(IdentifiedFixedResource)
+    assert minion_id is not None
+    assert pipeline_id is not None
+    assert resource_id is not None
 
     start = OrchestrationStart(
         pipeline="tests.assets.pipelines.emit1.counter.identified",
@@ -205,7 +211,7 @@ async def test_runner_tracks_durable_minion_pipeline_and_resources(
     )
     plan = ScenarioPlan(
         [start, WaitWorkflowCompletions(workflow_steps_mode="exact")],
-        pipeline_event_counts={IDENTIFIED_COUNTER_PIPELINE_ID: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
     result = await ScenarioRunner(gru, plan, per_verification_timeout=5.0).run()
@@ -213,23 +219,23 @@ async def test_runner_tracks_durable_minion_pipeline_and_resources(
     assert len(result.receipts) == 1
     receipt = result.receipts[0]
     assert receipt.success
-    assert receipt.minion_id == IDENTIFIED_COUNTER_MINION_ID
-    assert receipt.pipeline_id == IDENTIFIED_COUNTER_PIPELINE_ID
+    assert receipt.minion_id == minion_id
+    assert receipt.pipeline_id == pipeline_id
     assert receipt.orchestration_id is not None
     assert receipt.orchestration_id in gru._minions_by_orchestration_id
-    assert IDENTIFIED_COUNTER_PIPELINE_ID in gru._pipelines
-    assert IDENTIFIED_FIXED_RESOURCE_ID in gru._resources
+    assert pipeline_id in gru._pipelines
+    assert resource_id in gru._resources
 
     minion = gru._minions_by_orchestration_id[receipt.orchestration_id]
-    assert minion._mn_minion_id == IDENTIFIED_COUNTER_MINION_ID
-    assert gru._minion_pipeline_map[minion._mn_minion_instance_id] == IDENTIFIED_COUNTER_PIPELINE_ID
-    assert gru._minion_resource_map[minion._mn_minion_instance_id] == {IDENTIFIED_FIXED_RESOURCE_ID}
+    assert minion._mn_minion_id == minion_id
+    assert gru._minion_pipeline_map[minion._mn_minion_instance_id] == pipeline_id
+    assert gru._minion_resource_map[minion._mn_minion_instance_id] == {resource_id}
 
     assert result.spies is not None
     assert (
-        result.spies.pipelines[IDENTIFIED_COUNTER_PIPELINE_ID].__name__ == "IdentifiedEmit1Pipeline"
+        result.spies.pipelines[pipeline_id].__name__ == "IdentifiedEmit1Pipeline"
     )
-    assert result.spies.minions[IDENTIFIED_COUNTER_MINION_ID] is IdentifiedResourcedMinion
+    assert result.spies.minions[minion_id] is IdentifiedResourcedMinion
     assert IdentifiedFixedResource in result.spies.resources
 
     shutdown = await gru.shutdown()
@@ -626,7 +632,10 @@ async def test_runner_restart_same_orchestration_id_after_stop_succeeds(gru: Gru
 async def test_runner_records_expect_runtime_checkpoint_with_persistence_snapshot(
     gru: Gru,
 ) -> None:
-    from tests.assets.minions.failure.slow_step import SLOW_STEP_MINION_ID
+    from tests.assets.minions.failure.slow_step import SlowStepMinion
+
+    minion_id = get_component_id(SlowStepMinion)
+    assert minion_id is not None
 
     start = OrchestrationStart(
         minion="tests.assets.minions.failure.slow_step",
@@ -651,7 +660,7 @@ async def test_runner_records_expect_runtime_checkpoint_with_persistence_snapsho
     assert len(expect_cps) == 1
     persisted = expect_cps[0].persisted_contexts_by_minion_id
     assert persisted is not None
-    assert persisted.get(SLOW_STEP_MINION_ID, 0) >= 1
+    assert persisted.get(minion_id, 0) >= 1
     assert "tests.assets.minions.failure.slow_step" not in persisted
     assert expect_cps[0].spy_call_counts_by_instance is not None
     assert expect_cps[0].workflow_step_started_ids_by_minion_id is not None

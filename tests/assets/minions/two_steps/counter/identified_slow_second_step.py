@@ -7,10 +7,8 @@ from tests.assets.events.counter import CounterEvent
 from tests.assets.resources.fixed.identified import IdentifiedFixedResource
 from tests.assets.support.minion_spied import SpiedMinion
 
-IDENTIFIED_SLOW_SECOND_STEP_MINION_ID = "42345678-1234-5678-9234-567812345678"
 
-
-@minion_id(IDENTIFIED_SLOW_SECOND_STEP_MINION_ID)
+@minion_id("42345678-1234-5678-9234-567812345678")
 class IdentifiedSlowSecondStepMinion(SpiedMinion[CounterEvent, CounterContext]):
     fixed_resource: IdentifiedFixedResource
 

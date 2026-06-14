@@ -2,6 +2,7 @@ from typing import Any
 
 import pytest
 
+from minions._internal._domain.component_identity import get_component_id
 from minions._internal._domain.gru import GruRuntimeStateSnapshot
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.metrics_constants import LABEL_ORCHESTRATION_ID
@@ -10,7 +11,6 @@ from tests.assets.contexts.counter import CounterContext
 from tests.assets.events.counter import CounterEvent
 from tests.assets.minions.two_steps.counter.basic import TwoStepMinion
 from tests.assets.minions.two_steps.counter.identified_resourced import (
-    IDENTIFIED_COUNTER_MINION_ID,
     IdentifiedResourcedMinion,
 )
 from tests.assets.minions.two_steps.counter.resourced import TwoStepResourcedMinion
@@ -32,6 +32,15 @@ from tests.support.gru_scenario.runner import (
     SpyRegistry,
 )
 from tests.support.gru_scenario.verify import ScenarioVerifier
+
+
+def _require_component_id(component_cls: type[Any]) -> str:
+    component_id = get_component_id(component_cls)
+    assert component_id is not None
+    return component_id
+
+
+identified_counter_minion_id = _require_component_id(IdentifiedResourcedMinion)
 
 
 def _stub_get_call_counts(counts: dict[str, int]) -> Any:
@@ -2043,7 +2052,7 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
                 success=True,
                 orchestration_id="instance-1",
                 pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id=IDENTIFIED_COUNTER_MINION_ID,
+                minion_id=identified_counter_minion_id,
             ),
         ],
         checkpoints=[

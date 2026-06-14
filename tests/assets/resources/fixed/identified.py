@@ -1,10 +1,8 @@
 from minions import resource_id
 from tests.assets.support.resource_spied import SpiedResource
 
-IDENTIFIED_FIXED_RESOURCE_ID = "22345678-1234-5678-9234-567812345678"
 
-
-@resource_id(IDENTIFIED_FIXED_RESOURCE_ID)
+@resource_id("22345678-1234-5678-9234-567812345678")
 class IdentifiedFixedResource(SpiedResource):
     name = "identified-fixed-resource"
     _value = 123

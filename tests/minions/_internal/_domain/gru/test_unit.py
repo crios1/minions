@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from minions import Minion, Pipeline, Resource, minion_id, minion_step, pipeline_id, resource_id
+from minions._internal._domain.component_identity import get_component_id
 from minions._internal._domain.gru import ORCHESTRATION_ID_VERSION, Gru
 from minions._internal._domain.gru_result_types import StartResult, StopResult
 from minions._internal._framework.async_component import AsyncComponent
@@ -458,12 +459,16 @@ class TestUnit:
             IdentifiedResourcedMinion,
         )
         from tests.assets.pipelines.emit1.counter.identified import (
-            IDENTIFIED_COUNTER_PIPELINE_ID,
             IdentifiedEmit1Pipeline,
         )
         from tests.assets.resources.fixed.identified import (
-            IDENTIFIED_FIXED_RESOURCE_ID,
+            IdentifiedFixedResource,
         )
+
+        identified_pipeline_id = get_component_id(IdentifiedEmit1Pipeline)
+        identified_resource_id = get_component_id(IdentifiedFixedResource)
+        assert identified_pipeline_id is not None
+        assert identified_resource_id is not None
 
         async with gru_factory(
             logger=InMemoryLogger(),
@@ -483,20 +488,20 @@ class TestUnit:
             assert snapshot.minion_instances == {minion_instance_id}
             assert snapshot.orchestrations == {result.orchestration_id}
             assert snapshot.minion_tasks == {minion_instance_id}
-            assert snapshot.pipelines == {IDENTIFIED_COUNTER_PIPELINE_ID}
-            assert snapshot.pipeline_tasks == {IDENTIFIED_COUNTER_PIPELINE_ID}
-            assert snapshot.resources == {IDENTIFIED_FIXED_RESOURCE_ID}
-            assert snapshot.resource_tasks == {IDENTIFIED_FIXED_RESOURCE_ID}
+            assert snapshot.pipelines == {identified_pipeline_id}
+            assert snapshot.pipeline_tasks == {identified_pipeline_id}
+            assert snapshot.resources == {identified_resource_id}
+            assert snapshot.resource_tasks == {identified_resource_id}
             assert snapshot.pipeline_by_minion_instance == {
-                minion_instance_id: IDENTIFIED_COUNTER_PIPELINE_ID
+                minion_instance_id: identified_pipeline_id
             }
             assert snapshot.resources_by_minion_instance == {
-                minion_instance_id: frozenset({IDENTIFIED_FIXED_RESOURCE_ID})
+                minion_instance_id: frozenset({identified_resource_id})
             }
             assert snapshot.resources_by_pipeline == {}
             assert snapshot.resource_dependencies_by_dependent_resource == {}
             assert snapshot.resource_dependents_by_dependency_resource == {}
-            assert snapshot.resource_reference_counts == {IDENTIFIED_FIXED_RESOURCE_ID: 1}
+            assert snapshot.resource_reference_counts == {identified_resource_id: 1}
 
             with pytest.raises(TypeError):
                 snapshot.pipeline_by_minion_instance["other"] = "pipeline"  # type: ignore[index]

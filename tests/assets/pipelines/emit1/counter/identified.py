@@ -4,10 +4,8 @@ from tests.assets.support.pipeline_subscriber_ready_fixed_events import (
     SubscriberReadyFixedEventsPipeline,
 )
 
-IDENTIFIED_COUNTER_PIPELINE_ID = "12345678-1234-5678-9234-567812345678"
 
-
-@pipeline_id(IDENTIFIED_COUNTER_PIPELINE_ID)
+@pipeline_id("12345678-1234-5678-9234-567812345678")
 class IdentifiedEmit1Pipeline(SubscriberReadyFixedEventsPipeline[CounterEvent]):
     _next_seq = 0
 

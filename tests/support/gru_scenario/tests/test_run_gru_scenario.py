@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from minions._internal._domain.component_identity import get_component_id
 from minions._internal._domain.gru import Gru
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
@@ -28,7 +29,10 @@ async def test_run_gru_scenario_uses_durable_pipeline_id_for_event_targets(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    from tests.assets.pipelines.emit1.counter.identified import IDENTIFIED_COUNTER_PIPELINE_ID
+    from tests.assets.pipelines.emit1.counter.identified import IdentifiedEmit1Pipeline
+
+    pipeline_id = get_component_id(IdentifiedEmit1Pipeline)
+    assert pipeline_id is not None
 
     directives: list[Directive] = [
         OrchestrationStart(
@@ -45,7 +49,7 @@ async def test_run_gru_scenario_uses_durable_pipeline_id_for_event_targets(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={IDENTIFIED_COUNTER_PIPELINE_ID: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 
@@ -491,7 +495,10 @@ async def test_run_gru_scenario_resume_identified_minion_without_persisted_minio
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    from tests.assets.pipelines.emit1.counter.identified import IDENTIFIED_COUNTER_PIPELINE_ID
+    from tests.assets.pipelines.emit1.counter.identified import IdentifiedEmit1Pipeline
+
+    pipeline_id = get_component_id(IdentifiedEmit1Pipeline)
+    assert pipeline_id is not None
 
     minion_ref = "tests.assets.minions.two_steps.counter.identified_slow_second_step"
 
@@ -541,7 +548,7 @@ async def test_run_gru_scenario_resume_identified_minion_without_persisted_minio
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={IDENTIFIED_COUNTER_PIPELINE_ID: 1},
+        pipeline_event_counts={pipeline_id: 1},
     )
 
 
