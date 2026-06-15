@@ -36,7 +36,7 @@ async def test_log_exception_records_standard_exception_fields():
 
 
 @pytest.mark.asyncio
-async def test_log_exception_uses_cause_and_call_site_kwargs_override_context():
+async def test_log_exception_records_direct_cause_and_call_site_kwargs_override_context():
     logger = InMemoryLogger()
     try:
         try:
@@ -61,8 +61,11 @@ async def test_log_exception_uses_cause_and_call_site_kwargs_override_context():
         )
 
     [log] = logger.logs
-    assert log.kwargs["error_type"] == "ValueError"
-    assert log.kwargs["error_message"] == "inner"
+    assert log.kwargs["error_type"] == "RuntimeError"
+    assert log.kwargs["error_message"] == "outer"
+    assert log.kwargs["cause_error_type"] == "ValueError"
+    assert log.kwargs["cause_error_message"] == "inner"
     assert "ValueError: inner" in log.kwargs["traceback"]
+    assert "RuntimeError: outer" in log.kwargs["traceback"]
     assert log.kwargs["component"] == "call-site-component"
     assert log.kwargs["workflow_id"] == "wf-1"

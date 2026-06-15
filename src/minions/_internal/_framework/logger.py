@@ -67,14 +67,21 @@ class Logger(AsyncLifecycle):
 
         log_kwargs.update(kwargs)
 
-        trace = getattr(exc, "__cause__", None) or exc
+        cause = getattr(exc, "__cause__", None)
         log_kwargs.update(
             {
-                "error_type": type(trace).__name__,
-                "error_message": str(trace),
-                "traceback": format_exception_traceback(trace),
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+                "traceback": format_exception_traceback(exc),
             }
         )
+        if cause is not None:
+            log_kwargs.update(
+                {
+                    "cause_error_type": type(cause).__name__,
+                    "cause_error_message": str(cause),
+                }
+            )
 
         await self._mn_log(
             level,
