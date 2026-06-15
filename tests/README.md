@@ -66,6 +66,14 @@ This suite is intentionally layered. Each layer has a different purpose and conf
 - When a test componentry directory contains multiple helper modules, prefer a localized `tests/` subdirectory in that same directory to validate those helpers.
 - This localized helper-test pattern is an accepted tradeoff to keep related test infrastructure and its validation close together.
 
+## Component Reference Policy
+
+- Scenario-oriented orchestration tests should usually reference test assets by string module path.
+- Test asset paths encode fixture context such as event type, step shape, resource behavior, sharing behavior, and failure mode; that context is often clearer than importing a short class name.
+- Class references are preferred for inline test components, business-domain examples, and tests that specifically cover class-based orchestration semantics.
+- Keep focused contract coverage for both string-based and class-based `Gru.start_orchestration(...)` invocation forms.
+- Do not convert scenario tests from string paths to class references solely for uniformity; choose the representation that best communicates the behavior under test.
+
 ## Contributor Placement Guide
 
 1. Orchestration semantics changed:
