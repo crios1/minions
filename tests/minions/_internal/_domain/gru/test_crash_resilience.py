@@ -74,7 +74,10 @@ async def test_start_orchestration_contains_state_store_resume_read_failure(
         result = await gru.start_orchestration(GOOD_PIPELINE, GOOD_MINION)
 
         assert not result.success
-        assert result.reason == "GoodMinion.startup failed (tests/assets/crash/minions/good.py)"
+        assert (
+            result.reason
+            == "tests.assets.crash.minions.good.GoodMinion.startup failed"
+        )
         assert logger.has_log(
             "BoomGetContextsForOrchestrationStateStore.get_contexts_for_orchestration failed",
             log_kwargs={"error_type": "BoomError"},

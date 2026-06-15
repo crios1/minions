@@ -40,7 +40,10 @@ async def test_stop_committed_minion_shutdown_failure_discards_runtime_state_whe
         assert not stop.success
         assert (
             stop.reason
-            == "BoomShutdownMinion.shutdown failed (tests/assets/crash/minions/boom_shutdown.py)"
+            == (
+                "tests.assets.crash.minions.boom_shutdown."
+                "BoomShutdownMinion.shutdown failed"
+            )
         )
         assert gru._runtime_state_snapshot().is_empty
 
@@ -105,7 +108,10 @@ async def test_start_resource_startup_failure_discards_runtime_state_when_cleanu
         assert not result.success
         assert (
             result.reason
-            == "BoomStartupResource.startup failed (tests/assets/crash/resources/boom_startup.py)"
+            == (
+                "tests.assets.crash.resources.boom_startup."
+                "BoomStartupResource.startup failed"
+            )
         )
         assert gru._runtime_state_snapshot().is_empty
 

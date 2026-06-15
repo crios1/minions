@@ -109,7 +109,7 @@ async def test_safe_run_and_log_rejects_method_bound_to_other_component():
 
 
 @pytest.mark.asyncio
-async def test_safe_run_and_log_failure_logs_default_message_and_rel_modpath():
+async def test_safe_run_and_log_failure_logs_default_message_and_relative_module_path():
     logger = InMemoryLogger()
     comp = FailingComponent(logger)
 
@@ -118,14 +118,11 @@ async def test_safe_run_and_log_failure_logs_default_message_and_rel_modpath():
     assert result is None
     assert (
         logger.logs[-1].msg
-        == (
-            "FailingComponent.raise_runtime_error failed "
-            "(tests/minions/_internal/_framework/test_async_component.py)"
-        )
+        == f"{FailingComponent.__module__}.FailingComponent.raise_runtime_error failed"
     )
     assert (
-        str(logger.logs[-1].kwargs["rel_modpath"])
-        == "tests/minions/_internal/_framework/test_async_component.py"
+        str(logger.logs[-1].kwargs["relative_module_path"])
+        == FailingComponent.__module__
     )
 
 
@@ -142,25 +139,25 @@ async def test_safe_run_and_log_failure_accepts_log_message_override():
     assert result is None
     assert logger.logs[-1].msg == "Builder-facing failure message"
     assert (
-        str(logger.logs[-1].kwargs["rel_modpath"])
-        == "tests/minions/_internal/_framework/test_async_component.py"
+        str(logger.logs[-1].kwargs["relative_module_path"])
+        == FailingComponent.__module__
     )
 
 
 @pytest.mark.asyncio
-async def test_safe_run_and_log_failure_rel_modpath_overrides_log_kwargs_collision():
+async def test_safe_run_and_log_failure_relative_module_path_overrides_log_kwargs_collision():
     logger = InMemoryLogger()
     comp = FailingComponent(logger)
 
     result = await comp._mn_safe_run_and_log_failure(
         comp.raise_runtime_error,
-        log_kwargs={"rel_modpath": "wrong/path.py"},
+        log_kwargs={"relative_module_path": "wrong.module.path"},
     )
 
     assert result is None
     assert (
-        str(logger.logs[-1].kwargs["rel_modpath"])
-        == "tests/minions/_internal/_framework/test_async_component.py"
+        str(logger.logs[-1].kwargs["relative_module_path"])
+        == FailingComponent.__module__
     )
 
 
@@ -186,16 +183,13 @@ async def test_run_and_log_failure_logs_and_reraises_failure():
 
     assert (
         logger.logs[-1].msg
-        == (
-            "FailingComponent.raise_runtime_error failed "
-            "(tests/minions/_internal/_framework/test_async_component.py)"
-        )
+        == f"{FailingComponent.__module__}.FailingComponent.raise_runtime_error failed"
     )
     assert logger.logs[-1].kwargs["error_type"] == "RuntimeError"
     assert logger.logs[-1].kwargs["error_message"] == "boom"
     assert (
-        str(logger.logs[-1].kwargs["rel_modpath"])
-        == "tests/minions/_internal/_framework/test_async_component.py"
+        str(logger.logs[-1].kwargs["relative_module_path"])
+        == FailingComponent.__module__
     )
 
 
@@ -214,6 +208,6 @@ async def test_run_and_log_failure_accepts_log_message_and_kwargs():
     assert logger.logs[-1].msg == "Builder-facing failure message"
     assert logger.logs[-1].kwargs["operation"] == "demo"
     assert (
-        str(logger.logs[-1].kwargs["rel_modpath"])
-        == "tests/minions/_internal/_framework/test_async_component.py"
+        str(logger.logs[-1].kwargs["relative_module_path"])
+        == FailingComponent.__module__
     )

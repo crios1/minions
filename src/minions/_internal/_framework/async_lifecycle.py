@@ -5,7 +5,6 @@ from abc import ABC
 from typing import Awaitable, Callable, TypeAlias
 
 from .._domain.exceptions import MinionsError, UnsupportedUserCode
-from .._utils.get_relative_module_path import get_relative_module_path
 
 LifecycleCallback: TypeAlias = Callable[..., object | Awaitable[object]]
 
@@ -271,9 +270,10 @@ class AsyncLifecycle(ABC):
                     await result
         except Exception as e:
             log_kwargs = log_kwargs or {}
-            rel_modpath = get_relative_module_path(type(self))
+            relative_module_path = type(self).__module__
+            component_path = f"{relative_module_path}.{type(self).__qualname__}"
             raise MinionsError(
-                f"{type(self).__name__}.{name} failed ({rel_modpath})",
+                f"{component_path}.{name} failed",
                 context=log_kwargs,
             ) from e
 

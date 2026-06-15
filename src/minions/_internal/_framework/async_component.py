@@ -2,7 +2,6 @@ import inspect
 from collections.abc import Mapping, Sequence
 from typing import Awaitable, Callable, ParamSpec, TypeVar, overload
 
-from .._utils.get_relative_module_path import get_relative_module_path
 from .async_lifecycle import AsyncLifecycle
 from .logger import ERROR, Logger
 
@@ -43,12 +42,13 @@ class AsyncComponent(AsyncLifecycle):
         log_msg: str | None = None,
         log_kwargs: Mapping[str, object] | None = None,
     ) -> None:
-        rel_modpath = get_relative_module_path(type(self))
+        relative_module_path = type(self).__module__
+        component_path = f"{relative_module_path}.{type(self).__qualname__}"
         method_name = getattr(method, "__name__", None) or type(method).__name__
-        msg = log_msg or f"{type(self).__name__}.{method_name} failed ({rel_modpath})"
+        msg = log_msg or f"{component_path}.{method_name} failed"
         kwargs = {
             **(log_kwargs or {}),
-            "rel_modpath": rel_modpath,
+            "relative_module_path": relative_module_path,
         }
         await self._mn_logger._mn_log_exception(
             ERROR,
