@@ -16,23 +16,27 @@ class GruIntrospector:
     def get_pipeline_class(self, modpath: str) -> type[Pipeline[Any]]:
         return self._gru._get_pipeline_class(modpath)
 
-    def get_pipeline_identity(
+    def get_pipeline_identity(self, pipeline_cls: type[Pipeline[Any]]) -> str:
+        return self._gru._get_pipeline_identity(pipeline_cls)
+
+    def get_pipeline_identity_from_modpath(
         self,
         pipeline_modpath: str,
-        pipeline_cls: type[Pipeline[Any]] | None = None,
     ) -> str:
-        if pipeline_cls is None:
-            pipeline_cls = self.get_pipeline_class(pipeline_modpath)
-        return self._gru._get_pipeline_identity(pipeline_cls, pipeline_modpath)
+        return self._gru._get_pipeline_identity_from_modpath(pipeline_modpath)
 
-    def get_minion_identity(
+    def get_minion_identity(self, minion_cls: type[Minion[Any, Any]]) -> str:
+        return self._gru._get_minion_identity(minion_cls)
+
+    def get_minion_identity_from_modpath(
         self,
         minion_modpath: str,
-        minion_cls: type[Minion[Any, Any]] | None = None,
     ) -> str:
-        if minion_cls is None:
-            minion_cls = self.get_minion_class(minion_modpath)
-        return self._gru._get_minion_identity(minion_cls, minion_modpath)
+        return self._gru._get_minion_identity_from_modpath(minion_modpath)
+
+    @staticmethod
+    def get_component_identity(typ: type[Any], fallback: str) -> str:
+        return Gru._get_component_identity(typ, fallback)
 
     def get_all_resource_dependencies(
         self,
@@ -47,7 +51,7 @@ class GruIntrospector:
         return self._gru._get_direct_resource_dependencies(cls)
 
     def get_resource_identity(self, resource_cls: type[Resource]) -> str:
-        return self._gru._make_resource_id(resource_cls)
+        return self._gru._get_resource_identity(resource_cls)
 
     def get_minion_instance(self, instance_id: str) -> Minion[Any, Any] | None:
         return self._gru._minions_by_instance_id.get(instance_id)

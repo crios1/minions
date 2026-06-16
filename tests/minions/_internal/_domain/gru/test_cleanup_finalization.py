@@ -254,8 +254,8 @@ async def test_forced_resource_discard_releases_dependency_refcounts(
     from tests.assets.resources.fixed.base_b import FixedResourceB
 
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        parent_id = gru._make_resource_id(FixedResourceB)
-        dep_id = gru._make_resource_id(FixedResource)
+        parent_id = gru._get_resource_identity(FixedResourceB)
+        dep_id = gru._get_resource_identity(FixedResource)
         await gru._ensure_resource_tree_started(FixedResource)
         await gru._ensure_resource_tree_started(FixedResourceB)
 

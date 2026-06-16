@@ -391,9 +391,9 @@ class TestValidUsage:
             sys.modules.pop(module_name, None)
 
         expected_orchestration_id = Gru._make_orchestration_id(
+            pipeline_id=PIPELINE_COMPONENT_ID,
             minion_id=MINION_COMPONENT_ID,
             minion_config_id=CONFIG_ID,
-            pipeline_id=PIPELINE_COMPONENT_ID,
         )
         logger = InMemoryLogger()
         state_store = InMemoryStateStore(logger=logger)

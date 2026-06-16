@@ -113,7 +113,7 @@ class TestUnit:
             Gru._get_component_identity(StableIdResource, "fallback.resource")
             == RESOURCE_COMPONENT_ID
         )
-        assert Gru._get_minion_identity(StableIdMinion, "fallback.minion") == MINION_COMPONENT_ID
+        assert Gru._get_minion_identity(StableIdMinion) == MINION_COMPONENT_ID
 
     def test_idless_components_keep_fallback_identity(self) -> None:
         class PrototypeResource(Resource):
@@ -123,6 +123,35 @@ class TestUnit:
             Gru._get_component_identity(PrototypeResource, "fallback.prototype")
             == "fallback.prototype"
         )
+
+    def test_minion_string_entrypoint_identity_fallback_preserves_entrypoint_modpath(
+        self,
+    ) -> None:
+        from tests.assets.minions.two_steps.simple.basic import SimpleMinion
+
+        gru = object.__new__(Gru)
+        entrypoint_modpath = "tests.assets.entrypoints.valid.reexported_minion_subclass"
+
+        assert Gru._get_minion_identity(SimpleMinion) == (
+            "tests.assets.minions.two_steps.simple.basic.SimpleMinion"
+        )
+        assert gru._get_minion_identity_from_modpath(entrypoint_modpath) == entrypoint_modpath
+
+    def test_pipeline_string_entrypoint_identity_fallback_preserves_entrypoint_modpath(
+        self,
+    ) -> None:
+        from tests.assets.pipelines.simple.simple_event.single_event_1 import (
+            SimpleSingleEventPipeline1,
+        )
+
+        gru = object.__new__(Gru)
+        entrypoint_modpath = "tests.assets.entrypoints.valid.reexported_pipeline_subclass"
+
+        assert gru._get_pipeline_identity(SimpleSingleEventPipeline1) == (
+            "tests.assets.pipelines.simple.simple_event.single_event_1."
+            "SimpleSingleEventPipeline1"
+        )
+        assert gru._get_pipeline_identity_from_modpath(entrypoint_modpath) == entrypoint_modpath
 
     def test_attached_component_identity_ignores_current_address(self) -> None:
         @resource_id(RESOURCE_COMPONENT_ID)
@@ -152,9 +181,9 @@ class TestUnit:
         assert "alpha" not in cfg_a
 
         key = Gru._make_orchestration_id(
-            "tests.assets.Minion",
-            cfg_a,
-            "tests.assets.Pipeline",
+            pipeline_id="tests.assets.Pipeline",
+            minion_id="tests.assets.Minion",
+            minion_config_id=cfg_a,
         )
         assert key == self._expected_orchestration_id(
             minion_id="tests.assets.Minion",
@@ -171,9 +200,9 @@ class TestUnit:
 
         assert Gru._get_config_identity(str(config_path)) == CONFIG_ID
         assert Gru._make_orchestration_id(
-            "minion-id",
-            CONFIG_ID,
-            "pipeline-id"
+            pipeline_id="pipeline-id",
+            minion_id="minion-id",
+            minion_config_id=CONFIG_ID,
         ) == self._expected_orchestration_id(
             minion_id="minion-id",
             minion_config_id=CONFIG_ID,

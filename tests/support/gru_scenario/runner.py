@@ -205,7 +205,7 @@ class ScenarioRunner:
                 if isinstance(d.minion, type)
                 else self._insp.get_minion_class(minion_modpath)
             )
-            minion_id = self._insp.get_minion_identity(minion_modpath, m_cls)
+            minion_id = self._insp.get_component_identity(m_cls, minion_modpath)
             if minion_id not in self._spies.minions:
                 if not issubclass(m_cls, SpiedMinion):
                     pytest.fail(
@@ -242,7 +242,7 @@ class ScenarioRunner:
                 if isinstance(d.pipeline, type)
                 else self._insp.get_pipeline_class(pipeline_modpath)
             )
-            pipeline_id = self._insp.get_pipeline_identity(pipeline_modpath, p_cls)
+            pipeline_id = self._insp.get_component_identity(p_cls, pipeline_modpath)
             self._spies.pipeline_start_attempt_counts[pipeline_id] += 1
 
             if pipeline_id not in self._spies.pipelines:
@@ -288,7 +288,7 @@ class ScenarioRunner:
                 else self._insp.get_pipeline_class(pipeline_modpath)
             )
             expected_success_pipelines.add(
-                self._insp.get_pipeline_identity(pipeline_modpath, p_cls)
+                self._insp.get_component_identity(p_cls, pipeline_modpath)
             )
 
         configured_pipelines = set(self._plan.pipeline_event_targets)
@@ -372,11 +372,16 @@ class ScenarioRunner:
             directive_index=directive_index,
             minion_modpath=d.minion_modpath,
             pipeline_modpath=d.pipeline_modpath,
-            minion_id=self._insp.get_minion_identity(
-                d.minion_modpath,
-                d.minion if isinstance(d.minion, type) else None,
+            minion_id=(
+                self._insp.get_component_identity(d.minion, d.minion_modpath)
+                if isinstance(d.minion, type)
+                else self._insp.get_minion_identity_from_modpath(d.minion_modpath)
             ),
-            pipeline_id=self._insp.get_pipeline_identity(d.pipeline_modpath),
+            pipeline_id=(
+                self._insp.get_component_identity(d.pipeline, d.pipeline_modpath)
+                if isinstance(d.pipeline, type)
+                else self._insp.get_pipeline_identity_from_modpath(d.pipeline_modpath)
+            ),
             instance_id=None,
             minion_cls=None,
             success=r.success,

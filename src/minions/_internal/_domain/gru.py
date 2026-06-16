@@ -409,9 +409,9 @@ class Gru:
 
     @staticmethod
     def _make_orchestration_id(
+        pipeline_id: str,
         minion_id: str,
         minion_config_id: str,
-        pipeline_id: str,
     ) -> str:
         payload = {
             # Version the payload in case ther is a need to migrate IDs in the future.
@@ -442,7 +442,9 @@ class Gru:
             return p.resolve().as_posix()
 
     @staticmethod
-    def _get_component_identity(typ: type[Any], fallback: str) -> str:
+    def _get_component_identity(typ: type[Any], fallback: str | None = None) -> str:
+        """Use an explicit fallback to preserve entrypoint identity for re-exported classes."""
+        fallback = fallback or f"{typ.__module__}.{typ.__name__}"
         return get_component_id(typ) or fallback
 
     @staticmethod
@@ -459,8 +461,15 @@ class Gru:
         ]
 
     @staticmethod
-    def _get_minion_identity(minion_cls: type[Minion[Any, Any]], minion_modpath: str) -> str:
-        return Gru._get_component_identity(minion_cls, minion_modpath)
+    def _get_minion_identity(minion_cls: type[Minion[Any, Any]]) -> str:
+        return Gru._get_component_identity(minion_cls)
+
+    def _get_minion_identity_from_modpath(
+        self,
+        minion_modpath: str,
+    ) -> str:
+        minion_cls = self._get_minion_class(minion_modpath)
+        return self._get_component_identity(minion_cls, minion_modpath)
 
     def _get_minion_class(self, minion_modpath: str) -> type[Minion[Any, Any]]:
         mod = importlib.import_module(minion_modpath)
@@ -570,9 +579,8 @@ class Gru:
 
     # Resource Methods
 
-    def _make_resource_id(self, resource_cls: type[Resource]) -> str:
-        fallback = f"{resource_cls.__module__}.{resource_cls.__name__}"
-        return self._get_component_identity(resource_cls, fallback)
+    def _get_resource_identity(self, resource_cls: type[Resource]) -> str:
+        return self._get_component_identity(resource_cls)
 
     def _get_direct_resource_dependencies(
         self, cls: type[Minion[Any, Any] | Pipeline[Any] | Resource]
@@ -606,7 +614,7 @@ class Gru:
         stack: list[tuple[type[Resource], bool]] = [(resource_cls, False)]
         while stack:
             cls, expanded = stack.pop()
-            rid = self._make_resource_id(cls)
+            rid = self._get_resource_identity(cls)
 
             if expanded:
                 if cls in seen:
@@ -629,7 +637,7 @@ class Gru:
                 stack.append((d, False))
 
         for cls in start_order:
-            rid = self._make_resource_id(cls)
+            rid = self._get_resource_identity(cls)
             dependency_resource_classes = self._get_direct_resource_dependencies(cls)
             await self._start_resource(
                 rid,
@@ -638,7 +646,7 @@ class Gru:
             )
             async with self._runtime_state_lock:
                 for dependency_resource_cls in dependency_resource_classes:
-                    dep_id = self._make_resource_id(dependency_resource_cls)
+                    dep_id = self._get_resource_identity(dependency_resource_cls)
                     if dep_id in self._resource_dependencies[rid]:
                         continue
                     self._resource_dependencies[rid].add(dep_id)
@@ -646,7 +654,7 @@ class Gru:
                     self._resource_reference_counts[dep_id] += 1
 
         async with self._runtime_state_lock:
-            return self._resources[self._make_resource_id(resource_cls)]
+            return self._resources[self._get_resource_identity(resource_cls)]
 
     async def _cleanup_resources(self, candidates: Iterable[str]):
         """
@@ -708,7 +716,7 @@ class Gru:
             for attr, hint in get_type_hints(resource_cls).items():
                 attr_cls = get_type_from_hint(hint)
                 if attr_cls in dependency_resource_class_set:
-                    setattr(resource, attr, self._resources[self._make_resource_id(attr_cls)])
+                    setattr(resource, attr, self._resources[self._get_resource_identity(attr_cls)])
 
         async with self._resource_locks[resource_id]:
             created = False
@@ -755,13 +763,14 @@ class Gru:
 
     # Pipeline Methods
 
-    def _make_pipeline_id(self, pipeline_modpath: str) -> str:
-        """idempotently make pipeline id"""
-        return pipeline_modpath
+    def _get_pipeline_identity(self, pipeline_cls: type[Pipeline[Any]]) -> str:
+        return self._get_component_identity(pipeline_cls)
 
-    def _get_pipeline_identity(
-        self, pipeline_cls: type[Pipeline[Any]], pipeline_modpath: str
+    def _get_pipeline_identity_from_modpath(
+        self,
+        pipeline_modpath: str,
     ) -> str:
+        pipeline_cls = self._get_pipeline_class(pipeline_modpath)
         return self._get_component_identity(pipeline_cls, pipeline_modpath)
 
     def _get_pipeline_class(self, pipeline_modpath: str) -> type[Pipeline[Any]]:
@@ -1392,20 +1401,20 @@ class Gru:
 
             minion_instance_id = self._make_minion_instance_id()
             minion_identity = (
-                self._get_minion_identity(minion_cls, minion_modpath)
+                self._get_component_identity(minion_cls, minion_modpath)
                 if minion_cls is not None
                 else minion_modpath
             )
             pipeline_identity = (
-                self._get_pipeline_identity(pipeline_cls, pipeline_modpath)
+                self._get_component_identity(pipeline_cls, pipeline_modpath)
                 if pipeline_cls is not None
                 else pipeline_modpath
             )
             minion_config_identity = self._get_config_identity(minion_config_path)
             orchestration_id = self._make_orchestration_id(
+                pipeline_id=pipeline_identity,
                 minion_id=minion_identity,
                 minion_config_id=minion_config_identity,
-                pipeline_id=pipeline_identity,
             )
             orchestration_log_kwargs = {
                 "orchestration_id": orchestration_id,
@@ -1513,7 +1522,7 @@ class Gru:
                         for attr, hint in get_type_hints(type(minion_inst)).items():
                             cls = get_type_from_hint(hint)
                             if cls is not None and issubclass(cls, Resource):
-                                resource_id = self._make_resource_id(cls)
+                                resource_id = self._get_resource_identity(cls)
                                 item = (resource_id, attr, cls)
                                 if resource_id in self._resources:
                                     resources_running.append(item)
@@ -1549,7 +1558,7 @@ class Gru:
                             for attr, hint in get_type_hints(pipeline_inst.__class__).items():
                                 cls = get_type_from_hint(hint)
                                 if cls is not None and issubclass(cls, Resource):
-                                    resource_id = self._make_resource_id(cls)
+                                    resource_id = self._get_resource_identity(cls)
                                     item = (resource_id, attr, cls)
                                     if resource_id in self._resources:
                                         pipeline_resources_running.append(item)

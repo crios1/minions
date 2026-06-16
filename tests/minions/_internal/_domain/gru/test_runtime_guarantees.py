@@ -46,8 +46,11 @@ async def test_gru_does_not_replay_same_workflow_id_during_startup(
                 log.kwargs["workflow_id"]
                 for log in logger.logs
                 if log.msg == "Workflow Step started"
-                and log.kwargs.get("minion_id")
-                == "tests.assets.minions.race_cases.duplicate_workflow_replay"
+                and log.kwargs.get("minion_id") == (
+                    gru._get_minion_identity_from_modpath(
+                        "tests.assets.minions.race_cases.duplicate_workflow_replay"
+                    )
+                )
                 and log.kwargs.get("step_name") == "step_1"
             ]
 
@@ -92,12 +95,16 @@ async def test_gru_serializes_concurrent_starts_for_same_orchestration(
         state_store=state_store,
     ) as gru:
         gru._orchestration_locks = defaultdict(GatedLock)
-        orchestration_id = gru._make_orchestration_id(
-            "tests.assets.minions.two_steps.simple.basic",
-            "",
-            "tests.assets.pipelines.simple.simple_event.single_event_1",
+        expected_orchestration_id = Gru._make_orchestration_id(
+            pipeline_id=gru._get_pipeline_identity_from_modpath(
+                "tests.assets.pipelines.simple.simple_event.single_event_1",
+            ),
+            minion_id=gru._get_minion_identity_from_modpath(
+                "tests.assets.minions.two_steps.simple.basic",
+            ),
+            minion_config_id="",
         )
-        orchestration_gated_lock = gru._orchestration_locks[orchestration_id]
+        orchestration_gated_lock = gru._orchestration_locks[expected_orchestration_id]
         assert isinstance(orchestration_gated_lock, GatedLock)
 
         task1 = asyncio.create_task(
@@ -150,12 +157,16 @@ async def test_gru_serializes_concurrent_stops_for_same_orchestration(
         assert start_result.success
 
         gru._orchestration_locks = defaultdict(GatedLock)
-        orchestration_id = gru._make_orchestration_id(
-            "tests.assets.minions.two_steps.simple.basic",
-            "",
-            "tests.assets.pipelines.simple.simple_event.single_event_1",
+        expected_orchestration_id = Gru._make_orchestration_id(
+            pipeline_id=gru._get_pipeline_identity_from_modpath(
+                "tests.assets.pipelines.simple.simple_event.single_event_1",
+            ),
+            minion_id=gru._get_minion_identity_from_modpath(
+                "tests.assets.minions.two_steps.simple.basic",
+            ),
+            minion_config_id="",
         )
-        orchestration_gated_lock = gru._orchestration_locks[orchestration_id]
+        orchestration_gated_lock = gru._orchestration_locks[expected_orchestration_id]
         assert isinstance(orchestration_gated_lock, GatedLock)
 
         stop_task_1 = asyncio.create_task(
@@ -202,12 +213,16 @@ async def test_gru_serializes_concurrent_start_and_stop_for_same_orchestration(
         )
         assert start_result.success
         gru._orchestration_locks = defaultdict(GatedLock)
-        orchestration_id = gru._make_orchestration_id(
-            "tests.assets.minions.two_steps.simple.basic",
-            "",
-            "tests.assets.pipelines.simple.simple_event.single_event_1",
+        expected_orchestration_id = Gru._make_orchestration_id(
+            pipeline_id=gru._get_pipeline_identity_from_modpath(
+                "tests.assets.pipelines.simple.simple_event.single_event_1",
+            ),
+            minion_id=gru._get_minion_identity_from_modpath(
+                "tests.assets.minions.two_steps.simple.basic",
+            ),
+            minion_config_id="",
         )
-        orchestration_gated_lock = gru._orchestration_locks[orchestration_id]
+        orchestration_gated_lock = gru._orchestration_locks[expected_orchestration_id]
         assert isinstance(orchestration_gated_lock, GatedLock)
 
         stop_task = asyncio.create_task(gru.stop_orchestration(start_result.orchestration_id or ""))
@@ -246,15 +261,22 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations(
         state_store=state_store,
     ) as gru:
         gru._orchestration_locks = defaultdict(GatedLock)
-        orchestration_id_1 = gru._make_orchestration_id(
+        basic_minion_id = gru._get_minion_identity_from_modpath(
             "tests.assets.minions.two_steps.simple.basic",
-            "",
-            "tests.assets.pipelines.simple.simple_event.single_event_1",
         )
-        orchestration_id_2 = gru._make_orchestration_id(
-            "tests.assets.minions.two_steps.simple.basic",
-            "",
-            "tests.assets.pipelines.simple.simple_event.single_event_2",
+        orchestration_id_1 = Gru._make_orchestration_id(
+            pipeline_id=gru._get_pipeline_identity_from_modpath(
+                "tests.assets.pipelines.simple.simple_event.single_event_1",
+            ),
+            minion_id=basic_minion_id,
+            minion_config_id="",
+        )
+        orchestration_id_2 = Gru._make_orchestration_id(
+            pipeline_id=gru._get_pipeline_identity_from_modpath(
+                "tests.assets.pipelines.simple.simple_event.single_event_2",
+            ),
+            minion_id=basic_minion_id,
+            minion_config_id="",
         )
         gate1 = gru._orchestration_locks[orchestration_id_1]
         gate2 = gru._orchestration_locks[orchestration_id_2]
@@ -349,7 +371,7 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
         assert resourced_pipeline.ResourcedPipeline.get_call_counts()["_mn_startup"] == 1
         assert fixed_resource.FixedResource.get_call_counts()["_mn_startup"] == 1
 
-        resource_id = gru._make_resource_id(fixed_resource.FixedResource)
+        resource_id = gru._get_resource_identity(fixed_resource.FixedResource)
         assert gru._pipeline_resource_map[pipeline_modpath] == {resource_id}
         assert gru._resource_reference_counts[resource_id] == 1
 
@@ -396,8 +418,8 @@ async def test_gru_injects_resource_dependencies_before_resource_startup(
             timeout=5.0,
         )
 
-        fixed_resource_id = gru._make_resource_id(resource_module_fixed.FixedResource)
-        depends_on_fixed_resource_id = gru._make_resource_id(
+        fixed_resource_id = gru._get_resource_identity(resource_module_fixed.FixedResource)
+        depends_on_fixed_resource_id = gru._get_resource_identity(
             resource_module_depends_on_fixed.DependsOnFixedResource
         )
         depends_on_fixed_resource_inst = gru._resources[depends_on_fixed_resource_id]
@@ -467,9 +489,9 @@ async def test_gru_starts_resource_with_multiple_resource_dependencies(
 
         assert result.success
 
-        first_id = gru._make_resource_id(FirstLeafResource)
-        second_id = gru._make_resource_id(SecondLeafResource)
-        compound_id = gru._make_resource_id(MultiDependencyResource)
+        first_id = gru._get_resource_identity(FirstLeafResource)
+        second_id = gru._get_resource_identity(SecondLeafResource)
+        compound_id = gru._get_resource_identity(MultiDependencyResource)
 
         compound = gru._resources[compound_id]
         assert isinstance(compound, MultiDependencyResource)
@@ -570,10 +592,14 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations_while_s
         assert orchestration2_start_result.success
         assert orchestration2_start_result.orchestration_id is not None
         assert orchestration2_start_result.orchestration_id in gru._minions_by_orchestration_id
-        orchestration2_id = gru._make_orchestration_id(
-            "tests.assets.minions.two_steps.simple.basic",
-            "",
-            "tests.assets.pipelines.simple.simple_event.single_event_2",
+        orchestration2_id = Gru._make_orchestration_id(
+            pipeline_id=gru._get_pipeline_identity_from_modpath(
+                "tests.assets.pipelines.simple.simple_event.single_event_2",
+            ),
+            minion_id=gru._get_minion_identity_from_modpath(
+                "tests.assets.minions.two_steps.simple.basic",
+            ),
+            minion_config_id="",
         )
         assert orchestration2_id in gru._minions_by_orchestration_id
         assert orchestration1_start_result.orchestration_id in gru._minions_by_orchestration_id
