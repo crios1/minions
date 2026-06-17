@@ -14,7 +14,7 @@
 #   submitted orchestration to resolve.
 
 # CORE API:
-# minion start <m_modpath> <m_configpath> <p_modpath>
+# minion start <minion_module_path> <minion_config_path> <pipeline_module_path>
 #   → returns wid
 # minion stop <mid>
 #   → returns wid
@@ -200,8 +200,8 @@
 #     ...
 #   ]
 # }
-# start <m_modpath> <m_configpath> <p_modpath>
-# start <m_modpath> <m_configpath> <p_modpath>
+# start <minion_module_path> <minion_config_path> <pipeline_module_path>
+# start <minion_module_path> <minion_config_path> <pipeline_module_path>
 # ...
 
 # TODO: document how you manage deployments
@@ -450,7 +450,7 @@ class GruShell(cmd.Cmd):
     def do_start(self, line: str):
         argv = self._to_argv(line)
         if len(argv) != 3:
-            print("Usage: start MINION_MODULEPATH MINION_CONFIG_MODULEPATH PIPELINE_MODULEPATH")
+            print("Usage: start MINION_MODULE_PATH MINION_CONFIG_PATH PIPELINE_MODULE_PATH")
             return
 
         fut = self._submit(self._gru.start_minion(*argv))

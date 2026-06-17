@@ -20,8 +20,8 @@ class TestValidComposition:
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         ) -> None:
             
-            minion_modpath = "tests.assets.entrypoints.valid.two_minions_explicit_minion_simple"
-            pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+            minion_module_path = "tests.assets.entrypoints.valid.two_minions_explicit_minion_simple"
+            pipeline_module_path = "tests.assets.pipelines.simple.simple_event.single_event_1"
 
             async with gru_factory(
                 state_store=NoOpStateStore(),
@@ -29,8 +29,8 @@ class TestValidComposition:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
-                    pipeline=pipeline_modpath
+                    minion=minion_module_path,
+                    pipeline=pipeline_module_path
                 )
 
                 assert result.success
@@ -40,8 +40,8 @@ class TestValidComposition:
             self,
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         ) -> None:
-            minion_modpath = "tests.assets.minions.two_steps.simple.resourced_multi"
-            pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+            minion_module_path = "tests.assets.minions.two_steps.simple.resourced_multi"
+            pipeline_module_path = "tests.assets.pipelines.simple.simple_event.single_event_1"
 
             logger = InMemoryLogger()
             async with gru_factory(
@@ -50,8 +50,8 @@ class TestValidComposition:
                 metrics=InMemoryMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
-                    pipeline=pipeline_modpath
+                    minion=minion_module_path,
+                    pipeline=pipeline_module_path
                 )
 
                 assert result.success
@@ -67,8 +67,8 @@ class TestValidComposition:
             self,
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         ) -> None:
-            minion_modpath = "tests.assets.minions.two_steps.simple.basic"
-            pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+            minion_module_path = "tests.assets.minions.two_steps.simple.basic"
+            pipeline_module_path = "tests.assets.pipelines.simple.simple_event.single_event_1"
 
             async with gru_factory(
                 state_store=NoOpStateStore(),
@@ -76,8 +76,8 @@ class TestValidComposition:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
-                    pipeline=pipeline_modpath
+                    minion=minion_module_path,
+                    pipeline=pipeline_module_path
                 )
 
                 assert result.success
@@ -90,8 +90,8 @@ class TestValidCompositionUsingNewAssets:
             self,
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         ) -> None:
-            minion_modpath = "tests.assets.entrypoints.valid.two_minions_explicit_minion"
-            pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+            minion_module_path = "tests.assets.entrypoints.valid.two_minions_explicit_minion"
+            pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
 
             async with gru_factory(
                 state_store=NoOpStateStore(),
@@ -99,8 +99,8 @@ class TestValidCompositionUsingNewAssets:
                 metrics=NoOpMetrics(),
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
-                    pipeline=pipeline_modpath,
+                    minion=minion_module_path,
+                    pipeline=pipeline_module_path,
                 )
                 assert result.success
 
@@ -109,8 +109,8 @@ class TestValidCompositionUsingNewAssets:
             self,
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         ) -> None:
-            minion_modpath = "tests.assets.entrypoints.valid.single_minion_subclass"
-            pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+            minion_module_path = "tests.assets.entrypoints.valid.single_minion_subclass"
+            pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
 
             async with gru_factory(
                 state_store=NoOpStateStore(),
@@ -118,8 +118,8 @@ class TestValidCompositionUsingNewAssets:
                 metrics=NoOpMetrics(),
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
-                    pipeline=pipeline_modpath,
+                    minion=minion_module_path,
+                    pipeline=pipeline_module_path,
                 )
                 assert result.success
 
@@ -128,8 +128,8 @@ class TestValidCompositionUsingNewAssets:
             self,
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         ) -> None:
-            minion_modpath = "tests.assets.minions.two_steps.counter.multi_resources"
-            pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+            minion_module_path = "tests.assets.minions.two_steps.counter.multi_resources"
+            pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
 
             logger = InMemoryLogger()
             async with gru_factory(
@@ -138,8 +138,8 @@ class TestValidCompositionUsingNewAssets:
                 metrics=InMemoryMetrics(),
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
-                    pipeline=pipeline_modpath,
+                    minion=minion_module_path,
+                    pipeline=pipeline_module_path,
                 )
 
                 assert result.success
@@ -153,8 +153,8 @@ class TestValidCompositionUsingNewAssets:
             self,
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         ) -> None:
-            minion_modpath = "tests.assets.minions.two_steps.counter.basic"
-            pipeline_modpath = "tests.assets.pipelines.entrypoint.counter.single_class"
+            minion_module_path = "tests.assets.minions.two_steps.counter.basic"
+            pipeline_module_path = "tests.assets.pipelines.entrypoint.counter.single_class"
 
             async with gru_factory(
                 state_store=NoOpStateStore(),
@@ -162,8 +162,8 @@ class TestValidCompositionUsingNewAssets:
                 metrics=NoOpMetrics(),
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
-                    pipeline=pipeline_modpath,
+                    minion=minion_module_path,
+                    pipeline=pipeline_module_path,
                 )
                 assert result.success
 
@@ -172,8 +172,8 @@ class TestValidCompositionUsingNewAssets:
             self,
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         ) -> None:
-            minion_modpath = "tests.assets.minions.two_steps.counter.basic"
-            pipeline_modpath = "tests.assets.entrypoints.valid.single_pipeline_subclass"
+            minion_module_path = "tests.assets.minions.two_steps.counter.basic"
+            pipeline_module_path = "tests.assets.entrypoints.valid.single_pipeline_subclass"
 
             async with gru_factory(
                 state_store=NoOpStateStore(),
@@ -181,7 +181,7 @@ class TestValidCompositionUsingNewAssets:
                 metrics=NoOpMetrics(),
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
-                    pipeline=pipeline_modpath,
+                    minion=minion_module_path,
+                    pipeline=pipeline_module_path,
                 )
                 assert result.success

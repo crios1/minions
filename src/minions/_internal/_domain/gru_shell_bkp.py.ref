@@ -42,7 +42,7 @@ class GruShell(cmd.Cmd):
         """Starts a minion."""
         argv = self._to_argv(line)
         if not argv or len(argv) != 3:
-            print("Usage: start MINION_MODULEPATH MINION_CONFIG_MODULEPATH PIPELINE_MODULEPATH")
+            print("Usage: start MINION_MODULE_PATH MINION_CONFIG_PATH PIPELINE_MODULE_PATH")
             return
         # self._loop.create_task(self._gru.start_minion(*argv))
         # print(f"Minion launched. Check `status {argv[0]}` to confirm launch.")

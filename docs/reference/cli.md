@@ -140,7 +140,7 @@ Run `stamp ... --dry-run` when you want to preview edits, and `doctor ids` when 
 
 ## Command details
 
-- `start MINION_MODULEPATH MINION_CONFIG_PATH PIPELINE_MODULEPATH`
+- `start MINION_MODULE_PATH MINION_CONFIG_PATH PIPELINE_MODULE_PATH`
   - Starts an orchestration if one with the same orchestration identity is not already running. Returns a `StartResult` with an opaque deterministic SHA-256 `orchestration_id`.
 - `stop ORCHESTRATION_ID ...`
   - Stops matching orchestrations and cleans up resources/pipelines that are no longer referenced.

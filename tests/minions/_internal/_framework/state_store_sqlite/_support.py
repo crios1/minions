@@ -22,10 +22,10 @@ from minions._internal._utils.serialization import serialize
 def mk_ctx(
     i: int = 0,
     size: int = 32,
-    modpath: str = "app.minion",
+    module_path: str = "app.minion",
 ) -> MinionWorkflowContext[dict[str, int], dict[str, str]]:
     return MinionWorkflowContext(
-        orchestration_id=f"{modpath}|cfg-{i}|app.pipeline",
+        orchestration_id=f"{module_path}|cfg-{i}|app.pipeline",
         workflow_id=f"wf-{i}",
         event={"i": i},
         context={"p": "x" * size},

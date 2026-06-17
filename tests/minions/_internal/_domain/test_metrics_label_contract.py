@@ -70,7 +70,7 @@ async def test_pipeline_runtime_metric_labels_match_contract():
         _mn_minion_id = "contract-minion-component"
         _mn_minion_instance_id = "contract-minion"
         _mn_orchestration_id = "contract-minion-key"
-        _mn_minion_modpath = "tests.metrics_contract.FakeMinion"
+        _mn_minion_module_path = "tests.metrics_contract.FakeMinion"
 
         def __init__(self) -> None:
             self.tasks: list[asyncio.Task[None]] = []

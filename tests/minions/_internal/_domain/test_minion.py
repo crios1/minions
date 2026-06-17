@@ -102,7 +102,7 @@ class TestMinionSubclassingValid:
         m = MyMinion(
             minion_instance_id="mock",
             orchestration_id="mock",
-            minion_modpath="mock",
+            minion_module_path="mock",
             config_path=None,
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
@@ -123,7 +123,7 @@ class TestMinionSubclassingValid:
         m = MyMinion(
             minion_instance_id="instance-1",
             orchestration_id="orchestration-1",
-            minion_modpath="mock",
+            minion_module_path="mock",
             config_path=None,
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
@@ -156,7 +156,7 @@ class TestMinionSubclassingValid:
         m = MyMinion(
             minion_instance_id="instance-1",
             orchestration_id="orchestration-1",
-            minion_modpath="mock",
+            minion_module_path="mock",
             config_path=None,
             state_store=state_store,
             metrics=NoOpMetrics(),
@@ -198,7 +198,7 @@ class TestMinionSubclassingValid:
         m = MyMinion(
             minion_instance_id="instance-1",
             orchestration_id="orchestration-1",
-            minion_modpath="mock",
+            minion_module_path="mock",
             config_path=None,
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
@@ -230,7 +230,7 @@ class TestMinionSubclassingValid:
         m = MyMinion(
             minion_instance_id="mock",
             orchestration_id="mock",
-            minion_modpath="mock",
+            minion_module_path="mock",
             config_path="mock",
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
@@ -257,7 +257,7 @@ class TestMinionSubclassingValid:
         m = MyMinion(
             minion_instance_id="mock",
             orchestration_id="mock",
-            minion_modpath="mock",
+            minion_module_path="mock",
             config_path="mock",
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
@@ -293,7 +293,7 @@ class TestMinionSubclassingValid:
         m = MyMinion(
             minion_instance_id="mock",
             orchestration_id="mock",
-            minion_modpath="mock",
+            minion_module_path="mock",
             config_path="mock",
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
@@ -319,7 +319,7 @@ class TestMinionSubclassingValid:
         m = MyMinion(
             minion_instance_id="mock",
             orchestration_id="mock",
-            minion_modpath="mock",
+            minion_module_path="mock",
             config_path="mock",
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
@@ -342,7 +342,7 @@ class TestMinionSubclassingValid:
         m = MyMinion(
             minion_instance_id="mock",
             orchestration_id="mock",
-            minion_modpath="mock",
+            minion_module_path="mock",
             config_path="mock",
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),

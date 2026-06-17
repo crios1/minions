@@ -26,13 +26,13 @@ class OrchestrationStart(Directive):
         return {k: v for k, v in self.__dict__.items() if k in _ORCHESTRATION_START_PARAMS}
 
     @property
-    def minion_modpath(self) -> str:
+    def minion_module_path(self) -> str:
         if isinstance(self.minion, str):
             return self.minion
         return self.minion.__module__
 
     @property
-    def pipeline_modpath(self) -> str:
+    def pipeline_module_path(self) -> str:
         if isinstance(self.pipeline, str):
             return self.pipeline
         return self.pipeline.__module__

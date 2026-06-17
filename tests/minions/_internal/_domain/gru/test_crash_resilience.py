@@ -37,10 +37,10 @@ from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
 
 
-def orchestration_id(pipeline_modpath: str, minion_modpath: str, config: str = "") -> str:
+def orchestration_id(pipeline_module_path: str, minion_module_path: str, config: str = "") -> str:
     return Gru._make_orchestration_id(
-        pipeline_id=pipeline_modpath,
-        minion_id=minion_modpath,
+        pipeline_id=pipeline_module_path,
+        minion_id=minion_module_path,
         minion_config_id=config,
     )
 
@@ -155,7 +155,7 @@ async def test_start_orchestration_fails_closed_on_persisted_workflow_decode_mis
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("pipeline_modpath", "minion_modpath"),
+    ("pipeline_module_path", "minion_module_path"),
     [
         (
             "tests.assets.crash.pipelines.healthy_counter",
@@ -180,16 +180,16 @@ async def test_start_orchestration_contains_user_code_startup_failures(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-    pipeline_modpath: str,
-    minion_modpath: str,
+    pipeline_module_path: str,
+    minion_module_path: str,
     tests_dir: Path,
 ) -> None:
     config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_orchestration(
-            minion=minion_modpath,
-            pipeline=pipeline_modpath,
-            minion_config_path=config_path if "boom_load_config" in minion_modpath else None,
+            minion=minion_module_path,
+            pipeline=pipeline_module_path,
+            minion_config_path=config_path if "boom_load_config" in minion_module_path else None,
         )
 
         assert not result.success
@@ -213,10 +213,10 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
     state_store: InMemoryStateStore,
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        healthy_counter_pipeline_id = gru._get_pipeline_identity_from_modpath(
+        healthy_counter_pipeline_id = gru._get_pipeline_identity_from_module_path(
             "tests.assets.crash.pipelines.healthy_counter",
         )
-        boom_step_minion_id = gru._get_minion_identity_from_modpath(
+        boom_step_minion_id = gru._get_minion_identity_from_module_path(
             "tests.assets.crash.minions.boom_step",
         )
         expected_orchestration_id = Gru._make_orchestration_id(
@@ -269,7 +269,7 @@ async def test_pipeline_produce_event_failure_is_logged_measured_and_shutdown_is
     state_store: InMemoryStateStore,
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        boom_produce_event_pipeline_id = gru._get_pipeline_identity_from_modpath(
+        boom_produce_event_pipeline_id = gru._get_pipeline_identity_from_module_path(
             "tests.assets.crash.pipelines.boom_produce_event",
         )
 
@@ -305,10 +305,10 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
     state_store: InMemoryStateStore,
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        healthy_counter_pipeline_id = gru._get_pipeline_identity_from_modpath(
+        healthy_counter_pipeline_id = gru._get_pipeline_identity_from_module_path(
             "tests.assets.crash.pipelines.healthy_counter",
         )
-        boom_resource_method_minion_id = gru._get_minion_identity_from_modpath(
+        boom_resource_method_minion_id = gru._get_minion_identity_from_module_path(
             "tests.assets.crash.minions.boom_resource_method",
         )
         expected_orchestration_id = Gru._make_orchestration_id(
@@ -355,7 +355,7 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("pipeline_modpath", "minion_modpath"),
+    ("pipeline_module_path", "minion_module_path"),
     [
         (
             "tests.assets.crash.pipelines.healthy_counter",
@@ -376,15 +376,15 @@ async def test_shutdown_failures_are_reported_and_singleton_is_released(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-    pipeline_modpath: str,
-    minion_modpath: str,
+    pipeline_module_path: str,
+    minion_module_path: str,
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        result = await gru.start_orchestration(pipeline_modpath, minion_modpath)
+        result = await gru.start_orchestration(pipeline_module_path, minion_module_path)
         assert result.success
         stop = await gru.stop_orchestration(result.orchestration_id or "")
 
-        if minion_modpath.endswith(".boom_shutdown"):
+        if minion_module_path.endswith(".boom_shutdown"):
             assert not stop.success
             assert logger.has_log("Failed to stop orchestration")
         else:

@@ -464,15 +464,15 @@ class Gru:
     def _get_minion_identity(minion_cls: type[Minion[Any, Any]]) -> str:
         return Gru._get_component_identity(minion_cls)
 
-    def _get_minion_identity_from_modpath(
+    def _get_minion_identity_from_module_path(
         self,
-        minion_modpath: str,
+        minion_module_path: str,
     ) -> str:
-        minion_cls = self._get_minion_class(minion_modpath)
-        return self._get_component_identity(minion_cls, minion_modpath)
+        minion_cls = self._get_minion_class(minion_module_path)
+        return self._get_component_identity(minion_cls, minion_module_path)
 
-    def _get_minion_class(self, minion_modpath: str) -> type[Minion[Any, Any]]:
-        mod = importlib.import_module(minion_modpath)
+    def _get_minion_class(self, minion_module_path: str) -> type[Minion[Any, Any]]:
+        mod = importlib.import_module(minion_module_path)
 
         def is_minion_class(obj: object) -> TypeGuard[type[Minion[Any, Any]]]:
             return isinstance(obj, type) and issubclass(obj, Minion)
@@ -491,12 +491,12 @@ class Gru:
                 minion_cls = minion_classes[0]
             elif len(minion_classes) == 0:
                 raise ImportError(
-                    f"Module '{minion_modpath}' must define a `minion` variable or "
+                    f"Module '{minion_module_path}' must define a `minion` variable or "
                     "contain at least one subclass of `Minion`."
                 )
             else:
                 raise ImportError(
-                    f"Module '{minion_modpath}' contains multiple Minion subclasses "
+                    f"Module '{minion_module_path}' contains multiple Minion subclasses "
                     "but no explicit `minion` variable to resolve the entrypoint."
                 )
 
@@ -504,7 +504,7 @@ class Gru:
             minion_cls = minion_attr
         else:
             raise TypeError(
-                f"`minion` attribute in module '{minion_modpath}' is not a subclass of Minion"
+                f"`minion` attribute in module '{minion_module_path}' is not a subclass of Minion"
             )
 
         return minion_cls
@@ -516,13 +516,13 @@ class Gru:
         minion_id: str,
         minion_config_id: str,
         pipeline_id: str,
-        minion_modpath: str,
+        minion_module_path: str,
         minion_config_path: str | None,
         inline_minion_config: object | None = None,
         minion_cls: type[Minion[Any, Any]] | None = None,
     ) -> Minion[Any, Any]:
         if minion_cls is None:
-            minion_cls = self._get_minion_class(minion_modpath)
+            minion_cls = self._get_minion_class(minion_module_path)
 
         return minion_cls(
             minion_instance_id=minion_instance_id,
@@ -530,7 +530,7 @@ class Gru:
             minion_id=minion_id,
             minion_config_id=minion_config_id,
             pipeline_id=pipeline_id,
-            minion_modpath=minion_modpath,
+            minion_module_path=minion_module_path,
             config_path=minion_config_path,
             inline_config=inline_minion_config,
             state_store=self._state_store,
@@ -729,7 +729,7 @@ class Gru:
                     resource = resource_cls(
                         logger=self._logger,
                         metrics=self._metrics,
-                        resource_modpath=f"{resource_cls.__module__}.{resource_cls.__name__}",
+                        resource_module_path=f"{resource_cls.__module__}.{resource_cls.__name__}",
                         resource_id=resource_id,
                     )
                     inject_resource_dependencies(resource)
@@ -766,15 +766,15 @@ class Gru:
     def _get_pipeline_identity(self, pipeline_cls: type[Pipeline[Any]]) -> str:
         return self._get_component_identity(pipeline_cls)
 
-    def _get_pipeline_identity_from_modpath(
+    def _get_pipeline_identity_from_module_path(
         self,
-        pipeline_modpath: str,
+        pipeline_module_path: str,
     ) -> str:
-        pipeline_cls = self._get_pipeline_class(pipeline_modpath)
-        return self._get_component_identity(pipeline_cls, pipeline_modpath)
+        pipeline_cls = self._get_pipeline_class(pipeline_module_path)
+        return self._get_component_identity(pipeline_cls, pipeline_module_path)
 
-    def _get_pipeline_class(self, pipeline_modpath: str) -> type[Pipeline[Any]]:
-        mod = importlib.import_module(pipeline_modpath)
+    def _get_pipeline_class(self, pipeline_module_path: str) -> type[Pipeline[Any]]:
+        mod = importlib.import_module(pipeline_module_path)
 
         def is_pipeline_class(obj: object) -> TypeGuard[type[Pipeline[Any]]]:
             return isinstance(obj, type) and issubclass(obj, Pipeline)
@@ -793,12 +793,12 @@ class Gru:
                 pipeline_cls = pipeline_classes[0]
             elif len(pipeline_classes) == 0:
                 raise ImportError(
-                    f"Module '{pipeline_modpath}' must define a `pipeline` variable "
+                    f"Module '{pipeline_module_path}' must define a `pipeline` variable "
                     "or contain at least one subclass of `Pipeline`."
                 )
             else:
                 raise ImportError(
-                    f"Module '{pipeline_modpath}' contains multiple Pipeline "
+                    f"Module '{pipeline_module_path}' contains multiple Pipeline "
                     "subclasses but no explicit `pipeline` variable to resolve the "
                     "entrypoint."
                 )
@@ -807,7 +807,8 @@ class Gru:
             pipeline_cls = pipeline_attr
         else:
             raise TypeError(
-                f"`pipeline` attribute in module '{pipeline_modpath}' is not a subclass of Pipeline"
+                f"`pipeline` attribute in module '{pipeline_module_path}' "
+                "is not a subclass of Pipeline"
             )
 
         return pipeline_cls
@@ -815,18 +816,18 @@ class Gru:
     def _get_pipeline(
         self,
         pipeline_id: str,
-        pipeline_modpath: str,
+        pipeline_module_path: str,
         pipeline_cls: type[Pipeline[Any]] | None = None,
     ) -> Pipeline[Any]:
         if pipeline_id in self._pipelines:
             return self._pipelines[pipeline_id]
 
         if pipeline_cls is None:
-            pipeline_cls = self._get_pipeline_class(pipeline_modpath)
+            pipeline_cls = self._get_pipeline_class(pipeline_module_path)
 
         return pipeline_cls(
             pipeline_id=pipeline_id,
-            pipeline_modpath=pipeline_modpath,
+            pipeline_module_path=pipeline_module_path,
             metrics=self._metrics,
             logger=self._logger,
         )
@@ -1337,8 +1338,8 @@ class Gru:
                         ),
                         suggestion="use minion_config_path instead",
                     )
-                minion_modpath = minion.strip()
-                pipeline_modpath = pipeline.strip()
+                minion_module_path = minion.strip()
+                pipeline_module_path = pipeline.strip()
                 minion_config_path = (
                     None
                     if not minion_config_path
@@ -1346,13 +1347,13 @@ class Gru:
                 )
                 try:
                     minion_cls: type[Minion[Any, Any]] | None = self._get_minion_class(
-                        minion_modpath
+                        minion_module_path
                     )
                 except Exception:
                     minion_cls = None
                 try:
                     pipeline_cls: type[Pipeline[Any]] | None = self._get_pipeline_class(
-                        pipeline_modpath
+                        pipeline_module_path
                     )
                 except Exception:
                     pipeline_cls = None
@@ -1377,8 +1378,8 @@ class Gru:
                     )
                 minion_cls = cast(type[Minion[Any, Any]], minion)
                 pipeline_cls = cast(type[Pipeline[Any]], pipeline)
-                minion_modpath = minion_cls.__module__
-                pipeline_modpath = pipeline_cls.__module__
+                minion_module_path = minion_cls.__module__
+                pipeline_module_path = pipeline_cls.__module__
                 try:
                     minion_config_path = (
                         self._make_inline_config_identity(minion_config)
@@ -1401,14 +1402,14 @@ class Gru:
 
             minion_instance_id = self._make_minion_instance_id()
             minion_identity = (
-                self._get_component_identity(minion_cls, minion_modpath)
+                self._get_component_identity(minion_cls, minion_module_path)
                 if minion_cls is not None
-                else minion_modpath
+                else minion_module_path
             )
             pipeline_identity = (
-                self._get_component_identity(pipeline_cls, pipeline_modpath)
+                self._get_component_identity(pipeline_cls, pipeline_module_path)
                 if pipeline_cls is not None
-                else pipeline_modpath
+                else pipeline_module_path
             )
             minion_config_identity = self._get_config_identity(minion_config_path)
             orchestration_id = self._make_orchestration_id(
@@ -1448,9 +1449,9 @@ class Gru:
                             suggestion=suggestion,
                             minion_instance_id=minion_instance_id,
                             **orchestration_log_kwargs,
-                            minion_modpath=minion_modpath,
+                            minion_module_path=minion_module_path,
                             minion_config_path=minion_config_path,
-                            pipeline_modpath=pipeline_modpath,
+                            pipeline_module_path=pipeline_module_path,
                         )
                         return StartResult(
                             success=False,
@@ -1466,14 +1467,14 @@ class Gru:
                         minion_id=minion_identity,
                         minion_config_id=minion_config_identity,
                         pipeline_id=pipeline_identity,
-                        minion_modpath=minion_modpath,
+                        minion_module_path=minion_module_path,
                         minion_config_path=minion_config_path,
                         inline_minion_config=minion_config,
                         minion_cls=minion_cls,
                     )
                     pipeline_id = pipeline_identity
                     pipeline_inst = self._get_pipeline(
-                        pipeline_id, pipeline_modpath, pipeline_cls=pipeline_cls
+                        pipeline_id, pipeline_module_path, pipeline_cls=pipeline_cls
                     )
 
                     if minion_inst._mn_event_cls != pipeline_inst._mn_event_cls:
@@ -1493,9 +1494,9 @@ class Gru:
                             suggestion=suggestion,
                             minion_instance_id=minion_instance_id,
                             **orchestration_log_kwargs,
-                            minion_modpath=minion_modpath,
+                            minion_module_path=minion_module_path,
                             minion_config_path=minion_config_path,
-                            pipeline_modpath=pipeline_modpath,
+                            pipeline_module_path=pipeline_module_path,
                         )
                         return StartResult(
                             success=False,
@@ -1508,9 +1509,9 @@ class Gru:
                         DEBUG,
                         "Starting orchestration...",
                         **orchestration_log_kwargs,
-                        minion_modpath=minion_modpath,
+                        minion_module_path=minion_module_path,
                         minion_config_path=minion_config_path,
-                        pipeline_modpath=pipeline_modpath,
+                        pipeline_module_path=pipeline_module_path,
                     )
 
                     async with self._runtime_state_lock:
@@ -1606,9 +1607,9 @@ class Gru:
                         "Orchestration started",
                         minion_instance_id=minion_inst._mn_minion_instance_id,
                         **orchestration_log_kwargs,
-                        minion_modpath=minion_modpath,
+                        minion_module_path=minion_module_path,
                         minion_config_path=minion_config_path,
-                        pipeline_modpath=pipeline_modpath,
+                        pipeline_module_path=pipeline_module_path,
                     )
 
                     return StartResult(

@@ -62,7 +62,7 @@ asyncio.run(main())
 
 Inside the shell:
 
-- `start MINION_MODULEPATH CONFIG_PATH PIPELINE_MODULEPATH` — start additional orchestrations.
+- `start MINION_MODULE_PATH MINION_CONFIG_PATH PIPELINE_MODULE_PATH` — start additional orchestrations.
 - `stop ORCHESTRATION_ID ...` — stop by orchestration ID.
 - `status [--await] [--timeout N] [ids...]` — snapshot or wait for orchestration to settle.
 - `shutdown` — gracefully stop everything.

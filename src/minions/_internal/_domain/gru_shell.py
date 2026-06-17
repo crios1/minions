@@ -164,14 +164,14 @@ class GruShell(cmd.Cmd):
     def do_start(self, line: str):
         argv = self._to_argv(line)
         if len(argv) != 3:
-            print("Usage: start MINION_MODULEPATH MINION_CONFIG_MODULEPATH PIPELINE_MODULEPATH")
+            print("Usage: start MINION_MODULE_PATH MINION_CONFIG_PATH PIPELINE_MODULE_PATH")
             return
 
-        minion_modpath, minion_config_path, pipeline_modpath = argv
+        minion_module_path, minion_config_path, pipeline_module_path = argv
         fut = self._submit(
             self._gru.start_orchestration(
-                pipeline=pipeline_modpath,
-                minion=minion_modpath,
+                pipeline=pipeline_module_path,
+                minion=minion_module_path,
                 minion_config_path=minion_config_path,
             )
         )

@@ -22,8 +22,8 @@ class TestInvalidComposition:
             tests_dir: Path,
         ) -> None:
 
-            minion_modpath = "tests.assets.entrypoints.invalid.empty_simple"
-            pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+            minion_module_path = "tests.assets.entrypoints.invalid.empty_simple"
+            pipeline_module_path = "tests.assets.pipelines.simple.simple_event.single_event_1"
             config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
@@ -32,9 +32,9 @@ class TestInvalidComposition:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
+                    minion=minion_module_path,
                     minion_config_path=config_path,
-                    pipeline=pipeline_modpath
+                    pipeline=pipeline_module_path
                 )
 
                 assert not result.success
@@ -51,8 +51,8 @@ class TestInvalidComposition:
             tests_dir: Path,
         ) -> None:
             
-            minion_modpath = "tests.assets.entrypoints.invalid.two_minions_simple"
-            pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+            minion_module_path = "tests.assets.entrypoints.invalid.two_minions_simple"
+            pipeline_module_path = "tests.assets.pipelines.simple.simple_event.single_event_1"
             config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
@@ -61,9 +61,9 @@ class TestInvalidComposition:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
+                    minion=minion_module_path,
                     minion_config_path=config_path,
-                    pipeline=pipeline_modpath
+                    pipeline=pipeline_module_path
                 )
 
                 assert not result.success
@@ -79,8 +79,8 @@ class TestInvalidComposition:
             tests_dir: Path,
         ) -> None:
 
-            minion_modpath = "tests.assets.entrypoints.invalid.invalid_explicit_minion_simple"
-            pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+            minion_module_path = "tests.assets.entrypoints.invalid.invalid_explicit_minion_simple"
+            pipeline_module_path = "tests.assets.pipelines.simple.simple_event.single_event_1"
             config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
@@ -89,9 +89,9 @@ class TestInvalidComposition:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
+                    minion=minion_module_path,
                     minion_config_path=config_path,
-                    pipeline=pipeline_modpath
+                    pipeline=pipeline_module_path
                 )
 
                 assert not result.success
@@ -104,10 +104,10 @@ class TestInvalidComposition:
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
             tests_dir: Path,
         ) -> None:
-            minion_modpath = (
+            minion_module_path = (
                 "tests.assets.entrypoints.invalid.unserializable_workflow_context_minion_simple"
             )
-            pipeline_modpath = "tests.assets.pipeline_single_event"
+            pipeline_module_path = "tests.assets.pipeline_single_event"
             config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
@@ -116,9 +116,9 @@ class TestInvalidComposition:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
+                    minion=minion_module_path,
                     minion_config_path=config_path,
-                    pipeline=pipeline_modpath
+                    pipeline=pipeline_module_path
                 )
 
                 assert not result.success
@@ -131,8 +131,8 @@ class TestInvalidComposition:
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
             tests_dir: Path,
         ) -> None:
-            minion_modpath = "tests.assets.minions.invalid.bad_event"
-            pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+            minion_module_path = "tests.assets.minions.invalid.bad_event"
+            pipeline_module_path = "tests.assets.pipelines.simple.simple_event.single_event_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(
@@ -141,9 +141,9 @@ class TestInvalidComposition:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
+                    minion=minion_module_path,
                     minion_config_path=config_path,
-                    pipeline=pipeline_modpath
+                    pipeline=pipeline_module_path
                 )
 
                 assert not result.success
@@ -158,8 +158,8 @@ class TestInvalidComposition:
             tests_dir: Path,
         ) -> None:
 
-            minion_modpath = "tests.assets.minions.two_steps.simple.basic"
-            pipeline_modpath = "tests.assets.entrypoints.invalid.empty_simple"
+            minion_module_path = "tests.assets.minions.two_steps.simple.basic"
+            pipeline_module_path = "tests.assets.entrypoints.invalid.empty_simple"
             config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
@@ -168,9 +168,9 @@ class TestInvalidComposition:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
+                    minion=minion_module_path,
                     minion_config_path=config_path,
-                    pipeline=pipeline_modpath
+                    pipeline=pipeline_module_path
                 )
 
                 assert not result.success
@@ -187,8 +187,8 @@ class TestInvalidComposition:
             tests_dir: Path,
         ) -> None:
             
-            minion_modpath = "tests.assets.minions.two_steps.simple.basic"
-            pipeline_modpath = "tests.assets.entrypoints.invalid.two_pipelines_simple"
+            minion_module_path = "tests.assets.minions.two_steps.simple.basic"
+            pipeline_module_path = "tests.assets.entrypoints.invalid.two_pipelines_simple"
             config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
@@ -197,9 +197,9 @@ class TestInvalidComposition:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
+                    minion=minion_module_path,
                     minion_config_path=config_path,
-                    pipeline=pipeline_modpath
+                    pipeline=pipeline_module_path
                 )
 
                 assert not result.success
@@ -216,8 +216,10 @@ class TestInvalidComposition:
             tests_dir: Path,
         ) -> None:
 
-            minion_modpath = "tests.assets.minions.two_steps.simple.basic"
-            pipeline_modpath = "tests.assets.entrypoints.invalid.invalid_explicit_pipeline_simple"
+            minion_module_path = "tests.assets.minions.two_steps.simple.basic"
+            pipeline_module_path = (
+                "tests.assets.entrypoints.invalid.invalid_explicit_pipeline_simple"
+            )
             config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
@@ -226,9 +228,9 @@ class TestInvalidComposition:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
+                    minion=minion_module_path,
                     minion_config_path=config_path,
-                    pipeline=pipeline_modpath
+                    pipeline=pipeline_module_path
                 )
 
                 assert not result.success
@@ -241,8 +243,8 @@ class TestInvalidComposition:
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
             tests_dir: Path,
         ) -> None:
-            minion_modpath = "tests.assets.minions.two_steps.simple.basic"
-            pipeline_modpath = "tests.assets.pipelines.invalid.unserializable_event"
+            minion_module_path = "tests.assets.minions.two_steps.simple.basic"
+            pipeline_module_path = "tests.assets.pipelines.invalid.unserializable_event"
             config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
             async with gru_factory(
@@ -251,9 +253,9 @@ class TestInvalidComposition:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
+                    minion=minion_module_path,
                     minion_config_path=config_path,
-                    pipeline=pipeline_modpath
+                    pipeline=pipeline_module_path
                 )
 
                 assert not result.success
@@ -276,8 +278,8 @@ class TestInvalidCompositionUsingNewAssets:
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
             tests_dir: Path,
         ) -> None:
-            minion_modpath = "tests.assets.entrypoints.invalid.empty"
-            pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+            minion_module_path = "tests.assets.entrypoints.invalid.empty"
+            pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(
@@ -286,9 +288,9 @@ class TestInvalidCompositionUsingNewAssets:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
+                    minion=minion_module_path,
                     minion_config_path=config_path,
-                    pipeline=pipeline_modpath,
+                    pipeline=pipeline_module_path,
                 )
 
                 assert not result.success
@@ -301,8 +303,8 @@ class TestInvalidCompositionUsingNewAssets:
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
             tests_dir: Path,
         ) -> None:
-            minion_modpath = "tests.assets.entrypoints.invalid.two_minions"
-            pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+            minion_module_path = "tests.assets.entrypoints.invalid.two_minions"
+            pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(
@@ -311,9 +313,9 @@ class TestInvalidCompositionUsingNewAssets:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
+                    minion=minion_module_path,
                     minion_config_path=config_path,
-                    pipeline=pipeline_modpath,
+                    pipeline=pipeline_module_path,
                 )
 
                 assert not result.success
@@ -326,8 +328,8 @@ class TestInvalidCompositionUsingNewAssets:
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
             tests_dir: Path,
         ) -> None:
-            minion_modpath = "tests.assets.entrypoints.invalid.invalid_explicit_minion"
-            pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+            minion_module_path = "tests.assets.entrypoints.invalid.invalid_explicit_minion"
+            pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(
@@ -337,9 +339,9 @@ class TestInvalidCompositionUsingNewAssets:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
+                    minion=minion_module_path,
                     minion_config_path=config_path,
-                    pipeline=pipeline_modpath,
+                    pipeline=pipeline_module_path,
                 )
 
                 assert not result.success
@@ -352,8 +354,8 @@ class TestInvalidCompositionUsingNewAssets:
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
             tests_dir: Path,
         ) -> None:
-            minion_modpath = "tests.assets.minions.invalid.bad_context"
-            pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+            minion_module_path = "tests.assets.minions.invalid.bad_context"
+            pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(
@@ -362,9 +364,9 @@ class TestInvalidCompositionUsingNewAssets:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
+                    minion=minion_module_path,
                     minion_config_path=config_path,
-                    pipeline=pipeline_modpath,
+                    pipeline=pipeline_module_path,
                 )
 
                 assert not result.success
@@ -377,8 +379,8 @@ class TestInvalidCompositionUsingNewAssets:
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
             tests_dir: Path,
         ) -> None:
-            minion_modpath = "tests.assets.minions.invalid.bad_event"
-            pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+            minion_module_path = "tests.assets.minions.invalid.bad_event"
+            pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(
@@ -387,9 +389,9 @@ class TestInvalidCompositionUsingNewAssets:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
+                    minion=minion_module_path,
                     minion_config_path=config_path,
-                    pipeline=pipeline_modpath,
+                    pipeline=pipeline_module_path,
                 )
 
                 assert not result.success
@@ -403,8 +405,8 @@ class TestInvalidCompositionUsingNewAssets:
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
             tests_dir: Path,
         ) -> None:
-            minion_modpath = "tests.assets.minions.two_steps.counter.basic"
-            pipeline_modpath = "tests.assets.entrypoints.invalid.empty"
+            minion_module_path = "tests.assets.minions.two_steps.counter.basic"
+            pipeline_module_path = "tests.assets.entrypoints.invalid.empty"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(
@@ -413,9 +415,9 @@ class TestInvalidCompositionUsingNewAssets:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
+                    minion=minion_module_path,
                     minion_config_path=config_path,
-                    pipeline=pipeline_modpath,
+                    pipeline=pipeline_module_path,
                 )
 
                 assert not result.success
@@ -428,8 +430,8 @@ class TestInvalidCompositionUsingNewAssets:
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
             tests_dir: Path,
         ) -> None:
-            minion_modpath = "tests.assets.minions.two_steps.counter.basic"
-            pipeline_modpath = "tests.assets.entrypoints.invalid.two_pipelines"
+            minion_module_path = "tests.assets.minions.two_steps.counter.basic"
+            pipeline_module_path = "tests.assets.entrypoints.invalid.two_pipelines"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(
@@ -438,9 +440,9 @@ class TestInvalidCompositionUsingNewAssets:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
+                    minion=minion_module_path,
                     minion_config_path=config_path,
-                    pipeline=pipeline_modpath,
+                    pipeline=pipeline_module_path,
                 )
 
                 assert not result.success
@@ -453,8 +455,8 @@ class TestInvalidCompositionUsingNewAssets:
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
             tests_dir: Path,
         ) -> None:
-            minion_modpath = "tests.assets.minions.two_steps.counter.basic"
-            pipeline_modpath = "tests.assets.entrypoints.invalid.invalid_explicit_pipeline"
+            minion_module_path = "tests.assets.minions.two_steps.counter.basic"
+            pipeline_module_path = "tests.assets.entrypoints.invalid.invalid_explicit_pipeline"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(
@@ -463,9 +465,9 @@ class TestInvalidCompositionUsingNewAssets:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
+                    minion=minion_module_path,
                     minion_config_path=config_path,
-                    pipeline=pipeline_modpath,
+                    pipeline=pipeline_module_path,
                 )
 
                 assert not result.success
@@ -478,8 +480,8 @@ class TestInvalidCompositionUsingNewAssets:
             gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
             tests_dir: Path,
         ) -> None:
-            minion_modpath = "tests.assets.minions.two_steps.counter.basic"
-            pipeline_modpath = "tests.assets.pipelines.invalid.unserializable_event"
+            minion_module_path = "tests.assets.minions.two_steps.counter.basic"
+            pipeline_module_path = "tests.assets.pipelines.invalid.unserializable_event"
             config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
             async with gru_factory(
@@ -488,9 +490,9 @@ class TestInvalidCompositionUsingNewAssets:
                 metrics=NoOpMetrics()
             ) as gru:
                 result = await gru.start_orchestration(
-                    minion=minion_modpath,
+                    minion=minion_module_path,
                     minion_config_path=config_path,
-                    pipeline=pipeline_modpath,
+                    pipeline=pipeline_module_path,
                 )
 
                 assert not result.success

@@ -42,13 +42,13 @@ class Resource(AsyncService):
         self,
         logger: Logger,
         metrics: Metrics,
-        resource_modpath: str,
+        resource_module_path: str,
         resource_id: str | None = None,
     ):
         super().__init__(logger)
         self._mn_metrics = metrics
-        self._mn_resource_modpath = resource_modpath
-        self._mn_resource_id = resource_id if resource_id is not None else resource_modpath
+        self._mn_resource_module_path = resource_module_path
+        self._mn_resource_id = resource_id if resource_id is not None else resource_module_path
 
     async def _mn_startup(
         self,
@@ -60,7 +60,7 @@ class Resource(AsyncService):
         post_args: list[object] | None = None,
     ) -> None:
         return await super()._mn_startup(
-            log_kwargs={"resource_id": self._mn_resource_modpath},
+            log_kwargs={"resource_id": self._mn_resource_module_path},
             pre=self._mn_validate_and_wrap_public_async_methods,
         )
 
@@ -74,7 +74,7 @@ class Resource(AsyncService):
         post_args: list[object] | None = None,
     ) -> None:
         return await super()._mn_shutdown(
-            log_kwargs={"resource_id": self._mn_resource_modpath}
+            log_kwargs={"resource_id": self._mn_resource_module_path}
         )
 
     async def _mn_run(
@@ -87,7 +87,7 @@ class Resource(AsyncService):
         post_args: list[object] | None = None,
     ) -> None:
         return await super()._mn_run(
-            log_kwargs={"resource_id": self._mn_resource_modpath}
+            log_kwargs={"resource_id": self._mn_resource_module_path}
         )
 
     def _mn_validate_and_wrap_public_async_methods(self) -> None:
@@ -105,7 +105,7 @@ class Resource(AsyncService):
             if getattr(method, "__untracked__", False):
                 continue
 
-            self._mn_validate_user_code(method, self._mn_resource_modpath)
+            self._mn_validate_user_code(method, self._mn_resource_module_path)
 
             def make_wrapper(
                 attr_name: str,

@@ -43,16 +43,16 @@ class AsyncLifecycle(ABC):
             and n not in allowed
         }
         if bad:
-            modpath = f"{cls.__module__}.{cls.__qualname__}"
+            module_path = f"{cls.__module__}.{cls.__qualname__}"
             names = ", ".join(f"`{cls.__name__}.{n}`" for n in sorted(bad))
             raise UnsupportedUserCode(
-                f"Invalid attribute assignment: {names} in `{modpath}`. "
+                f"Invalid attribute assignment: {names} in `{module_path}`. "
                 "Attributes starting with `_mn_` are reserved for internal Minions runtime use."
             )
 
     @classmethod
-    def _mn_validate_class_user_code(cls, modpath: str | None = None) -> None:
-        modpath = modpath or cls.__module__
+    def _mn_validate_class_user_code(cls, module_path: str | None = None) -> None:
+        module_path = module_path or cls.__module__
         isfunction = inspect.isfunction
 
         for name, attr in cls.__dict__.items():
@@ -63,16 +63,16 @@ class AsyncLifecycle(ABC):
             if not isfunction(func):
                 continue  # avoids builtins / descriptors that don't have user code
 
-            cls._mn_validate_user_code(func, modpath)
+            cls._mn_validate_user_code(func, module_path)
 
     @classmethod
-    def _mn_validate_user_code(cls, func: Callable[..., object], modpath: str) -> None:
+    def _mn_validate_user_code(cls, func: Callable[..., object], module_path: str) -> None:
         try:
             src = textwrap.dedent(inspect.getsource(func))
             tree = ast.parse(src)
         except (OSError, TypeError, IndentationError) as e:
             raise UnsupportedUserCode(
-                f"Could not validate source of function `{func.__name__}` ({modpath}): {e}"
+                f"Could not validate source of function `{func.__name__}` ({module_path}): {e}"
             )
 
         banned_task_fns = {"create_task", "ensure_future"}
@@ -104,14 +104,14 @@ class AsyncLifecycle(ABC):
                     if owner in {"asyncio", "aio"} and f.attr in banned_task_fns:
                         raise UnsupportedUserCode(
                             f"Unsupported use of `{owner}.{f.attr}` in "
-                            f"`{func.__name__}` ({modpath}). Use "
+                            f"`{func.__name__}` ({module_path}). Use "
                             "`self.safe_create_task(...)` instead."
                         )
                     if (owner, f.attr) in banned_exit_attrs:
                         name = f"{owner}.{f.attr}"
                         raise UnsupportedUserCode(
                             f"Unsupported use of `{name}` in `{func.__name__}` "
-                            f"({modpath}). If you want to abort an in-flight workflow, "
+                            f"({module_path}). If you want to abort an in-flight workflow, "
                             "raise an AbortWorkflow exception. If you want to stop "
                             "an orchestration, run stop_orchestration."
                         )
@@ -130,7 +130,7 @@ class AsyncLifecycle(ABC):
                                 raise UnsupportedUserCode(
                                     f"Invalid attribute assignment: "
                                     f"`self.{a1.value}` in `{func.__name__}` "
-                                    f"({modpath}). Attributes starting with `_mn_` are "
+                                    f"({module_path}). Attributes starting with `_mn_` are "
                                     "reserved for framework use."
                                 )
 
@@ -138,12 +138,12 @@ class AsyncLifecycle(ABC):
                     if f.id in banned_task_fns:
                         raise UnsupportedUserCode(
                             f"Unsupported use of `{f.id}` in `{func.__name__}` "
-                            f"({modpath}). Use `self.safe_create_task(...)` instead."
+                            f"({module_path}). Use `self.safe_create_task(...)` instead."
                         )
                     if f.id in banned_exit_names:
                         raise UnsupportedUserCode(
                             f"Unsupported use of `{f.id}` in `{func.__name__}` "
-                            f"({modpath}). If you want to abort an in-flight workflow, "
+                            f"({module_path}). If you want to abort an in-flight workflow, "
                             "raise an AbortWorkflow exception. If you want to stop "
                             "an orchestration, run stop_orchestration."
                         )
@@ -158,7 +158,7 @@ class AsyncLifecycle(ABC):
                                 raise UnsupportedUserCode(
                                     f"Invalid attribute assignment: "
                                     f"`self.{a1.value}` in `{func.__name__}` "
-                                    f"({modpath}). Attributes starting with `_mn_` are "
+                                    f"({module_path}). Attributes starting with `_mn_` are "
                                     "reserved for framework use."
                                 )
 
@@ -167,7 +167,7 @@ class AsyncLifecycle(ABC):
                 if isinstance(exc, ast.Name) and exc.id == "SystemExit":
                     raise UnsupportedUserCode(
                         f"Unsupported use of `raise SystemExit` in "
-                        f"`{func.__name__}` ({modpath}). If you want to abort an "
+                        f"`{func.__name__}` ({module_path}). If you want to abort an "
                         "in-flight workflow, raise an AbortWorkflow exception. If "
                         "you want to stop an orchestration, run stop_orchestration."
                     )
@@ -178,7 +178,7 @@ class AsyncLifecycle(ABC):
                 ):
                     raise UnsupportedUserCode(
                         f"Unsupported use of `raise SystemExit(...)` in "
-                        f"`{func.__name__}` ({modpath}). If you want to abort an "
+                        f"`{func.__name__}` ({module_path}). If you want to abort an "
                         "in-flight workflow, raise an AbortWorkflow exception. If "
                         "you want to stop an orchestration, run stop_orchestration."
                     )
@@ -191,7 +191,7 @@ class AsyncLifecycle(ABC):
                 }:
                     raise UnsupportedUserCode(
                         f"Unsupported use of `raise {raised_name}` in "
-                        f"`{func.__name__}` ({modpath}). The runtime treats "
+                        f"`{func.__name__}` ({module_path}). The runtime treats "
                         "asyncio cancellation as workflow interruption and may "
                         "replay the workflow. If you want to intentionally stop an "
                         "in-flight workflow, raise AbortWorkflow instead."
@@ -210,7 +210,7 @@ class AsyncLifecycle(ABC):
                         continue
                     raise UnsupportedUserCode(
                         f"Invalid attribute assignment: `self.{t.attr}` in "
-                        f"`{func.__name__}` ({modpath}). Attributes starting with "
+                        f"`{func.__name__}` ({module_path}). Attributes starting with "
                         "`_mn_` are reserved for framework use."
                     )
 
@@ -233,7 +233,7 @@ class AsyncLifecycle(ABC):
 
                 raise UnsupportedUserCode(
                     f"Invalid attribute assignment: `self.{key}` in "
-                    f"`{func.__name__}` ({modpath}). Attributes starting with "
+                    f"`{func.__name__}` ({module_path}). Attributes starting with "
                     "`_mn_` are reserved for framework use."
                 )
 

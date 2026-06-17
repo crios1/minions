@@ -49,8 +49,10 @@ def test_orchestration_start_accepts_class_inputs_and_inline_config():
         minion_config=config,
     )
 
-    assert directive.minion_modpath == "tests.assets.minions.two_steps.simple.configured"
-    assert directive.pipeline_modpath == "tests.assets.pipelines.simple.simple_event.single_event_1"
+    assert directive.minion_module_path == "tests.assets.minions.two_steps.simple.configured"
+    assert directive.pipeline_module_path == (
+        "tests.assets.pipelines.simple.simple_event.single_event_1"
+    )
     assert directive.as_kwargs() == {
         "minion": ConfiguredSimpleMinion,
         "pipeline": SimpleSingleEventPipeline1,

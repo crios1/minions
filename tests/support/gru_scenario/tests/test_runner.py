@@ -170,7 +170,7 @@ async def test_runner_concurrent_starts_capture_started_minions_and_instance_tag
     assert {r.directive_index for r in result.receipts} == {0, 1}
     assert len(result.started_minions) == 2
 
-    started_locations = {m._mn_minion_modpath for m in result.started_minions}
+    started_locations = {m._mn_minion_module_path for m in result.started_minions}
     assert started_locations == {
         "tests.assets.minions.two_steps.simple.basic",
         "tests.assets.minions.two_steps.simple.resourced_2",

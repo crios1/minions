@@ -275,7 +275,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
 
         cls._mn_workflow_spec = tuple(name for _, name in steps)
 
-        modpath = cls.__module__
+        module_path = cls.__module__
         step_names = set(cls._mn_workflow_spec)
         for name in cls._mn_workflow_spec:
             fn = cls.__dict__[name]
@@ -284,7 +284,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 step_fn=fn,
                 step_names=step_names,
             )
-            cls._mn_validate_user_code(fn, modpath)
+            cls._mn_validate_user_code(fn, module_path)
 
     @classmethod
     def _mn_validate_no_step_to_step_calls(
@@ -320,7 +320,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         self,
         minion_instance_id: str,
         orchestration_id: str,
-        minion_modpath: str,
+        minion_module_path: str,
         config_path: str | None,
         state_store: StateStore,
         metrics: Metrics,
@@ -345,12 +345,12 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         # the stable component.
         self._mn_minion_instance_id = minion_instance_id
         self._mn_orchestration_id = orchestration_id
-        self._mn_minion_id = minion_id if minion_id is not None else minion_modpath
+        self._mn_minion_id = minion_id if minion_id is not None else minion_module_path
         self._mn_minion_config_id = (
             minion_config_id if minion_config_id is not None else (config_path or "")
         )
         self._mn_pipeline_id = pipeline_id if pipeline_id is not None else ""
-        self._mn_minion_modpath = minion_modpath
+        self._mn_minion_module_path = minion_module_path
         self._mn_config_path = config_path
         self._mn_config: object | None = None
         if inline_config is not None:
@@ -536,7 +536,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         workflow = tuple(getattr(self, name) for _, name in steps)
 
         for step in workflow:
-            self._mn_validate_user_code(step, self._mn_minion_modpath)
+            self._mn_validate_user_code(step, self._mn_minion_module_path)
 
         return workflow
 
@@ -680,7 +680,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             persistence_retryable=True,
                             minion_instance_id=self._mn_minion_instance_id,
                             **self._mn_orchestration_log_kwargs(),
-                            minion_modpath=self._mn_minion_modpath,
+                            minion_module_path=self._mn_minion_module_path,
                         )
                     return True
 
@@ -821,7 +821,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             "context_type": getattr(ctx.context_cls, "__name__", type(ctx.context).__name__),
             "minion_instance_id": self._mn_minion_instance_id,
             **self._mn_orchestration_log_kwargs(),
-            "minion_modpath": self._mn_minion_modpath,
+            "minion_module_path": self._mn_minion_module_path,
         }
         if error is not None:
             await self._mn_logger._mn_log_exception(level, message, error, **log_kwargs)
@@ -999,7 +999,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 workflow_id=ctx.workflow_id,
                                 minion_instance_id=self._mn_minion_instance_id,
                                 **self._mn_orchestration_log_kwargs(),
-                                minion_modpath=self._mn_minion_modpath,
+                                minion_module_path=self._mn_minion_module_path,
                             ),
                             self._mn_metrics._mn_inc(
                                 metric_name=MINION_WORKFLOW_STARTED_TOTAL,
@@ -1014,7 +1014,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         workflow_id=ctx.workflow_id,
                         minion_instance_id=self._mn_minion_instance_id,
                         **self._mn_orchestration_log_kwargs(),
-                        minion_modpath=self._mn_minion_modpath,
+                        minion_module_path=self._mn_minion_module_path,
                     )
 
                 workflow = self._mn_workflow
@@ -1039,7 +1039,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 step_index=i,
                                 minion_instance_id=self._mn_minion_instance_id,
                                 **self._mn_orchestration_log_kwargs(),
-                                minion_modpath=self._mn_minion_modpath,
+                                minion_module_path=self._mn_minion_module_path,
                             ),
                             self._mn_metrics._mn_inc(
                                 metric_name=MINION_WORKFLOW_STEP_STARTED_TOTAL,
@@ -1072,7 +1072,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                     step_index=i,
                                     minion_instance_id=self._mn_minion_instance_id,
                                     **self._mn_orchestration_log_kwargs(),
-                                    minion_modpath=self._mn_minion_modpath,
+                                    minion_module_path=self._mn_minion_module_path,
                                 ),
                                 self._mn_metrics._mn_inc(
                                     metric_name=MINION_WORKFLOW_STEP_ABORTED_TOTAL,
@@ -1092,7 +1092,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             "step_index": i,
                             "minion_instance_id": self._mn_minion_instance_id,
                             **self._mn_orchestration_log_kwargs(),
-                            "minion_modpath": self._mn_minion_modpath,
+                            "minion_module_path": self._mn_minion_module_path,
                         }
                         tb = sys.exc_info()[2]
                         err_loc = get_user_error_location(tb)
@@ -1130,7 +1130,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                     step_index=i,
                                     minion_instance_id=self._mn_minion_instance_id,
                                     **self._mn_orchestration_log_kwargs(),
-                                    minion_modpath=self._mn_minion_modpath,
+                                    minion_module_path=self._mn_minion_module_path,
                                 ),
                                 self._mn_metrics._mn_inc(
                                     metric_name=MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
@@ -1205,7 +1205,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 workflow_id=ctx.workflow_id,
                                 minion_instance_id=self._mn_minion_instance_id,
                                 **self._mn_orchestration_log_kwargs(),
-                                minion_modpath=self._mn_minion_modpath,
+                                minion_module_path=self._mn_minion_module_path,
                             ),
                             self._mn_metrics._mn_inc(
                                 metric_name=MINION_WORKFLOW_ABORTED_TOTAL,
@@ -1226,7 +1226,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 workflow_id=ctx.workflow_id,
                                 minion_instance_id=self._mn_minion_instance_id,
                                 **self._mn_orchestration_log_kwargs(),
-                                minion_modpath=self._mn_minion_modpath,
+                                minion_module_path=self._mn_minion_module_path,
                             ),
                             self._mn_metrics._mn_inc(
                                 metric_name=MINION_WORKFLOW_FAILED_TOTAL,
@@ -1246,7 +1246,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 workflow_id=ctx.workflow_id,
                                 minion_instance_id=self._mn_minion_instance_id,
                                 **self._mn_orchestration_log_kwargs(),
-                                minion_modpath=self._mn_minion_modpath,
+                                minion_module_path=self._mn_minion_module_path,
                             ),
                             self._mn_metrics._mn_inc(
                                 metric_name=MINION_WORKFLOW_SUCCEEDED_TOTAL,
@@ -1296,7 +1296,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     rel_path = Path(frame.filename).resolve().relative_to(cwd)
                 except ValueError:
                     continue  # skip frames not under cwd
-                if str(rel_path).startswith(str(self._mn_minion_modpath)):
+                if str(rel_path).startswith(str(self._mn_minion_module_path)):
                     return {
                         "filepath": str(rel_path),
                         "lineno": frame.lineno,

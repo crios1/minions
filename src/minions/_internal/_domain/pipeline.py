@@ -98,14 +98,14 @@ class Pipeline(AsyncService, Generic[T_Event]):
     def __init__(
         self,
         pipeline_id: str,
-        pipeline_modpath: str,
+        pipeline_module_path: str,
         metrics: Metrics,
         logger: Logger
     ):
         super().__init__(logger)
 
         self._mn_pipeline_id = pipeline_id
-        self._mn_pipeline_modpath = pipeline_modpath
+        self._mn_pipeline_module_path = pipeline_module_path
         self._mn_metrics = metrics
         self._mn_logger = logger
         self._mn_subs: set[Minion[T_Event, Any]] = set()
@@ -124,7 +124,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
         return await super()._mn_startup(
             log_kwargs={"pipeline_id": self._mn_pipeline_id},
             pre=self._mn_validate_user_code,
-            pre_args=[self.produce_event, self._mn_pipeline_modpath],
+            pre_args=[self.produce_event, self._mn_pipeline_module_path],
         )
 
     async def _mn_shutdown(
@@ -168,7 +168,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
                 DEBUG,
                 "Pipeline produced event",
                 pipeline_id=self._mn_pipeline_id,
-                pipeline_modpath=self._mn_pipeline_modpath,
+                pipeline_module_path=self._mn_pipeline_module_path,
                 event=repr(event),
             )
             await self._mn_metrics._mn_inc(
@@ -196,7 +196,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
                             minion_id=minion._mn_minion_id,
                             minion_instance_id=minion._mn_minion_instance_id,
                             orchestration_id=minion._mn_orchestration_id,
-                            minion_modpath=minion._mn_minion_modpath,
+                            minion_module_path=minion._mn_minion_module_path,
                         )
                         for minion in subs
                     ],

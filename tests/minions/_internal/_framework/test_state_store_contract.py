@@ -43,14 +43,14 @@ class ContextStruct(msgspec.Struct):
     total: int = 0
 
 
-def _ck(minion_modpath: str, *, config: str = "cfg", pipeline: str = "app.pipeline") -> str:
-    return f"{minion_modpath}|{config}|{pipeline}"
+def _ck(minion_module_path: str, *, config: str = "cfg", pipeline: str = "app.pipeline") -> str:
+    return f"{minion_module_path}|{config}|{pipeline}"
 
 
 def mk_ctx(
     workflow_id: str = "wf-0",
     *,
-    minion_modpath: str = "app.minion",
+    minion_module_path: str = "app.minion",
     config: str = "cfg",
     pipeline: str = "app.pipeline",
     event: Any | None = None,
@@ -60,7 +60,7 @@ def mk_ctx(
     error_msg: str | None = None,
 ) -> MinionWorkflowContext[Any, Any]:
     return MinionWorkflowContext(
-        orchestration_id=_ck(minion_modpath, config=config, pipeline=pipeline),
+        orchestration_id=_ck(minion_module_path, config=config, pipeline=pipeline),
         workflow_id=workflow_id,
         event={} if event is None else event,
         context={} if context is None else context,
@@ -214,7 +214,7 @@ async def test_state_store_get_all_contexts_returns_blob_records(
         type=PersistedMinionWorkflowContext,
     )
     assert persisted.workflow_id == expected.workflow_id
-    assert not hasattr(persisted, "minion_modpath")
+    assert not hasattr(persisted, "minion_module_path")
     assert not hasattr(persisted, "minion_id")
     assert persisted.context_cls == "builtins.dict"
     assert persisted.schema_version == CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION
@@ -229,7 +229,7 @@ async def test_state_store_get_contexts_for_orchestration_filters_by_identity(
     store_and_logger: tuple[StateStore, InMemoryLogger],
 ):
     store, _ = store_and_logger
-    target_modpath = "app.minion.shared"
+    target_module_path = "app.minion.shared"
     target_a = mk_ctx(
         config="cfg-a",
         workflow_id="wf-target-a",
@@ -261,7 +261,7 @@ async def test_state_store_get_contexts_for_orchestration_filters_by_identity(
     assert all(ctx.orchestration_id == target_a.orchestration_id for ctx in filtered)
 
     missing = await store._mn_get_decoded_contexts_for_orchestration(
-        _ck(target_modpath, config="cfg-missing")
+        _ck(target_module_path, config="cfg-missing")
     )
     assert missing == []
 

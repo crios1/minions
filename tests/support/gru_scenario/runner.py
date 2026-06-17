@@ -78,8 +78,8 @@ class SpyRegistry:
 @dataclass(frozen=True)
 class OrchestrationStartReceipt:
     directive_index: int
-    minion_modpath: str
-    pipeline_modpath: str
+    minion_module_path: str
+    pipeline_module_path: str
     instance_id: str | None
     minion_cls: type[SpiedMinion[Any, Any]] | None
     success: bool
@@ -197,20 +197,20 @@ class ScenarioRunner:
             if not isinstance(d, OrchestrationStart):
                 continue
 
-            minion_modpath = d.minion_modpath
-            pipeline_modpath = d.pipeline_modpath
+            minion_module_path = d.minion_module_path
+            pipeline_module_path = d.pipeline_module_path
 
             m_cls = (
                 d.minion
                 if isinstance(d.minion, type)
-                else self._insp.get_minion_class(minion_modpath)
+                else self._insp.get_minion_class(minion_module_path)
             )
-            minion_id = self._insp.get_component_identity(m_cls, minion_modpath)
+            minion_id = self._insp.get_component_identity(m_cls, minion_module_path)
             if minion_id not in self._spies.minions:
                 if not issubclass(m_cls, SpiedMinion):
                     pytest.fail(
                         "OrchestrationStart minion must resolve to a spy-enabled minion subclass; "
-                        f"got {m_cls!r} for '{minion_modpath}'"
+                        f"got {m_cls!r} for '{minion_module_path}'"
                     )
                 self._spies.minions[minion_id] = m_cls
 
@@ -219,7 +219,7 @@ class ScenarioRunner:
                     if not issubclass(r_cls, SpiedResource):
                         pytest.fail(
                             "Minion resource dependency must be spy-enabled; "
-                            f"got {r_cls!r} while resolving '{minion_modpath}'"
+                            f"got {r_cls!r} while resolving '{minion_module_path}'"
                         )
                     self._spies.resources.add(r_cls)
                     resource_id = self._insp.get_resource_identity(r_cls)
@@ -240,16 +240,16 @@ class ScenarioRunner:
             p_cls = (
                 d.pipeline
                 if isinstance(d.pipeline, type)
-                else self._insp.get_pipeline_class(pipeline_modpath)
+                else self._insp.get_pipeline_class(pipeline_module_path)
             )
-            pipeline_id = self._insp.get_component_identity(p_cls, pipeline_modpath)
+            pipeline_id = self._insp.get_component_identity(p_cls, pipeline_module_path)
             self._spies.pipeline_start_attempt_counts[pipeline_id] += 1
 
             if pipeline_id not in self._spies.pipelines:
                 if not issubclass(p_cls, SpiedPipeline):
                     pytest.fail(
                         "OrchestrationStart pipeline must resolve to a spy-enabled "
-                        f"pipeline subclass; got {p_cls!r} for '{pipeline_modpath}'"
+                        f"pipeline subclass; got {p_cls!r} for '{pipeline_module_path}'"
                     )
                 self._spies.pipelines[pipeline_id] = p_cls
 
@@ -258,7 +258,7 @@ class ScenarioRunner:
                     if not issubclass(r_cls, SpiedResource):
                         pytest.fail(
                             "Pipeline resource dependency must be spy-enabled; "
-                            f"got {r_cls!r} while resolving '{pipeline_modpath}'"
+                            f"got {r_cls!r} while resolving '{pipeline_module_path}'"
                         )
                     self._spies.resources.add(r_cls)
                     resource_id = self._insp.get_resource_identity(r_cls)
@@ -281,14 +281,14 @@ class ScenarioRunner:
         for d in iter_directives_flat(self._plan.directives):
             if not isinstance(d, OrchestrationStart) or not d.expect_success:
                 continue
-            pipeline_modpath = d.pipeline_modpath
+            pipeline_module_path = d.pipeline_module_path
             p_cls = (
                 d.pipeline
                 if isinstance(d.pipeline, type)
-                else self._insp.get_pipeline_class(pipeline_modpath)
+                else self._insp.get_pipeline_class(pipeline_module_path)
             )
             expected_success_pipelines.add(
-                self._insp.get_component_identity(p_cls, pipeline_modpath)
+                self._insp.get_component_identity(p_cls, pipeline_module_path)
             )
 
         configured_pipelines = set(self._plan.pipeline_event_targets)
@@ -370,17 +370,17 @@ class ScenarioRunner:
 
         receipt = OrchestrationStartReceipt(
             directive_index=directive_index,
-            minion_modpath=d.minion_modpath,
-            pipeline_modpath=d.pipeline_modpath,
+            minion_module_path=d.minion_module_path,
+            pipeline_module_path=d.pipeline_module_path,
             minion_id=(
-                self._insp.get_component_identity(d.minion, d.minion_modpath)
+                self._insp.get_component_identity(d.minion, d.minion_module_path)
                 if isinstance(d.minion, type)
-                else self._insp.get_minion_identity_from_modpath(d.minion_modpath)
+                else self._insp.get_minion_identity_from_module_path(d.minion_module_path)
             ),
             pipeline_id=(
-                self._insp.get_component_identity(d.pipeline, d.pipeline_modpath)
+                self._insp.get_component_identity(d.pipeline, d.pipeline_module_path)
                 if isinstance(d.pipeline, type)
-                else self._insp.get_pipeline_identity_from_modpath(d.pipeline_modpath)
+                else self._insp.get_pipeline_identity_from_module_path(d.pipeline_module_path)
             ),
             instance_id=None,
             minion_cls=None,
@@ -402,8 +402,8 @@ class ScenarioRunner:
             minion_cls = m_cls if issubclass(m_cls, SpiedMinion) else None
             receipt = OrchestrationStartReceipt(
                 directive_index=receipt.directive_index,
-                minion_modpath=receipt.minion_modpath,
-                pipeline_modpath=receipt.pipeline_modpath,
+                minion_module_path=receipt.minion_module_path,
+                pipeline_module_path=receipt.pipeline_module_path,
                 minion_id=getattr(minion_inst, "_mn_minion_id", receipt.minion_id),
                 pipeline_id=receipt.pipeline_id,
                 instance_id=getattr(minion_inst, "_mn_minion_instance_id", None),

@@ -157,8 +157,8 @@ class TestInvalidUsage:
 
         print("--------- start problematic test ---------")
 
-        minion_modpath = "tests.assets.minions.two_steps.simple.basic"
-        pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+        minion_module_path = "tests.assets.minions.two_steps.simple.basic"
+        pipeline_module_path = "tests.assets.pipelines.simple.simple_event.single_event_1"
 
         async with gru_factory(
             state_store=NoOpStateStore(),
@@ -166,8 +166,8 @@ class TestInvalidUsage:
             metrics=NoOpMetrics()
         ) as gru:
             result1 = await gru.start_orchestration(
-                minion=minion_modpath,
-                pipeline=pipeline_modpath
+                minion=minion_module_path,
+                pipeline=pipeline_module_path
             )
 
             print(result1)
@@ -181,8 +181,8 @@ class TestInvalidUsage:
             )
 
             result2 = await gru.start_orchestration(
-                minion=minion_modpath,
-                pipeline=pipeline_modpath
+                minion=minion_module_path,
+                pipeline=pipeline_module_path
             )
 
             print(result2)
@@ -239,8 +239,8 @@ class TestInvalidUsage:
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
     ) -> None:
-        minion_modpath = "tests.assets.minions.two_steps.simple.basic"
-        pipeline_modpath = "tests.assets.pipelines.simple.record_event"
+        minion_module_path = "tests.assets.minions.two_steps.simple.basic"
+        pipeline_module_path = "tests.assets.pipelines.simple.record_event"
 
         async with gru_factory(
             state_store=NoOpStateStore(),
@@ -248,8 +248,8 @@ class TestInvalidUsage:
             metrics=NoOpMetrics()
         ) as gru:
             result = await gru.start_orchestration(
-                minion=minion_modpath,
-                pipeline=pipeline_modpath
+                minion=minion_module_path,
+                pipeline=pipeline_module_path
             )
 
             print(result)
@@ -278,16 +278,16 @@ class TestInvalidUsageDSL:
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
     ) -> None:
-        pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+        pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
 
         directives: list[Directive] = [
             OrchestrationStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
-                pipeline=pipeline_modpath,
+                pipeline=pipeline_module_path,
             ),
             OrchestrationStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
-                pipeline=pipeline_modpath,
+                pipeline=pipeline_module_path,
                 expect_success=False,
             ),
             WaitWorkflowCompletions(),
@@ -300,7 +300,7 @@ class TestInvalidUsageDSL:
             metrics,
             state_store,
             directives,
-            pipeline_event_counts={pipeline_modpath: 1},
+            pipeline_event_counts={pipeline_module_path: 1},
         )
 
     @pytest.mark.asyncio
@@ -362,16 +362,16 @@ class TestInvalidUsageUsingNewAssetsDSL:
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
     ) -> None:
-        pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+        pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
 
         directives: list[Directive] = [
             OrchestrationStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
-                pipeline=pipeline_modpath,
+                pipeline=pipeline_module_path,
             ),
             OrchestrationStart(
                 minion="tests.assets.minions.two_steps.counter.basic",
-                pipeline=pipeline_modpath,
+                pipeline=pipeline_module_path,
                 expect_success=False,
             ),
             WaitWorkflowCompletions(),
@@ -384,7 +384,7 @@ class TestInvalidUsageUsingNewAssetsDSL:
             metrics,
             state_store,
             directives,
-            pipeline_event_counts={pipeline_modpath: 1},
+            pipeline_event_counts={pipeline_module_path: 1},
         )
 
     @pytest.mark.asyncio
@@ -503,8 +503,8 @@ class TestInvalidUsageUsingNewAssets:
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
     ) -> None:
-        minion_modpath = "tests.assets.minions.two_steps.counter.basic"
-        pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+        minion_module_path = "tests.assets.minions.two_steps.counter.basic"
+        pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
 
         async with gru_factory(
             state_store=NoOpStateStore(),
@@ -512,8 +512,8 @@ class TestInvalidUsageUsingNewAssets:
             metrics=NoOpMetrics()
         ) as gru:
             result1 = await gru.start_orchestration(
-                minion=minion_modpath,
-                pipeline=pipeline_modpath,
+                minion=minion_module_path,
+                pipeline=pipeline_module_path,
             )
 
             assert result1.success
@@ -525,8 +525,8 @@ class TestInvalidUsageUsingNewAssets:
             )
 
             result2 = await gru.start_orchestration(
-                minion=minion_modpath,
-                pipeline=pipeline_modpath,
+                minion=minion_module_path,
+                pipeline=pipeline_module_path,
             )
 
             assert not result2.success
@@ -553,8 +553,8 @@ class TestInvalidUsageUsingNewAssets:
     async def test_gru_returns_error_when_mismatched_minion_and_pipeline_event_types(
         self, gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
     ) -> None:
-        minion_modpath = "tests.assets.minions.two_steps.counter.basic"
-        pipeline_modpath = "tests.assets.pipelines.types.record_event"
+        minion_module_path = "tests.assets.minions.two_steps.counter.basic"
+        pipeline_module_path = "tests.assets.pipelines.types.record_event"
 
         async with gru_factory(
             state_store=NoOpStateStore(),
@@ -562,8 +562,8 @@ class TestInvalidUsageUsingNewAssets:
             metrics=NoOpMetrics()
         ) as gru:
             result = await gru.start_orchestration(
-                minion=minion_modpath,
-                pipeline=pipeline_modpath,
+                minion=minion_module_path,
+                pipeline=pipeline_module_path,
             )
 
             assert not result.success

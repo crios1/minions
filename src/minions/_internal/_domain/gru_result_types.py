@@ -6,9 +6,9 @@ from dataclasses import dataclass, field
 @dataclass
 class ConflictingMinion:
     instance_id: str
-    modpath: str
-    config_modpath: str | None
-    pipeline_modpath: str
+    module_path: str
+    config_module_path: str | None
+    pipeline_module_path: str
 
 
 @dataclass

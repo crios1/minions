@@ -45,9 +45,9 @@ class GruShell(cmd.Cmd):
             add_help=False,
         )
         a = start.add_argument
-        a("m_modpath")
-        a("m_configpath")
-        a("p_modpath")
+        a("minion_module_path")
+        a("minion_config_path")
+        a("pipeline_module_path")
 
         stop = sub.add_parser(
             "stop",
@@ -184,8 +184,9 @@ class GruShell(cmd.Cmd):
 
     def _minion_start(self, args):
         print(
-            f"[MOCK] minion start m_modpath={args.m_modpath} "
-            f"m_configpath={args.m_configpath} p_modpath={args.p_modpath}"
+            f"[MOCK] minion start minion_module_path={args.minion_module_path} "
+            f"minion_config_path={args.minion_config_path} "
+            "pipeline_module_path={args.pipeline_module_path}"
         )
         print("[MOCK] wid=wid-123")
 

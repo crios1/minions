@@ -124,20 +124,22 @@ class TestUnit:
             == "fallback.prototype"
         )
 
-    def test_minion_string_entrypoint_identity_fallback_preserves_entrypoint_modpath(
+    def test_minion_string_entrypoint_identity_fallback_preserves_entrypoint_module_path(
         self,
     ) -> None:
         from tests.assets.minions.two_steps.simple.basic import SimpleMinion
 
         gru = object.__new__(Gru)
-        entrypoint_modpath = "tests.assets.entrypoints.valid.reexported_minion_subclass"
+        entrypoint_module_path = "tests.assets.entrypoints.valid.reexported_minion_subclass"
 
         assert Gru._get_minion_identity(SimpleMinion) == (
             "tests.assets.minions.two_steps.simple.basic.SimpleMinion"
         )
-        assert gru._get_minion_identity_from_modpath(entrypoint_modpath) == entrypoint_modpath
+        assert gru._get_minion_identity_from_module_path(entrypoint_module_path) == (
+            entrypoint_module_path
+        )
 
-    def test_pipeline_string_entrypoint_identity_fallback_preserves_entrypoint_modpath(
+    def test_pipeline_string_entrypoint_identity_fallback_preserves_entrypoint_module_path(
         self,
     ) -> None:
         from tests.assets.pipelines.simple.simple_event.single_event_1 import (
@@ -145,13 +147,15 @@ class TestUnit:
         )
 
         gru = object.__new__(Gru)
-        entrypoint_modpath = "tests.assets.entrypoints.valid.reexported_pipeline_subclass"
+        entrypoint_module_path = "tests.assets.entrypoints.valid.reexported_pipeline_subclass"
 
         assert gru._get_pipeline_identity(SimpleSingleEventPipeline1) == (
             "tests.assets.pipelines.simple.simple_event.single_event_1."
             "SimpleSingleEventPipeline1"
         )
-        assert gru._get_pipeline_identity_from_modpath(entrypoint_modpath) == entrypoint_modpath
+        assert gru._get_pipeline_identity_from_module_path(entrypoint_module_path) == (
+            entrypoint_module_path
+        )
 
     def test_attached_component_identity_ignores_current_address(self) -> None:
         @resource_id(RESOURCE_COMPONENT_ID)

@@ -10,29 +10,29 @@ class GruIntrospector:
     def __init__(self, gru: Gru):
         self._gru = gru
 
-    def get_minion_class(self, modpath: str) -> type[Minion[Any, Any]]:
-        return self._gru._get_minion_class(modpath)
+    def get_minion_class(self, module_path: str) -> type[Minion[Any, Any]]:
+        return self._gru._get_minion_class(module_path)
 
-    def get_pipeline_class(self, modpath: str) -> type[Pipeline[Any]]:
-        return self._gru._get_pipeline_class(modpath)
+    def get_pipeline_class(self, module_path: str) -> type[Pipeline[Any]]:
+        return self._gru._get_pipeline_class(module_path)
 
     def get_pipeline_identity(self, pipeline_cls: type[Pipeline[Any]]) -> str:
         return self._gru._get_pipeline_identity(pipeline_cls)
 
-    def get_pipeline_identity_from_modpath(
+    def get_pipeline_identity_from_module_path(
         self,
-        pipeline_modpath: str,
+        pipeline_module_path: str,
     ) -> str:
-        return self._gru._get_pipeline_identity_from_modpath(pipeline_modpath)
+        return self._gru._get_pipeline_identity_from_module_path(pipeline_module_path)
 
     def get_minion_identity(self, minion_cls: type[Minion[Any, Any]]) -> str:
         return self._gru._get_minion_identity(minion_cls)
 
-    def get_minion_identity_from_modpath(
+    def get_minion_identity_from_module_path(
         self,
-        minion_modpath: str,
+        minion_module_path: str,
     ) -> str:
-        return self._gru._get_minion_identity_from_modpath(minion_modpath)
+        return self._gru._get_minion_identity_from_module_path(minion_module_path)
 
     @staticmethod
     def get_component_identity(typ: type[Any], fallback: str) -> str:
@@ -62,14 +62,14 @@ class GruIntrospector:
     def get_pipeline_instance(self, pipeline_id: str) -> object | None:
         return self._gru._pipelines.get(pipeline_id)
 
-    def get_pipeline_modpath_for_minion(self, instance_id: str) -> str | None:
+    def get_pipeline_module_path_for_minion(self, instance_id: str) -> str | None:
         pipeline_id = self._gru._minion_pipeline_map.get(instance_id)
         if not pipeline_id:
             return None
         pipeline_inst = self._gru._pipelines.get(pipeline_id)
         if pipeline_inst is None:
             return None
-        return getattr(pipeline_inst, "_mn_pipeline_modpath", None)
+        return getattr(pipeline_inst, "_mn_pipeline_module_path", None)
 
     def resource_ids_for(self, *, minion_instance_id: str | None, pipeline_id: str) -> set[str]:
         resource_ids: set[str] = set()

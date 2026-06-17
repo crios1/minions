@@ -177,7 +177,7 @@ def test_serialize_persisted_workflow_context_writes_blob_contract():
     loaded_ctx = deserialize_workflow_context_blob(blob)
 
     assert persisted.workflow_id == ctx.workflow_id
-    assert not hasattr(persisted, "minion_modpath")
+    assert not hasattr(persisted, "minion_module_path")
     assert persisted.context_cls == "builtins.dict"
     assert persisted.schema_version == CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION
     assert loaded_ctx == ctx
@@ -204,7 +204,7 @@ def test_adapter_payload_roundtrips_msgspec_struct_payloads():
 
 def test_normalize_workflow_context_data_rejects_legacy_unversioned_payload():
     v1_payload: StateStorePayload = {
-        "minion_modpath": "tests.assets.minions.sample",
+        "minion_module_path": "tests.assets.minions.sample",
         "workflow_id": "wf-legacy",
         "event": {"v": 1},
         "context": {"c": 1},
@@ -228,7 +228,7 @@ def test_normalize_workflow_context_data_rejects_future_schema_version():
     payload: WorkflowContextData = {
         "schema_version": 999,
         "orchestration_id": "tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
-        "minion_modpath": "tests.assets.minions.sample",
+        "minion_module_path": "tests.assets.minions.sample",
         "workflow_id": "wf-future",
         "event": {"v": 1},
         "context": {"c": 1},

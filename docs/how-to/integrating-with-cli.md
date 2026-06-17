@@ -17,7 +17,7 @@ The shell shares the Gru event loop; commands submit coroutines with `asyncio.ru
 
 ## Commands
 
-- `start MINION_MODULEPATH MINION_CONFIG_PATH PIPELINE_MODULEPATH`
+- `start MINION_MODULE_PATH MINION_CONFIG_PATH PIPELINE_MODULE_PATH`
   - Queues a start. Each module path should resolve to a module with one local `Minion` or `Pipeline` subclass. Use a `minion` or `pipeline` variable when the entrypoint class needs disambiguation.
 - `stop ORCHESTRATION_ID ...`
   - Stops matching orchestrations. Orchestration IDs come from `start` responses and `status`.

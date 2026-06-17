@@ -118,8 +118,8 @@ class TestValidUsage:
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         reload_wait_for_subs_pipeline: Callable[..., None],
     ) -> None:
-        minion_modpath = "tests.assets.minions.two_steps.simple.basic"
-        pipeline_modpath = (
+        minion_module_path = "tests.assets.minions.two_steps.simple.basic"
+        pipeline_module_path = (
             "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
         )
         from tests.assets.minions.two_steps.simple.basic import SimpleMinion
@@ -133,8 +133,8 @@ class TestValidUsage:
             metrics=NoOpMetrics()
         ) as gru:
             result = await gru.start_orchestration(
-                minion=minion_modpath,
-                pipeline=pipeline_modpath
+                minion=minion_module_path,
+                pipeline=pipeline_module_path
             )
 
             assert result.success
@@ -523,8 +523,8 @@ class TestValidUsage:
         Start three minions that share the same pipeline and a single Resource type.
         Verify pipeline and resource are shared and cleaned up after stopping all minions.
         """
-        minion_modpath = "tests.assets.minions.two_steps.simple.resourced_1"
-        pipeline_modpath = (
+        minion_module_path = "tests.assets.minions.two_steps.simple.resourced_1"
+        pipeline_module_path = (
             "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
         )
         reload_wait_for_subs_pipeline(expected_subs=3)
@@ -555,19 +555,19 @@ class TestValidUsage:
             metrics=InMemoryMetrics()
         ) as gru:
             r1 = await gru.start_orchestration(
-                minion=minion_modpath,
+                minion=minion_module_path,
                 minion_config_path=cfg1,
-                pipeline=pipeline_modpath
+                pipeline=pipeline_module_path
             )
             r2 = await gru.start_orchestration(
-                minion=minion_modpath,
+                minion=minion_module_path,
                 minion_config_path=cfg2,
-                pipeline=pipeline_modpath
+                pipeline=pipeline_module_path
             )
             r3 = await gru.start_orchestration(
-                minion=minion_modpath,
+                minion=minion_module_path,
                 minion_config_path=cfg3,
-                pipeline=pipeline_modpath
+                pipeline=pipeline_module_path
             )
 
             assert r1.success and r2.success and r3.success
@@ -602,16 +602,16 @@ class TestValidUsage:
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ) -> None:
-        minion_modpath = "tests.assets.minions.two_steps.simple.basic"
-        pipeline_modpath = "tests.assets.pipelines.simple.simple_event.single_event_1"
+        minion_module_path = "tests.assets.minions.two_steps.simple.basic"
+        pipeline_module_path = "tests.assets.pipelines.simple.simple_event.single_event_1"
         async with gru_factory(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
         ) as gru:
             result = await gru.start_orchestration(
-                minion=minion_modpath,
-                pipeline=pipeline_modpath
+                minion=minion_module_path,
+                pipeline=pipeline_module_path
             )
 
             assert result.success
@@ -627,8 +627,8 @@ class TestValidUsage:
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         tests_dir: Path,
     ) -> None:
-        minion_modpath = "tests.assets.minions.two_steps.counter.uses_config"
-        pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+        minion_module_path = "tests.assets.minions.two_steps.counter.uses_config"
+        pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
         logger = InMemoryLogger()
@@ -642,9 +642,9 @@ class TestValidUsage:
             metrics=InMemoryMetrics(),
         ) as gru:
             result = await gru.start_orchestration(
-                minion=minion_modpath,
+                minion=minion_module_path,
                 minion_config_path=config_path,
-                pipeline=pipeline_modpath,
+                pipeline=pipeline_module_path,
             )
 
             assert result.success
@@ -707,15 +707,18 @@ class TestValidUsage:
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ) -> None:
-        minion_modpath = "tests.assets.minions.two_steps.simple.resourced_1"
-        pipeline_modpath = "tests.assets.pipelines.simple.simple_event.resourced"
+        minion_module_path = "tests.assets.minions.two_steps.simple.resourced_1"
+        pipeline_module_path = "tests.assets.pipelines.simple.simple_event.resourced"
         logger = InMemoryLogger()
         async with gru_factory(
             state_store=InMemoryStateStore(logger=logger),
             logger=logger,
             metrics=InMemoryMetrics()
         ) as gru:
-            r1 = await gru.start_orchestration(minion=minion_modpath, pipeline=pipeline_modpath)
+            r1 = await gru.start_orchestration(
+                pipeline=pipeline_module_path,
+                minion=minion_module_path
+            )
 
             assert r1.success
 
@@ -734,7 +737,7 @@ class TestValidUsage:
 class TestValidUsageDSL:
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        ("minion_modpath", "pipeline_modpath"),
+        ("minion_module_path", "pipeline_module_path"),
         [
             (
                 "tests.assets.minions.user_guarantees.persisted_dataclass",
@@ -752,11 +755,11 @@ class TestValidUsageDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-        minion_modpath: str,
-        pipeline_modpath: str,
+        minion_module_path: str,
+        pipeline_module_path: str,
     ) -> None:
-        start_1 = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
-        start_2 = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
+        start_1 = OrchestrationStart(minion=minion_module_path, pipeline=pipeline_module_path)
+        start_2 = OrchestrationStart(minion=minion_module_path, pipeline=pipeline_module_path)
         directives: list[Directive] = [
             start_1,
             AfterWorkflowStepStarts(
@@ -789,7 +792,7 @@ class TestValidUsageDSL:
             metrics,
             state_store,
             directives,
-            pipeline_event_counts={pipeline_modpath: 1},
+            pipeline_event_counts={pipeline_module_path: 1},
         )
 
     @pytest.mark.asyncio
@@ -800,10 +803,10 @@ class TestValidUsageDSL:
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
     ) -> None:
-        pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+        pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
         start = OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_module_path,
         )
 
         directives: list[Directive] = [
@@ -830,7 +833,7 @@ class TestValidUsageDSL:
             metrics,
             state_store,
             directives,
-            pipeline_event_counts={pipeline_modpath: 1},
+            pipeline_event_counts={pipeline_module_path: 1},
         )
 
     @pytest.mark.asyncio
@@ -898,18 +901,18 @@ class TestValidUsageDSL:
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
     ) -> None:
-        pipeline_modpath = "tests.assets.pipelines.sync.counter.sync_3subs_1event"
+        pipeline_module_path = "tests.assets.pipelines.sync.counter.sync_3subs_1event"
         start_1 = OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.resourced",
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_module_path,
         )
         start_2 = OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.resourced_shared_b",
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_module_path,
         )
         start_3 = OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.resourced_shared_c",
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_module_path,
         )
 
         directives: list[Directive] = [
@@ -938,7 +941,7 @@ class TestValidUsageDSL:
             metrics,
             state_store,
             directives,
-            pipeline_event_counts={pipeline_modpath: 1},
+            pipeline_event_counts={pipeline_module_path: 1},
         )
 
     @pytest.mark.asyncio
@@ -949,10 +952,10 @@ class TestValidUsageDSL:
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
     ) -> None:
-        pipeline_modpath = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
+        pipeline_module_path = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
         start = OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.resourced",
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_module_path,
         )
 
         directives: list[Directive] = [
@@ -975,7 +978,7 @@ class TestValidUsageDSL:
             metrics,
             state_store,
             directives,
-            pipeline_event_counts={pipeline_modpath: 1},
+            pipeline_event_counts={pipeline_module_path: 1},
         )
 
     @pytest.mark.asyncio
@@ -986,13 +989,13 @@ class TestValidUsageDSL:
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
     ) -> None:
-        pipeline_modpath = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
+        pipeline_module_path = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
         first = OrchestrationStart(
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_module_path,
             minion="tests.assets.minions.two_steps.counter.resourced",
         )
         second = OrchestrationStart(
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_module_path,
             minion="tests.assets.minions.two_steps.counter.resourced_shared_b",
         )
         await run_gru_scenario(
@@ -1008,7 +1011,7 @@ class TestValidUsageDSL:
                 OrchestrationStop(id=second, expect_success=True),
                 GruShutdown(expect_success=True),
             ],
-            pipeline_event_counts={pipeline_modpath: 1},
+            pipeline_event_counts={pipeline_module_path: 1},
         )
 
     @pytest.mark.asyncio
@@ -1019,10 +1022,10 @@ class TestValidUsageDSL:
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
     ) -> None:
-        pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
+        pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
         start = OrchestrationStart(
             minion="tests.assets.minions.two_steps.counter.basic",
-            pipeline=pipeline_modpath,
+            pipeline=pipeline_module_path,
         )
 
         directives: list[Directive] = [
@@ -1044,7 +1047,7 @@ class TestValidUsageDSL:
             metrics,
             state_store,
             directives,
-            pipeline_event_counts={pipeline_modpath: 1},
+            pipeline_event_counts={pipeline_module_path: 1},
         )
 
 
@@ -1077,9 +1080,9 @@ class TestValidUsageUsingNewAssetsDSL:
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
     ) -> None:
-        minion_modpath = "tests.assets.minions.two_steps.counter.basic"
-        pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
-        start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
+        minion_module_path = "tests.assets.minions.two_steps.counter.basic"
+        pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
+        start = OrchestrationStart(minion=minion_module_path, pipeline=pipeline_module_path)
         directives: list[Directive] = [
             start,
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
@@ -1100,7 +1103,7 @@ class TestValidUsageUsingNewAssetsDSL:
             metrics,
             state_store,
             directives,
-            pipeline_event_counts={pipeline_modpath: 1},
+            pipeline_event_counts={pipeline_module_path: 1},
         )
 
     @pytest.mark.asyncio
@@ -1111,9 +1114,9 @@ class TestValidUsageUsingNewAssetsDSL:
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
     ) -> None:
-        minion_modpath = "tests.assets.minions.two_steps.counter.basic"
-        pipeline_modpath = "tests.assets.pipelines.emit1.counter.emit_1"
-        start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
+        minion_module_path = "tests.assets.minions.two_steps.counter.basic"
+        pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
+        start = OrchestrationStart(minion=minion_module_path, pipeline=pipeline_module_path)
         directives: list[Directive] = [
             start,
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
@@ -1133,7 +1136,7 @@ class TestValidUsageUsingNewAssetsDSL:
             metrics,
             state_store,
             directives,
-            pipeline_event_counts={pipeline_modpath: 1},
+            pipeline_event_counts={pipeline_module_path: 1},
         )
 
     @pytest.mark.asyncio
@@ -1184,10 +1187,10 @@ class TestValidUsageUsingNewAssetsDSL:
         minion_a = "tests.assets.minions.two_steps.counter.resourced"
         minion_b = "tests.assets.minions.two_steps.counter.resourced_shared_b"
         minion_c = "tests.assets.minions.two_steps.counter.resourced_shared_c"
-        pipeline_modpath = "tests.assets.pipelines.sync.counter.sync_3subs_1event"
-        start_1 = OrchestrationStart(minion=minion_a, pipeline=pipeline_modpath)
-        start_2 = OrchestrationStart(minion=minion_b, pipeline=pipeline_modpath)
-        start_3 = OrchestrationStart(minion=minion_c, pipeline=pipeline_modpath)
+        pipeline_module_path = "tests.assets.pipelines.sync.counter.sync_3subs_1event"
+        start_1 = OrchestrationStart(minion=minion_a, pipeline=pipeline_module_path)
+        start_2 = OrchestrationStart(minion=minion_b, pipeline=pipeline_module_path)
+        start_3 = OrchestrationStart(minion=minion_c, pipeline=pipeline_module_path)
 
         directives: list[Directive] = [
             start_1,
@@ -1206,7 +1209,7 @@ class TestValidUsageUsingNewAssetsDSL:
             metrics,
             state_store,
             directives,
-            pipeline_event_counts={pipeline_modpath: 1},
+            pipeline_event_counts={pipeline_module_path: 1},
         )
 
     @pytest.mark.asyncio
@@ -1217,9 +1220,9 @@ class TestValidUsageUsingNewAssetsDSL:
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
     ) -> None:
-        minion_modpath = "tests.assets.minions.two_steps.counter.resourced"
-        pipeline_modpath = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
-        start = OrchestrationStart(minion=minion_modpath, pipeline=pipeline_modpath)
+        minion_module_path = "tests.assets.minions.two_steps.counter.resourced"
+        pipeline_module_path = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
+        start = OrchestrationStart(minion=minion_module_path, pipeline=pipeline_module_path)
 
         directives: list[Directive] = [
             start,
@@ -1233,5 +1236,5 @@ class TestValidUsageUsingNewAssetsDSL:
             metrics,
             state_store,
             directives,
-            pipeline_event_counts={pipeline_modpath: 1},
+            pipeline_event_counts={pipeline_module_path: 1},
         )

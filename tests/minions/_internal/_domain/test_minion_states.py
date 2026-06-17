@@ -388,7 +388,7 @@ async def test_workflow_persistence_continue_on_failure_advances_and_retries_at_
     m = ContinueOnFailureMinion(
         minion_instance_id="iid",
         orchestration_id="ck",
-        minion_modpath="tests.assets.continue_persistence_minion",
+        minion_module_path="tests.assets.continue_persistence_minion",
         config_path="cfg",
         state_store=store,
         metrics=metrics,
@@ -448,7 +448,7 @@ async def test_workflow_persistence_idle_until_persisted_blocks_next_step_until_
     m = IdleUntilPersistedMinion(
         minion_instance_id="iid",
         orchestration_id="ck",
-        minion_modpath="tests.assets.idle_persistence_minion",
+        minion_module_path="tests.assets.idle_persistence_minion",
         config_path="cfg",
         state_store=store,
         metrics=metrics,
@@ -506,7 +506,7 @@ async def test_workflow_persistence_blocked_gauge_counts_concurrent_workflows_fo
     m = ConcurrentIdleUntilPersistedMinion(
         minion_instance_id="iid",
         orchestration_id="ck",
-        minion_modpath="tests.assets.concurrent_idle_persistence_minion",
+        minion_module_path="tests.assets.concurrent_idle_persistence_minion",
         config_path="cfg",
         state_store=store,
         metrics=metrics,
@@ -559,7 +559,7 @@ async def test_workflow_persistence_idle_until_persisted_relogs_and_escalates_su
     m = SustainedIdleMinion(
         minion_instance_id="iid",
         orchestration_id="ck",
-        minion_modpath="tests.assets.sustained_idle_persistence_minion",
+        minion_module_path="tests.assets.sustained_idle_persistence_minion",
         config_path="cfg",
         state_store=store,
         metrics=metrics,
@@ -617,7 +617,7 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds():
     m = DeleteBlockingSuccessMinion(
         minion_instance_id="iid",
         orchestration_id="ck",
-        minion_modpath="tests.assets.delete_blocking_success_minion",
+        minion_module_path="tests.assets.delete_blocking_success_minion",
         config_path="cfg",
         state_store=store,
         metrics=metrics,
@@ -700,7 +700,7 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
     m = NonRetryablePersistenceMinion(
         minion_instance_id="iid",
         orchestration_id="ck",
-        minion_modpath="tests.assets.non_retryable_persistence_minion",
+        minion_module_path="tests.assets.non_retryable_persistence_minion",
         config_path="cfg",
         state_store=store,
         metrics=metrics,
@@ -764,9 +764,9 @@ async def test_minion_startup_replays_only_own_contexts():
     logger = InMemoryLogger()
     metrics = InMemoryMetrics()
     store = InMemoryStateStore(logger=logger)
-    minion_modpath = "mock.modpath.minion_replay_shared"
-    own_orchestration_id = f"{minion_modpath}|cfg-own|tests.assets.pipelines.shared"
-    other_orchestration_id = f"{minion_modpath}|cfg-other|tests.assets.pipelines.shared"
+    minion_module_path = "mock.module_path.minion_replay_shared"
+    own_orchestration_id = f"{minion_module_path}|cfg-own|tests.assets.pipelines.shared"
+    other_orchestration_id = f"{minion_module_path}|cfg-other|tests.assets.pipelines.shared"
 
     await store._mn_serialize_and_save_context(
         MinionWorkflowContext(
@@ -790,7 +790,7 @@ async def test_minion_startup_replays_only_own_contexts():
     m = ReplayMinion(
         "iid",
         own_orchestration_id,
-        minion_modpath,
+        minion_module_path,
         None,
         store,
         metrics,
@@ -833,7 +833,7 @@ async def test_minion_startup_replays_typed_msgspec_event_and_context():
 
     await store._mn_serialize_and_save_context(
         MinionWorkflowContext(
-            orchestration_id="mock.modpath.minion_replay_typed|cfg|tests.assets.pipelines.shared",
+            orchestration_id="mock.module_path.minion_replay_typed|cfg|tests.assets.pipelines.shared",
             workflow_id="wf-typed",
             event=ReplayEvent(7),
             context=ReplayContext(11),
@@ -843,8 +843,8 @@ async def test_minion_startup_replays_typed_msgspec_event_and_context():
 
     m = ReplayMinion(
         "iid",
-        "mock.modpath.minion_replay_typed|cfg|tests.assets.pipelines.shared",
-        "mock.modpath.minion_replay_typed",
+        "mock.module_path.minion_replay_typed|cfg|tests.assets.pipelines.shared",
+        "mock.module_path.minion_replay_typed",
         None,
         store,
         metrics,
@@ -1024,10 +1024,10 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
     logger = InMemoryLogger()
     metrics = InMemoryMetrics()
     store = InMemoryStateStore(logger=logger)
-    minion_modpath = "tests.assets.replay_with_invalid_context_minion"
+    minion_module_path = "tests.assets.replay_with_invalid_context_minion"
 
     valid_context: MinionWorkflowContext[DictEvent, DictContext] = MinionWorkflowContext(
-        orchestration_id=f"{minion_modpath}|cfg|tests.assets.pipelines.invalid",
+        orchestration_id=f"{minion_module_path}|cfg|tests.assets.pipelines.invalid",
         workflow_id="wf-valid",
         event=DictEvent(value=123),
         context=DictContext(),
@@ -1037,7 +1037,7 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
         error_msg=None,
     )
     invalid_context: MinionWorkflowContext[DictEvent, DictContext] = MinionWorkflowContext(
-        orchestration_id=f"{minion_modpath}|cfg|tests.assets.pipelines.invalid",
+        orchestration_id=f"{minion_module_path}|cfg|tests.assets.pipelines.invalid",
         workflow_id="wf-invalid",
         event=DictEvent(value=456),
         context=DictContext(),
@@ -1060,19 +1060,19 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
 
     store._contexts["wf-valid"] = StoredWorkflowContext(
         workflow_id="wf-valid",
-        orchestration_id=f"{minion_modpath}|cfg|tests.assets.pipelines.invalid",
+        orchestration_id=f"{minion_module_path}|cfg|tests.assets.pipelines.invalid",
         context=serialize_persisted_workflow_context(valid_context),
     )
     store._contexts["wf-invalid"] = StoredWorkflowContext(
         workflow_id="wf-invalid",
-        orchestration_id=f"{minion_modpath}|cfg|tests.assets.pipelines.invalid",
+        orchestration_id=f"{minion_module_path}|cfg|tests.assets.pipelines.invalid",
         context=serialize(invalid_payload),
     )
 
     m = ReplayWithInvalidContextMinion(
         "iid",
-        f"{minion_modpath}|cfg|tests.assets.pipelines.invalid",
-        minion_modpath,
+        f"{minion_module_path}|cfg|tests.assets.pipelines.invalid",
+        minion_module_path,
         None,
         store,
         metrics,
@@ -1101,8 +1101,8 @@ async def test_minion_startup_replay_fails_closed_on_context_type_mismatch():
     logger = InMemoryLogger()
     metrics = InMemoryMetrics()
     store = InMemoryStateStore(logger=logger)
-    minion_modpath = "tests.assets.replay_with_mismatched_context_minion"
-    orchestration_id = f"{minion_modpath}|cfg|tests.assets.pipelines.invalid"
+    minion_module_path = "tests.assets.replay_with_mismatched_context_minion"
+    orchestration_id = f"{minion_module_path}|cfg|tests.assets.pipelines.invalid"
 
     valid_context: MinionWorkflowContext[DictEvent, DictContext] = MinionWorkflowContext(
         orchestration_id=orchestration_id,
@@ -1137,7 +1137,7 @@ async def test_minion_startup_replay_fails_closed_on_context_type_mismatch():
     m = ReplayWithMismatchedContextMinion(
         "iid",
         orchestration_id,
-        minion_modpath,
+        minion_module_path,
         None,
         store,
         metrics,
