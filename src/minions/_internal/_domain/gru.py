@@ -1417,11 +1417,15 @@ class Gru:
                 minion_id=minion_identity,
                 minion_config_id=minion_config_identity,
             )
-            orchestration_log_kwargs = {
+            orchestration_log_kwargs: dict[str, object] = {
                 "orchestration_id": orchestration_id,
                 "minion_id": minion_identity,
+                "minion_instance_id": minion_instance_id,
                 "minion_config_id": minion_config_identity,
+                "minion_config_path": minion_config_path,
+                "minion_module_path": minion_module_path,
                 "pipeline_id": pipeline_identity,
+                "pipeline_module_path": pipeline_module_path,
             }
             minion_inst: Minion[Any, Any] | None = None
             pipeline_inst: Pipeline[Any] | None = None
@@ -1441,17 +1445,15 @@ class Gru:
                         suggestion = (
                             "Use a different config file if you want to launch another instance."
                         )
-                        minion_instance_id = minion_inst._mn_minion_instance_id
+                        orchestration_log_kwargs["minion_instance_id"] = (
+                            minion_inst._mn_minion_instance_id
+                        )
                         await self._logger._mn_log(
                             INFO,
                             "Failed to start orchestration",
                             reason=reason,
                             suggestion=suggestion,
-                            minion_instance_id=minion_instance_id,
                             **orchestration_log_kwargs,
-                            minion_module_path=minion_module_path,
-                            minion_config_path=minion_config_path,
-                            pipeline_module_path=pipeline_module_path,
                         )
                         return StartResult(
                             success=False,
@@ -1486,17 +1488,15 @@ class Gru:
                         suggestion = (
                             "Update the minion or pipeline so they use the same event type."
                         )
-                        minion_instance_id = minion_inst._mn_minion_instance_id
+                        orchestration_log_kwargs["minion_instance_id"] = (
+                            minion_inst._mn_minion_instance_id
+                        )
                         await self._logger._mn_log(
                             INFO,
                             "Failed to start orchestration",
                             reason=reason,
                             suggestion=suggestion,
-                            minion_instance_id=minion_instance_id,
                             **orchestration_log_kwargs,
-                            minion_module_path=minion_module_path,
-                            minion_config_path=minion_config_path,
-                            pipeline_module_path=pipeline_module_path,
                         )
                         return StartResult(
                             success=False,
@@ -1509,9 +1509,6 @@ class Gru:
                         DEBUG,
                         "Starting orchestration...",
                         **orchestration_log_kwargs,
-                        minion_module_path=minion_module_path,
-                        minion_config_path=minion_config_path,
-                        pipeline_module_path=pipeline_module_path,
                     )
 
                     async with self._runtime_state_lock:
@@ -1605,11 +1602,7 @@ class Gru:
                     await self._logger._mn_log(
                         INFO,
                         "Orchestration started",
-                        minion_instance_id=minion_inst._mn_minion_instance_id,
                         **orchestration_log_kwargs,
-                        minion_module_path=minion_module_path,
-                        minion_config_path=minion_config_path,
-                        pipeline_module_path=pipeline_module_path,
                     )
 
                     return StartResult(
