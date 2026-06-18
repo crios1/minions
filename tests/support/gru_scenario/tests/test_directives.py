@@ -14,8 +14,8 @@ from tests.support.gru_scenario.directives import (
 
 
 def test_iter_directives_flattens_concurrent():
-    d1a = OrchestrationStart(minion="m1", pipeline="p1")
-    d1b = OrchestrationStart(minion="m2", pipeline="p2")
+    d1a = OrchestrationStart(pipeline="p1", minion="m1")
+    d1b = OrchestrationStart(pipeline="p2", minion="m2")
     d2 = WaitWorkflowCompletions()
     d3a = OrchestrationStop(id=d1a, expect_success=True)
     d3b = OrchestrationStop(id=d1b, expect_success=True)
@@ -27,7 +27,7 @@ def test_iter_directives_flattens_concurrent():
 
 
 def test_wait_workflow_completions_accepts_orchestrations_and_mode():
-    start = OrchestrationStart(minion="m1", pipeline="p1")
+    start = OrchestrationStart(pipeline="p1", minion="m1")
     directive = WaitWorkflowCompletions(
         orchestrations=(start,),
         workflow_steps_mode="exact",
@@ -63,13 +63,13 @@ def test_orchestration_start_accepts_class_inputs_and_inline_config():
 
 def test_orchestration_starts_use_identity_with_unhashable_inline_configs():
     start_a = OrchestrationStart(
-        minion="m1",
         pipeline="p1",
+        minion="m1",
         minion_config={"values": []},
     )
     start_b = OrchestrationStart(
-        minion="m1",
         pipeline="p1",
+        minion="m1",
         minion_config={"values": []},
     )
 
@@ -84,7 +84,7 @@ def test_orchestration_starts_use_identity_with_unhashable_inline_configs():
 
 
 def test_iter_directives_flattens_wait_workflow_step_starts_then_wrapped_directive():
-    d1 = OrchestrationStart(minion="m1", pipeline="p1")
+    d1 = OrchestrationStart(pipeline="p1", minion="m1")
     d2 = OrchestrationStop(id=d1, expect_success=True)
     wrapped = AfterWorkflowStepStarts(expected={d1: {"step_2": 1}}, directive=d2)
     d3 = GruShutdown()

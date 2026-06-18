@@ -12,9 +12,9 @@ from tests.support.gru_scenario.plan import ScenarioPlan
 
 
 def test_scenario_plan_flattens_and_indexes_directives():
-    d1a = OrchestrationStart(minion="m1", pipeline="p1")
-    d1b = OrchestrationStart(minion="m2", pipeline="p2")
-    d1c = OrchestrationStart(minion="m3", pipeline="p3")
+    d1a = OrchestrationStart(pipeline="p1", minion="m1")
+    d1b = OrchestrationStart(pipeline="p2", minion="m2")
+    d1c = OrchestrationStart(pipeline="p3", minion="m3")
     d1 = Concurrent(d1a, d1b, d1c)
     d2 = OrchestrationStop(id=d1a, expect_success=True)
     d3 = WaitWorkflowCompletions()
@@ -30,7 +30,7 @@ def test_scenario_plan_flattens_and_indexes_directives():
 
 def test_scenario_plan_copies_pipeline_event_counts():
     counts = {"p1": 2}
-    d1 = OrchestrationStart(minion="m1", pipeline="p1")
+    d1 = OrchestrationStart(pipeline="p1", minion="m1")
 
     plan = ScenarioPlan([d1, GruShutdown()], pipeline_event_counts=counts)
 
@@ -39,7 +39,7 @@ def test_scenario_plan_copies_pipeline_event_counts():
 
 
 def test_scenario_plan_uses_identity_for_index_lookup():
-    start = OrchestrationStart(minion="m1", pipeline="p1")
+    start = OrchestrationStart(pipeline="p1", minion="m1")
     d1 = OrchestrationStop(id=start, expect_success=True)
     d2 = OrchestrationStop(id=start, expect_success=True)
 
@@ -68,7 +68,7 @@ def test_scenario_plan_accepts_stop_and_shutdown_only_directives():
 
 
 def test_scenario_plan_accepts_zero_pipeline_event_count_for_started_pipeline():
-    d1 = OrchestrationStart(minion="m1", pipeline="p1")
+    d1 = OrchestrationStart(pipeline="p1", minion="m1")
 
     plan = ScenarioPlan([d1], pipeline_event_counts={"p1": 0})
 
@@ -76,8 +76,8 @@ def test_scenario_plan_accepts_zero_pipeline_event_count_for_started_pipeline():
 
 
 def test_scenario_plan_flattens_nested_concurrent_and_indexes_all_children():
-    d1 = OrchestrationStart(minion="m1", pipeline="p1")
-    d2 = OrchestrationStart(minion="m2", pipeline="p2")
+    d1 = OrchestrationStart(pipeline="p1", minion="m1")
+    d2 = OrchestrationStart(pipeline="p2", minion="m2")
     d3 = OrchestrationStop(id=d1, expect_success=True)
     d4 = OrchestrationStop(id=d2, expect_success=True)
     d5 = GruShutdown(expect_success=True)
@@ -98,7 +98,7 @@ def test_scenario_plan_flattens_nested_concurrent_and_indexes_all_children():
 
 
 def test_scenario_plan_defers_missing_pipeline_event_count_validation_to_runner():
-    d1 = OrchestrationStart(minion="m1", pipeline="p1")
+    d1 = OrchestrationStart(pipeline="p1", minion="m1")
 
     plan = ScenarioPlan([d1], pipeline_event_counts={})
 
@@ -106,7 +106,7 @@ def test_scenario_plan_defers_missing_pipeline_event_count_validation_to_runner(
 
 
 def test_scenario_plan_defers_unused_pipeline_event_count_validation_to_runner():
-    d1 = OrchestrationStart(minion="m1", pipeline="p1")
+    d1 = OrchestrationStart(pipeline="p1", minion="m1")
 
     plan = ScenarioPlan([d1], pipeline_event_counts={"p1": 1, "p2": 1})
 
@@ -114,28 +114,28 @@ def test_scenario_plan_defers_unused_pipeline_event_count_validation_to_runner()
 
 
 def test_scenario_plan_raises_when_pipeline_event_count_is_negative():
-    d1 = OrchestrationStart(minion="m1", pipeline="p1")
+    d1 = OrchestrationStart(pipeline="p1", minion="m1")
 
     with pytest.raises(ValueError, match="must be >= 0"):
         ScenarioPlan([d1], pipeline_event_counts={"p1": -1})
 
 
 def test_scenario_plan_raises_when_pipeline_event_count_is_not_int():
-    d1 = OrchestrationStart(minion="m1", pipeline="p1")
+    d1 = OrchestrationStart(pipeline="p1", minion="m1")
 
     with pytest.raises(ValueError, match="must be an int"):
         ScenarioPlan([d1], pipeline_event_counts={"p1": 1.5})  # type: ignore[arg-type]
 
 
 def test_scenario_plan_raises_when_reusing_same_directive_instance():
-    shared = OrchestrationStart(minion="m1", pipeline="p1")
+    shared = OrchestrationStart(pipeline="p1", minion="m1")
 
     with pytest.raises(ValueError, match="Directives must be unique instances"):
         ScenarioPlan([Concurrent(shared, shared)], pipeline_event_counts={"p1": 1})
 
 
 def test_scenario_plan_rejects_wait_reference_outside_plan():
-    start = OrchestrationStart(minion="m1", pipeline="p1")
+    start = OrchestrationStart(pipeline="p1", minion="m1")
     wait = WaitWorkflowCompletions(orchestrations=(start,))
 
     with pytest.raises(ValueError, match="outside this ScenarioPlan"):
@@ -143,7 +143,7 @@ def test_scenario_plan_rejects_wait_reference_outside_plan():
 
 
 def test_scenario_plan_rejects_wait_reference_to_future_start():
-    start = OrchestrationStart(minion="m1", pipeline="p1")
+    start = OrchestrationStart(pipeline="p1", minion="m1")
     wait = WaitWorkflowCompletions(orchestrations=(start,))
 
     with pytest.raises(ValueError, match="precede it"):
@@ -151,7 +151,7 @@ def test_scenario_plan_rejects_wait_reference_to_future_start():
 
 
 def test_scenario_plan_rejects_duplicate_wait_references():
-    start = OrchestrationStart(minion="m1", pipeline="p1")
+    start = OrchestrationStart(pipeline="p1", minion="m1")
     wait = WaitWorkflowCompletions(orchestrations=(start, start))
 
     with pytest.raises(ValueError, match="duplicate directive references"):
@@ -159,7 +159,7 @@ def test_scenario_plan_rejects_duplicate_wait_references():
 
 
 def test_scenario_plan_copies_directives_input_list():
-    start = OrchestrationStart(minion="m1", pipeline="p1")
+    start = OrchestrationStart(pipeline="p1", minion="m1")
     directives: list[Directive] = [start, OrchestrationStop(id=start, expect_success=True)]
     plan = ScenarioPlan(directives, pipeline_event_counts={"p1": 0})
 

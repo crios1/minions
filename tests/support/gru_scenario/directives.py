@@ -16,10 +16,10 @@ class Directive:
 
 @dataclass(frozen=True, eq=False)
 class OrchestrationStart(Directive):
-    minion: str | type[Minion[Any, Any]]
     pipeline: str | type[Pipeline[Any]]
-    minion_config_path: str | None = None
+    minion: str | type[Minion[Any, Any]]
     minion_config: object | None = None
+    minion_config_path: str | None = None
     expect_success: bool = True
 
     def as_kwargs(self) -> dict[str, object]:

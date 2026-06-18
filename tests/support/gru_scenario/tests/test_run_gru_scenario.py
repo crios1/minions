@@ -63,12 +63,12 @@ async def test_run_gru_scenario_with_new_assets(
     pipeline_ref = "tests.assets.pipelines.sync.counter.sync_2subs_2events"
     pipeline_id = pipeline_ref
     start_1 = OrchestrationStart(
-        minion="tests.assets.minions.two_steps.counter.basic",
         pipeline=pipeline_ref,
+        minion="tests.assets.minions.two_steps.counter.basic",
     )
     start_2 = OrchestrationStart(
-        minion="tests.assets.minions.two_steps.counter.resourced",
         pipeline=pipeline_ref,
+        minion="tests.assets.minions.two_steps.counter.resourced",
     )
 
     directives: list[Directive] = [
@@ -104,8 +104,8 @@ async def test_run_gru_scenario_helper_basic(
 
     directives: list[Directive] = [
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.simple.basic",
             pipeline=pipeline_ref,
+            minion="tests.assets.minions.two_steps.simple.basic",
         ),
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         GruShutdown(expect_success=True),
@@ -135,8 +135,8 @@ async def test_run_gru_scenario_accepts_class_start_with_inline_minion_config(
     pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
     pipeline_id = pipeline_ref
     start = OrchestrationStart(
-        minion=ConfiguredSimpleMinion,
         pipeline=SimpleSingleEventPipeline1,
+        minion=ConfiguredSimpleMinion,
         minion_config=AssetMinionConfig(name="inline"),
     )
 
@@ -175,8 +175,8 @@ async def test_run_gru_scenario_wait_workflow_step_starts_then_stop_happy_path(
     pipeline_ref = "tests.assets.pipelines.emit1.counter.emit_1"
     pipeline_id = pipeline_ref
     start = OrchestrationStart(
-        minion=minion_ref,
         pipeline=pipeline_ref,
+        minion=minion_ref,
     )
 
     directives: list[Directive] = [
@@ -209,8 +209,8 @@ async def test_run_gru_scenario_expect_runtime_persistence_after_stop(
     pipeline_ref = "tests.assets.pipelines.emit1.counter.emit_1"
     pipeline_id = pipeline_ref
     start = OrchestrationStart(
-        minion=minion_ref,
         pipeline=pipeline_ref,
+        minion=minion_ref,
     )
 
     directives: list[Directive] = [
@@ -246,7 +246,7 @@ async def test_run_gru_scenario_expect_runtime_resolutions_after_completion(
     pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
     pipeline_id = pipeline_ref
 
-    start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
+    start = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
     directives: list[Directive] = [
         start,
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
@@ -279,7 +279,7 @@ async def test_run_gru_scenario_expect_runtime_workflow_steps_exact_after_comple
     pipeline_ref = "tests.assets.pipelines.simple.simple_event.single_event_1"
     pipeline_id = pipeline_ref
 
-    start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
+    start = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
     directives: list[Directive] = [
         start,
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
@@ -315,8 +315,8 @@ async def test_run_gru_scenario_mixed_wait_workflow_step_modes_end_to_end(
     pipeline_id_a = pipeline_ref_a
     pipeline_ref_b = "tests.assets.pipelines.simple.simple_event.single_event_2"
     pipeline_id_b = pipeline_ref_b
-    start_a = OrchestrationStart(minion=minion_ref_a, pipeline=pipeline_ref_a)
-    start_b = OrchestrationStart(minion=minion_ref_b, pipeline=pipeline_ref_b)
+    start_a = OrchestrationStart(pipeline=pipeline_ref_a, minion=minion_ref_a)
+    start_b = OrchestrationStart(pipeline=pipeline_ref_b, minion=minion_ref_b)
 
     directives: list[Directive] = [
         start_a,
@@ -365,7 +365,7 @@ async def test_run_gru_scenario_expect_runtime_at_checkpoint_index(
     minion_ref = "tests.assets.minions.failure.slow_step"
     pipeline_ref = "tests.assets.pipelines.emit1.counter.emit_1"
     pipeline_id = pipeline_ref
-    start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
+    start = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
 
     directives: list[Directive] = [
         start,
@@ -400,8 +400,8 @@ async def test_run_gru_scenario_restart_same_pipeline_with_persistence_and_resol
     minion_ref = "tests.assets.minions.failure.slow_step"
     pipeline_ref = "tests.assets.pipelines.emit1.counter.emit_1"
     pipeline_id = pipeline_ref
-    start_1 = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
-    start_2 = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
+    start_1 = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
+    start_2 = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
 
     directives: list[Directive] = [
         start_1,
@@ -449,8 +449,8 @@ async def test_run_gru_scenario_resume_from_explicit_step_boundary_does_not_repl
     minion_ref = "tests.assets.minions.two_steps.counter.slow_second_step"
     pipeline_ref = "tests.assets.pipelines.emit1.counter.emit_1"
     pipeline_id = pipeline_ref
-    first_start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
-    second_start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
+    first_start = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
+    second_start = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
 
     directives: list[Directive] = [
         first_start,
@@ -503,8 +503,8 @@ async def test_run_gru_scenario_resume_identified_minion_without_persisted_minio
     minion_ref = "tests.assets.minions.two_steps.counter.identified_slow_second_step"
 
     pipeline_ref = "tests.assets.pipelines.emit1.counter.identified"
-    first_start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
-    second_start = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
+    first_start = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
+    second_start = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
 
     directives: list[Directive] = [
         first_start,
@@ -603,12 +603,12 @@ async def test_run_gru_scenario_duplicate_start_fails(
 
     directives: list[Directive] = [
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.simple.basic",
             pipeline=pipeline_ref,
+            minion="tests.assets.minions.two_steps.simple.basic",
         ),
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.simple.basic",
             pipeline=pipeline_ref,
+            minion="tests.assets.minions.two_steps.simple.basic",
             expect_success=False,
         ),
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
@@ -637,8 +637,8 @@ async def test_run_gru_scenario_failed_start_does_not_require_minion_startup(
 
     directives: list[Directive] = [
         OrchestrationStart(
-            minion=minion_ref,
             pipeline=pipeline_ref,
+            minion=minion_ref,
             expect_success=False,
         ),
         GruShutdown(expect_success=True),
@@ -666,8 +666,8 @@ async def test_run_gru_scenario_stop_unknown_fails(
 
     directives: list[Directive] = [
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.simple.basic",
             pipeline=pipeline_ref,
+            minion="tests.assets.minions.two_steps.simple.basic",
         ),
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         OrchestrationStop(id="missing-orchestration", expect_success=False),
@@ -774,10 +774,10 @@ async def test_run_gru_scenario_wait_workflows_unknown_start_fails(
     reload_wait_for_subs_pipeline(expected_subs=1)
 
     start = OrchestrationStart(
-        minion="tests.assets.minions.two_steps.simple.basic",
         pipeline=pipeline_ref,
+        minion="tests.assets.minions.two_steps.simple.basic",
     )
-    start_missing = OrchestrationStart(minion="missing-minion", pipeline=pipeline_ref)
+    start_missing = OrchestrationStart(pipeline=pipeline_ref, minion="missing-minion")
     directives: list[Directive] = [
         start,
         WaitWorkflowCompletions(orchestrations=(start_missing,)),
@@ -807,12 +807,12 @@ async def test_run_gru_scenario_expect_runtime_exact_reports_mismatch(
     pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=2)
     start = OrchestrationStart(
-        minion="tests.assets.minions.two_steps.simple.basic",
         pipeline=pipeline_ref,
+        minion="tests.assets.minions.two_steps.simple.basic",
     )
     start_other = OrchestrationStart(
-        minion="tests.assets.minions.two_steps.simple.resourced_2",
         pipeline=pipeline_ref,
+        minion="tests.assets.minions.two_steps.simple.resourced_2",
     )
 
     directives: list[Directive] = [
@@ -981,8 +981,8 @@ async def test_run_gru_scenario_simple_start_wait_shutdown(
 
     directives: list[Directive] = [
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.simple.basic",
             pipeline=pipeline_ref,
+            minion="tests.assets.minions.two_steps.simple.basic",
         ),
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         GruShutdown(expect_success=True),
@@ -1048,14 +1048,14 @@ async def test_run_gru_scenario_golden_regression_mixed_concurrent_wait_subset(
     pipeline_ref = "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
     pipeline_id = pipeline_ref
     reload_wait_for_subs_pipeline(expected_subs=1)
-    start_1 = OrchestrationStart(minion=minion_ref, pipeline=pipeline_ref)
+    start_1 = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
 
     directives: list[Directive] = [
         Concurrent(
             start_1,
             OrchestrationStart(
-                minion=minion_ref,
                 pipeline=pipeline_ref,
+                minion=minion_ref,
                 expect_success=False,
             ),
         ),

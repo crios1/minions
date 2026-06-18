@@ -758,8 +758,8 @@ class TestValidUsageDSL:
         minion_module_path: str,
         pipeline_module_path: str,
     ) -> None:
-        start_1 = OrchestrationStart(minion=minion_module_path, pipeline=pipeline_module_path)
-        start_2 = OrchestrationStart(minion=minion_module_path, pipeline=pipeline_module_path)
+        start_1 = OrchestrationStart(pipeline=pipeline_module_path, minion=minion_module_path)
+        start_2 = OrchestrationStart(pipeline=pipeline_module_path, minion=minion_module_path)
         directives: list[Directive] = [
             start_1,
             AfterWorkflowStepStarts(
@@ -805,8 +805,8 @@ class TestValidUsageDSL:
     ) -> None:
         pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
         start = OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline=pipeline_module_path,
+            minion="tests.assets.minions.two_steps.counter.basic",
         )
 
         directives: list[Directive] = [
@@ -848,16 +848,16 @@ class TestValidUsageDSL:
         pipeline2 = "tests.assets.pipelines.emit1.counter.emit_1_b"
         pipeline3 = "tests.assets.pipelines.emit1.counter.emit_1_c"
         start_1 = OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.resourced",
             pipeline=pipeline1,
+            minion="tests.assets.minions.two_steps.counter.resourced",
         )
         start_2 = OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.resourced_b",
             pipeline=pipeline2,
+            minion="tests.assets.minions.two_steps.counter.resourced_b",
         )
         start_3 = OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.resourced_c",
             pipeline=pipeline3,
+            minion="tests.assets.minions.two_steps.counter.resourced_c",
         )
 
         directives: list[Directive] = [
@@ -903,16 +903,16 @@ class TestValidUsageDSL:
     ) -> None:
         pipeline_module_path = "tests.assets.pipelines.sync.counter.sync_3subs_1event"
         start_1 = OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.resourced",
             pipeline=pipeline_module_path,
+            minion="tests.assets.minions.two_steps.counter.resourced",
         )
         start_2 = OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.resourced_shared_b",
             pipeline=pipeline_module_path,
+            minion="tests.assets.minions.two_steps.counter.resourced_shared_b",
         )
         start_3 = OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.resourced_shared_c",
             pipeline=pipeline_module_path,
+            minion="tests.assets.minions.two_steps.counter.resourced_shared_c",
         )
 
         directives: list[Directive] = [
@@ -954,8 +954,8 @@ class TestValidUsageDSL:
     ) -> None:
         pipeline_module_path = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
         start = OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.resourced",
             pipeline=pipeline_module_path,
+            minion="tests.assets.minions.two_steps.counter.resourced",
         )
 
         directives: list[Directive] = [
@@ -1024,8 +1024,8 @@ class TestValidUsageDSL:
     ) -> None:
         pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
         start = OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline=pipeline_module_path,
+            minion="tests.assets.minions.two_steps.counter.basic",
         )
 
         directives: list[Directive] = [
@@ -1082,7 +1082,7 @@ class TestValidUsageUsingNewAssetsDSL:
     ) -> None:
         minion_module_path = "tests.assets.minions.two_steps.counter.basic"
         pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
-        start = OrchestrationStart(minion=minion_module_path, pipeline=pipeline_module_path)
+        start = OrchestrationStart(pipeline=pipeline_module_path, minion=minion_module_path)
         directives: list[Directive] = [
             start,
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
@@ -1116,7 +1116,7 @@ class TestValidUsageUsingNewAssetsDSL:
     ) -> None:
         minion_module_path = "tests.assets.minions.two_steps.counter.basic"
         pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
-        start = OrchestrationStart(minion=minion_module_path, pipeline=pipeline_module_path)
+        start = OrchestrationStart(pipeline=pipeline_module_path, minion=minion_module_path)
         directives: list[Directive] = [
             start,
             WaitWorkflowCompletions(workflow_steps_mode="exact"),
@@ -1154,9 +1154,9 @@ class TestValidUsageUsingNewAssetsDSL:
         pipeline1 = "tests.assets.pipelines.emit1.counter.emit_1_a"
         pipeline2 = "tests.assets.pipelines.emit1.counter.emit_1_b"
         pipeline3 = "tests.assets.pipelines.emit1.counter.emit_1_c"
-        start_1 = OrchestrationStart(minion=minion1, pipeline=pipeline1)
-        start_2 = OrchestrationStart(minion=minion2, pipeline=pipeline2)
-        start_3 = OrchestrationStart(minion=minion3, pipeline=pipeline3)
+        start_1 = OrchestrationStart(pipeline=pipeline1, minion=minion1)
+        start_2 = OrchestrationStart(pipeline=pipeline2, minion=minion2)
+        start_3 = OrchestrationStart(pipeline=pipeline3, minion=minion3)
 
         directives: list[Directive] = [
             Concurrent(start_1, start_2, start_3),
@@ -1188,9 +1188,9 @@ class TestValidUsageUsingNewAssetsDSL:
         minion_b = "tests.assets.minions.two_steps.counter.resourced_shared_b"
         minion_c = "tests.assets.minions.two_steps.counter.resourced_shared_c"
         pipeline_module_path = "tests.assets.pipelines.sync.counter.sync_3subs_1event"
-        start_1 = OrchestrationStart(minion=minion_a, pipeline=pipeline_module_path)
-        start_2 = OrchestrationStart(minion=minion_b, pipeline=pipeline_module_path)
-        start_3 = OrchestrationStart(minion=minion_c, pipeline=pipeline_module_path)
+        start_1 = OrchestrationStart(pipeline=pipeline_module_path, minion=minion_a)
+        start_2 = OrchestrationStart(pipeline=pipeline_module_path, minion=minion_b)
+        start_3 = OrchestrationStart(pipeline=pipeline_module_path, minion=minion_c)
 
         directives: list[Directive] = [
             start_1,
@@ -1222,7 +1222,7 @@ class TestValidUsageUsingNewAssetsDSL:
     ) -> None:
         minion_module_path = "tests.assets.minions.two_steps.counter.resourced"
         pipeline_module_path = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
-        start = OrchestrationStart(minion=minion_module_path, pipeline=pipeline_module_path)
+        start = OrchestrationStart(pipeline=pipeline_module_path, minion=minion_module_path)
 
         directives: list[Directive] = [
             start,

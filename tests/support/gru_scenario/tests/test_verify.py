@@ -120,12 +120,12 @@ def test_assert_metrics_label_contract_reports_recorded_mismatches():
 def test_compute_minion_expectations_accumulates_starts_from_successful_receipts():
     directives = [
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
     ]
     plan = ScenarioPlan(
@@ -684,8 +684,8 @@ def test_assert_workflow_step_start_events_are_monotonic_allows_resume_replay_at
     plan = ScenarioPlan(
         [
             OrchestrationStart(
-                minion="tests.assets.minions.two_steps.counter.basic",
                 pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+                minion="tests.assets.minions.two_steps.counter.basic",
             ),
         ],
         pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
@@ -739,8 +739,8 @@ def test_assert_workflow_step_start_events_are_monotonic_rejects_regression():
     plan = ScenarioPlan(
         [
             OrchestrationStart(
-                minion="tests.assets.minions.two_steps.counter.basic",
                 pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+                minion="tests.assets.minions.two_steps.counter.basic",
             ),
         ],
         pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
@@ -795,8 +795,8 @@ def test_assert_workflow_step_start_events_are_monotonic_rejects_step_name_index
     plan = ScenarioPlan(
         [
             OrchestrationStart(
-                minion="tests.assets.minions.two_steps.counter.basic",
                 pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+                minion="tests.assets.minions.two_steps.counter.basic",
             ),
         ],
         pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
@@ -846,8 +846,8 @@ def test_assert_workflow_step_start_events_are_monotonic_rejects_step_name_index
 def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_checkpoint():
     directives = [
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
     ]
     plan = ScenarioPlan(
@@ -914,12 +914,12 @@ def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_ch
 def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phase_windows():
     directives = [
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
     ]
     plan = ScenarioPlan(
@@ -998,8 +998,8 @@ def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phas
 def test_checkpoint_window_workflow_step_progression_exact_fails_on_overage():
     directives = [
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
     ]
     plan = ScenarioPlan(
@@ -1059,12 +1059,12 @@ def test_checkpoint_window_workflow_step_progression_exact_fails_on_overage():
 def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_window():
     directives = [
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
     ]
     plan = ScenarioPlan(
@@ -1157,8 +1157,8 @@ def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_wi
 def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_allows_call_count_overage():  # noqa: E501
     directives = [
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
     ]
     plan = ScenarioPlan(
@@ -1218,8 +1218,8 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_all
 def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_rejects_overage_beyond_start_tolerance():  # noqa: E501
     directives = [
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
     ]
     plan = ScenarioPlan(
@@ -1284,12 +1284,12 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_rej
 def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overlap_passes_with_workflow_id_exactness():  # noqa: E501
     directives = [
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
     ]
     plan = ScenarioPlan(
@@ -1366,12 +1366,12 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
 def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overlap_reports_instance_deltas_on_workflow_id_mismatch():  # noqa: E501
     directives = [
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
     ]
     plan = ScenarioPlan(
@@ -1453,8 +1453,8 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
 def test_checkpoint_window_workflow_step_progression_exact_prioritizes_workflow_id_mismatch_when_both_fail():  # noqa: E501
     directives = [
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
     ]
     plan = ScenarioPlan(
@@ -1553,8 +1553,8 @@ def test_workflow_id_delta_count_computes_new_ids_only():
 def test_checkpoint_window_fanout_fails_when_workflow_id_delta_below_expected():
     directives = [
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
     ]
     plan = ScenarioPlan(
@@ -1613,8 +1613,8 @@ def test_checkpoint_window_fanout_fails_when_workflow_id_delta_below_expected():
 def test_assert_runtime_expectations_persistence_at_latest_checkpoint():
     directives = [
         start := OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
         ExpectRuntime(
             expect=RuntimeExpectSpec(persistence={start: 1}),
@@ -1665,8 +1665,8 @@ def test_assert_lifecycle_tracking_reports_untracked_successful_start():
     plan = ScenarioPlan(
         [
             OrchestrationStart(
-                minion="tests.assets.minions.two_steps.counter.basic",
                 pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+                minion="tests.assets.minions.two_steps.counter.basic",
             )
         ],
         pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
@@ -1731,7 +1731,7 @@ def test_assert_lifecycle_tracking_reports_resource_refcount_mismatch():
     pipeline_id = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
     resource_id = "tests.assets.resources.fixed.base.FixedResource"
     plan = ScenarioPlan(
-        [OrchestrationStart(minion=minion_id, pipeline=pipeline_id)],
+        [OrchestrationStart(pipeline=pipeline_id, minion=minion_id)],
         pipeline_event_counts={pipeline_id: 1},
     )
     result = ScenarioRunResult(
@@ -1789,8 +1789,8 @@ def test_assert_lifecycle_tracking_reports_resource_refcount_mismatch():
 def test_assert_persisted_context_integrity_accepts_matching_snapshot():
     directives = [
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
     ]
     plan = ScenarioPlan(
@@ -1846,8 +1846,8 @@ def test_assert_persisted_context_integrity_accepts_matching_snapshot():
 def test_assert_runtime_expectations_resolutions_at_latest_checkpoint():
     directives = [
         start := OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
@@ -1907,8 +1907,8 @@ def test_assert_runtime_expectations_resolutions_at_latest_checkpoint():
 def test_assert_runtime_expectations_workflow_steps_exact_at_latest_checkpoint():
     directives = [
         start := OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
@@ -1964,8 +1964,8 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_latest_checkpoint()
 def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage():
     directives = [
         start := OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
@@ -2020,8 +2020,8 @@ def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage():
 def test_assert_runtime_expectations_persistence_at_checkpoint_index():
     directives = [
         start := OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.identified_resourced",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.identified_resourced",
         ),
         ExpectRuntime(
             at=0,
@@ -2083,8 +2083,8 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
 def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
     directives = [
         start := OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
         ExpectRuntime(
             at=0,
@@ -2157,8 +2157,8 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
 def test_assert_runtime_expectations_fails_for_out_of_range_checkpoint_index():
     directives = [
         start := OrchestrationStart(
-            minion="tests.assets.minions.two_steps.counter.basic",
             pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            minion="tests.assets.minions.two_steps.counter.basic",
         ),
         ExpectRuntime(
             at=2,

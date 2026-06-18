@@ -282,12 +282,12 @@ class TestInvalidUsageDSL:
 
         directives: list[Directive] = [
             OrchestrationStart(
-                minion="tests.assets.minions.two_steps.counter.basic",
                 pipeline=pipeline_module_path,
+                minion="tests.assets.minions.two_steps.counter.basic",
             ),
             OrchestrationStart(
-                minion="tests.assets.minions.two_steps.counter.basic",
                 pipeline=pipeline_module_path,
+                minion="tests.assets.minions.two_steps.counter.basic",
                 expect_success=False,
             ),
             WaitWorkflowCompletions(),
@@ -336,8 +336,8 @@ class TestInvalidUsageDSL:
 
         directives: list[Directive] = [
             OrchestrationStart(
-                minion="tests.assets.minions.two_steps.counter.basic",
                 pipeline="tests.assets.pipelines.types.record_event",
+                minion="tests.assets.minions.two_steps.counter.basic",
                 expect_success=False,
             ),
             GruShutdown(expect_success=True),
@@ -366,12 +366,12 @@ class TestInvalidUsageUsingNewAssetsDSL:
 
         directives: list[Directive] = [
             OrchestrationStart(
-                minion="tests.assets.minions.two_steps.counter.basic",
                 pipeline=pipeline_module_path,
+                minion="tests.assets.minions.two_steps.counter.basic",
             ),
             OrchestrationStart(
-                minion="tests.assets.minions.two_steps.counter.basic",
                 pipeline=pipeline_module_path,
+                minion="tests.assets.minions.two_steps.counter.basic",
                 expect_success=False,
             ),
             WaitWorkflowCompletions(),
@@ -420,8 +420,8 @@ class TestInvalidUsageUsingNewAssetsDSL:
 
         directives: list[Directive] = [
             OrchestrationStart(
-                minion="tests.assets.minions.two_steps.counter.basic",
                 pipeline="tests.assets.pipelines.types.record_event",
+                minion="tests.assets.minions.two_steps.counter.basic",
                 expect_success=False,
             ),
             GruShutdown(expect_success=True),
