@@ -28,7 +28,7 @@ class AsyncLifecycle(ABC):
         if not any(getattr(base, "_mn_user_facing", False) for base in cls.__mro__[1:]):
             return
         cls._mn_ensure_attrspace()
-        cls._mn_validate_class_user_code(cls.__module__)
+        cls._mn_validate_class_user_code()
 
     @classmethod
     def _mn_ensure_attrspace(cls) -> None:
@@ -51,19 +51,19 @@ class AsyncLifecycle(ABC):
             )
 
     @classmethod
-    def _mn_validate_class_user_code(cls, module_path: str | None = None) -> None:
-        module_path = module_path or cls.__module__
-        isfunction = inspect.isfunction
-
+    def _mn_validate_class_user_code(cls) -> None:
         for name, attr in cls.__dict__.items():
             if not name or not name[0].isalpha():
                 continue
 
-            func = getattr(attr, "__func__", attr)  # unwrap staticmethod/classmethod if present
-            if not isfunction(func):
-                continue  # avoids builtins / descriptors that don't have user code
+            # unwrap staticmethod/classmethod if present
+            func = getattr(attr, "__func__", attr)
 
-            cls._mn_validate_user_code(func, module_path)
+            # avoids builtins / descriptors that don't have user code
+            if not inspect.isfunction(func):
+                continue
+
+            cls._mn_validate_user_code(func, cls.__module__)
 
     @classmethod
     def _mn_validate_user_code(cls, func: Callable[..., object], module_path: str) -> None:
