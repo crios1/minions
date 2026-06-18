@@ -383,29 +383,7 @@ class Gru:
         await self._logger._mn_log(DEBUG, "async component shutdown complete", **log_kwargs)
 
 
-    # Minion Methods
-
-    def _make_minion_instance_id(self) -> str:
-        return uuid.uuid4().hex
-
-    @staticmethod
-    def _make_inline_config_identity(minion_config: object) -> str:
-        config_type = type(minion_config)
-        require_type_serializable(
-            config_type,
-            owner="Gru.start_orchestration",
-            type_label="minion_config type",
-        )
-        require_type_model(
-            config_type,
-            owner="Gru.start_orchestration",
-            type_label="minion_config type",
-        )
-
-        type_id = f"{config_type.__module__}.{config_type.__qualname__}".encode("utf-8")
-        payload = serialize(minion_config, exp_msg_prefix="Gru.start_orchestration minion_config: ")
-        digest = hashlib.sha256(type_id + b"\0" + payload).hexdigest()[:16]
-        return f"<inline:{digest}>"
+    # Orchestration Identity Methods
 
     @staticmethod
     def _make_orchestration_id(
@@ -427,6 +405,25 @@ class Gru:
         return base62_encode(digest).rjust(44, "0")
 
     @staticmethod
+    def _make_inline_config_identity(minion_config: object) -> str:
+        config_type = type(minion_config)
+        require_type_serializable(
+            config_type,
+            owner="Gru.start_orchestration",
+            type_label="minion_config type",
+        )
+        require_type_model(
+            config_type,
+            owner="Gru.start_orchestration",
+            type_label="minion_config type",
+        )
+
+        type_id = f"{config_type.__module__}.{config_type.__qualname__}".encode("utf-8")
+        payload = serialize(minion_config, exp_msg_prefix="Gru.start_orchestration minion_config: ")
+        digest = hashlib.sha256(type_id + b"\0" + payload).hexdigest()[:16]
+        return f"<inline:{digest}>"
+
+    @staticmethod
     def _get_config_identity(minion_config_path: str | None) -> str:
         if not minion_config_path:
             return ""
@@ -441,24 +438,20 @@ class Gru:
         except ValueError:
             return p.resolve().as_posix()
 
+
+    # Component Identity Methods
+
     @staticmethod
     def _get_component_identity(typ: type[Any], fallback: str | None = None) -> str:
         """Use an explicit fallback to preserve entrypoint identity for re-exported classes."""
         fallback = fallback or f"{typ.__module__}.{typ.__name__}"
         return get_component_id(typ) or fallback
 
-    @staticmethod
-    def _get_local_subclasses(mod: ModuleType, base_cls: type[Any]) -> list[type[Any]]:
-        return [
-            obj
-            for obj in vars(mod).values()
-            if (
-                isinstance(obj, type)
-                and issubclass(obj, base_cls)
-                and obj is not base_cls
-                and obj.__module__ == mod.__name__
-            )
-        ]
+
+    # Minion Methods
+
+    def _make_minion_instance_id(self) -> str:
+        return uuid.uuid4().hex
 
     @staticmethod
     def _get_minion_identity(minion_cls: type[Minion[Any, Any]]) -> str:
@@ -1259,6 +1252,19 @@ class Gru:
                 "and start it in one step, or call `await gru._startup()` manually "
                 "after instantiating it with `Gru(...)`."
             )  # pragma: no cover
+
+    @staticmethod
+    def _get_local_subclasses(mod: ModuleType, base_cls: type[Any]) -> list[type[Any]]:
+        return [
+            obj
+            for obj in vars(mod).values()
+            if (
+                isinstance(obj, type)
+                and issubclass(obj, base_cls)
+                and obj is not base_cls
+                and obj.__module__ == mod.__name__
+            )
+        ]
 
     @asynccontextmanager
     async def _reserve_lifecycle_op(self):
