@@ -74,8 +74,8 @@ Entry points that start your system:
 async def main():
     gru = await Gru.create()
     await gru.start_orchestration(
-        "minions.onchain_strategy",
         "pipelines.price_pipeline",
+        "minions.onchain_strategy",
         minion_config_path="configs/strategy-a.yaml",
     )
 

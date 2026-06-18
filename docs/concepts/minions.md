@@ -15,11 +15,11 @@ class WorkflowCtx:
 
 class OrderMinion(Minion[dict, WorkflowCtx]):
     @minion_step
-    async def reserve_inventory(self, ctx: WorkflowCtx):
+    async def reserve_inventory(self):
         ...
 
     @minion_step
-    async def charge_customer(self, ctx: WorkflowCtx):
+    async def charge_customer(self):
         ...
 ```
 
@@ -29,6 +29,7 @@ Rules from the runtime:
 - Bare `dict` is accepted for quick examples and prototypes. For durable workflow state, prefer explicit schemas such as dataclasses, TypedDicts, msgspec structs, or `dict[str, V]` / `Mapping[str, V]` with serializable values.
 - Steps must be instance methods decorated with `{py:func}``@minion_step``. They run in source order.
 - Use `self.event` to access the current pipeline event; the event is contextvar-bound per workflow.
+- Use `self.context` to read and update the current workflow context; steps do not receive it as an argument.
 - Use `self.workflow_handle` when business code needs optional diagnostic correlation data for logs or audit records. The read-only handle exposes `orchestration_id` and `workflow_id`, matching the stable identity fields used by framework diagnostics and persisted workflow state.
 - Raise `{py:class}``minions._internal._domain.exceptions.AbortWorkflow`` to stop a workflow gracefully without treating it as a failure.
 - Do not raise `asyncio.CancelledError` to intentionally stop a workflow. The runtime treats cancellation as an interruption, keeps the persisted workflow context, and may replay the workflow later. Use `AbortWorkflow` when the workflow should stop as an intentional terminal outcome.
@@ -71,8 +72,8 @@ class PriceMinion(Minion[PriceEvent, WorkflowCtx]):
     price_api: PriceAPI  # injected by Gru
 
     @minion_step
-    async def fetch_price(self, ctx: WorkflowCtx):
-        ctx.price = await self.price_api.get_price(ctx.symbol)
+    async def fetch_price(self):
+        self.context.price = await self.price_api.get_price(self.context.symbol)
 ```
 
 Resources can depend on other resources; Gru reference-counts the graph and shuts down unused nodes when a minion stops.

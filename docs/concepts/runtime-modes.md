@@ -5,7 +5,9 @@ Minions supports two ways of starting minions:
 1. **Inline mode** — pass Minion/Pipeline classes and an optional dataclass or `msgspec.Struct` config.
 2. **Deployment mode** — pass module paths and a file-based config.
 
-Both modes are fully supported, but they serve different purposes and have different guarantees.
+Both modes are fully supported. They differ in how Gru loads components and
+supplies config, but durable identity is controlled separately by component and
+config IDs.
 
 ---
 
@@ -23,8 +25,8 @@ class MyConfig:
 
 
 gru.start_orchestration(
-    MyMinion,
     MyPipeline,
+    MyMinion,
     minion_config=MyConfig(my_key="my_value"),
 )
 ```
@@ -32,27 +34,50 @@ gru.start_orchestration(
 `MyMinion` declares `config: MyConfig` when its steps read
 `self.config`.
 
-Use inline mode when you’re exploring, prototyping, or running a single instance. Configs live in memory, and the runtime derives an inline config identity from the structured config value: `/abs/path/to/minion.py|<inline:digest>|/abs/path/to/pipeline.py`. Starting the same (minion, pipeline, config value) again addresses the same inline instance.
+Use inline mode when you’re exploring, testing, or composing a runtime directly
+in Python. Gru derives the config identity from the serializable config type and
+value as `<inline:digest>`. Component identities come from `@minion_id(...)`
+and `@pipeline_id(...)` when present; otherwise Gru falls back to each class's
+module and name. Starting the same component identities with the same inline
+config value addresses the same orchestration.
+
+Inline config identity is deterministic, but inline config is not intended as a
+long-lived deployment slot. Use a stamped file-backed config before relying on
+resume across deployment refactors.
 
 ## Deployment mode (string-based)
 
-Deployment mode is the production path—module strings plus a real config file:
+Deployment mode loads components from module strings and can use a file-backed
+config:
 
 ```python
 gru.start_orchestration(
-    "minions.examples.strategy:MyMinion",
-    "minions.examples.pipeline:MyPipeline",
+    "minions.examples.pipeline",
+    "minions.examples.strategy",
     minion_config_path="configs/strategy-client-a.yaml",
 )
 ```
 
-Use deployment mode when you need multiple independent instances, long-running workloads, resumability, or operational safety. Identity is derived from real file paths: `/abs/path/to/minion.py|/abs/path/to/config.yaml|/abs/path/to/pipeline.py`. That stable identity enables resumable workflows, deterministic redeployments, and dependency-aware draining or cutovers.
+Use deployment mode for declared deployments, multiple configured instances,
+and operator-controlled startup. Component identities still come from
+`@minion_id(...)` and `@pipeline_id(...)` when present. Id-less components use
+the supplied module strings as fallback identities.
+
+A TOML, YAML, or JSON config with a top-level `_minions_config_id` uses that UUID
+as its durable identity. An id-less config falls back to its project-relative
+path, or its absolute path when it is outside the project.
 
 ## Choosing between the two
 
-- Pick **inline** for first-time trials, notebooks/REPLs, simple scripts, and single-instance runs where you don’t need durable identity.
-- Pick **deployment** for anything long-lived or multi-instance, where you want restartability, operational auditability, and deterministic identity tied to config.
+- Pick **inline** for tests, notebooks/REPLs, and direct Python composition.
+- Pick **deployment** for declared, file-configured, or operator-managed runtime instances.
+- Stamp component and file config IDs before relying on refactor-stable resume or metric continuity in either mode.
 
 ## Why two modes?
 
-Minions is a runtime, not just a library. Runtimes need explicit operational identity for long-lived workloads, but developers also need a frictionless on-ramp. Inline mode keeps experimentation fast and Pythonic; deployment mode provides the stability, resumability, and orchestration guarantees you want in real systems. Start inline in a handful of lines, then graduate to deployment mode as your system grows.
+Minions supports direct Python composition without making module-based
+deployment cumbersome. The startup form and durability contract are separate:
+choose the form that fits how the runtime is launched, then add explicit IDs
+when the identities must survive source and config moves. See
+{doc}`state-and-persistence` for the complete identity matrix and migration
+guidance.

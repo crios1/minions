@@ -51,7 +51,7 @@ class HeartbeatStore(Resource):
 Pipelines emit events forever. The framework fans them out to subscribed minions.
 
 ```python
-# my_app/pipelines.py
+# my_app/pipelines/my_pipeline.py
 import asyncio, time
 from minions import Pipeline
 from .types import Heartbeat
@@ -60,8 +60,6 @@ class HeartbeatPipeline(Pipeline[Heartbeat]):
     async def produce_event(self) -> Heartbeat:
         await asyncio.sleep(1)
         return Heartbeat(timestamp=time.time())
-
-pipeline = HeartbeatPipeline  # helps Gru resolve the class
 ```
 
 ## Write a Minion
@@ -69,25 +67,23 @@ pipeline = HeartbeatPipeline  # helps Gru resolve the class
 Minions declare the event and workflow context types, then implement ordered `{py:func}``@minion_step`` methods.
 
 ```python
-# my_app/minions.py
+# my_app/minions/my_minion.py
 from minions import Minion, minion_step
 from .resources import HeartbeatStore
 from .types import Heartbeat, WorkflowCtx
 
 class PrintMinion(Minion[Heartbeat, WorkflowCtx]):
-    store: HeartbeatStore  # dependency injected automatically
+    store: HeartbeatStore
     @minion_step
-    async def record(self, ctx: WorkflowCtx):
+    async def record(self):
         await self.store.save(self.event)
-        ctx.retries += 1
-        print(f"[{ctx.user_id}] heartbeat at {self.event.timestamp}")
-
-minion = PrintMinion  # optional, makes discovery unambiguous
+        self.context.retries += 1
+        print(f"[{self.context.user_id}] heartbeat at {self.event.timestamp}")
 ```
 
 ## Run everything with Gru
 
-`Gru` orchestrates lifecycles: starting pipelines/resources, wiring dependencies, subscribing minions, and persisting workflow context. The current API accepts module paths for your pipeline/minion classes. Pass `minion_config_path` only when that Minion declares a typed `config` attribute, overrides `load_config`, and returns a dataclass or `msgspec.Struct` config model.
+`Gru` orchestrates lifecycles: starting pipelines/resources, wiring dependencies, subscribing minions, and persisting workflow context. The current API accepts module paths for your pipeline and minion modules. Pass `minion_config_path` only when that Minion declares a typed `config` attribute, overrides `load_config`, and returns a dataclass or `msgspec.Struct` config model.
 
 ```python
 # run.py
@@ -98,8 +94,8 @@ async def main():
     gru = await Gru.create()
 
     await gru.start_orchestration(
-        "my_app.minions",   # module containing one local Minion subclass
-        "my_app.pipelines", # module containing one local Pipeline subclass
+        "my_app.pipelines.my_pipeline", # module containing one local Pipeline subclass
+        "my_app.minions.my_minion",   # module containing one local Minion subclass
     )
 
     shell = GruShell(gru)
@@ -111,6 +107,18 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+
+This id-less version is appropriate while learning and prototyping. When the
+project needs persisted workflows or metrics to remain stable across module
+moves and renames, let the CLI add durable component identities:
+
+```bash
+python -m minions stamp component-ids my_app
+python -m minions doctor ids my_app
+```
+
+The stamper generates the IDs and adds the required decorators and imports; you
+do not need to write or choose the IDs yourself.
 
 Start the app and try `start`, `stop`, `status`, and `shutdown` in the shell. `GruShell` is a deprecated transitional helper; the planned long-term runtime control model is `minions gru serve` plus `minions gru attach`. See {doc}`how-to/integrating-with-cli` for current command details.
 

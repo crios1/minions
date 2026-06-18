@@ -23,6 +23,21 @@ Gru accepts Minion, Pipeline, and Resource classes with or without explicit comp
 
 Id-less components are useful for first runs, examples, notebooks, and other prototype workflows. They keep the current fallback behavior: Gru derives identity from the import/module address it can resolve at orchestration start. That keeps onboarding low-friction, but it does not promise refactor-stable resume or metric continuity if files, modules, or class addresses move.
 
+The identity sources are:
+
+| Runtime object | Durable identity | Fallback identity | Stability |
+| --- | --- | --- | --- |
+| Minion | `@minion_id(...)` UUID | Class module/name, or the string entrypoint module | Fallback changes when its address changes |
+| Pipeline | `@pipeline_id(...)` UUID | Class module/name, or the string entrypoint module | Fallback changes when its address changes |
+| Resource | `@resource_id(...)` UUID | Class module/name | Fallback changes when its address changes |
+| File-backed config | Top-level `_minions_config_id` UUID | Project-relative path, or absolute path outside the project | Fallback changes when the path changes |
+| Inline config | Not stampable | Content-derived `<inline:digest>` | Stable for the same serializable type and value |
+
+Class-based versus string-based startup controls how Gru loads a component and
+which fallback address is available. It does not determine whether the
+component has durable identity. Explicit component and config UUIDs provide
+refactor-stable identity in either startup form.
+
 For durable systems, stamp UUID component IDs on source classes:
 
 ```python

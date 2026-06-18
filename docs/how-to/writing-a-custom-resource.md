@@ -44,8 +44,8 @@ class PriceMinion(Minion[PriceEvent, Ctx]):
     api: PriceAPI
 
     @minion_step
-    async def fetch(self, ctx: Ctx):
-        ctx.quote = await self.api.get_price(ctx.symbol)
+    async def fetch(self):
+        self.context.quote = await self.api.get_price(self.context.symbol)
 ```
 
 ## 4) Rate limit where it matters

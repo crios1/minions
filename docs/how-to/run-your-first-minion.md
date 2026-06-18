@@ -35,6 +35,18 @@ class PrintMinion(Minion[PrintEvent, PrintContext]):
 
 ## 3) Start Gru and the minion
 
+Before treating this as a durable deployment, stamp component and config IDs:
+
+```bash
+python -m minions stamp all my_app config
+python -m minions doctor ids my_app config
+```
+
+Id-less components and configs still run, but their module/path fallback
+identities can change during refactors (moves and renames). Stamping an existing running deployment
+changes its orchestration identity, so drain prototype workflows before that
+cutover.
+
 ```python
 import asyncio
 from minions import Gru, GruShell
@@ -42,8 +54,8 @@ from minions import Gru, GruShell
 async def main():
     gru = await Gru.create()
     await gru.start_orchestration(
-        "my_app.minions",   # module containing one local Minion subclass
-        "my_app.pipelines", # module containing one local Pipeline subclass
+        "my_app.pipelines.my_pipeline", # module containing one local Pipeline subclass
+        "my_app.minions.my_minion",   # module containing one local Minion subclass
         minion_config_path="config/print.json",
     )
 

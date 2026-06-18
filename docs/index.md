@@ -30,6 +30,7 @@ concepts/pipelines
 concepts/resources
 concepts/state-and-persistence
 concepts/concurrency-and-backpressure
+concepts/gru-lifecycle-failure-management
 concepts/runtime-modes
 concepts/project-structure
 concepts/portability
@@ -163,7 +164,7 @@ class MyMinion(Minion[MyEvent, MyContext]):
 
 async def main():
     gru = await Gru.create()
-    await gru.start_orchestration(MyMinion, MyPipeline)
+    await gru.start_orchestration(MyPipeline, MyMinion)
 
 if __name__ == "__main__":
     asyncio.run(main())

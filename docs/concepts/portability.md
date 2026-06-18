@@ -40,15 +40,24 @@ If this directory exists, Minions can orchestrate it.
 
 Minions treats the following as part of the portable deployment footprint:
 
-### 1. Module locations (minions and pipelines)
+### 1. Component identities
 
-Minion and Pipeline identity is based on:
+Durable Minion, Pipeline, and Resource identity is stored with the component
+class:
 
+```python
+from minions import minion_id, pipeline_id, resource_id
+
+@minion_id("11111111-1111-4111-8111-111111111111")
+class MeanReversionMinion(...):
+    ...
 ```
-cls.__module__
-```
 
-This is independent of absolute file paths. If your project folder moves, your module names stay the same.
+The UUID moves with the class, so normal module moves and renames do not change
+its runtime identity. Id-less components remain supported for prototypes and
+fall back to their class address or supplied entrypoint module. Those fallback
+identities are portable when module names remain unchanged, but they are not
+refactor-stable.
 
 ### 2. Config files inside the project directory
 
@@ -56,19 +65,21 @@ If you start a minion with:
 
 ```python
 gru.start_orchestration(
-    "myapp.strategies.mean_reversion",
     "myapp.pipelines.pricing",
+    "myapp.strategies.mean_reversion",
     minion_config_path="configs/client-a.yaml",
 )
 ```
 
-And `configs/client-a.yaml` lives **inside your project folder**, Minions records it in the orchestration identity as:
+For durable deployments, stamp the config with a top-level UUID:
 
-```
-myapp.strategies.mean_reversion|configs/client-a.yaml|myapp.pipelines.pricing
+```yaml
+_minions_config_id: "44444444-4444-4444-8444-444444444444"
 ```
 
-Not an absolute path. This identity is fully portable: works if you zip and move the project, commit to Git, or run inside Docker. Minions loads the file using the absolute resolved path, but stores the **relative** path as the deployment identity.
+Gru then uses that UUID as the config identity, independent of where the project
+or config file is moved. Without `_minions_config_id`, an in-project config uses
+its project-relative path as fallback identity.
 
 ---
 
@@ -78,19 +89,16 @@ If you point Minions at a config file *outside* the project directory:
 
 ```python
 gru.start_orchestration(
-    "myapp.strategies",
     "myapp.pipelines",
+    "myapp.strategies",
     minion_config_path="/etc/minions/client-a.yaml",
 )
 ```
 
-Then the orchestration identity becomes:
-
-```
-myapp.strategies|/etc/minions/client-a.yaml|myapp.pipelines
-```
-
-This is correct, but not portable. Minions does not restrict you—you can load configs from anywhere—but the identity reflects that you chose an external dependency. This keeps flexibility without hiding operational realities.
+Without `_minions_config_id`, Gru uses the resolved absolute config path as the
+fallback identity. That fallback is machine-specific. A stamped external config
+retains its UUID identity, but the external file is still outside the
+self-contained deployment artifact and must be provisioned separately.
 
 ---
 
@@ -115,8 +123,8 @@ class MyConfig:
 
 
 gru.start_orchestration(
-    MyMinion,
     MyPipeline,
+    MyMinion,
     minion_config=MyConfig(my_key="my_value"),
 )
 ```
@@ -124,33 +132,34 @@ gru.start_orchestration(
 The configured Minion declares `config: MyConfig` before its steps access
 `self.config`.
 
-Orchestration identity:
-
-```
-myapp.minions.MyMinion|<inline:digest>|myapp.pipelines.MyPipeline
-```
-
 Inline deployments are portable, but their identity is tied to the in-memory
 config value. They’re intended for development, teaching, and exploration. For
-long-lived deployment slots, use file-based configs.
+long-lived deployment slots, use file-based configs with
+`_minions_config_id`.
 
 ---
 
 ## Why Minions defaults to relative paths
 
-Relative config paths give Minions systems a property that distributed systems lack:
+Stamped component and config IDs give Minions systems a property that
+distributed systems often require additional deployment infrastructure to
+maintain:
 
 > **A Minions deployment is fully self-contained. Copy the folder anywhere and everything—including running state—still works.**
 
-Your SQLite state store, configs, pipelines, and code remain coherent as a unit. This is a major ergonomic advantage of Minions and one of the runtime’s core values.
+Your SQLite state store, configs, pipelines, and code remain coherent as a unit.
+Relative paths remain useful fallbacks while prototyping, but explicit IDs are
+the durable contract for moving and refactoring that unit.
 
 ---
 
 ## Best practices for portable Minions systems
 
 - Place all configs in a dedicated `configs/` folder inside your project.  
-- Ensure your entrypoint (e.g., `python -m yourapp.main`) lives inside the project.  
-- Use relative config paths when calling `gru.start_orchestration`.  
+- Stamp Minion, Pipeline, Resource, and file config IDs before durable deployment.
+- Run `python -m minions doctor ids .` as a deployment preflight.
+- Ensure your entrypoint (e.g., `python -m yourapp.main`) lives inside the project.
+- Use relative config paths even when configs are stamped so loading remains portable.
 - Let Minions resolve absolute paths internally for loading.  
 - Keep state stores (SQLite, files, checkpoints) inside the project directory.  
 
@@ -160,10 +169,13 @@ If you follow this structure, Minions gives you a deployment artifact that works
 
 ## Summary
 
-- Minions uses **module names** (not file paths) to identify minions and pipelines.  
-- Config paths inside the project directory become **portable deployment identities**.  
-- Config paths outside the project directory become **absolute, external identities**.  
-- Inline config is portable and identity follows the structured config value.  
+- Explicit UUIDs provide refactor-stable Minion, Pipeline, Resource, and file config identities.
+- Id-less components and configs use module/path fallbacks for low-friction prototypes.
+- External configs remain external deployment dependencies even when stamped.
+- Inline config is portable and identity follows its serializable type and value.
 - A Minions project directory is intentionally designed to be a **self-contained system**.
 
 Portability isn’t an accident—it’s a design goal. Minions gives you microservice structure with single-artifact deployment simplicity.
+
+See {doc}`state-and-persistence` for the complete identity matrix and the
+required migration boundary when stamping an existing deployment.
