@@ -106,19 +106,19 @@ class TestValidUsage:
     async def test_gru_start_stop_orchestration(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        configure_emit_one_simple_pipeline_subscriber_gate: Callable[..., None],
     ) -> None:
         minion_module_path = "tests.assets.minions.two_steps.simple.default"
         pipeline_module_path = (
             "tests.assets.pipelines.emit_one.simple.default"
         )
-        from tests.assets.minions.two_steps.simple.default import (
-            AssetMinion as TwoStepSimpleMinion,
-        )
 
-        TwoStepSimpleMinion.enable_spy()
-        TwoStepSimpleMinion.reset_spy()
-        configure_emit_one_simple_pipeline_subscriber_gate(expected_subs=1)
+        from tests.assets.minions.two_steps.simple.default import AssetMinion
+        from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
+
+        AssetMinion.enable_spy()
+        AssetMinion.reset_spy()
+        AssetPipeline.configure_gate(expected_subs=1)
+
         async with gru_factory(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
@@ -136,7 +136,7 @@ class TestValidUsage:
                 in gru._minion_tasks
             )
 
-            await TwoStepSimpleMinion.wait_for_calls(
+            await AssetMinion.wait_for_calls(
                 expected={"step_1": 1, "step_2": 1},
                 timeout=5.0,
             )
@@ -470,14 +470,14 @@ class TestValidUsage:
             logger=logger,
             metrics=InMemoryMetrics()
         ) as gru:
-            from tests.assets.minions.two_steps.simple.with_simple_resource import (
-                AssetMinion as Simple1ResourceMinion,
-            )
             from tests.assets.minions.two_steps.simple.with_simple_b_resource import (
                 AssetMinion as Simple2ResourceMinion,
             )
             from tests.assets.minions.two_steps.simple.with_simple_c_resource import (
                 AssetMinion as Simple3ResourceMinion,
+            )
+            from tests.assets.minions.two_steps.simple.with_simple_resource import (
+                AssetMinion as Simple1ResourceMinion,
             )
 
             for cls in (
@@ -522,7 +522,6 @@ class TestValidUsage:
     async def test_gru_start_3_minions_1_pipeline_1_resource_sharing(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        configure_emit_one_simple_pipeline_subscriber_gate: Callable[..., None],
         tests_dir: Path,
     ) -> None:
         """
@@ -533,13 +532,14 @@ class TestValidUsage:
         pipeline_module_path = (
             "tests.assets.pipelines.emit_one.simple.default"
         )
-        configure_emit_one_simple_pipeline_subscriber_gate(expected_subs=3)
         from tests.assets.minions.two_steps.simple.with_simple_resource import (
             AssetMinion as Simple1ResourceMinion,
         )
+        from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
 
         Simple1ResourceMinion.enable_spy()
         Simple1ResourceMinion.reset_spy()
+        AssetPipeline.configure_gate(expected_subs=3)
 
         # TODO: I'm testing resource sharing between minions spawned from the
         # same minion class but different configs.

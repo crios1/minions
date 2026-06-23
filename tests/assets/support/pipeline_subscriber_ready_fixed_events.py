@@ -20,9 +20,8 @@ class SubscriberReadyFixedEventsPipeline(
     expected_subs = 1
 
     @classmethod
-    def reset_gate(cls, *, expected_subs: int | None = None) -> None:
-        if expected_subs is not None:
-            cls.expected_subs = expected_subs
+    def configure_gate(cls, *, expected_subs: int) -> None:
+        cls.expected_subs = expected_subs
 
     async def wait_for_subscribers(
         self,

@@ -19,17 +19,6 @@ def tests_dir() -> Path:
     return Path(__file__).resolve().parent
 
 
-@pytest.fixture
-def configure_emit_one_simple_pipeline_subscriber_gate() -> Callable[..., None]:
-    def _configure(*, expected_subs: int) -> None:
-        from tests.assets.pipelines.emit_one.simple import default
-
-        importlib.reload(default)
-        default.AssetPipeline.reset_gate(expected_subs=expected_subs)
-
-    return _configure
-
-
 @pytest.fixture(autouse=True)
 def scrub_asset_modules() -> Generator[None, None, None]:
     "enables non-leaky reuse of assets across tests"

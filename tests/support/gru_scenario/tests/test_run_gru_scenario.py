@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -557,10 +556,12 @@ async def test_run_gru_scenario_batches_stops_serial(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-    configure_emit_one_simple_pipeline_subscriber_gate: Callable[..., None],
 ) -> None:
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
-    configure_emit_one_simple_pipeline_subscriber_gate(expected_subs=2)
+    from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
+
+    AssetPipeline.configure_gate(expected_subs=2)
+
     start_1 = OrchestrationStart(
         pipeline=pipeline_ref,
         minion="tests.assets.minions.two_steps.simple.default"
@@ -687,10 +688,12 @@ async def test_run_gru_scenario_parallel_starts(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-    configure_emit_one_simple_pipeline_subscriber_gate: Callable[..., None],
 ) -> None:
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
-    configure_emit_one_simple_pipeline_subscriber_gate(expected_subs=2)
+    from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
+
+    AssetPipeline.configure_gate(expected_subs=2)
+
     start_1 = OrchestrationStart(
         pipeline=pipeline_ref,
         minion="tests.assets.minions.two_steps.simple.default"
@@ -724,10 +727,12 @@ async def test_run_gru_scenario_wait_workflows_subset(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-    configure_emit_one_simple_pipeline_subscriber_gate: Callable[..., None],
 ) -> None:
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
-    configure_emit_one_simple_pipeline_subscriber_gate(expected_subs=2)
+    from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
+
+    AssetPipeline.configure_gate(expected_subs=2)
+
     start_1 = OrchestrationStart(
         pipeline=pipeline_ref,
         minion="tests.assets.minions.two_steps.simple.default"
@@ -762,10 +767,11 @@ async def test_run_gru_scenario_wait_workflows_unknown_start_fails(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-    configure_emit_one_simple_pipeline_subscriber_gate: Callable[..., None],
 ) -> None:
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
-    configure_emit_one_simple_pipeline_subscriber_gate(expected_subs=1)
+    from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
+
+    AssetPipeline.configure_gate(expected_subs=1)
 
     start = OrchestrationStart(
         pipeline=pipeline_ref,
@@ -795,10 +801,12 @@ async def test_run_gru_scenario_expect_runtime_exact_reports_mismatch(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-    configure_emit_one_simple_pipeline_subscriber_gate: Callable[..., None],
 ) -> None:
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
-    configure_emit_one_simple_pipeline_subscriber_gate(expected_subs=2)
+    from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
+
+    AssetPipeline.configure_gate(expected_subs=2)
+
     start = OrchestrationStart(
         pipeline=pipeline_ref,
         minion="tests.assets.minions.two_steps.simple.default",
@@ -928,10 +936,12 @@ async def test_run_gru_scenario_parallel_mixed_directives(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-    configure_emit_one_simple_pipeline_subscriber_gate: Callable[..., None],
 ) -> None:
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
-    configure_emit_one_simple_pipeline_subscriber_gate(expected_subs=2)
+    from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
+
+    AssetPipeline.configure_gate(expected_subs=2)
+
     start_1 = OrchestrationStart(
         pipeline=pipeline_ref,
         minion="tests.assets.minions.two_steps.simple.default"
@@ -996,10 +1006,12 @@ async def test_dsl_exploration(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-    configure_emit_one_simple_pipeline_subscriber_gate: Callable[..., None],
 ) -> None:
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
-    configure_emit_one_simple_pipeline_subscriber_gate(expected_subs=2)
+    from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
+
+    AssetPipeline.configure_gate(expected_subs=2)
+
     start_1 = OrchestrationStart(
         pipeline=pipeline_ref,
         minion="tests.assets.minions.two_steps.simple.default"
@@ -1033,11 +1045,13 @@ async def test_run_gru_scenario_golden_regression_mixed_concurrent_wait_subset(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-    configure_emit_one_simple_pipeline_subscriber_gate: Callable[..., None],
 ) -> None:
     minion_ref = "tests.assets.minions.two_steps.simple.default"
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
-    configure_emit_one_simple_pipeline_subscriber_gate(expected_subs=1)
+    from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
+
+    AssetPipeline.configure_gate(expected_subs=1)
+
     start_1 = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
 
     directives: list[Directive] = [

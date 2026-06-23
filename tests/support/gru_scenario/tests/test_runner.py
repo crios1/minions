@@ -1,5 +1,4 @@
 import asyncio
-from collections.abc import Callable
 
 import pytest
 
@@ -147,15 +146,17 @@ async def test_runner_records_receipts_for_success_and_expected_failure(
 @pytest.mark.asyncio
 async def test_runner_concurrent_starts_capture_started_minions_and_instance_tags(
     gru: Gru,
-    configure_emit_one_simple_pipeline_subscriber_gate: Callable[..., None],
 ) -> None:
-    pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
-    pipeline_id = pipeline_ref
     default_minion_ref = "tests.assets.minions.two_steps.simple.default"
     resourced_minion_ref = (
         "tests.assets.minions.two_steps.simple.with_simple_b_resource"
     )
-    configure_emit_one_simple_pipeline_subscriber_gate(expected_subs=2)
+
+    pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
+    pipeline_id = pipeline_ref
+    from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
+
+    AssetPipeline.configure_gate(expected_subs=2)
 
     directives = [
         Concurrent(
