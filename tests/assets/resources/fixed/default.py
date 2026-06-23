@@ -17,7 +17,7 @@ class AssetResource(SpiedResource):
     async def run(self):
         return
 
-    async def get_value(self, _hint: int | None = None) -> int:
+    async def get_value(self) -> int:
         return type(self)._value
 
 

@@ -11,7 +11,7 @@ class AssetMinion(SpiedMinion[CounterEvent, CounterContext]):
 
     @minion_step
     async def step_1(self) -> None:
-        self.context.value = await self.fixed_resource.get_value(self.event.seq)
+        self.context.value = await self.fixed_resource.get_value()
 
     @minion_step
     async def step_2(self) -> None:

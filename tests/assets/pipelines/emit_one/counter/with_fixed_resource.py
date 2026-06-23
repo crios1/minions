@@ -9,7 +9,7 @@ class AssetPipeline(SubscriberReadyFixedEventsPipeline[CounterEvent]):
     fixed_resource: FixedResource
 
     async def produce_event(self) -> CounterEvent:
-        return CounterEvent(seq=await self.fixed_resource.get_value(0))
+        return CounterEvent(seq=await self.fixed_resource.get_value())
 
 
 pipeline = AssetPipeline
