@@ -597,15 +597,16 @@ async def test_run_gru_scenario_duplicate_start_fails(
     state_store: InMemoryStateStore,
 ) -> None:
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
+    minion_ref = "tests.assets.minions.two_steps.simple.default"
 
     directives: list[Directive] = [
         OrchestrationStart(
             pipeline=pipeline_ref,
-            minion="tests.assets.minions.two_steps.simple.default",
+            minion=minion_ref,
         ),
         OrchestrationStart(
             pipeline=pipeline_ref,
-            minion="tests.assets.minions.two_steps.simple.default",
+            minion=minion_ref,
             expect_success=False,
         ),
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
@@ -852,18 +853,19 @@ async def test_run_gru_scenario_strict_wait_workflow_window_overlap_mismatch(
     pipeline_ref = (
         "tests.assets.pipelines.emit_two.simple.with_subscriber_counts_one_then_two"
     )
+    minion_ref = "tests.assets.minions.two_steps.simple.with_config"
 
     directives: list[Directive] = [
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.simple.with_config",
-            minion_config_path=cfg1,
             pipeline=pipeline_ref,
+            minion=minion_ref,
+            minion_config_path=cfg1,
         ),
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         OrchestrationStart(
-            minion="tests.assets.minions.two_steps.simple.with_config",
-            minion_config_path=cfg2,
             pipeline=pipeline_ref,
+            minion=minion_ref,
+            minion_config_path=cfg2,
         ),
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         GruShutdown(expect_success=True),
