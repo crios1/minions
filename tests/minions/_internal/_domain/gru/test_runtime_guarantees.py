@@ -20,14 +20,14 @@ from tests.support.race_window import GatedAsyncCallable, GatedLock
 async def test_gru_does_not_replay_same_workflow_id_during_startup(
     gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
 ) -> None:
+    from tests.assets.minions.race_cases.duplicate_workflow_replay import (
+        AssetMinion as DuplicateWorkflowReplayMinion,
+    )
+
     logger = InMemoryLogger()
     metrics = InMemoryMetrics()
     state_store = InMemoryStateStore(logger=logger)
-    duplicate_workflow_replay = importlib.import_module(
-        "tests.assets.minions.race_cases.duplicate_workflow_replay"
-    )
-    duplicate_workflow_replay_minion = duplicate_workflow_replay.DuplicateWorkflowReplayMinion
-    duplicate_workflow_replay_minion.reset_gates()
+    DuplicateWorkflowReplayMinion.reset_gates()
 
     async with gru_factory(
         logger=logger,
@@ -36,10 +36,10 @@ async def test_gru_does_not_replay_same_workflow_id_during_startup(
     ) as gru:
         result = await gru.start_orchestration(
             minion="tests.assets.minions.race_cases.duplicate_workflow_replay",
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
         )
         assert result.success
-        assert duplicate_workflow_replay_minion._gate("_startup_entered").is_set()
+        assert DuplicateWorkflowReplayMinion._gate("_startup_entered").is_set()
 
         def _get_step_1_workflow_ids() -> list[str]:
             return [
@@ -56,7 +56,7 @@ async def test_gru_does_not_replay_same_workflow_id_during_startup(
 
         try:
             await asyncio.wait_for(
-                duplicate_workflow_replay_minion._gate("_step_1_started").wait(),
+                DuplicateWorkflowReplayMinion._gate("_step_1_started").wait(),
                 timeout=1.0,
             )
             await asyncio.sleep(0)
@@ -78,7 +78,7 @@ async def test_gru_does_not_replay_same_workflow_id_during_startup(
                 f"{duplicate_step_1_workflow_ids}"
             )
         finally:
-            duplicate_workflow_replay_minion._gate("_allow_step_1_finish").set()
+            DuplicateWorkflowReplayMinion._gate("_allow_step_1_finish").set()
 
 
 @pytest.mark.asyncio
@@ -97,10 +97,10 @@ async def test_gru_serializes_concurrent_starts_for_same_orchestration(
         gru._orchestration_locks = defaultdict(GatedLock)
         expected_orchestration_id = Gru._make_orchestration_id(
             pipeline_id=gru._get_pipeline_identity_from_module_path(
-                "tests.assets.pipelines.simple.simple_event.single_event_1",
+                "tests.assets.pipelines.emit_one.simple.default",
             ),
             minion_id=gru._get_minion_identity_from_module_path(
-                "tests.assets.minions.two_steps.simple.basic",
+                "tests.assets.minions.two_steps.simple.default",
             ),
             minion_config_id="",
         )
@@ -109,14 +109,14 @@ async def test_gru_serializes_concurrent_starts_for_same_orchestration(
 
         task1 = asyncio.create_task(
             gru.start_orchestration(
-                minion="tests.assets.minions.two_steps.simple.basic",
-                pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
+                minion="tests.assets.minions.two_steps.simple.default",
+                pipeline="tests.assets.pipelines.emit_one.simple.default",
             )
         )
         task2 = asyncio.create_task(
             gru.start_orchestration(
-                minion="tests.assets.minions.two_steps.simple.basic",
-                pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
+                minion="tests.assets.minions.two_steps.simple.default",
+                pipeline="tests.assets.pipelines.emit_one.simple.default",
             )
         )
 
@@ -151,18 +151,18 @@ async def test_gru_serializes_concurrent_stops_for_same_orchestration(
         state_store=state_store,
     ) as gru:
         start_result = await gru.start_orchestration(
-            minion="tests.assets.minions.two_steps.simple.basic",
-            pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
+            minion="tests.assets.minions.two_steps.simple.default",
+            pipeline="tests.assets.pipelines.emit_one.simple.default",
         )
         assert start_result.success
 
         gru._orchestration_locks = defaultdict(GatedLock)
         expected_orchestration_id = Gru._make_orchestration_id(
             pipeline_id=gru._get_pipeline_identity_from_module_path(
-                "tests.assets.pipelines.simple.simple_event.single_event_1",
+                "tests.assets.pipelines.emit_one.simple.default",
             ),
             minion_id=gru._get_minion_identity_from_module_path(
-                "tests.assets.minions.two_steps.simple.basic",
+                "tests.assets.minions.two_steps.simple.default",
             ),
             minion_config_id="",
         )
@@ -208,17 +208,17 @@ async def test_gru_serializes_concurrent_start_and_stop_for_same_orchestration(
     ) as gru:
         # Start once normally so the race only covers the stop/start window.
         start_result = await gru.start_orchestration(
-            minion="tests.assets.minions.two_steps.simple.basic",
-            pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
+            minion="tests.assets.minions.two_steps.simple.default",
+            pipeline="tests.assets.pipelines.emit_one.simple.default",
         )
         assert start_result.success
         gru._orchestration_locks = defaultdict(GatedLock)
         expected_orchestration_id = Gru._make_orchestration_id(
             pipeline_id=gru._get_pipeline_identity_from_module_path(
-                "tests.assets.pipelines.simple.simple_event.single_event_1",
+                "tests.assets.pipelines.emit_one.simple.default",
             ),
             minion_id=gru._get_minion_identity_from_module_path(
-                "tests.assets.minions.two_steps.simple.basic",
+                "tests.assets.minions.two_steps.simple.default",
             ),
             minion_config_id="",
         )
@@ -230,8 +230,8 @@ async def test_gru_serializes_concurrent_start_and_stop_for_same_orchestration(
 
         start_task = asyncio.create_task(
             gru.start_orchestration(
-                minion="tests.assets.minions.two_steps.simple.basic",
-                pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
+                minion="tests.assets.minions.two_steps.simple.default",
+                pipeline="tests.assets.pipelines.emit_one.simple.default",
             )
         )
 
@@ -262,18 +262,18 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations(
     ) as gru:
         gru._orchestration_locks = defaultdict(GatedLock)
         basic_minion_id = gru._get_minion_identity_from_module_path(
-            "tests.assets.minions.two_steps.simple.basic",
+            "tests.assets.minions.two_steps.simple.default",
         )
         orchestration_id_1 = Gru._make_orchestration_id(
             pipeline_id=gru._get_pipeline_identity_from_module_path(
-                "tests.assets.pipelines.simple.simple_event.single_event_1",
+                "tests.assets.pipelines.emit_one.simple.default",
             ),
             minion_id=basic_minion_id,
             minion_config_id="",
         )
         orchestration_id_2 = Gru._make_orchestration_id(
             pipeline_id=gru._get_pipeline_identity_from_module_path(
-                "tests.assets.pipelines.simple.simple_event.single_event_2",
+                "tests.assets.pipelines.emit_one.simple.default_b",
             ),
             minion_id=basic_minion_id,
             minion_config_id="",
@@ -285,14 +285,14 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations(
 
         task1 = asyncio.create_task(
             gru.start_orchestration(
-                minion="tests.assets.minions.two_steps.simple.basic",
-                pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
+                minion="tests.assets.minions.two_steps.simple.default",
+                pipeline="tests.assets.pipelines.emit_one.simple.default",
             )
         )
         task2 = asyncio.create_task(
             gru.start_orchestration(
-                minion="tests.assets.minions.two_steps.simple.basic",
-                pipeline="tests.assets.pipelines.simple.simple_event.single_event_2",
+                minion="tests.assets.minions.two_steps.simple.default",
+                pipeline="tests.assets.pipelines.emit_one.simple.default_b",
             )
         )
 
@@ -321,17 +321,17 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
     metrics = InMemoryMetrics()
     state_store = InMemoryStateStore(logger=logger)
 
-    resourced_pipeline = importlib.import_module(
-        "tests.assets.pipelines.resourced.counter.with_fixed_resource"
+    fixed_resource_pipeline_module = importlib.import_module(
+        "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
     )
-    resourced_pipeline.ResourcedPipeline.enable_spy()
-    resourced_pipeline.ResourcedPipeline.reset_spy()
+    fixed_resource_pipeline_module.AssetPipeline.enable_spy()
+    fixed_resource_pipeline_module.AssetPipeline.reset_spy()
 
-    fixed_resource = importlib.import_module("tests.assets.resources.fixed.base")
-    fixed_resource.FixedResource.enable_spy()
-    fixed_resource.FixedResource.reset_spy()
+    fixed_resource_module = importlib.import_module("tests.assets.resources.fixed.default")
+    fixed_resource_module.AssetResource.enable_spy()
+    fixed_resource_module.AssetResource.reset_spy()
 
-    pipeline_module_path = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
+    pipeline_module_path = "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
 
     async with gru_factory(
         logger=logger,
@@ -344,13 +344,13 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
 
         task1 = asyncio.create_task(
             gru.start_orchestration(
-                minion="tests.assets.minions.two_steps.counter.basic",
+                minion="tests.assets.minions.two_steps.counter.default",
                 pipeline=pipeline_module_path,
             )
         )
         task2 = asyncio.create_task(
             gru.start_orchestration(
-                minion="tests.assets.minions.two_steps.counter.uses_config",
+                minion="tests.assets.minions.two_steps.counter.with_file_config",
                 minion_config_path="tests/assets/config/minions/b.toml",
                 pipeline=pipeline_module_path,
             )
@@ -368,10 +368,10 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
         assert result2.success
         assert len(gru._pipelines) == 1
         assert len(gru._resources) == 1
-        assert resourced_pipeline.ResourcedPipeline.get_call_counts()["_mn_startup"] == 1
-        assert fixed_resource.FixedResource.get_call_counts()["_mn_startup"] == 1
+        assert fixed_resource_pipeline_module.AssetPipeline.get_call_counts()["_mn_startup"] == 1
+        assert fixed_resource_module.AssetResource.get_call_counts()["_mn_startup"] == 1
 
-        resource_id = gru._get_resource_identity(fixed_resource.FixedResource)
+        resource_id = gru._get_resource_identity(fixed_resource_module.AssetResource)
         assert gru._pipeline_resource_map[pipeline_module_path] == {resource_id}
         assert gru._resource_reference_counts[resource_id] == 1
 
@@ -387,19 +387,23 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
 async def test_gru_injects_resource_dependencies_before_resource_startup(
     gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
 ) -> None:
+    from tests.assets.minions.two_steps.counter.default import (
+        AssetMinion as TwoStepCounterMinion,
+    )
+    from tests.assets.resources.fixed.default import AssetResource as FixedResource
+    from tests.assets.resources.with_dependencies.depends_on_fixed import (
+        AssetResource as ResourceDependingOnFixed,
+    )
+
     logger = InMemoryLogger()
     metrics = InMemoryMetrics()
     state_store = InMemoryStateStore(logger=logger)
 
-    minion_module = importlib.import_module("tests.assets.minions.two_steps.counter.basic")
-    minion_module.TwoStepMinion.enable_spy()
-    minion_module.TwoStepMinion.reset_spy()
+    TwoStepCounterMinion.enable_spy()
+    TwoStepCounterMinion.reset_spy()
 
-    pipeline_module_path = "tests.assets.pipelines.resourced.counter.has_transitive_resource"
-
-    resource_module_fixed = importlib.import_module("tests.assets.resources.fixed.base")
-    resource_module_depends_on_fixed = importlib.import_module(
-        "tests.assets.resources.with_dependencies.depends_on_fixed"
+    pipeline_module_path = (
+        "tests.assets.pipelines.emit_one.counter.with_resource_depending_on_fixed"
     )
 
     async with gru_factory(
@@ -408,20 +412,18 @@ async def test_gru_injects_resource_dependencies_before_resource_startup(
         state_store=state_store,
     ) as gru:
         result = await gru.start_orchestration(
-            minion="tests.assets.minions.two_steps.counter.basic",
+            minion="tests.assets.minions.two_steps.counter.default",
             pipeline=pipeline_module_path,
         )
 
         assert result.success
-        await minion_module.TwoStepMinion.wait_for_calls(
+        await TwoStepCounterMinion.wait_for_calls(
             expected={"step_1": 1, "step_2": 1},
             timeout=5.0,
         )
 
-        fixed_resource_id = gru._get_resource_identity(resource_module_fixed.FixedResource)
-        depends_on_fixed_resource_id = gru._get_resource_identity(
-            resource_module_depends_on_fixed.DependsOnFixedResource
-        )
+        fixed_resource_id = gru._get_resource_identity(FixedResource)
+        depends_on_fixed_resource_id = gru._get_resource_identity(ResourceDependingOnFixed)
         depends_on_fixed_resource_inst = gru._resources[depends_on_fixed_resource_id]
         assert gru._pipeline_resource_map[pipeline_module_path] == {depends_on_fixed_resource_id}
         assert gru._resource_dependencies[depends_on_fixed_resource_id] == {fixed_resource_id}
@@ -568,8 +570,8 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations_while_s
         state_store=state_store,
     ) as gru:
         orchestration1_start_result = await gru.start_orchestration(
-            minion="tests.assets.minions.two_steps.simple.basic",
-            pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
+            minion="tests.assets.minions.two_steps.simple.default",
+            pipeline="tests.assets.pipelines.emit_one.simple.default",
         )
         assert orchestration1_start_result.success
 
@@ -583,8 +585,8 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations_while_s
 
         orchestration2_start_task = asyncio.create_task(
             gru.start_orchestration(
-                minion="tests.assets.minions.two_steps.simple.basic",
-                pipeline="tests.assets.pipelines.simple.simple_event.single_event_2",
+                minion="tests.assets.minions.two_steps.simple.default",
+                pipeline="tests.assets.pipelines.emit_one.simple.default_b",
             )
         )
 
@@ -594,10 +596,10 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations_while_s
         assert orchestration2_start_result.orchestration_id in gru._minions_by_orchestration_id
         orchestration2_id = Gru._make_orchestration_id(
             pipeline_id=gru._get_pipeline_identity_from_module_path(
-                "tests.assets.pipelines.simple.simple_event.single_event_2",
+                "tests.assets.pipelines.emit_one.simple.default_b",
             ),
             minion_id=gru._get_minion_identity_from_module_path(
-                "tests.assets.minions.two_steps.simple.basic",
+                "tests.assets.minions.two_steps.simple.default",
             ),
             minion_config_id="",
         )
@@ -658,8 +660,8 @@ async def test_gru_shutdown_waits_for_in_flight_start_orchestration(
 
         start_task = asyncio.create_task(
             gru.start_orchestration(
-                minion="tests.assets.minions.two_steps.simple.basic",
-                pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
+                minion="tests.assets.minions.two_steps.simple.default",
+                pipeline="tests.assets.pipelines.emit_one.simple.default",
             )
         )
 
@@ -693,8 +695,8 @@ async def test_gru_shutdown_waits_for_in_flight_stop_orchestration(
         state_store=state_store,
     ) as gru:
         start_result = await gru.start_orchestration(
-            minion="tests.assets.minions.two_steps.simple.basic",
-            pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
+            minion="tests.assets.minions.two_steps.simple.default",
+            pipeline="tests.assets.pipelines.emit_one.simple.default",
         )
         assert start_result.success
 
@@ -741,8 +743,8 @@ async def test_gru_shutdown_rejects_new_lifecycle_work_while_shutdown_is_pending
 
             start_task = asyncio.create_task(
                 gru.start_orchestration(
-                    minion="tests.assets.minions.two_steps.simple.basic",
-                    pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
+                    minion="tests.assets.minions.two_steps.simple.default",
+                    pipeline="tests.assets.pipelines.emit_one.simple.default",
                 )
             )
             await asyncio.sleep(0)
@@ -772,8 +774,8 @@ async def test_gru_shutdown_rejects_new_lifecycle_work_during_shutdown_in_progre
         state_store=state_store,
     ) as gru:
         start_result = await gru.start_orchestration(
-            minion="tests.assets.minions.two_steps.simple.basic",
-            pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
+            minion="tests.assets.minions.two_steps.simple.default",
+            pipeline="tests.assets.pipelines.emit_one.simple.default",
         )
         assert start_result.success
 
@@ -786,8 +788,8 @@ async def test_gru_shutdown_rejects_new_lifecycle_work_during_shutdown_in_progre
 
         new_start_task = asyncio.create_task(
             gru.start_orchestration(
-                minion="tests.assets.minions.two_steps.simple.basic",
-                pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
+                minion="tests.assets.minions.two_steps.simple.default",
+                pipeline="tests.assets.pipelines.emit_one.simple.default",
             )
         )
         new_stop_task = asyncio.create_task(
@@ -824,8 +826,8 @@ async def test_gru_shutdown_serializes_concurrent_shutdown_calls(
 
         start_task = asyncio.create_task(
             gru.start_orchestration(
-                minion="tests.assets.minions.two_steps.simple.basic",
-                pipeline="tests.assets.pipelines.simple.simple_event.single_event_1",
+                minion="tests.assets.minions.two_steps.simple.default",
+                pipeline="tests.assets.pipelines.emit_one.simple.default",
             )
         )
 

@@ -1,5 +1,5 @@
-from tests.assets.pipelines.simple.simple_event.single_event_1 import (
-    SimpleSingleEventPipeline1,
+from tests.assets.pipelines.emit_one.simple.default import (
+    AssetPipeline as EmitOneSimplePipeline,
 )
 
-pipeline = SimpleSingleEventPipeline1
+pipeline = EmitOneSimplePipeline

@@ -5,7 +5,7 @@ from tests.assets.crash.boom import boom
 from tests.assets.support.resource_spied import SpiedResource
 
 
-class BoomShutdownResource(SpiedResource):
+class AssetResource(SpiedResource):
     async def run(self) -> None:
         await asyncio.sleep(sys.maxsize)
 
@@ -13,4 +13,4 @@ class BoomShutdownResource(SpiedResource):
         boom()
 
 
-resource = BoomShutdownResource
+resource = AssetResource

@@ -24,7 +24,6 @@ from tests.assets.support.minion_spied_configed import AssetMinionConfig
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.support.gru_scenario import (
     AfterWorkflowStepStarts,
-    Concurrent,
     Directive,
     ExpectRuntime,
     GruShutdown,
@@ -49,19 +48,12 @@ class _ConfigurableMinion(Protocol):
 
 
 class TestValidUsage:
-    # Legacy/manual baseline during DSL confidence window.
-    # Orchestration-valid coverage should be added/updated in `TestValidUsageDSL`
-    # and `TestValidUsageUsingNewAssetsDSL`.
     @pytest.mark.asyncio
     async def test_gru_accepts_none_logger_metrics_state_store(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ) -> None:
-        async with gru_factory(
-            logger=None,
-            state_store=None,
-            metrics=None
-        ):
+        async with gru_factory(logger=None, state_store=None, metrics=None):
             pass
 
     @pytest.mark.asyncio
@@ -70,9 +62,7 @@ class TestValidUsage:
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ) -> None:
         async with gru_factory(
-            state_store=NoOpStateStore(),
-            logger=NoOpLogger(),
-            metrics=NoOpMetrics()
+            state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()
         ):
             pass
 
@@ -116,25 +106,27 @@ class TestValidUsage:
     async def test_gru_start_stop_orchestration(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        reload_wait_for_subs_pipeline: Callable[..., None],
+        configure_emit_one_simple_pipeline_subscriber_gate: Callable[..., None],
     ) -> None:
-        minion_module_path = "tests.assets.minions.two_steps.simple.basic"
+        minion_module_path = "tests.assets.minions.two_steps.simple.default"
         pipeline_module_path = (
-            "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
+            "tests.assets.pipelines.emit_one.simple.default"
         )
-        from tests.assets.minions.two_steps.simple.basic import SimpleMinion
+        from tests.assets.minions.two_steps.simple.default import (
+            AssetMinion as TwoStepSimpleMinion,
+        )
 
-        SimpleMinion.enable_spy()
-        SimpleMinion.reset_spy()
-        reload_wait_for_subs_pipeline(expected_subs=1)
+        TwoStepSimpleMinion.enable_spy()
+        TwoStepSimpleMinion.reset_spy()
+        configure_emit_one_simple_pipeline_subscriber_gate(expected_subs=1)
         async with gru_factory(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
         ) as gru:
             result = await gru.start_orchestration(
-                minion=minion_module_path,
-                pipeline=pipeline_module_path
+                pipeline=pipeline_module_path,
+                minion=minion_module_path
             )
 
             assert result.success
@@ -144,7 +136,7 @@ class TestValidUsage:
                 in gru._minion_tasks
             )
 
-            await SimpleMinion.wait_for_calls(
+            await TwoStepSimpleMinion.wait_for_calls(
                 expected={"step_1": 1, "step_2": 1},
                 timeout=5.0,
             )
@@ -156,8 +148,12 @@ class TestValidUsage:
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ) -> None:
-        from tests.assets.minions.two_steps.counter.basic import TwoStepMinion
-        from tests.assets.pipelines.emit1.counter.emit_1 import Emit1Pipeline
+        from tests.assets.minions.two_steps.counter.default import (
+            AssetMinion as TwoStepCounterMinion,
+        )
+        from tests.assets.pipelines.emit_one.counter.default import (
+            AssetPipeline as EmitOneCounterPipeline,
+        )
 
         async with gru_factory(
             state_store=NoOpStateStore(),
@@ -165,8 +161,8 @@ class TestValidUsage:
             metrics=NoOpMetrics(),
         ) as gru:
             start_result = await gru.start_orchestration(
-                pipeline=Emit1Pipeline,
-                minion=TwoStepMinion,
+                pipeline=EmitOneCounterPipeline,
+                minion=TwoStepCounterMinion,
             )
 
             assert start_result.success
@@ -461,24 +457,34 @@ class TestValidUsage:
         Start three minions each with their own pipeline and their own Resource type
         so there is no sharing of pipelines or resources between minions.
         """
-        minion1 = "tests.assets.minions.two_steps.simple.resourced_1"
-        minion2 = "tests.assets.minions.two_steps.simple.resourced_2"
-        minion3 = "tests.assets.minions.two_steps.simple.resourced_3"
+        minion1 = "tests.assets.minions.two_steps.simple.with_simple_resource"
+        minion2 = "tests.assets.minions.two_steps.simple.with_simple_b_resource"
+        minion3 = "tests.assets.minions.two_steps.simple.with_simple_c_resource"
 
-        pipeline1 = "tests.assets.pipelines.simple.simple_event.single_event_1"
-        pipeline2 = "tests.assets.pipelines.simple.simple_event.single_event_2"
-        pipeline3 = "tests.assets.pipelines.simple.simple_event.single_event_3"
+        pipeline1 = "tests.assets.pipelines.emit_one.simple.default"
+        pipeline2 = "tests.assets.pipelines.emit_one.simple.default_b"
+        pipeline3 = "tests.assets.pipelines.emit_one.simple.default_c"
         logger = InMemoryLogger()
         async with gru_factory(
             state_store=InMemoryStateStore(logger=logger),
             logger=logger,
             metrics=InMemoryMetrics()
         ) as gru:
-            from tests.assets.minions.two_steps.simple.resourced_1 import SimpleResourcedMinion1
-            from tests.assets.minions.two_steps.simple.resourced_2 import SimpleResourcedMinion2
-            from tests.assets.minions.two_steps.simple.resourced_3 import SimpleResourcedMinion3
+            from tests.assets.minions.two_steps.simple.with_simple_resource import (
+                AssetMinion as Simple1ResourceMinion,
+            )
+            from tests.assets.minions.two_steps.simple.with_simple_b_resource import (
+                AssetMinion as Simple2ResourceMinion,
+            )
+            from tests.assets.minions.two_steps.simple.with_simple_c_resource import (
+                AssetMinion as Simple3ResourceMinion,
+            )
 
-            for cls in (SimpleResourcedMinion1, SimpleResourcedMinion2, SimpleResourcedMinion3):
+            for cls in (
+                Simple1ResourceMinion,
+                Simple2ResourceMinion,
+                Simple3ResourceMinion,
+            ):
                 cls.enable_spy()
                 cls.reset_spy()
 
@@ -494,13 +500,13 @@ class TestValidUsage:
             # Expect three distinct resource classes started
             assert len(gru._resources) >= 3
 
-            await SimpleResourcedMinion1.wait_for_calls(
+            await Simple1ResourceMinion.wait_for_calls(
                 expected={"step_1": 1, "step_2": 1}, timeout=5.0
             )
-            await SimpleResourcedMinion2.wait_for_calls(
+            await Simple2ResourceMinion.wait_for_calls(
                 expected={"step_1": 1, "step_2": 1}, timeout=5.0
             )
-            await SimpleResourcedMinion3.wait_for_calls(
+            await Simple3ResourceMinion.wait_for_calls(
                 expected={"step_1": 1, "step_2": 1}, timeout=5.0
             )
 
@@ -516,22 +522,24 @@ class TestValidUsage:
     async def test_gru_start_3_minions_1_pipeline_1_resource_sharing(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        reload_wait_for_subs_pipeline: Callable[..., None],
+        configure_emit_one_simple_pipeline_subscriber_gate: Callable[..., None],
         tests_dir: Path,
     ) -> None:
         """
         Start three minions that share the same pipeline and a single Resource type.
         Verify pipeline and resource are shared and cleaned up after stopping all minions.
         """
-        minion_module_path = "tests.assets.minions.two_steps.simple.resourced_1"
+        minion_module_path = "tests.assets.minions.two_steps.simple.with_simple_resource"
         pipeline_module_path = (
-            "tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events"
+            "tests.assets.pipelines.emit_one.simple.default"
         )
-        reload_wait_for_subs_pipeline(expected_subs=3)
-        from tests.assets.minions.two_steps.simple.resourced_1 import SimpleResourcedMinion1
+        configure_emit_one_simple_pipeline_subscriber_gate(expected_subs=3)
+        from tests.assets.minions.two_steps.simple.with_simple_resource import (
+            AssetMinion as Simple1ResourceMinion,
+        )
 
-        SimpleResourcedMinion1.enable_spy()
-        SimpleResourcedMinion1.reset_spy()
+        Simple1ResourceMinion.enable_spy()
+        Simple1ResourceMinion.reset_spy()
 
         # TODO: I'm testing resource sharing between minions spawned from the
         # same minion class but different configs.
@@ -555,19 +563,19 @@ class TestValidUsage:
             metrics=InMemoryMetrics()
         ) as gru:
             r1 = await gru.start_orchestration(
+                pipeline=pipeline_module_path,
                 minion=minion_module_path,
                 minion_config_path=cfg1,
-                pipeline=pipeline_module_path
             )
             r2 = await gru.start_orchestration(
+                pipeline=pipeline_module_path,
                 minion=minion_module_path,
                 minion_config_path=cfg2,
-                pipeline=pipeline_module_path
             )
             r3 = await gru.start_orchestration(
+                pipeline=pipeline_module_path,
                 minion=minion_module_path,
                 minion_config_path=cfg3,
-                pipeline=pipeline_module_path
             )
 
             assert r1.success and r2.success and r3.success
@@ -578,7 +586,7 @@ class TestValidUsage:
             # resource should be shared across minions
             assert len(gru._resources) == 1
 
-            await SimpleResourcedMinion1.wait_for_calls(
+            await Simple1ResourceMinion.wait_for_calls(
                 expected={"step_1": 3, "step_2": 3},
                 timeout=5.0,
             )
@@ -602,16 +610,14 @@ class TestValidUsage:
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ) -> None:
-        minion_module_path = "tests.assets.minions.two_steps.simple.basic"
-        pipeline_module_path = "tests.assets.pipelines.simple.simple_event.single_event_1"
         async with gru_factory(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
         ) as gru:
             result = await gru.start_orchestration(
-                minion=minion_module_path,
-                pipeline=pipeline_module_path
+                pipeline="tests.assets.pipelines.emit_one.simple.default",
+                minion="tests.assets.minions.two_steps.simple.default",
             )
 
             assert result.success
@@ -622,20 +628,22 @@ class TestValidUsage:
             )
 
     @pytest.mark.asyncio
-    async def test_gru_loads_minion_config_into_workflow_context(
+    async def test_gru_binds_file_config_to_minion(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         tests_dir: Path,
     ) -> None:
-        minion_module_path = "tests.assets.minions.two_steps.counter.uses_config"
-        pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
+        minion_module_path = "tests.assets.minions.two_steps.counter.with_file_config"
+        pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
         logger = InMemoryLogger()
-        from tests.assets.minions.two_steps.counter.uses_config import ConfigMinion
+        from tests.assets.minions.two_steps.counter.with_file_config import (
+            AssetMinion as FileConfigMinion,
+        )
 
-        ConfigMinion.enable_spy()
-        ConfigMinion.reset_spy()
+        FileConfigMinion.enable_spy()
+        FileConfigMinion.reset_spy()
         async with gru_factory(
             state_store=InMemoryStateStore(logger=logger),
             logger=logger,
@@ -650,10 +658,13 @@ class TestValidUsage:
             assert result.success
             assert result.orchestration_id is not None
 
-            await ConfigMinion.wait_for_calls(expected={"step_1": 1, "step_2": 1}, timeout=5.0)
+            await FileConfigMinion.wait_for_calls(
+                expected={"step_1": 1, "step_2": 1},
+                timeout=5.0
+            )
 
             minion = gru._minions_by_orchestration_id[result.orchestration_id]
-            assert isinstance(minion, ConfigMinion)
+            assert isinstance(minion, FileConfigMinion)
             assert isinstance(minion.config, AssetMinionConfig)
             assert minion.config.name == "alpha"
 
@@ -669,12 +680,16 @@ class TestValidUsage:
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         inline_config_kind: str,
     ) -> None:
-        from tests.assets.minions.two_steps.counter.inline_config import (
-            InlineConfigMinion,
+        from tests.assets.minions.one_step.counter.with_inline_config import (
+            AssetMinion as InlineConfigMinion,
+        )
+        from tests.assets.minions.one_step.counter.with_inline_config import (
             InlineDataclassConfig,
             InlineStructConfig,
         )
-        from tests.assets.pipelines.emit1.counter.emit_1 import Emit1Pipeline
+        from tests.assets.pipelines.emit_one.counter.default import (
+            AssetPipeline as EmitOneCounterPipeline,
+        )
 
         inline_config = (
             InlineDataclassConfig(name="dataclass")
@@ -687,8 +702,8 @@ class TestValidUsage:
             metrics=NoOpMetrics(),
         ) as gru:
             result = await gru.start_orchestration(
+                pipeline=EmitOneCounterPipeline,
                 minion=InlineConfigMinion,
-                pipeline=Emit1Pipeline,
                 minion_config=inline_config,
             )
 
@@ -707,8 +722,10 @@ class TestValidUsage:
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ) -> None:
-        minion_module_path = "tests.assets.minions.two_steps.simple.resourced_1"
-        pipeline_module_path = "tests.assets.pipelines.simple.simple_event.resourced"
+        minion_module_path = "tests.assets.minions.two_steps.simple.with_simple_resource"
+        pipeline_module_path = (
+            "tests.assets.pipelines.emit_one.simple.with_simple_resource"
+        )
         logger = InMemoryLogger()
         async with gru_factory(
             state_store=InMemoryStateStore(logger=logger),
@@ -803,10 +820,10 @@ class TestValidUsageDSL:
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
     ) -> None:
-        pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
+        pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         start = OrchestrationStart(
             pipeline=pipeline_module_path,
-            minion="tests.assets.minions.two_steps.counter.basic",
+            minion="tests.assets.minions.two_steps.counter.default",
         )
 
         directives: list[Directive] = [
@@ -815,11 +832,7 @@ class TestValidUsageDSL:
             ExpectRuntime(
                 expect=RuntimeExpectSpec(
                     resolutions={
-                        start: {
-                            "succeeded": 1,
-                            "failed": 0,
-                            "aborted": 0
-                        },
+                        start: {"succeeded": 1, "failed": 0, "aborted": 0},
                     }
                 ),
             ),
@@ -844,20 +857,20 @@ class TestValidUsageDSL:
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
     ) -> None:
-        pipeline1 = "tests.assets.pipelines.emit1.counter.emit_1_a"
-        pipeline2 = "tests.assets.pipelines.emit1.counter.emit_1_b"
-        pipeline3 = "tests.assets.pipelines.emit1.counter.emit_1_c"
+        pipeline1 = "tests.assets.pipelines.emit_one.counter.default"
+        pipeline2 = "tests.assets.pipelines.emit_one.counter.default_b"
+        pipeline3 = "tests.assets.pipelines.emit_one.counter.default_c"
         start_1 = OrchestrationStart(
             pipeline=pipeline1,
-            minion="tests.assets.minions.two_steps.counter.resourced",
+            minion="tests.assets.minions.two_steps.counter.with_fixed_resource",
         )
         start_2 = OrchestrationStart(
             pipeline=pipeline2,
-            minion="tests.assets.minions.two_steps.counter.resourced_b",
+            minion="tests.assets.minions.two_steps.counter.with_fixed_b_resource",
         )
         start_3 = OrchestrationStart(
             pipeline=pipeline3,
-            minion="tests.assets.minions.two_steps.counter.resourced_c",
+            minion="tests.assets.minions.two_steps.counter.with_fixed_c_resource",
         )
 
         directives: list[Directive] = [
@@ -901,18 +914,20 @@ class TestValidUsageDSL:
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
     ) -> None:
-        pipeline_module_path = "tests.assets.pipelines.sync.counter.sync_3subs_1event"
+        pipeline_module_path = (
+            "tests.assets.pipelines.emit_one.counter.after_three_subscribers"
+        )
         start_1 = OrchestrationStart(
             pipeline=pipeline_module_path,
-            minion="tests.assets.minions.two_steps.counter.resourced",
+            minion="tests.assets.minions.two_steps.counter.with_fixed_resource",
         )
         start_2 = OrchestrationStart(
             pipeline=pipeline_module_path,
-            minion="tests.assets.minions.two_steps.counter.resourced_shared_b",
+            minion="tests.assets.minions.two_steps.counter.with_fixed_resource_b",
         )
         start_3 = OrchestrationStart(
             pipeline=pipeline_module_path,
-            minion="tests.assets.minions.two_steps.counter.resourced_shared_c",
+            minion="tests.assets.minions.two_steps.counter.with_fixed_resource_c",
         )
 
         directives: list[Directive] = [
@@ -952,10 +967,12 @@ class TestValidUsageDSL:
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
     ) -> None:
-        pipeline_module_path = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
+        pipeline_module_path = (
+            "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
+        )
         start = OrchestrationStart(
             pipeline=pipeline_module_path,
-            minion="tests.assets.minions.two_steps.counter.resourced",
+            minion="tests.assets.minions.two_steps.counter.with_fixed_resource",
         )
 
         directives: list[Directive] = [
@@ -989,14 +1006,16 @@ class TestValidUsageDSL:
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
     ) -> None:
-        pipeline_module_path = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
+        pipeline_module_path = (
+            "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
+        )
         first = OrchestrationStart(
             pipeline=pipeline_module_path,
-            minion="tests.assets.minions.two_steps.counter.resourced",
+            minion="tests.assets.minions.two_steps.counter.with_fixed_resource",
         )
         second = OrchestrationStart(
             pipeline=pipeline_module_path,
-            minion="tests.assets.minions.two_steps.counter.resourced_shared_b",
+            minion="tests.assets.minions.two_steps.counter.with_fixed_resource_b",
         )
         await run_gru_scenario(
             gru,
@@ -1022,10 +1041,10 @@ class TestValidUsageDSL:
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
     ) -> None:
-        pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
+        pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         start = OrchestrationStart(
             pipeline=pipeline_module_path,
-            minion="tests.assets.minions.two_steps.counter.basic",
+            minion="tests.assets.minions.two_steps.counter.default",
         )
 
         directives: list[Directive] = [
@@ -1038,195 +1057,6 @@ class TestValidUsageDSL:
                     }
                 ),
             ),
-            GruShutdown(expect_success=True),
-        ]
-
-        await run_gru_scenario(
-            gru,
-            logger,
-            metrics,
-            state_store,
-            directives,
-            pipeline_event_counts={pipeline_module_path: 1},
-        )
-
-
-class TestValidUsageUsingNewAssetsDSL:
-    @pytest.mark.asyncio
-    async def test_gru_accepts_none_logger_metrics_state_store(
-        self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
-        async with gru_factory(logger=None, state_store=None, metrics=None):
-            pass
-
-    @pytest.mark.asyncio
-    async def test_gru_allows_create_and_immediate_shutdown(
-        self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
-        async with gru_factory(
-            state_store=NoOpStateStore(),
-            logger=NoOpLogger(),
-            metrics=NoOpMetrics()
-        ):
-            pass
-
-    @pytest.mark.asyncio
-    async def test_gru_start_stop_orchestration(
-        self,
-        gru: Gru,
-        logger: InMemoryLogger,
-        metrics: InMemoryMetrics,
-        state_store: InMemoryStateStore,
-    ) -> None:
-        minion_module_path = "tests.assets.minions.two_steps.counter.basic"
-        pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
-        start = OrchestrationStart(pipeline=pipeline_module_path, minion=minion_module_path)
-        directives: list[Directive] = [
-            start,
-            WaitWorkflowCompletions(workflow_steps_mode="exact"),
-            ExpectRuntime(
-                expect=RuntimeExpectSpec(
-                    resolutions={
-                        start: {"succeeded": 1, "failed": 0, "aborted": 0},
-                    }
-                ),
-            ),
-            OrchestrationStop(id=start, expect_success=True),
-            GruShutdown(expect_success=True),
-        ]
-
-        await run_gru_scenario(
-            gru,
-            logger,
-            metrics,
-            state_store,
-            directives,
-            pipeline_event_counts={pipeline_module_path: 1},
-        )
-
-    @pytest.mark.asyncio
-    async def test_gru_start_orchestration_shutdown_without_stop(
-        self,
-        gru: Gru,
-        logger: InMemoryLogger,
-        metrics: InMemoryMetrics,
-        state_store: InMemoryStateStore,
-    ) -> None:
-        minion_module_path = "tests.assets.minions.two_steps.counter.basic"
-        pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
-        start = OrchestrationStart(pipeline=pipeline_module_path, minion=minion_module_path)
-        directives: list[Directive] = [
-            start,
-            WaitWorkflowCompletions(workflow_steps_mode="exact"),
-            ExpectRuntime(
-                expect=RuntimeExpectSpec(
-                    resolutions={
-                        start: {"succeeded": 1, "failed": 0, "aborted": 0},
-                    }
-                ),
-            ),
-            GruShutdown(expect_success=True),
-        ]
-
-        await run_gru_scenario(
-            gru,
-            logger,
-            metrics,
-            state_store,
-            directives,
-            pipeline_event_counts={pipeline_module_path: 1},
-        )
-
-    @pytest.mark.asyncio
-    async def test_gru_start_3_minions_3_pipelines_3_resources_no_sharing(
-        self,
-        gru: Gru,
-        logger: InMemoryLogger,
-        metrics: InMemoryMetrics,
-        state_store: InMemoryStateStore,
-    ) -> None:
-        minion1 = "tests.assets.minions.two_steps.counter.resourced"
-        minion2 = "tests.assets.minions.two_steps.counter.resourced_b"
-        minion3 = "tests.assets.minions.two_steps.counter.resourced_c"
-
-        pipeline1 = "tests.assets.pipelines.emit1.counter.emit_1_a"
-        pipeline2 = "tests.assets.pipelines.emit1.counter.emit_1_b"
-        pipeline3 = "tests.assets.pipelines.emit1.counter.emit_1_c"
-        start_1 = OrchestrationStart(pipeline=pipeline1, minion=minion1)
-        start_2 = OrchestrationStart(pipeline=pipeline2, minion=minion2)
-        start_3 = OrchestrationStart(pipeline=pipeline3, minion=minion3)
-
-        directives: list[Directive] = [
-            Concurrent(start_1, start_2, start_3),
-            WaitWorkflowCompletions(workflow_steps_mode="exact"),
-            OrchestrationStop(id=start_1, expect_success=True),
-            OrchestrationStop(id=start_2, expect_success=True),
-            OrchestrationStop(id=start_3, expect_success=True),
-            GruShutdown(expect_success=True),
-        ]
-
-        await run_gru_scenario(
-            gru,
-            logger,
-            metrics,
-            state_store,
-            directives,
-            pipeline_event_counts={pipeline1: 1, pipeline2: 1, pipeline3: 1},
-        )
-
-    @pytest.mark.asyncio
-    async def test_gru_start_3_minions_1_pipeline_1_resource_sharing(
-        self,
-        gru: Gru,
-        logger: InMemoryLogger,
-        metrics: InMemoryMetrics,
-        state_store: InMemoryStateStore,
-    ) -> None:
-        minion_a = "tests.assets.minions.two_steps.counter.resourced"
-        minion_b = "tests.assets.minions.two_steps.counter.resourced_shared_b"
-        minion_c = "tests.assets.minions.two_steps.counter.resourced_shared_c"
-        pipeline_module_path = "tests.assets.pipelines.sync.counter.sync_3subs_1event"
-        start_1 = OrchestrationStart(pipeline=pipeline_module_path, minion=minion_a)
-        start_2 = OrchestrationStart(pipeline=pipeline_module_path, minion=minion_b)
-        start_3 = OrchestrationStart(pipeline=pipeline_module_path, minion=minion_c)
-
-        directives: list[Directive] = [
-            start_1,
-            start_2,
-            start_3,
-            WaitWorkflowCompletions(workflow_steps_mode="exact"),
-            OrchestrationStop(id=start_1, expect_success=True),
-            OrchestrationStop(id=start_2, expect_success=True),
-            OrchestrationStop(id=start_3, expect_success=True),
-            GruShutdown(expect_success=True),
-        ]
-
-        await run_gru_scenario(
-            gru,
-            logger,
-            metrics,
-            state_store,
-            directives,
-            pipeline_event_counts={pipeline_module_path: 1},
-        )
-
-    @pytest.mark.asyncio
-    async def test_minion_and_pipeline_share_resource_dependency(
-        self,
-        gru: Gru,
-        logger: InMemoryLogger,
-        metrics: InMemoryMetrics,
-        state_store: InMemoryStateStore,
-    ) -> None:
-        minion_module_path = "tests.assets.minions.two_steps.counter.resourced"
-        pipeline_module_path = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
-        start = OrchestrationStart(pipeline=pipeline_module_path, minion=minion_module_path)
-
-        directives: list[Directive] = [
-            start,
-            WaitWorkflowCompletions(workflow_steps_mode="exact"),
             GruShutdown(expect_success=True),
         ]
 

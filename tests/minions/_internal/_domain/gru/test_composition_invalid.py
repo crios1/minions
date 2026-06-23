@@ -10,491 +10,234 @@ from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_noop import NoOpStateStore
 
 
-class TestInvalidComposition:
-    # NOTE: should have test for each case where gru
-    # returns error given invalid minion, pipeline, resource
+class TestMinionFile:
+    @pytest.mark.asyncio
+    async def test_gru_returns_error_on_empty_minion_file(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        tests_dir: Path,
+    ) -> None:
+        minion_module_path = "tests.assets.entrypoints.invalid.empty"
+        pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
+        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-    class TestMinionFile:
-        @pytest.mark.asyncio
-        async def test_gru_returns_error_on_empty_minion_file(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
-        ) -> None:
-
-            minion_module_path = "tests.assets.entrypoints.invalid.empty_simple"
-            pipeline_module_path = "tests.assets.pipelines.simple.simple_event.single_event_1"
-            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
-
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=NoOpLogger(),
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    minion_config_path=config_path,
-                    pipeline=pipeline_module_path
-                )
-
-                assert not result.success
-                assert result.reason
-                assert (
-                    "must define a `minion` variable or contain at least one subclass of `Minion`"
-                    in result.reason
-                )
-
-        @pytest.mark.asyncio
-        async def test_gru_returns_error_on_minion_file_with_multiple_minions_and_no_explicit_minion(  # noqa: E501
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
-        ) -> None:
-            
-            minion_module_path = "tests.assets.entrypoints.invalid.two_minions_simple"
-            pipeline_module_path = "tests.assets.pipelines.simple.simple_event.single_event_1"
-            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
-
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=NoOpLogger(),
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    minion_config_path=config_path,
-                    pipeline=pipeline_module_path
-                )
-
-                assert not result.success
-                assert result.reason
-                assert (
-                    "multiple Minion subclasses but no explicit `minion` variable" in result.reason
-                )
-
-        @pytest.mark.asyncio
-        async def test_gru_returns_error_on_minion_file_with_invalid_explicit_minion(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
-        ) -> None:
-
-            minion_module_path = "tests.assets.entrypoints.invalid.invalid_explicit_minion_simple"
-            pipeline_module_path = "tests.assets.pipelines.simple.simple_event.single_event_1"
-            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
-
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=NoOpLogger(),
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    minion_config_path=config_path,
-                    pipeline=pipeline_module_path
-                )
-
-                assert not result.success
-                assert result.reason
-                assert "is not a subclass of Minion" in result.reason
-
-        @pytest.mark.asyncio
-        async def test_gru_returns_error_on_minion_workflow_context_not_serializable(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
-        ) -> None:
-            minion_module_path = (
-                "tests.assets.entrypoints.invalid.unserializable_workflow_context_minion_simple"
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=NoOpLogger(),
+            metrics=NoOpMetrics()
+        ) as gru:
+            result = await gru.start_orchestration(
+                minion=minion_module_path,
+                minion_config_path=config_path,
+                pipeline=pipeline_module_path,
             )
-            pipeline_module_path = "tests.assets.pipeline_single_event"
-            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=NoOpLogger(),
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    minion_config_path=config_path,
-                    pipeline=pipeline_module_path
-                )
+            assert not result.success
+            assert result.reason
+            assert "must define a `minion` variable" in result.reason
 
-                assert not result.success
-                assert result.reason
-                assert "workflow context is not serializable" in result.reason
+    @pytest.mark.asyncio
+    async def test_gru_returns_error_on_minion_file_with_multiple_minions_and_no_explicit_minion(  # noqa: E501
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        tests_dir: Path,
+    ) -> None:
+        minion_module_path = "tests.assets.entrypoints.invalid.two_minions"
+        pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
+        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-        @pytest.mark.asyncio
-        async def test_gru_returns_error_on_minion_event_not_serializable(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
-        ) -> None:
-            minion_module_path = "tests.assets.minions.invalid.bad_event"
-            pipeline_module_path = "tests.assets.pipelines.simple.simple_event.single_event_1"
-            config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
-
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=NoOpLogger(),
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    minion_config_path=config_path,
-                    pipeline=pipeline_module_path
-                )
-
-                assert not result.success
-                assert result.reason
-                assert "event type is not serializable" in result.reason
-
-    class TestPipelineFile:
-        @pytest.mark.asyncio
-        async def test_gru_returns_error_on_empty_pipeline_file(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
-        ) -> None:
-
-            minion_module_path = "tests.assets.minions.two_steps.simple.basic"
-            pipeline_module_path = "tests.assets.entrypoints.invalid.empty_simple"
-            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
-
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=NoOpLogger(),
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    minion_config_path=config_path,
-                    pipeline=pipeline_module_path
-                )
-
-                assert not result.success
-                assert result.reason
-                assert (
-                    "must define a `pipeline` variable or contain at least one "
-                    "subclass of `Pipeline`" in result.reason
-                )
-
-        @pytest.mark.asyncio
-        async def test_gru_returns_error_on_pipeline_file_with_multiple_pipelines_and_no_explicit_pipeline(  # noqa: E501
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
-        ) -> None:
-            
-            minion_module_path = "tests.assets.minions.two_steps.simple.basic"
-            pipeline_module_path = "tests.assets.entrypoints.invalid.two_pipelines_simple"
-            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
-
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=NoOpLogger(),
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    minion_config_path=config_path,
-                    pipeline=pipeline_module_path
-                )
-
-                assert not result.success
-                assert result.reason
-                assert (
-                    "multiple Pipeline subclasses but no explicit `pipeline` variable"
-                    in result.reason
-                )
-
-        @pytest.mark.asyncio
-        async def test_gru_returns_error_on_pipeline_file_with_invalid_explicit_pipeline(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
-        ) -> None:
-
-            minion_module_path = "tests.assets.minions.two_steps.simple.basic"
-            pipeline_module_path = (
-                "tests.assets.entrypoints.invalid.invalid_explicit_pipeline_simple"
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=NoOpLogger(),
+            metrics=NoOpMetrics()
+        ) as gru:
+            result = await gru.start_orchestration(
+                minion=minion_module_path,
+                minion_config_path=config_path,
+                pipeline=pipeline_module_path,
             )
-            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
 
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=NoOpLogger(),
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    minion_config_path=config_path,
-                    pipeline=pipeline_module_path
-                )
+            assert not result.success
+            assert result.reason
+            assert "multiple Minion subclasses" in result.reason
 
-                assert not result.success
-                assert result.reason
-                assert "is not a subclass of Pipeline" in result.reason
+    @pytest.mark.asyncio
+    async def test_gru_returns_error_on_minion_file_with_invalid_explicit_minion(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        tests_dir: Path,
+    ) -> None:
+        minion_module_path = "tests.assets.entrypoints.invalid.invalid_explicit_minion"
+        pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
+        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-        @pytest.mark.asyncio
-        async def test_gru_returns_error_on_pipeline_event_not_serializable(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
-        ) -> None:
-            minion_module_path = "tests.assets.minions.two_steps.simple.basic"
-            pipeline_module_path = "tests.assets.pipelines.invalid.unserializable_event"
-            config_path = str(tests_dir / "assets" / "config/minions/a.toml")
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=NoOpLogger(),
+            metrics=NoOpMetrics()
+        ) as gru:
+            result = await gru.start_orchestration(
+                minion=minion_module_path,
+                minion_config_path=config_path,
+                pipeline=pipeline_module_path,
+            )
 
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=NoOpLogger(),
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    minion_config_path=config_path,
-                    pipeline=pipeline_module_path
-                )
+            assert not result.success
+            assert result.reason
+            assert "is not a subclass of Minion" in result.reason
 
-                assert not result.success
-                assert result.reason
-                assert "event type is not serializable" in result.reason
+    @pytest.mark.asyncio
+    async def test_gru_returns_error_on_minion_workflow_context_not_serializable(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        tests_dir: Path,
+    ) -> None:
+        minion_module_path = "tests.assets.minions.invalid.bad_context"
+        pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
+        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-    # Resource doesn't have tests like in TestMinion and TestPipeline
-    # because Resources dependencies are declared as type hints
-    # when creating Minion and Pipeline subclasses.
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=NoOpLogger(),
+            metrics=NoOpMetrics()
+        ) as gru:
+            result = await gru.start_orchestration(
+                minion=minion_module_path,
+                minion_config_path=config_path,
+                pipeline=pipeline_module_path,
+            )
 
-    # TODO: ensure gru properly handles Minions and Pipelines with multiple
-    # Resource dependency declarations.
+            assert not result.success
+            assert result.reason
+            assert "workflow context is not serializable" in result.reason
+
+    @pytest.mark.asyncio
+    async def test_gru_returns_error_on_minion_event_not_serializable(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        tests_dir: Path,
+    ) -> None:
+        minion_module_path = "tests.assets.minions.invalid.bad_event"
+        pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
+        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
+
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=NoOpLogger(),
+            metrics=NoOpMetrics()
+        ) as gru:
+            result = await gru.start_orchestration(
+                minion=minion_module_path,
+                minion_config_path=config_path,
+                pipeline=pipeline_module_path,
+            )
+
+            assert not result.success
+            assert result.reason
+            assert "event type is not serializable" in result.reason
 
 
-class TestInvalidCompositionUsingNewAssets:
-    class TestMinionFile:
-        @pytest.mark.asyncio
-        async def test_gru_returns_error_on_empty_minion_file(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
-        ) -> None:
-            minion_module_path = "tests.assets.entrypoints.invalid.empty"
-            pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
-            config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
+class TestPipelineFile:
+    @pytest.mark.asyncio
+    async def test_gru_returns_error_on_empty_pipeline_file(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        tests_dir: Path,
+    ) -> None:
+        minion_module_path = "tests.assets.minions.two_steps.counter.default"
+        pipeline_module_path = "tests.assets.entrypoints.invalid.empty"
+        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=NoOpLogger(),
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    minion_config_path=config_path,
-                    pipeline=pipeline_module_path,
-                )
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=NoOpLogger(),
+            metrics=NoOpMetrics()
+        ) as gru:
+            result = await gru.start_orchestration(
+                minion=minion_module_path,
+                minion_config_path=config_path,
+                pipeline=pipeline_module_path,
+            )
 
-                assert not result.success
-                assert result.reason
-                assert "must define a `minion` variable" in result.reason
+            assert not result.success
+            assert result.reason
+            assert "must define a `pipeline` variable" in result.reason
 
-        @pytest.mark.asyncio
-        async def test_gru_returns_error_on_minion_file_with_multiple_minions_and_no_explicit_minion(  # noqa: E501
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
-        ) -> None:
-            minion_module_path = "tests.assets.entrypoints.invalid.two_minions"
-            pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
-            config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
+    @pytest.mark.asyncio
+    async def test_gru_returns_error_on_pipeline_file_with_multiple_pipelines_and_no_explicit_pipeline(  # noqa: E501
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        tests_dir: Path,
+    ) -> None:
+        minion_module_path = "tests.assets.minions.two_steps.counter.default"
+        pipeline_module_path = "tests.assets.entrypoints.invalid.two_pipelines"
+        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=NoOpLogger(),
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    minion_config_path=config_path,
-                    pipeline=pipeline_module_path,
-                )
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=NoOpLogger(),
+            metrics=NoOpMetrics()
+        ) as gru:
+            result = await gru.start_orchestration(
+                minion=minion_module_path,
+                minion_config_path=config_path,
+                pipeline=pipeline_module_path,
+            )
 
-                assert not result.success
-                assert result.reason
-                assert "multiple Minion subclasses" in result.reason
+            assert not result.success
+            assert result.reason
+            assert "multiple Pipeline subclasses" in result.reason
 
-        @pytest.mark.asyncio
-        async def test_gru_returns_error_on_minion_file_with_invalid_explicit_minion(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
-        ) -> None:
-            minion_module_path = "tests.assets.entrypoints.invalid.invalid_explicit_minion"
-            pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
-            config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
+    @pytest.mark.asyncio
+    async def test_gru_returns_error_on_pipeline_file_with_invalid_explicit_pipeline(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        tests_dir: Path,
+    ) -> None:
+        minion_module_path = "tests.assets.minions.two_steps.counter.default"
+        pipeline_module_path = "tests.assets.entrypoints.invalid.invalid_explicit_pipeline"
+        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=NoOpLogger(),
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=NoOpLogger(),
+            metrics=NoOpMetrics()
+        ) as gru:
+            result = await gru.start_orchestration(
+                minion=minion_module_path,
+                minion_config_path=config_path,
+                pipeline=pipeline_module_path,
+            )
 
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    minion_config_path=config_path,
-                    pipeline=pipeline_module_path,
-                )
+            assert not result.success
+            assert result.reason
+            assert "is not a subclass of Pipeline" in result.reason
 
-                assert not result.success
-                assert result.reason
-                assert "is not a subclass of Minion" in result.reason
+    @pytest.mark.asyncio
+    async def test_gru_returns_error_on_pipeline_event_not_serializable(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        tests_dir: Path,
+    ) -> None:
+        minion_module_path = "tests.assets.minions.two_steps.counter.default"
+        pipeline_module_path = "tests.assets.pipelines.invalid.unserializable_event"
+        config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-        @pytest.mark.asyncio
-        async def test_gru_returns_error_on_minion_workflow_context_not_serializable(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
-        ) -> None:
-            minion_module_path = "tests.assets.minions.invalid.bad_context"
-            pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
-            config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=NoOpLogger(),
+            metrics=NoOpMetrics()
+        ) as gru:
+            result = await gru.start_orchestration(
+                minion=minion_module_path,
+                minion_config_path=config_path,
+                pipeline=pipeline_module_path,
+            )
 
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=NoOpLogger(),
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    minion_config_path=config_path,
-                    pipeline=pipeline_module_path,
-                )
+            assert not result.success
+            assert result.reason
+            assert "event type is not serializable" in result.reason
 
-                assert not result.success
-                assert result.reason
-                assert "workflow context is not serializable" in result.reason
 
-        @pytest.mark.asyncio
-        async def test_gru_returns_error_on_minion_event_not_serializable(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
-        ) -> None:
-            minion_module_path = "tests.assets.minions.invalid.bad_event"
-            pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
-            config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
-
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=NoOpLogger(),
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    minion_config_path=config_path,
-                    pipeline=pipeline_module_path,
-                )
-
-                assert not result.success
-                assert result.reason
-                assert "event type is not serializable" in result.reason
-
-    class TestPipelineFile:
-        @pytest.mark.asyncio
-        async def test_gru_returns_error_on_empty_pipeline_file(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
-        ) -> None:
-            minion_module_path = "tests.assets.minions.two_steps.counter.basic"
-            pipeline_module_path = "tests.assets.entrypoints.invalid.empty"
-            config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
-
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=NoOpLogger(),
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    minion_config_path=config_path,
-                    pipeline=pipeline_module_path,
-                )
-
-                assert not result.success
-                assert result.reason
-                assert "must define a `pipeline` variable" in result.reason
-
-        @pytest.mark.asyncio
-        async def test_gru_returns_error_on_pipeline_file_with_multiple_pipelines_and_no_explicit_pipeline(  # noqa: E501
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
-        ) -> None:
-            minion_module_path = "tests.assets.minions.two_steps.counter.basic"
-            pipeline_module_path = "tests.assets.entrypoints.invalid.two_pipelines"
-            config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
-
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=NoOpLogger(),
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    minion_config_path=config_path,
-                    pipeline=pipeline_module_path,
-                )
-
-                assert not result.success
-                assert result.reason
-                assert "multiple Pipeline subclasses" in result.reason
-
-        @pytest.mark.asyncio
-        async def test_gru_returns_error_on_pipeline_file_with_invalid_explicit_pipeline(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
-        ) -> None:
-            minion_module_path = "tests.assets.minions.two_steps.counter.basic"
-            pipeline_module_path = "tests.assets.entrypoints.invalid.invalid_explicit_pipeline"
-            config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
-
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=NoOpLogger(),
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    minion_config_path=config_path,
-                    pipeline=pipeline_module_path,
-                )
-
-                assert not result.success
-                assert result.reason
-                assert "is not a subclass of Pipeline" in result.reason
-
-        @pytest.mark.asyncio
-        async def test_gru_returns_error_on_pipeline_event_not_serializable(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-            tests_dir: Path,
-        ) -> None:
-            minion_module_path = "tests.assets.minions.two_steps.counter.basic"
-            pipeline_module_path = "tests.assets.pipelines.invalid.unserializable_event"
-            config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
-
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=NoOpLogger(),
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    minion_config_path=config_path,
-                    pipeline=pipeline_module_path,
-                )
-
-                assert not result.success
-                assert result.reason
-                assert "event type is not serializable" in result.reason
+# Resources do not have module-entrypoint tests equivalent to Minions and Pipelines:
+# Resource dependencies are declared as type hints on component subclasses.

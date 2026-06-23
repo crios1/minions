@@ -6,8 +6,8 @@ class UnserializableContext:
     pass
 
 
-class BadContextMinion(SpiedMinion[CounterEvent, UnserializableContext]):
+class AssetMinion(SpiedMinion[CounterEvent, UnserializableContext]):
     pass
 
 
-minion = BadContextMinion
+minion = AssetMinion

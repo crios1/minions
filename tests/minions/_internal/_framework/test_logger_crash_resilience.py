@@ -1,7 +1,7 @@
 import pytest
 
 from minions._internal._framework.logger import ERROR, INFO
-from tests.assets.crash.support.logger_boom_log import BoomLogger
+from tests.assets.crash.support.logger.boom_log import AssetLogger as BoomLogLogger
 from tests.assets.support.logger_inmemory import InMemoryLogger
 
 
@@ -9,7 +9,7 @@ from tests.assets.support.logger_inmemory import InMemoryLogger
 async def test_logger_log_failure_is_contained_by_log_wrapper(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    logger = BoomLogger()
+    logger = BoomLogLogger()
 
     await logger._mn_log(INFO, "hello", key="value")
 

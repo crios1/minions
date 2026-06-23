@@ -7,7 +7,7 @@ from tests.assets.events.counter import CounterEvent
 from tests.assets.support.minion_spied import SpiedMinion
 
 
-class SlowSecondStepMinion(SpiedMinion[CounterEvent, CounterContext]):
+class AssetMinion(SpiedMinion[CounterEvent, CounterContext]):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         # Keep stop-driven checkpoint tests fast while still giving the stop call
@@ -24,4 +24,4 @@ class SlowSecondStepMinion(SpiedMinion[CounterEvent, CounterContext]):
         self.context.handled = True
 
 
-minion = SlowSecondStepMinion
+minion = AssetMinion

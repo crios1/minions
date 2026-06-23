@@ -1,5 +1,4 @@
 import contextlib
-import importlib
 from collections.abc import Callable
 from pathlib import Path
 
@@ -28,8 +27,9 @@ from minions._internal._framework.minion_workflow_context_codec import (
 from minions._internal._framework.state_store import StoredWorkflowContext
 from tests.assets.contexts.simple import SimpleContext
 from tests.assets.crash.boom import BOOM_MESSAGE
-from tests.assets.crash.support.state_store_boom_get_contexts_for_orchestration import (
-    BoomGetContextsForOrchestrationStateStore,
+from tests.assets.crash.resources.boom_method import AssetResource as BoomMethodResource
+from tests.assets.crash.support.state_store.boom_get_contexts_for_orchestration import (
+    AssetStateStore as BoomGetContextsForOrchestrationStateStore,
 )
 from tests.assets.events.simple import SimpleEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
@@ -47,8 +47,8 @@ def orchestration_id(pipeline_module_path: str, minion_module_path: str, config:
 
 async def assert_gru_can_start_and_stop_known_good_orchestration(gru: Gru) -> None:
     result = await gru.start_orchestration(
-        "tests.assets.crash.pipelines.healthy_counter",
-        "tests.assets.crash.minions.good",
+        "tests.assets.crash.pipelines.counter.healthy",
+        "tests.assets.crash.minions.counter.healthy",
     )
     assert result.success
     assert result.orchestration_id is not None
@@ -74,17 +74,17 @@ async def test_start_orchestration_contains_state_store_resume_read_failure(
 
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_orchestration(
-            "tests.assets.crash.pipelines.healthy_counter",
-            "tests.assets.crash.minions.good",
+            "tests.assets.crash.pipelines.counter.healthy",
+            "tests.assets.crash.minions.counter.healthy",
         )
 
         assert not result.success
         assert (
             result.reason
-            == "tests.assets.crash.minions.good.GoodMinion.startup failed"
+            == "tests.assets.crash.minions.counter.healthy.AssetMinion.startup failed"
         )
         assert logger.has_log(
-            "BoomGetContextsForOrchestrationStateStore.get_contexts_for_orchestration failed",
+            "AssetStateStore.get_contexts_for_orchestration failed",
             log_kwargs={"error_type": "BoomError"},
         )
         assert logger.has_log(
@@ -106,14 +106,14 @@ async def test_start_orchestration_fails_closed_on_persisted_workflow_decode_mis
     state_store: InMemoryStateStore,
 ) -> None:
     expected_orchestration_id = orchestration_id(
-        "tests.assets.crash.pipelines.healthy_counter",
-        "tests.assets.crash.minions.good",
+        "tests.assets.crash.pipelines.counter.healthy",
+        "tests.assets.crash.minions.counter.healthy",
     )
     persisted_context = MinionWorkflowContext(
         orchestration_id=expected_orchestration_id,
         workflow_id="wf-incompatible",
         event=SimpleEvent(timestamp=1.0),
-        context=SimpleContext(price=1.23),
+        context=SimpleContext(value=1),
         context_cls=SimpleContext,
         next_step_index=0,
     )
@@ -125,8 +125,8 @@ async def test_start_orchestration_fails_closed_on_persisted_workflow_decode_mis
 
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_orchestration(
-            "tests.assets.crash.pipelines.healthy_counter",
-            "tests.assets.crash.minions.good",
+            "tests.assets.crash.pipelines.counter.healthy",
+            "tests.assets.crash.minions.counter.healthy",
         )
 
         assert not result.success
@@ -158,20 +158,20 @@ async def test_start_orchestration_fails_closed_on_persisted_workflow_decode_mis
     ("pipeline_module_path", "minion_module_path"),
     [
         (
-            "tests.assets.crash.pipelines.healthy_counter",
-            "tests.assets.crash.minions.boom_startup",
+            "tests.assets.crash.pipelines.counter.healthy",
+            "tests.assets.crash.minions.counter.boom_startup",
         ),
         (
-            "tests.assets.crash.pipelines.healthy_counter",
-            "tests.assets.crash.minions.boom_load_config",
+            "tests.assets.crash.pipelines.counter.healthy",
+            "tests.assets.crash.minions.counter.boom_load_config",
         ),
         (
-            "tests.assets.crash.pipelines.boom_startup",
-            "tests.assets.crash.minions.good",
+            "tests.assets.crash.pipelines.counter.boom_startup",
+            "tests.assets.crash.minions.counter.healthy",
         ),
         (
-            "tests.assets.crash.pipelines.healthy_counter",
-            "tests.assets.crash.minions.depends_on_boom_startup_resource",
+            "tests.assets.crash.pipelines.counter.healthy",
+            "tests.assets.crash.minions.counter.with_boom_startup_resource",
         ),
     ],
 )
@@ -214,10 +214,10 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
         healthy_counter_pipeline_id = gru._get_pipeline_identity_from_module_path(
-            "tests.assets.crash.pipelines.healthy_counter",
+            "tests.assets.crash.pipelines.counter.healthy",
         )
         boom_step_minion_id = gru._get_minion_identity_from_module_path(
-            "tests.assets.crash.minions.boom_step",
+            "tests.assets.crash.minions.counter.boom_step",
         )
         expected_orchestration_id = Gru._make_orchestration_id(
             pipeline_id=healthy_counter_pipeline_id,
@@ -226,8 +226,8 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
         )
 
         result = await gru.start_orchestration(
-            "tests.assets.crash.pipelines.healthy_counter",
-            "tests.assets.crash.minions.boom_step",
+            "tests.assets.crash.pipelines.counter.healthy",
+            "tests.assets.crash.minions.counter.boom_step",
         )
         assert result.success
 
@@ -270,12 +270,12 @@ async def test_pipeline_produce_event_failure_is_logged_measured_and_shutdown_is
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
         boom_produce_event_pipeline_id = gru._get_pipeline_identity_from_module_path(
-            "tests.assets.crash.pipelines.boom_produce_event",
+            "tests.assets.crash.pipelines.counter.boom_produce_event",
         )
 
         result = await gru.start_orchestration(
-            "tests.assets.crash.pipelines.boom_produce_event",
-            "tests.assets.crash.minions.good",
+            "tests.assets.crash.pipelines.counter.boom_produce_event",
+            "tests.assets.crash.minions.counter.healthy",
         )
         assert result.success
 
@@ -306,26 +306,22 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
 ) -> None:
     async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
         healthy_counter_pipeline_id = gru._get_pipeline_identity_from_module_path(
-            "tests.assets.crash.pipelines.healthy_counter",
+            "tests.assets.crash.pipelines.counter.healthy",
         )
-        boom_resource_method_minion_id = gru._get_minion_identity_from_module_path(
-            "tests.assets.crash.minions.boom_resource_method",
+        with_boom_method_resource_minion_id = gru._get_minion_identity_from_module_path(
+            "tests.assets.crash.minions.counter.with_boom_method_resource",
         )
         expected_orchestration_id = Gru._make_orchestration_id(
             pipeline_id=healthy_counter_pipeline_id,
-            minion_id=boom_resource_method_minion_id,
+            minion_id=with_boom_method_resource_minion_id,
             minion_config_id="",
         )
 
-        boom_method_resource_id = gru._get_resource_identity(
-            importlib.import_module(
-                "tests.assets.crash.resources.boom_method"
-            ).BoomMethodResource,
-        )
+        boom_method_resource_id = gru._get_resource_identity(BoomMethodResource)
 
         result = await gru.start_orchestration(
-            "tests.assets.crash.pipelines.healthy_counter",
-            "tests.assets.crash.minions.boom_resource_method",
+            "tests.assets.crash.pipelines.counter.healthy",
+            "tests.assets.crash.minions.counter.with_boom_method_resource",
         )
         assert result.success
 
@@ -343,7 +339,7 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
                 LABEL_RESOURCE: boom_method_resource_id,
                 LABEL_RESOURCE_METHOD: "explode",
                 LABEL_RESOURCE_CALLER_KIND: "minion",
-                LABEL_RESOURCE_CALLER: boom_resource_method_minion_id,
+                LABEL_RESOURCE_CALLER: with_boom_method_resource_minion_id,
                 LABEL_ORCHESTRATION_ID: expected_orchestration_id,
                 LABEL_ERROR_TYPE: "BoomError",
             },
@@ -358,16 +354,16 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
     ("pipeline_module_path", "minion_module_path"),
     [
         (
-            "tests.assets.crash.pipelines.healthy_counter",
-            "tests.assets.crash.minions.boom_shutdown",
+            "tests.assets.crash.pipelines.counter.healthy",
+            "tests.assets.crash.minions.counter.boom_shutdown",
         ),
         (
-            "tests.assets.crash.pipelines.blocking_boom_shutdown",
-            "tests.assets.crash.minions.good",
+            "tests.assets.crash.pipelines.counter.blocking_boom_shutdown",
+            "tests.assets.crash.minions.counter.healthy",
         ),
         (
-            "tests.assets.crash.pipelines.healthy_counter",
-            "tests.assets.crash.minions.depends_on_boom_shutdown_resource",
+            "tests.assets.crash.pipelines.counter.healthy",
+            "tests.assets.crash.minions.counter.with_boom_shutdown_resource",
         ),
     ],
 )

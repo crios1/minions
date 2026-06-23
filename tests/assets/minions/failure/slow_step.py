@@ -8,7 +8,7 @@ from tests.assets.support.minion_spied import SpiedMinion
 
 
 @minion_id("52345678-1234-5678-9234-567812345678")
-class SlowStepMinion(SpiedMinion[CounterEvent, CounterContext]):
+class AssetMinion(SpiedMinion[CounterEvent, CounterContext]):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         # Instance-level override for this test fixture.
@@ -20,4 +20,4 @@ class SlowStepMinion(SpiedMinion[CounterEvent, CounterContext]):
         await asyncio.sleep(0.2)
 
 
-minion = SlowStepMinion
+minion = AssetMinion

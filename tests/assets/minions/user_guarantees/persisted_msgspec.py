@@ -6,7 +6,7 @@ from tests.assets.support.minion_spied import SpiedMinion
 from tests.assets.user_guarantees.persisted_shapes import StructContext, StructEvent
 
 
-class StructPersistenceGuaranteeMinion(SpiedMinion[StructEvent, StructContext]):
+class AssetMinion(SpiedMinion[StructEvent, StructContext]):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         setattr(self, "_mn_shutdown_grace_seconds", 0.05)
@@ -20,4 +20,4 @@ class StructPersistenceGuaranteeMinion(SpiedMinion[StructEvent, StructContext]):
         await asyncio.sleep(0.2)
 
 
-minion = StructPersistenceGuaranteeMinion
+minion = AssetMinion

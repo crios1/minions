@@ -5,9 +5,9 @@ class UnserializableEvent:
     pass
 
 
-class UnserializableEventPipeline(SpiedPipeline[UnserializableEvent]):
+class AssetPipeline(SpiedPipeline[UnserializableEvent]):
     async def produce_event(self) -> UnserializableEvent:
         raise RuntimeError("should not run")
 
 
-pipeline = UnserializableEventPipeline
+pipeline = AssetPipeline

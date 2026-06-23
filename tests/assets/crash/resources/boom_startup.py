@@ -2,7 +2,7 @@ from tests.assets.crash.boom import boom
 from tests.assets.support.resource_spied import SpiedResource
 
 
-class BoomStartupResource(SpiedResource):
+class AssetResource(SpiedResource):
     async def startup(self) -> None:
         boom()
 
@@ -10,4 +10,4 @@ class BoomStartupResource(SpiedResource):
         return
 
 
-resource = BoomStartupResource
+resource = AssetResource

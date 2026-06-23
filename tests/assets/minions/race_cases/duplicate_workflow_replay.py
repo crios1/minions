@@ -6,7 +6,7 @@ from tests.assets.events.counter import CounterEvent
 from tests.assets.support.minion_spied import SpiedMinion
 
 
-class DuplicateWorkflowReplayMinion(SpiedMinion[CounterEvent, CounterContext]):
+class AssetMinion(SpiedMinion[CounterEvent, CounterContext]):
     _startup_entered: asyncio.Event | None = None
     _step_1_started: asyncio.Event | None = None
     _allow_step_1_finish: asyncio.Event | None = None
@@ -33,4 +33,4 @@ class DuplicateWorkflowReplayMinion(SpiedMinion[CounterEvent, CounterContext]):
         await type(self)._gate("_allow_step_1_finish").wait()
 
 
-minion = DuplicateWorkflowReplayMinion
+minion = AssetMinion

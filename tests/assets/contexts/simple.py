@@ -3,8 +3,8 @@ from dataclasses import dataclass
 
 @dataclass
 class SimpleContext:
-    price: float | None = None
-    price1: float | None = None
-    price2: float | None = None
+    value: int | None = None
+    value_a: int | None = None
+    value_b: int | None = None
     step1: str | None = None
     step2: str | None = None

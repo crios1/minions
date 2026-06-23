@@ -3,9 +3,6 @@ from dataclasses import dataclass
 
 @dataclass
 class CounterContext:
-    alpha: bool = False
-    beta: bool = False
-    config_name: str | None = None
     handled: bool = False
     seq: int | None = None
     value: int | None = None

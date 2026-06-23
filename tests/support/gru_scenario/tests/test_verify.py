@@ -9,12 +9,16 @@ from minions._internal._framework.metrics_constants import LABEL_ORCHESTRATION_I
 from minions._internal._framework.state_store import StoredWorkflowContext
 from tests.assets.contexts.counter import CounterContext
 from tests.assets.events.counter import CounterEvent
-from tests.assets.minions.two_steps.counter.basic import TwoStepMinion
-from tests.assets.minions.two_steps.counter.identified_resourced import (
-    IdentifiedResourcedMinion,
+from tests.assets.minions.two_steps.counter.default import AssetMinion as TwoStepCounterMinion
+from tests.assets.minions.two_steps.counter.identified_with_fixed_resource import (
+    AssetMinion as IdentifiedMinion,
 )
-from tests.assets.minions.two_steps.counter.resourced import TwoStepResourcedMinion
-from tests.assets.pipelines.emit1.counter.emit_1 import Emit1Pipeline
+from tests.assets.minions.two_steps.counter.with_fixed_resource import (
+    AssetMinion as FixedResourceMinion,
+)
+from tests.assets.pipelines.emit_one.counter.default import (
+    AssetPipeline as EmitOneCounterPipeline,
+)
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
@@ -40,7 +44,7 @@ def _require_component_id(component_cls: type[Any]) -> str:
     return component_id
 
 
-identified_counter_minion_id = _require_component_id(IdentifiedResourcedMinion)
+identified_counter_minion_id = _require_component_id(IdentifiedMinion)
 
 
 def _stub_get_call_counts(counts: dict[str, int]) -> Any:
@@ -82,23 +86,23 @@ def test_verifier_require_spies_invariant_message_is_actionable():
 
 
 def test_require_workflow_spec_rejects_missing_spec(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(TwoStepMinion, "_mn_workflow_spec", None)
+    monkeypatch.setattr(TwoStepCounterMinion, "_mn_workflow_spec", None)
 
     with pytest.raises(
         pytest.fail.Exception,
         match="workflow spec missing; Minion setup is deferred or incomplete",
     ):
-        ScenarioVerifier._require_workflow_spec(TwoStepMinion)
+        ScenarioVerifier._require_workflow_spec(TwoStepCounterMinion)
 
 
 def test_require_workflow_spec_rejects_empty_spec(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(TwoStepMinion, "_mn_workflow_spec", ())
+    monkeypatch.setattr(TwoStepCounterMinion, "_mn_workflow_spec", ())
 
     with pytest.raises(
         pytest.fail.Exception,
         match="workflow spec is empty; a valid Minion must define at least one @minion_step",
     ):
-        ScenarioVerifier._require_workflow_spec(TwoStepMinion)
+        ScenarioVerifier._require_workflow_spec(TwoStepCounterMinion)
 
 
 def test_assert_metrics_label_contract_reports_recorded_mismatches():
@@ -120,46 +124,46 @@ def test_assert_metrics_label_contract_reports_recorded_mismatches():
 def test_compute_minion_expectations_accumulates_starts_from_successful_receipts():
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-1",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
             OrchestrationStartReceipt(
                 directive_index=1,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-2",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
     )
@@ -167,54 +171,54 @@ def test_compute_minion_expectations_accumulates_starts_from_successful_receipts
     verifier = _mk_verifier(plan, result)
     expectations = verifier._compute_minion_expectations(spies)
 
-    assert expectations.minion_start_counts[TwoStepMinion] == 2
-    assert expectations.expected_workflows_by_class[TwoStepMinion] == 2
+    assert expectations.minion_start_counts[TwoStepCounterMinion] == 2
+    assert expectations.expected_workflows_by_class[TwoStepCounterMinion] == 2
 
 
 def test_build_expected_call_counts_state_store_formula_for_mixed_success_and_failure():
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
             expect_success=False,
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 2},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 2},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-ok",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
             OrchestrationStartReceipt(
                 directive_index=1,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-fail",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=False,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
         seen_shutdown=True,
@@ -242,53 +246,53 @@ def test_build_expected_call_counts_state_store_formula_for_mixed_success_and_fa
 def test_build_expected_call_counts_scales_minion_init_with_successful_starts():
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-a",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
             OrchestrationStartReceipt(
                 directive_index=1,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-b",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
     )
 
     verifier = _mk_verifier(plan, result)
     expected = verifier._build_expected_call_counts()
-    minion_counts = expected.call_counts[TwoStepMinion]
+    minion_counts = expected.call_counts[TwoStepCounterMinion]
 
     assert minion_counts["__init__"] == 2
     assert minion_counts["startup"] == 2
@@ -306,31 +310,31 @@ async def test_build_expected_call_counts_does_not_require_get_all_for_overridde
 
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-ok",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
     )
@@ -354,7 +358,7 @@ def test_assert_call_order_reports_extra_calls_with_details():
     plan = ScenarioPlan([], pipeline_event_counts={})
     result = ScenarioRunResult(
         spies=SpyRegistry(),
-        extra_calls=[(TwoStepMinion, ("step_1",), {"count": 2})],
+        extra_calls=[(TwoStepCounterMinion, ("step_1",), {"count": 2})],
     )
     verifier = _mk_verifier(plan, result)
     # Scope this test to the extra-call diagnostics branch only.
@@ -369,31 +373,31 @@ def test_assert_state_store_read_call_bounds_rejects_excess_get_all_calls(
 ) -> None:
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-ok",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
     )
@@ -417,38 +421,38 @@ def test_assert_minion_fanout_delivery_proves_pipeline_event_delivery_to_steps(
 ) -> None:
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 2},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 2},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-ok",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
     )
 
     verifier = _mk_verifier(plan, result)
     monkeypatch.setattr(
-        TwoStepMinion,
+        TwoStepCounterMinion,
         "get_call_counts",
         _stub_get_call_counts({"step_1": 2, "step_2": 2}),
     )
@@ -461,68 +465,71 @@ def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnost
 ) -> None:
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.resourced",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.with_fixed_resource",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 2},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 2},
     )
     spies = SpyRegistry(
         minions={
-            "tests.assets.minions.two_steps.counter.basic": TwoStepMinion,
-            "tests.assets.minions.two_steps.counter.resourced": TwoStepResourcedMinion,
+            "tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion,
+            "tests.assets.minions.two_steps.counter.with_fixed_resource": FixedResourceMinion,
         },
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-a",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
             OrchestrationStartReceipt(
                 directive_index=1,
-                minion_module_path="tests.assets.minions.two_steps.counter.resourced",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.with_fixed_resource",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-b",
-                minion_cls=TwoStepResourcedMinion,
+                minion_cls=FixedResourceMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.resourced",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.with_fixed_resource",
             ),
         ],
     )
 
     verifier = _mk_verifier(plan, result)
     monkeypatch.setattr(
-        TwoStepMinion,
+        TwoStepCounterMinion,
         "get_call_counts",
         _stub_get_call_counts({"step_1": 2, "step_2": 2}),
     )
     monkeypatch.setattr(
-        TwoStepResourcedMinion,
+        FixedResourceMinion,
         "get_call_counts",
         _stub_get_call_counts({"step_1": 1, "step_2": 2}),
     )
 
     with pytest.raises(
         pytest.fail.Exception,
-        match="Fanout mismatch for TwoStepResourcedMinion.step_1"
+        match=(
+            r"Fanout mismatch for tests\.assets\.minions\.two_steps\.counter\."
+            r"with_fixed_resource:AssetMinion\.step_1"
+        ),
     ):
         verifier._assert_minion_fanout_delivery()
 
@@ -532,38 +539,38 @@ def test_assert_minion_fanout_delivery_allows_plus_one_per_start_tolerance(
 ) -> None:
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 2},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 2},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-ok",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
     )
 
     verifier = _mk_verifier(plan, result)
     monkeypatch.setattr(
-        TwoStepMinion,
+        TwoStepCounterMinion,
         "get_call_counts",
         _stub_get_call_counts({"step_1": 3, "step_2": 3}),
     )
@@ -576,38 +583,38 @@ def test_assert_minion_fanout_delivery_rejects_overage_beyond_plus_one(
 ) -> None:
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 2},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 2},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-ok",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
     )
 
     verifier = _mk_verifier(plan, result)
     monkeypatch.setattr(
-        TwoStepMinion,
+        TwoStepCounterMinion,
         "get_call_counts",
         _stub_get_call_counts({"step_1": 4, "step_2": 3}),
     )
@@ -615,8 +622,9 @@ def test_assert_minion_fanout_delivery_rejects_overage_beyond_plus_one(
     with pytest.raises(
         pytest.fail.Exception,
         match=(
-            r"Fanout mismatch for TwoStepMinion\.step_1: expected 2\.\.3 workflow "
-            r"calls from pipeline events, got 4"
+            r"Fanout mismatch for tests\.assets\.minions\.two_steps\.counter\."
+            r"default:AssetMinion\.step_1: expected 2\.\.3 workflow calls from "
+            r"pipeline events, got 4"
         ),
     ):
         verifier._assert_minion_fanout_delivery()
@@ -627,52 +635,52 @@ def test_assert_pipeline_events_allows_restarted_pipeline_produce_event_totals(
 ) -> None:
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-a",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
             OrchestrationStartReceipt(
                 directive_index=1,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-b",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
     )
     verifier = _mk_verifier(plan, result)
     monkeypatch.setattr(
-        Emit1Pipeline,
+        EmitOneCounterPipeline,
         "get_call_counts",
         _stub_get_call_counts({"__init__": 2, "startup": 2, "run": 2, "produce_event": 3}),
     )
@@ -684,30 +692,30 @@ def test_assert_workflow_step_start_events_are_monotonic_allows_resume_replay_at
     plan = ScenarioPlan(
         [
             OrchestrationStart(
-                pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-                minion="tests.assets.minions.two_steps.counter.basic",
+                pipeline="tests.assets.pipelines.emit_one.counter.default",
+                minion="tests.assets.minions.two_steps.counter.default",
             ),
         ],
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
-    minion_id = "tests.assets.minions.two_steps.counter.basic"
+    minion_id = "tests.assets.minions.two_steps.counter.default"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-ok",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
         checkpoints=[
@@ -739,30 +747,30 @@ def test_assert_workflow_step_start_events_are_monotonic_rejects_regression():
     plan = ScenarioPlan(
         [
             OrchestrationStart(
-                pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-                minion="tests.assets.minions.two_steps.counter.basic",
+                pipeline="tests.assets.pipelines.emit_one.counter.default",
+                minion="tests.assets.minions.two_steps.counter.default",
             ),
         ],
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
-    minion_id = "tests.assets.minions.two_steps.counter.basic"
+    minion_id = "tests.assets.minions.two_steps.counter.default"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-ok",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
         checkpoints=[
@@ -795,30 +803,30 @@ def test_assert_workflow_step_start_events_are_monotonic_rejects_step_name_index
     plan = ScenarioPlan(
         [
             OrchestrationStart(
-                pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-                minion="tests.assets.minions.two_steps.counter.basic",
+                pipeline="tests.assets.pipelines.emit_one.counter.default",
+                minion="tests.assets.minions.two_steps.counter.default",
             ),
         ],
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
-    minion_id = "tests.assets.minions.two_steps.counter.basic"
+    minion_id = "tests.assets.minions.two_steps.counter.default"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-ok",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
         checkpoints=[
@@ -846,31 +854,31 @@ def test_assert_workflow_step_start_events_are_monotonic_rejects_step_name_index
 def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_checkpoint():
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-ok",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id="instance-1",
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
         checkpoints=[
@@ -883,7 +891,7 @@ def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_ch
                 seen_shutdown=False,
                 orchestration_directive_indexes=(),
                 spy_call_counts={
-                    "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
+                    "tests.assets.minions.two_steps.counter.default.AssetMinion": {
                         "step_1": 0,
                         "step_2": 0,
                     }
@@ -898,7 +906,7 @@ def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_ch
                 seen_shutdown=False,
                 orchestration_directive_indexes=None,
                 spy_call_counts={
-                    "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
+                    "tests.assets.minions.two_steps.counter.default.AssetMinion": {
                         "step_1": 1,
                         "step_2": 1,
                     }
@@ -914,46 +922,46 @@ def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_ch
 def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phase_windows():
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-pre-stop",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id="instance-1",
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
             OrchestrationStartReceipt(
                 directive_index=1,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-post-restart",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id="instance-1",
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
         checkpoints=[
@@ -967,7 +975,7 @@ def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phas
                 expected_step_starts={0: {"step_1": 1}},
                 wrapped_directive_type="OrchestrationStop",
                 spy_call_counts={
-                    "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
+                    "tests.assets.minions.two_steps.counter.default.AssetMinion": {
                         "step_1": 1,
                         "step_2": 0,
                     }
@@ -982,7 +990,7 @@ def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phas
                 seen_shutdown=False,
                 orchestration_directive_indexes=None,
                 spy_call_counts={
-                    "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
+                    "tests.assets.minions.two_steps.counter.default.AssetMinion": {
                         "step_1": 2,
                         "step_2": 1,
                     }
@@ -998,30 +1006,30 @@ def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phas
 def test_checkpoint_window_workflow_step_progression_exact_fails_on_overage():
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-ok",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
                 minion_id="durable-two-step-minion",
             ),
         ],
@@ -1036,7 +1044,7 @@ def test_checkpoint_window_workflow_step_progression_exact_fails_on_overage():
                 orchestration_directive_indexes=None,
                 workflow_steps_mode="exact",
                 spy_call_counts={
-                    "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
+                    "tests.assets.minions.two_steps.counter.default.AssetMinion": {
                         "step_1": 2,
                         "step_2": 2,
                     }
@@ -1059,48 +1067,48 @@ def test_checkpoint_window_workflow_step_progression_exact_fails_on_overage():
 def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_window():
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
-    class_key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
-    minion_id = "tests.assets.minions.two_steps.counter.basic"
+    class_key = "tests.assets.minions.two_steps.counter.default.AssetMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.default"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-1",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
             OrchestrationStartReceipt(
                 directive_index=1,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-2",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
         checkpoints=[
@@ -1157,33 +1165,33 @@ def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_wi
 def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_allows_call_count_overage():  # noqa: E501
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
-    class_key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
-    minion_id = "tests.assets.minions.two_steps.counter.basic"
+    class_key = "tests.assets.minions.two_steps.counter.default.AssetMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.default"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-ok",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
         checkpoints=[
@@ -1218,33 +1226,33 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_all
 def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_rejects_overage_beyond_start_tolerance():  # noqa: E501
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
-    class_key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
-    minion_id = "tests.assets.minions.two_steps.counter.basic"
+    class_key = "tests.assets.minions.two_steps.counter.default.AssetMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.default"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-ok",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
         checkpoints=[
@@ -1284,48 +1292,48 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_rej
 def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overlap_passes_with_workflow_id_exactness():  # noqa: E501
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
-    class_key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
-    minion_id = "tests.assets.minions.two_steps.counter.basic"
+    class_key = "tests.assets.minions.two_steps.counter.default.AssetMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.default"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-1",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
             OrchestrationStartReceipt(
                 directive_index=1,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-2",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
         checkpoints=[
@@ -1366,48 +1374,48 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
 def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overlap_reports_instance_deltas_on_workflow_id_mismatch():  # noqa: E501
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
-    class_key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
-    minion_id = "tests.assets.minions.two_steps.counter.basic"
+    class_key = "tests.assets.minions.two_steps.counter.default.AssetMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.default"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-1",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
             OrchestrationStartReceipt(
                 directive_index=1,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-2",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
         checkpoints=[
@@ -1453,33 +1461,33 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
 def test_checkpoint_window_workflow_step_progression_exact_prioritizes_workflow_id_mismatch_when_both_fail():  # noqa: E501
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
-    class_key = "tests.assets.minions.two_steps.counter.basic.TwoStepMinion"
-    minion_id = "tests.assets.minions.two_steps.counter.basic"
+    class_key = "tests.assets.minions.two_steps.counter.default.AssetMinion"
+    minion_id = "tests.assets.minions.two_steps.counter.default"
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-1",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
         checkpoints=[
@@ -1553,31 +1561,31 @@ def test_workflow_id_delta_count_computes_new_ids_only():
 def test_checkpoint_window_fanout_fails_when_workflow_id_delta_below_expected():
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 2},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 2},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-ok",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id=None,
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
         checkpoints=[
@@ -1590,13 +1598,13 @@ def test_checkpoint_window_fanout_fails_when_workflow_id_delta_below_expected():
                 seen_shutdown=False,
                 orchestration_directive_indexes=None,
                 spy_call_counts={
-                    "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
+                    "tests.assets.minions.two_steps.counter.default.AssetMinion": {
                         "step_1": 2,
                         "step_2": 2,
                     }
                 },
                 workflow_step_started_ids_by_minion_id={
-                    "tests.assets.minions.two_steps.counter.basic.TwoStepMinion": {
+                    "tests.assets.minions.two_steps.counter.default.AssetMinion": {
                         "step_1": ("workflow-1",),
                         "step_2": ("workflow-1",),
                     }
@@ -1613,8 +1621,8 @@ def test_checkpoint_window_fanout_fails_when_workflow_id_delta_below_expected():
 def test_assert_runtime_expectations_persistence_at_latest_checkpoint():
     directives = [
         start := OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
         ExpectRuntime(
             expect=RuntimeExpectSpec(persistence={start: 1}),
@@ -1622,24 +1630,24 @@ def test_assert_runtime_expectations_persistence_at_latest_checkpoint():
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-ok",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id="instance-1",
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
                 minion_id="durable-two-step-minion",
             ),
         ],
@@ -1651,9 +1659,7 @@ def test_assert_runtime_expectations_persistence_at_latest_checkpoint():
                 receipt_count=1,
                 successful_receipt_count=1,
                 seen_shutdown=False,
-                persisted_contexts_by_orchestration_id={
-                    "instance-1": 1
-                },
+                persisted_contexts_by_orchestration_id={"instance-1": 1},
             ),
         ],
     )
@@ -1665,29 +1671,29 @@ def test_assert_lifecycle_tracking_reports_untracked_successful_start():
     plan = ScenarioPlan(
         [
             OrchestrationStart(
-                pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-                minion="tests.assets.minions.two_steps.counter.basic",
+                pipeline="tests.assets.pipelines.emit_one.counter.default",
+                minion="tests.assets.minions.two_steps.counter.default",
             )
         ],
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="minion-instance-1",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id="orchestration-1",
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
         lifecycle_observations=[
@@ -1700,8 +1706,8 @@ def test_assert_lifecycle_tracking_reports_untracked_successful_start():
                     minion_instances=frozenset({"minion-instance-1"}),
                     orchestrations=frozenset(),
                     minion_tasks=frozenset({"minion-instance-1"}),
-                    pipelines=frozenset({"tests.assets.pipelines.emit1.counter.emit_1"}),
-                    pipeline_tasks=frozenset({"tests.assets.pipelines.emit1.counter.emit_1"}),
+                    pipelines=frozenset({"tests.assets.pipelines.emit_one.counter.default"}),
+                    pipeline_tasks=frozenset({"tests.assets.pipelines.emit_one.counter.default"}),
                     resources=frozenset(),
                     resource_tasks=frozenset(),
                     pipeline_by_minion_instance={},
@@ -1727,17 +1733,17 @@ def test_assert_lifecycle_tracking_reports_untracked_successful_start():
 
 
 def test_assert_lifecycle_tracking_reports_resource_refcount_mismatch():
-    minion_id = "tests.assets.minions.two_steps.counter.resourced"
-    pipeline_id = "tests.assets.pipelines.resourced.counter.with_fixed_resource"
-    resource_id = "tests.assets.resources.fixed.base.FixedResource"
+    minion_id = "tests.assets.minions.two_steps.counter.with_fixed_resource"
+    pipeline_id = "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
+    resource_id = "tests.assets.resources.fixed.default.AssetResource"
     plan = ScenarioPlan(
         [OrchestrationStart(pipeline=pipeline_id, minion=minion_id)],
         pipeline_event_counts={pipeline_id: 1},
     )
     result = ScenarioRunResult(
         spies=SpyRegistry(
-            minions={minion_id: TwoStepMinion},
-            pipelines={pipeline_id: Emit1Pipeline},
+            minions={minion_id: TwoStepCounterMinion},
+            pipelines={pipeline_id: EmitOneCounterPipeline},
             resources_by_minion_id={minion_id: frozenset({resource_id})},
             resources_by_pipeline={pipeline_id: frozenset({resource_id})},
         ),
@@ -1747,7 +1753,7 @@ def test_assert_lifecycle_tracking_reports_resource_refcount_mismatch():
                 minion_module_path=minion_id,
                 pipeline_module_path=pipeline_id,
                 instance_id="minion-instance-1",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id="orchestration-1",
                 pipeline_id=pipeline_id,
@@ -1789,30 +1795,30 @@ def test_assert_lifecycle_tracking_reports_resource_refcount_mismatch():
 def test_assert_persisted_context_integrity_accepts_matching_snapshot():
     directives = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-ok",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id="ck",
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
                 minion_id="durable-two-step-minion",
             ),
         ],
@@ -1846,8 +1852,8 @@ def test_assert_persisted_context_integrity_accepts_matching_snapshot():
 def test_assert_runtime_expectations_resolutions_at_latest_checkpoint():
     directives = [
         start := OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
@@ -1857,25 +1863,25 @@ def test_assert_runtime_expectations_resolutions_at_latest_checkpoint():
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="instance-1",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id="instance-1",
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
         checkpoints=[
@@ -1907,8 +1913,8 @@ def test_assert_runtime_expectations_resolutions_at_latest_checkpoint():
 def test_assert_runtime_expectations_workflow_steps_exact_at_latest_checkpoint():
     directives = [
         start := OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
@@ -1919,25 +1925,25 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_latest_checkpoint()
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="instance-1",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id="instance-1",
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
         checkpoints=[
@@ -1964,8 +1970,8 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_latest_checkpoint()
 def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage():
     directives = [
         start := OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
         ExpectRuntime(
             expect=RuntimeExpectSpec(
@@ -1976,25 +1982,25 @@ def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage():
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="instance-1",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id="instance-1",
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
         checkpoints=[
@@ -2020,8 +2026,8 @@ def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage():
 def test_assert_runtime_expectations_persistence_at_checkpoint_index():
     directives = [
         start := OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.identified_resourced",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.identified_with_fixed_resource",
         ),
         ExpectRuntime(
             at=0,
@@ -2030,28 +2036,30 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
         minions={
-            "tests.assets.minions.two_steps.counter.identified_resourced": (
-                IdentifiedResourcedMinion
+            "tests.assets.minions.two_steps.counter.identified_with_fixed_resource": (
+                IdentifiedMinion
             ),
         },
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.identified_resourced",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path=(
+                    "tests.assets.minions.two_steps.counter.identified_with_fixed_resource"
+                ),
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-ok",
-                minion_cls=IdentifiedResourcedMinion,
+                minion_cls=IdentifiedMinion,
                 success=True,
                 orchestration_id="instance-1",
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
                 minion_id=identified_counter_minion_id,
             ),
         ],
@@ -2083,8 +2091,8 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
 def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
     directives = [
         start := OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
         ExpectRuntime(
             at=0,
@@ -2096,25 +2104,25 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="instance-1",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id="instance-1",
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
         checkpoints=[
@@ -2157,8 +2165,8 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
 def test_assert_runtime_expectations_fails_for_out_of_range_checkpoint_index():
     directives = [
         start := OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit1.counter.emit_1",
-            minion="tests.assets.minions.two_steps.counter.basic",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+            minion="tests.assets.minions.two_steps.counter.default",
         ),
         ExpectRuntime(
             at=2,
@@ -2167,25 +2175,25 @@ def test_assert_runtime_expectations_fails_for_out_of_range_checkpoint_index():
     ]
     plan = ScenarioPlan(
         directives,
-        pipeline_event_counts={"tests.assets.pipelines.emit1.counter.emit_1": 1},
+        pipeline_event_counts={"tests.assets.pipelines.emit_one.counter.default": 1},
     )
     spies = SpyRegistry(
-        minions={"tests.assets.minions.two_steps.counter.basic": TwoStepMinion},
-        pipelines={"tests.assets.pipelines.emit1.counter.emit_1": Emit1Pipeline},
+        minions={"tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion},
+        pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
     result = ScenarioRunResult(
         spies=spies,
         receipts=[
             OrchestrationStartReceipt(
                 directive_index=0,
-                minion_module_path="tests.assets.minions.two_steps.counter.basic",
-                pipeline_module_path="tests.assets.pipelines.emit1.counter.emit_1",
+                minion_module_path="tests.assets.minions.two_steps.counter.default",
+                pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-ok",
-                minion_cls=TwoStepMinion,
+                minion_cls=TwoStepCounterMinion,
                 success=True,
                 orchestration_id="instance-1",
-                pipeline_id="tests.assets.pipelines.emit1.counter.emit_1",
-                minion_id="tests.assets.minions.two_steps.counter.basic",
+                pipeline_id="tests.assets.pipelines.emit_one.counter.default",
+                minion_id="tests.assets.minions.two_steps.counter.default",
             ),
         ],
         checkpoints=[

@@ -1,8 +1,8 @@
-from tests.assets.resources.fixed.base import FixedResource
+from tests.assets.resources.fixed.default import AssetResource as FixedResource
 from tests.assets.support.resource_spied import SpiedResource
 
 
-class DependsOnFixedResource(SpiedResource):
+class AssetResource(SpiedResource):
     fixed_resource: FixedResource
     startup_value: int | None = None
 
@@ -13,4 +13,4 @@ class DependsOnFixedResource(SpiedResource):
         return await self.fixed_resource.get_value()
 
 
-resource = DependsOnFixedResource
+resource = AssetResource

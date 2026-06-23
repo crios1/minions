@@ -30,6 +30,10 @@ from .runner import (
 )
 
 
+def _class_ref(cls: type[Any]) -> str:
+    return f"{cls.__module__}:{cls.__qualname__}"
+
+
 class _ExtraCallRecorder:
     def __init__(
         self,
@@ -1125,7 +1129,8 @@ class ScenarioVerifier:
         for m_cls, expected_workflows in expectations.expected_workflows_by_class.items():
             if expected_workflows < 0:
                 pytest.fail(
-                    f"Invalid expected workflow count for {m_cls.__name__}: {expected_workflows}"
+                    "Invalid expected workflow count for "
+                    f"{_class_ref(m_cls)}: {expected_workflows}"
                 )
             start_count = expectations.minion_start_counts.get(m_cls, 0)
             max_expected_workflows = expected_workflows + start_count
@@ -1137,7 +1142,7 @@ class ScenarioVerifier:
                 actual = actual_counts.get(step_name, 0)
                 if actual < expected_workflows or actual > max_expected_workflows:
                     pytest.fail(
-                        f"Fanout mismatch for {m_cls.__name__}.{step_name}: "
+                        f"Fanout mismatch for {_class_ref(m_cls)}.{step_name}: "
                         "expected "
                         f"{expected_workflows}..{max_expected_workflows} workflow calls "
                         f"from pipeline events, got {actual}."

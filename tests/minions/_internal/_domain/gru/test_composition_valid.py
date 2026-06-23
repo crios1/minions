@@ -12,176 +12,112 @@ from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
 
 
-class TestValidComposition:
-    class TestMinionFile:
-        @pytest.mark.asyncio
-        async def test_gru_accepts_file_with_multiple_minions_and_explicit_minion(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        ) -> None:
-            
-            minion_module_path = "tests.assets.entrypoints.valid.two_minions_explicit_minion_simple"
-            pipeline_module_path = "tests.assets.pipelines.simple.simple_event.single_event_1"
+class TestMinionFile:
+    @pytest.mark.asyncio
+    async def test_gru_accepts_file_with_multiple_minions_and_explicit_minion(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    ) -> None:
+        minion_module_path = "tests.assets.entrypoints.valid.two_minions_explicit_minion"
+        pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
 
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=ConsoleLogger(),
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    pipeline=pipeline_module_path
-                )
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=ConsoleLogger(),
+            metrics=NoOpMetrics(),
+        ) as gru:
+            result = await gru.start_orchestration(
+                minion=minion_module_path,
+                pipeline=pipeline_module_path,
+            )
 
-                assert result.success
+            assert result.success
 
-        @pytest.mark.asyncio
-        async def test_gru_starts_minion_with_multiple_distinct_resource_dependencies(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        ) -> None:
-            minion_module_path = "tests.assets.minions.two_steps.simple.resourced_multi"
-            pipeline_module_path = "tests.assets.pipelines.simple.simple_event.single_event_1"
+    @pytest.mark.asyncio
+    async def test_gru_accepts_file_with_single_minion_subclass(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    ) -> None:
+        minion_module_path = "tests.assets.entrypoints.valid.single_minion_subclass"
+        pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
 
-            logger = InMemoryLogger()
-            async with gru_factory(
-                state_store=InMemoryStateStore(logger=logger),
-                logger=logger,
-                metrics=InMemoryMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    pipeline=pipeline_module_path
-                )
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=ConsoleLogger(),
+            metrics=NoOpMetrics(),
+        ) as gru:
+            result = await gru.start_orchestration(
+                minion=minion_module_path,
+                pipeline=pipeline_module_path,
+            )
 
-                assert result.success
+            assert result.success
 
-                assert len(gru._pipelines) >= 1
-                assert len(gru._resources) >= 2
+    @pytest.mark.asyncio
+    async def test_gru_starts_minion_with_multiple_distinct_resource_dependencies(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    ) -> None:
+        minion_module_path = (
+            "tests.assets.minions.one_step.counter."
+            "with_fixed_and_fixed_b_resources"
+        )
+        pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
 
-                assert result.orchestration_id is not None
+        logger = InMemoryLogger()
+        async with gru_factory(
+            state_store=InMemoryStateStore(logger=logger),
+            logger=logger,
+            metrics=InMemoryMetrics(),
+        ) as gru:
+            result = await gru.start_orchestration(
+                minion=minion_module_path,
+                pipeline=pipeline_module_path,
+            )
 
-    class TestPipelineFile: # TODO: consider implementing tests to be in parity with TestMinionFile class  # noqa: E501
-        @pytest.mark.asyncio
-        async def test_gru_accepts_file_with_single_pipeline_class(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        ) -> None:
-            minion_module_path = "tests.assets.minions.two_steps.simple.basic"
-            pipeline_module_path = "tests.assets.pipelines.simple.simple_event.single_event_1"
-
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=ConsoleLogger(),
-                metrics=NoOpMetrics()
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    pipeline=pipeline_module_path
-                )
-
-                assert result.success
+            assert result.success
+            assert len(gru._pipelines) >= 1
+            assert len(gru._resources) >= 2
+            assert result.orchestration_id is not None
 
 
-class TestValidCompositionUsingNewAssets:
-    class TestMinionFile:
-        @pytest.mark.asyncio
-        async def test_gru_accepts_file_with_multiple_minions_and_explicit_minion(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        ) -> None:
-            minion_module_path = "tests.assets.entrypoints.valid.two_minions_explicit_minion"
-            pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
+class TestPipelineFile:
+    @pytest.mark.asyncio
+    async def test_gru_accepts_file_with_single_pipeline_class(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    ) -> None:
+        minion_module_path = "tests.assets.minions.two_steps.counter.default"
+        pipeline_module_path = "tests.assets.pipelines.entrypoint.counter.single_class"
 
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=ConsoleLogger(),
-                metrics=NoOpMetrics(),
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    pipeline=pipeline_module_path,
-                )
-                assert result.success
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=ConsoleLogger(),
+            metrics=NoOpMetrics(),
+        ) as gru:
+            result = await gru.start_orchestration(
+                minion=minion_module_path,
+                pipeline=pipeline_module_path,
+            )
 
-        @pytest.mark.asyncio
-        async def test_gru_accepts_file_with_single_minion_subclass(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        ) -> None:
-            minion_module_path = "tests.assets.entrypoints.valid.single_minion_subclass"
-            pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
+            assert result.success
 
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=ConsoleLogger(),
-                metrics=NoOpMetrics(),
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    pipeline=pipeline_module_path,
-                )
-                assert result.success
+    @pytest.mark.asyncio
+    async def test_gru_accepts_file_with_single_pipeline_subclass(
+        self,
+        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    ) -> None:
+        minion_module_path = "tests.assets.minions.two_steps.counter.default"
+        pipeline_module_path = "tests.assets.entrypoints.valid.single_pipeline_subclass"
 
-        @pytest.mark.asyncio
-        async def test_gru_starts_minion_with_multiple_distinct_resource_dependencies(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        ) -> None:
-            minion_module_path = "tests.assets.minions.two_steps.counter.multi_resources"
-            pipeline_module_path = "tests.assets.pipelines.emit1.counter.emit_1"
+        async with gru_factory(
+            state_store=NoOpStateStore(),
+            logger=ConsoleLogger(),
+            metrics=NoOpMetrics(),
+        ) as gru:
+            result = await gru.start_orchestration(
+                minion=minion_module_path,
+                pipeline=pipeline_module_path,
+            )
 
-            logger = InMemoryLogger()
-            async with gru_factory(
-                state_store=InMemoryStateStore(logger=logger),
-                logger=logger,
-                metrics=InMemoryMetrics(),
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    pipeline=pipeline_module_path,
-                )
-
-                assert result.success
-                assert len(gru._pipelines) >= 1
-                assert len(gru._resources) >= 2
-                assert result.orchestration_id is not None
-
-    class TestPipelineFile:
-        @pytest.mark.asyncio
-        async def test_gru_accepts_file_with_single_pipeline_class(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        ) -> None:
-            minion_module_path = "tests.assets.minions.two_steps.counter.basic"
-            pipeline_module_path = "tests.assets.pipelines.entrypoint.counter.single_class"
-
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=ConsoleLogger(),
-                metrics=NoOpMetrics(),
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    pipeline=pipeline_module_path,
-                )
-                assert result.success
-
-        @pytest.mark.asyncio
-        async def test_gru_accepts_file_with_single_pipeline_subclass(
-            self,
-            gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-        ) -> None:
-            minion_module_path = "tests.assets.minions.two_steps.counter.basic"
-            pipeline_module_path = "tests.assets.entrypoints.valid.single_pipeline_subclass"
-
-            async with gru_factory(
-                state_store=NoOpStateStore(),
-                logger=ConsoleLogger(),
-                metrics=NoOpMetrics(),
-            ) as gru:
-                result = await gru.start_orchestration(
-                    minion=minion_module_path,
-                    pipeline=pipeline_module_path,
-                )
-                assert result.success
+            assert result.success

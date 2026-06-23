@@ -66,8 +66,8 @@ def test_start_prints_failed_start_result_with_recovery_guidance() -> None:
     out = io.StringIO()
     with redirect_stdout(out):
         shell.do_start(
-            "tests.assets.minions.two_steps.simple.basic config.toml "
-            "tests.assets.pipelines.simple.record_event"
+            "tests.assets.minions.two_steps.simple.default config.toml "
+            "tests.assets.pipelines.emit_one.record.default"
         )
 
     output = out.getvalue()
@@ -120,15 +120,15 @@ def test_start_calls_current_gru_signature_and_rekeys_successful_result() -> Non
     out = io.StringIO()
     with redirect_stdout(out):
         shell.do_start(
-            "tests.assets.minions.two_steps.simple.basic config.toml "
-            "tests.assets.pipelines.simple.record_event"
+            "tests.assets.minions.two_steps.simple.default config.toml "
+            "tests.assets.pipelines.emit_one.record.default"
         )
 
     assert submitted
     assert gru.start_calls == [
         (
-            "tests.assets.pipelines.simple.record_event",
-            "tests.assets.minions.two_steps.simple.basic",
+            "tests.assets.pipelines.emit_one.record.default",
+            "tests.assets.minions.two_steps.simple.default",
             "config.toml",
         )
     ]

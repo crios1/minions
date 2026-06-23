@@ -127,13 +127,15 @@ class TestUnit:
     def test_minion_string_entrypoint_identity_fallback_preserves_entrypoint_module_path(
         self,
     ) -> None:
-        from tests.assets.minions.two_steps.simple.basic import SimpleMinion
+        from tests.assets.minions.two_steps.simple.default import (
+            AssetMinion as TwoStepSimpleMinion,
+        )
 
         gru = object.__new__(Gru)
         entrypoint_module_path = "tests.assets.entrypoints.valid.reexported_minion_subclass"
 
-        assert Gru._get_minion_identity(SimpleMinion) == (
-            "tests.assets.minions.two_steps.simple.basic.SimpleMinion"
+        assert Gru._get_minion_identity(TwoStepSimpleMinion) == (
+            "tests.assets.minions.two_steps.simple.default.AssetMinion"
         )
         assert gru._get_minion_identity_from_module_path(entrypoint_module_path) == (
             entrypoint_module_path
@@ -142,16 +144,15 @@ class TestUnit:
     def test_pipeline_string_entrypoint_identity_fallback_preserves_entrypoint_module_path(
         self,
     ) -> None:
-        from tests.assets.pipelines.simple.simple_event.single_event_1 import (
-            SimpleSingleEventPipeline1,
+        from tests.assets.pipelines.emit_one.simple.default import (
+            AssetPipeline as EmitOneSimplePipeline,
         )
 
         gru = object.__new__(Gru)
         entrypoint_module_path = "tests.assets.entrypoints.valid.reexported_pipeline_subclass"
 
-        assert gru._get_pipeline_identity(SimpleSingleEventPipeline1) == (
-            "tests.assets.pipelines.simple.simple_event.single_event_1."
-            "SimpleSingleEventPipeline1"
+        assert gru._get_pipeline_identity(EmitOneSimplePipeline) == (
+            "tests.assets.pipelines.emit_one.simple.default.AssetPipeline"
         )
         assert gru._get_pipeline_identity_from_module_path(entrypoint_module_path) == (
             entrypoint_module_path
@@ -467,8 +468,8 @@ class TestUnit:
             state_store=NoOpStateStore(),
         ) as gru:
             result = await gru.start_orchestration(
-                "tests.assets.crash.pipelines.healthy_counter",
-                "tests.assets.crash.minions.good",
+                "tests.assets.crash.pipelines.counter.healthy",
+                "tests.assets.crash.minions.counter.healthy",
             )
             assert result.success
 
@@ -488,17 +489,17 @@ class TestUnit:
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ) -> None:
-        from tests.assets.minions.two_steps.counter.identified_resourced import (
-            IdentifiedResourcedMinion,
+        from tests.assets.minions.two_steps.counter.identified_with_fixed_resource import (
+            AssetMinion as IdentifiedFixedResourceMinion,
         )
-        from tests.assets.pipelines.emit1.counter.identified import (
-            IdentifiedEmit1Pipeline,
+        from tests.assets.pipelines.emit_one.counter.identified import (
+            AssetPipeline as IdentifiedEmitOneCounterPipeline,
         )
         from tests.assets.resources.fixed.identified import (
-            IdentifiedFixedResource,
+            AssetResource as IdentifiedFixedResource,
         )
 
-        identified_pipeline_id = get_component_id(IdentifiedEmit1Pipeline)
+        identified_pipeline_id = get_component_id(IdentifiedEmitOneCounterPipeline)
         identified_resource_id = get_component_id(IdentifiedFixedResource)
         assert identified_pipeline_id is not None
         assert identified_resource_id is not None
@@ -509,8 +510,8 @@ class TestUnit:
             state_store=NoOpStateStore(),
         ) as gru:
             result = await gru.start_orchestration(
-                IdentifiedEmit1Pipeline,
-                IdentifiedResourcedMinion,
+                IdentifiedEmitOneCounterPipeline,
+                IdentifiedFixedResourceMinion,
             )
             assert result.success
             assert result.orchestration_id is not None
@@ -559,8 +560,8 @@ class TestUnit:
             state_store=NoOpStateStore(),
         ) as gru:
             result = await gru.start_orchestration(
-                "tests.assets.crash.pipelines.healthy_counter",
-                "tests.assets.crash.minions.good",
+                "tests.assets.crash.pipelines.counter.healthy",
+                "tests.assets.crash.minions.counter.healthy",
             )
             assert result.success
 
@@ -592,8 +593,8 @@ class TestUnit:
             state_store=NoOpStateStore(),
         ) as gru:
             result = await gru.start_orchestration(
-                "tests.assets.crash.pipelines.healthy_counter",
-                "tests.assets.crash.minions.good",
+                "tests.assets.crash.pipelines.counter.healthy",
+                "tests.assets.crash.minions.counter.healthy",
             )
             assert result.success
             monitor_task = gru._resource_monitor_task
@@ -629,8 +630,8 @@ class TestUnit:
             state_store=NoOpStateStore(),
         ) as gru:
             result = await gru.start_orchestration(
-                "tests.assets.crash.pipelines.healthy_counter",
-                "tests.assets.crash.minions.good",
+                "tests.assets.crash.pipelines.counter.healthy",
+                "tests.assets.crash.minions.counter.healthy",
             )
             assert result.success
 
@@ -643,129 +644,3 @@ class TestUnit:
             assert not shutdown.success
             assert shutdown.reason == "logger shutdown boom"
             assert gru._runtime_state_snapshot().is_empty
-
-
-class TestUnitUsingNewAssets:
-    def patch_sleep_cancel_after(self, monkeypatch: pytest.MonkeyPatch, n: int) -> None:
-        calls = {"n": 0}
-
-        async def sleeper(_delay: object) -> None:
-            calls["n"] += 1
-            if calls["n"] >= n:
-                raise asyncio.CancelledError
-
-        monkeypatch.setattr("asyncio.sleep", sleeper)
-
-    @pytest.mark.asyncio
-    async def test_monitor_process_resources_healthy(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "psutil.virtual_memory", lambda: types.SimpleNamespace(percent=55, total=10_000)
-        )
-        monkeypatch.setattr("psutil.cpu_percent", _cpu_percent_stub(20))
-        monkeypatch.setattr("psutil.cpu_count", _cpu_count_stub(8))
-        monkeypatch.setattr("psutil.Process", _process_stub(rss=1234, cpu_percent=16))
-
-        self.patch_sleep_cancel_after(monkeypatch, 1)
-
-        metrics = InMemoryMetrics()
-        logger = InMemoryLogger()
-        monitor = _ResourceMonitorHarness(metrics, logger)
-
-        with pytest.raises(asyncio.CancelledError):
-            await monitor._monitor_process_resources(interval=0)
-
-        gsnap = metrics.snapshot_gauges()
-        assert InMemoryMetrics.find_sample(gsnap[SYSTEM_MEMORY_USED_PERCENT], {})["value"] == 55
-        assert InMemoryMetrics.find_sample(gsnap[SYSTEM_CPU_USED_PERCENT], {})["value"] == 20
-        assert InMemoryMetrics.find_sample(gsnap[PROCESS_MEMORY_USED_PERCENT], {})["value"] == 12
-        assert InMemoryMetrics.find_sample(gsnap[PROCESS_CPU_USED_PERCENT], {})["value"] == 2
-
-        assert metrics.snapshot_counters() == {}
-        assert metrics.snapshot_histograms() == {}
-
-    @pytest.mark.asyncio
-    async def test_monitor_high_ram_warn_once_with_reset(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        mem_vals = iter([95, 96, 55])
-        monkeypatch.setattr(
-            "psutil.virtual_memory",
-            lambda: types.SimpleNamespace(percent=next(mem_vals), total=10_000),
-        )
-        monkeypatch.setattr("psutil.cpu_percent", _cpu_percent_stub(20))
-        monkeypatch.setattr("psutil.cpu_count", _cpu_count_stub(4))
-        monkeypatch.setattr("psutil.Process", _process_stub(rss=1000, cpu_percent=8))
-
-        self.patch_sleep_cancel_after(monkeypatch, 3)
-
-        metrics = InMemoryMetrics()
-        logger = InMemoryLogger()
-        monitor = _ResourceMonitorHarness(metrics, logger)
-
-        with pytest.raises(asyncio.CancelledError):
-            await monitor._monitor_process_resources(interval=0)
-
-        warns = [
-            log
-            for log in logger.logs
-            if log.level == WARNING and "System memory usage is very high" in log.msg
-        ]
-        assert len(warns) == 1
-        assert warns[0].kwargs.get("system_memory_used_percent") in (95, 96)
-
-        gsnap = metrics.snapshot_gauges()
-        assert InMemoryMetrics.find_sample(gsnap[SYSTEM_MEMORY_USED_PERCENT], {})["value"] == 55
-        assert InMemoryMetrics.find_sample(gsnap[SYSTEM_CPU_USED_PERCENT], {})["value"] == 20
-        assert InMemoryMetrics.find_sample(gsnap[PROCESS_MEMORY_USED_PERCENT], {})["value"] == 10
-        assert InMemoryMetrics.find_sample(gsnap[PROCESS_CPU_USED_PERCENT], {})["value"] == 2
-
-    @pytest.mark.asyncio
-    async def test_monitor_failure_suppressed_then_recovery(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        def vm_gen() -> Iterator[RuntimeError | types.SimpleNamespace]:
-            yield from [RuntimeError("boom1"), RuntimeError("boom2")]
-            while True:
-                yield types.SimpleNamespace(percent=50, total=10_000)
-
-        it = vm_gen()
-
-        def vm_stub() -> types.SimpleNamespace:
-            v = next(it)
-            if isinstance(v, Exception):
-                raise v
-            return v
-
-        monkeypatch.setattr("psutil.virtual_memory", vm_stub)
-
-        monkeypatch.setattr("psutil.cpu_percent", _cpu_percent_stub(10))
-        monkeypatch.setattr("psutil.cpu_count", _cpu_count_stub(4))
-        monkeypatch.setattr("psutil.Process", _process_stub(rss=1000, cpu_percent=8))
-
-        self.patch_sleep_cancel_after(monkeypatch, 3)
-
-        metrics = InMemoryMetrics()
-        logger = InMemoryLogger()
-        monitor = _ResourceMonitorHarness(metrics, logger)
-
-        with pytest.raises(asyncio.CancelledError):
-            await monitor._monitor_process_resources(interval=0)
-
-        crits = [log for log in logger.logs if log.level == CRITICAL]
-        infos = [log for log in logger.logs if log.level == INFO and "recovered" in log.msg]
-
-        assert len(crits) == 1
-        assert len(infos) == 1
-
-        crit = crits[0]
-        assert "failed" in crit.msg.lower()
-        assert crit.kwargs.get("error_type") in ("RuntimeError",)
-        assert crit.kwargs.get("error_message") in ("boom1", "boom2")
-        tb = crit.kwargs.get("traceback")
-        assert isinstance(tb, str) and "RuntimeError: " in tb
-
-        gsnap = metrics.snapshot_gauges()
-        assert InMemoryMetrics.find_sample(gsnap[SYSTEM_MEMORY_USED_PERCENT], {})["value"] == 50
-        assert InMemoryMetrics.find_sample(gsnap[SYSTEM_CPU_USED_PERCENT], {})["value"] == 10
-        assert InMemoryMetrics.find_sample(gsnap[PROCESS_MEMORY_USED_PERCENT], {})["value"] == 10
-        assert InMemoryMetrics.find_sample(gsnap[PROCESS_CPU_USED_PERCENT], {})["value"] == 2

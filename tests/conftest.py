@@ -20,21 +20,14 @@ def tests_dir() -> Path:
 
 
 @pytest.fixture
-def reload_wait_for_subs_pipeline() -> Callable[..., None]:
-    def _reload(*, expected_subs: int) -> None:
-        from tests.assets.pipelines.simple.simple_event import (
-            subscriber_ready_fixed_events,
-        )
+def configure_emit_one_simple_pipeline_subscriber_gate() -> Callable[..., None]:
+    def _configure(*, expected_subs: int) -> None:
+        from tests.assets.pipelines.emit_one.simple import default
 
-        importlib.reload(subscriber_ready_fixed_events)
+        importlib.reload(default)
+        default.AssetPipeline.reset_gate(expected_subs=expected_subs)
 
-        from tests.assets.pipelines.simple.simple_event.subscriber_ready_fixed_events import (
-            SimpleSubscriberReadyFixedEventsPipeline,
-        )
-
-        SimpleSubscriberReadyFixedEventsPipeline.reset_gate(expected_subs=expected_subs)
-
-    return _reload
+    return _configure
 
 
 @pytest.fixture(autouse=True)

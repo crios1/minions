@@ -1,3 +1,5 @@
-from tests.assets.minions.two_steps.simple.basic import SimpleMinion
+from tests.assets.minions.two_steps.simple.default import (
+    AssetMinion as TwoStepSimpleMinion,
+)
 
-minion = SimpleMinion
+minion = TwoStepSimpleMinion
