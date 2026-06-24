@@ -868,8 +868,9 @@ class ScenarioRunner:
 
     def _snapshot_metrics_counters(self) -> dict[str, list[dict[str, object]]] | None:
         metrics = getattr(self._gru, "_metrics", None)
-        # TODO: should we call the user-defined method directly or via a wrapper
-        # like _mn_snapshot (or create _mn_snapshot_counters if needed)?
+        # Keep this as the direct user-facing counter snapshot hook. The
+        # verifier only consumes counters, and _mn_snapshot() would collapse
+        # unsupported/failing snapshots into an indistinguishable empty result.
         snapshot_fn = getattr(metrics, "snapshot_counters", None)
 
         if not callable(snapshot_fn):
@@ -880,11 +881,14 @@ class ScenarioRunner:
         if not isinstance(counters, dict):
             return None
 
-        counters = cast(dict[str, object], counters)
+        counters = cast(dict[object, object], counters)
 
         normalized: dict[str, list[dict[str, object]]] = {}
 
         for name, samples in counters.items():
+            if not isinstance(name, str):
+                continue
+
             if not isinstance(samples, list):
                 normalized[name] = []
                 continue
@@ -897,7 +901,7 @@ class ScenarioRunner:
                     continue
 
                 sample = cast(dict[str, object], sample)
-                normalized_samples.append(sample)
+                normalized_samples.append(dict(sample))
 
             normalized[name] = normalized_samples
 

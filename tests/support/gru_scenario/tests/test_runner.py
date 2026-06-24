@@ -68,6 +68,81 @@ async def test_runner_require_result_invariant_message_is_actionable(gru: Gru) -
 
 
 @pytest.mark.asyncio
+async def test_runner_metrics_counter_snapshot_uses_direct_snapshot_hook(gru: Gru) -> None:
+    class CounterSnapshotMetrics:
+        def __init__(self) -> None:
+            self.snapshot_counters_called = False
+            self.mn_snapshot_called = False
+
+        def snapshot_counters(self) -> object:
+            self.snapshot_counters_called = True
+            return {
+                "events_total": [
+                    {"labels": {"status": "ok"}, "value": 1.0},
+                ],
+            }
+
+        async def _mn_snapshot(self) -> object:
+            self.mn_snapshot_called = True
+            return {
+                "counter": {
+                    "events_total": [
+                        {"labels": {"status": "wrapped"}, "value": 2.0},
+                    ],
+                },
+                "gauge": {},
+                "histogram": {},
+            }
+
+    metrics = CounterSnapshotMetrics()
+    gru._metrics = metrics  # type: ignore[assignment]
+    runner = ScenarioRunner(
+        gru,
+        ScenarioPlan([], pipeline_event_counts={}),
+        per_verification_timeout=0.1,
+    )
+
+    assert runner._snapshot_metrics_counters() == {
+        "events_total": [
+            {"labels": {"status": "ok"}, "value": 1.0},
+        ],
+    }
+    assert metrics.snapshot_counters_called is True
+    assert metrics.mn_snapshot_called is False
+
+
+@pytest.mark.asyncio
+async def test_runner_metrics_counter_snapshot_normalizes_only_supported_shape(
+    gru: Gru,
+) -> None:
+    class MalformedCounterSnapshotMetrics:
+        def snapshot_counters(self) -> object:
+            snapshot: dict[object, object] = {
+                "valid_total": [
+                    {"labels": {"status": "ok"}, "value": 1.0},
+                    "not-a-sample",
+                ],
+                "not_a_list_total": "not-a-list",
+                123: [{"labels": {}, "value": 2.0}],
+            }
+            return snapshot
+
+    gru._metrics = MalformedCounterSnapshotMetrics()  # type: ignore[assignment]
+    runner = ScenarioRunner(
+        gru,
+        ScenarioPlan([], pipeline_event_counts={}),
+        per_verification_timeout=0.1,
+    )
+
+    snapshot = runner._snapshot_metrics_counters()
+
+    assert snapshot == {
+        "valid_total": [{"labels": {"status": "ok"}, "value": 1.0}],
+        "not_a_list_total": [],
+    }
+
+
+@pytest.mark.asyncio
 async def test_runner_validates_missing_pipeline_event_count_after_resolving_identity(
     gru: Gru,
 ) -> None:
