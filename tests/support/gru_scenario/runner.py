@@ -75,6 +75,23 @@ class SpyRegistry:
             r.reset_spy()
 
 
+StartFailureCategory = Literal[
+    "duplicate_orchestration",
+    "event_type_mismatch",
+    "unknown",
+]
+
+
+def _categorize_start_failure(reason: str | None) -> StartFailureCategory | None:
+    if reason is None:
+        return None
+    if reason == "Orchestration already running - start request was rejected.":
+        return "duplicate_orchestration"
+    if reason.startswith("Incompatible minion and pipeline event types:"):
+        return "event_type_mismatch"
+    return "unknown"
+
+
 @dataclass(frozen=True)
 class OrchestrationStartReceipt:
     directive_index: int
@@ -86,6 +103,8 @@ class OrchestrationStartReceipt:
     orchestration_id: str | None = None
     pipeline_id: str = ""
     minion_id: str = ""
+    failure_reason: str | None = None
+    failure_category: StartFailureCategory | None = None
 
     def __post_init__(self) -> None:
         if not self.pipeline_id:
@@ -386,6 +405,8 @@ class ScenarioRunner:
             minion_cls=None,
             success=r.success,
             orchestration_id=getattr(r, "orchestration_id", None),
+            failure_reason=getattr(r, "reason", None),
+            failure_category=_categorize_start_failure(getattr(r, "reason", None)),
         )
 
         if not r.success:
@@ -410,6 +431,8 @@ class ScenarioRunner:
                 minion_cls=minion_cls,
                 success=receipt.success,
                 orchestration_id=receipt.orchestration_id,
+                failure_reason=receipt.failure_reason,
+                failure_category=receipt.failure_category,
             )
             if isinstance(minion_inst, SpiedMinion):
                 result.started_minions.add(minion_inst)

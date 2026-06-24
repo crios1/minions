@@ -283,6 +283,11 @@ async def test_runner_wait_workflows_subset_handles_mixed_success_and_failure(
     assert len(result.receipts) == 2
     assert sum(1 for r in result.receipts if r.success) == 1
     assert sum(1 for r in result.receipts if not r.success) == 1
+    failed_receipt = next(r for r in result.receipts if not r.success)
+    assert failed_receipt.failure_reason == (
+        "Orchestration already running - start request was rejected."
+    )
+    assert failed_receipt.failure_category == "duplicate_orchestration"
     assert len(result.started_minions) == 1
 
 

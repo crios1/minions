@@ -19,12 +19,20 @@ from tests.assets.minions.two_steps.counter.with_fixed_resource import (
 from tests.assets.pipelines.emit_one.counter.default import (
     AssetPipeline as EmitOneCounterPipeline,
 )
+from tests.assets.pipelines.emit_two.simple.with_subscriber_counts_one_then_two import (
+    AssetPipeline as EmitTwoSimplePipeline,
+)
+from tests.assets.resources.fixed.default import AssetResource as FixedResource
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.support.gru_scenario.directives import (
+    AfterWorkflowStepStarts,
+    Concurrent,
     ExpectRuntime,
+    GruShutdown,
     OrchestrationStart,
+    OrchestrationStop,
     RuntimeExpectSpec,
 )
 from tests.support.gru_scenario.plan import ScenarioPlan
@@ -297,6 +305,43 @@ def test_build_expected_call_counts_scales_minion_init_with_successful_starts():
     assert minion_counts["__init__"] == 2
     assert minion_counts["startup"] == 2
     assert minion_counts["run"] == 2
+
+
+def test_build_expected_call_counts_keeps_pipelines_out_of_exact_pinning():
+    pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
+    minion_ref = "tests.assets.minions.two_steps.counter.with_fixed_resource"
+    plan = ScenarioPlan(
+        [OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)],
+        pipeline_event_counts={pipeline_ref: 1},
+    )
+    spies = SpyRegistry(
+        minions={minion_ref: FixedResourceMinion},
+        pipelines={pipeline_ref: EmitOneCounterPipeline},
+        resources={FixedResource},
+    )
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            OrchestrationStartReceipt(
+                directive_index=0,
+                minion_module_path=minion_ref,
+                pipeline_module_path=pipeline_ref,
+                instance_id="id-ok",
+                minion_cls=FixedResourceMinion,
+                success=True,
+                orchestration_id=None,
+                pipeline_id=pipeline_ref,
+                minion_id=minion_ref,
+            ),
+        ],
+    )
+
+    expected = _mk_verifier(plan, result)._build_expected_call_counts()
+
+    assert EmitOneCounterPipeline not in expected.call_counts
+    assert EmitOneCounterPipeline not in expected.allow_unlisted
+    assert FixedResource in expected.call_counts
+    assert FixedResource in expected.allow_unlisted
 
 
 @pytest.mark.asyncio
@@ -630,7 +675,7 @@ def test_assert_minion_fanout_delivery_rejects_overage_beyond_plus_one(
         verifier._assert_minion_fanout_delivery()
 
 
-def test_assert_pipeline_events_allows_restarted_pipeline_produce_event_totals(
+def test_assert_pipeline_events_uses_exact_singleton_activation_counts_by_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directives = [
@@ -682,7 +727,302 @@ def test_assert_pipeline_events_allows_restarted_pipeline_produce_event_totals(
     monkeypatch.setattr(
         EmitOneCounterPipeline,
         "get_call_counts",
-        _stub_get_call_counts({"__init__": 2, "startup": 2, "run": 2, "produce_event": 3}),
+        _stub_get_call_counts({"__init__": 1, "startup": 1, "run": 1, "produce_event": 1}),
+    )
+
+    verifier._assert_pipeline_events()
+
+
+def test_assert_pipeline_events_uses_pipeline_total_events_for_produce_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pipeline_ref = "tests.assets.pipelines.emit_two.simple.with_subscriber_counts_one_then_two"
+    minion_ref = "tests.assets.minions.two_steps.simple.default"
+    plan = ScenarioPlan(
+        [OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)],
+        pipeline_event_counts={pipeline_ref: 1},
+    )
+    spies = SpyRegistry(
+        minions={minion_ref: TwoStepCounterMinion},
+        pipelines={pipeline_ref: EmitTwoSimplePipeline},
+    )
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            OrchestrationStartReceipt(
+                directive_index=0,
+                minion_module_path=minion_ref,
+                pipeline_module_path=pipeline_ref,
+                instance_id="id-ok",
+                minion_cls=TwoStepCounterMinion,
+                success=True,
+                orchestration_id=None,
+                pipeline_id=pipeline_ref,
+                minion_id=minion_ref,
+            ),
+        ],
+    )
+    verifier = _mk_verifier(plan, result)
+    monkeypatch.setattr(
+        EmitTwoSimplePipeline,
+        "get_call_counts",
+        _stub_get_call_counts({"__init__": 1, "startup": 1, "run": 1, "produce_event": 2}),
+    )
+
+    verifier._assert_pipeline_events()
+
+
+def test_assert_pipeline_events_keeps_concurrent_starts_exact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
+    minion_ref = "tests.assets.minions.two_steps.counter.default"
+    start_a = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
+    start_b = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
+    plan = ScenarioPlan(
+        [Concurrent(start_a, start_b)],
+        pipeline_event_counts={pipeline_ref: 1},
+    )
+    spies = SpyRegistry(
+        minions={minion_ref: TwoStepCounterMinion},
+        pipelines={pipeline_ref: EmitOneCounterPipeline},
+    )
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            OrchestrationStartReceipt(
+                directive_index=0,
+                minion_module_path=minion_ref,
+                pipeline_module_path=pipeline_ref,
+                instance_id="id-a",
+                minion_cls=TwoStepCounterMinion,
+                success=True,
+                orchestration_id=None,
+                pipeline_id=pipeline_ref,
+                minion_id=minion_ref,
+            ),
+            OrchestrationStartReceipt(
+                directive_index=1,
+                minion_module_path=minion_ref,
+                pipeline_module_path=pipeline_ref,
+                instance_id="id-b",
+                minion_cls=TwoStepCounterMinion,
+                success=True,
+                orchestration_id=None,
+                pipeline_id=pipeline_ref,
+                minion_id=minion_ref,
+            ),
+        ],
+    )
+    verifier = _mk_verifier(plan, result)
+    monkeypatch.setattr(
+        EmitOneCounterPipeline,
+        "get_call_counts",
+        _stub_get_call_counts({"__init__": 1, "startup": 1, "run": 1, "produce_event": 1}),
+    )
+
+    verifier._assert_pipeline_events()
+
+
+def test_assert_pipeline_events_keeps_lifecycle_exact_for_stop_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
+    minion_ref = "tests.assets.minions.two_steps.counter.default"
+    start = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
+    plan = ScenarioPlan(
+        [
+            start,
+            AfterWorkflowStepStarts(
+                expected={start: {"step_1": 1}},
+                directive=OrchestrationStop(id=start, expect_success=True),
+            ),
+            GruShutdown(expect_success=True),
+        ],
+        pipeline_event_counts={pipeline_ref: 1},
+    )
+    spies = SpyRegistry(
+        minions={minion_ref: TwoStepCounterMinion},
+        pipelines={pipeline_ref: EmitOneCounterPipeline},
+    )
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            OrchestrationStartReceipt(
+                directive_index=0,
+                minion_module_path=minion_ref,
+                pipeline_module_path=pipeline_ref,
+                instance_id="id-ok",
+                minion_cls=TwoStepCounterMinion,
+                success=True,
+                orchestration_id="orch-ok",
+                pipeline_id=pipeline_ref,
+                minion_id=minion_ref,
+            ),
+        ],
+        seen_shutdown=True,
+    )
+    verifier = _mk_verifier(plan, result)
+    monkeypatch.setattr(
+        EmitOneCounterPipeline,
+        "get_call_counts",
+        _stub_get_call_counts(
+            {"__init__": 1, "startup": 1, "run": 1, "shutdown": 1, "produce_event": 2}
+        ),
+    )
+
+    verifier._assert_pipeline_events()
+
+
+def test_assert_pipeline_events_ignores_failed_start_when_pipeline_is_active(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
+    minion_ref = "tests.assets.minions.two_steps.counter.default"
+    directives = [
+        OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref),
+        OrchestrationStart(
+            pipeline=pipeline_ref,
+            minion=minion_ref,
+            expect_success=False,
+        ),
+        GruShutdown(expect_success=True),
+    ]
+    plan = ScenarioPlan(directives, pipeline_event_counts={pipeline_ref: 1})
+    spies = SpyRegistry(
+        minions={minion_ref: TwoStepCounterMinion},
+        pipelines={pipeline_ref: EmitOneCounterPipeline},
+    )
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            OrchestrationStartReceipt(
+                directive_index=0,
+                minion_module_path=minion_ref,
+                pipeline_module_path=pipeline_ref,
+                instance_id="id-ok",
+                minion_cls=TwoStepCounterMinion,
+                success=True,
+                orchestration_id="orch-ok",
+                pipeline_id=pipeline_ref,
+                minion_id=minion_ref,
+            ),
+            OrchestrationStartReceipt(
+                directive_index=1,
+                minion_module_path=minion_ref,
+                pipeline_module_path=pipeline_ref,
+                instance_id=None,
+                minion_cls=None,
+                success=False,
+                orchestration_id=None,
+                pipeline_id=pipeline_ref,
+                minion_id=minion_ref,
+            ),
+        ],
+        seen_shutdown=True,
+    )
+    verifier = _mk_verifier(plan, result)
+    monkeypatch.setattr(
+        EmitOneCounterPipeline,
+        "get_call_counts",
+        _stub_get_call_counts(
+            {"__init__": 1, "startup": 1, "run": 1, "shutdown": 1, "produce_event": 1}
+        ),
+    )
+
+    verifier._assert_pipeline_events()
+
+
+def test_assert_pipeline_events_falls_back_for_failed_start_before_activation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
+    minion_ref = "tests.assets.minions.two_steps.counter.default"
+    directives = [
+        OrchestrationStart(
+            pipeline=pipeline_ref,
+            minion=minion_ref,
+            expect_success=False,
+        ),
+        GruShutdown(expect_success=True),
+    ]
+    plan = ScenarioPlan(directives, pipeline_event_counts={})
+    spies = SpyRegistry(
+        minions={minion_ref: TwoStepCounterMinion},
+        pipelines={pipeline_ref: EmitOneCounterPipeline},
+    )
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            OrchestrationStartReceipt(
+                directive_index=0,
+                minion_module_path=minion_ref,
+                pipeline_module_path=pipeline_ref,
+                instance_id=None,
+                minion_cls=None,
+                success=False,
+                orchestration_id=None,
+                pipeline_id=pipeline_ref,
+                minion_id=minion_ref,
+            ),
+        ],
+        seen_shutdown=True,
+    )
+    verifier = _mk_verifier(plan, result)
+    monkeypatch.setattr(
+        EmitOneCounterPipeline,
+        "get_call_counts",
+        _stub_get_call_counts({}),
+    )
+
+    verifier._assert_pipeline_events()
+
+
+def test_assert_pipeline_events_handles_event_type_failure_before_activation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
+    minion_ref = "tests.assets.minions.two_steps.simple.default"
+    directives = [
+        OrchestrationStart(
+            pipeline=pipeline_ref,
+            minion=minion_ref,
+            expect_success=False,
+        ),
+        GruShutdown(expect_success=True),
+    ]
+    plan = ScenarioPlan(directives, pipeline_event_counts={})
+    spies = SpyRegistry(
+        minions={minion_ref: TwoStepCounterMinion},
+        pipelines={pipeline_ref: EmitOneCounterPipeline},
+    )
+    result = ScenarioRunResult(
+        spies=spies,
+        receipts=[
+            OrchestrationStartReceipt(
+                directive_index=0,
+                minion_module_path=minion_ref,
+                pipeline_module_path=pipeline_ref,
+                instance_id=None,
+                minion_cls=None,
+                success=False,
+                orchestration_id="orch-failed",
+                pipeline_id=pipeline_ref,
+                minion_id=minion_ref,
+                failure_reason=(
+                    "Incompatible minion and pipeline event types: "
+                    "pipeline_emits=CounterEvent; minion_expects=SimpleEvent"
+                ),
+                failure_category="event_type_mismatch",
+            ),
+        ],
+        seen_shutdown=True,
+    )
+    verifier = _mk_verifier(plan, result)
+    monkeypatch.setattr(
+        EmitOneCounterPipeline,
+        "get_call_counts",
+        _stub_get_call_counts({"__init__": 1}),
     )
 
     verifier._assert_pipeline_events()

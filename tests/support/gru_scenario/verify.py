@@ -1,5 +1,6 @@
 import asyncio
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Callable, cast
 
@@ -15,11 +16,17 @@ from tests.assets.support.logger_spied import SpiedLogger
 from tests.assets.support.metrics_spied import SpiedMetrics
 from tests.assets.support.minion_spied import SpiedMinion
 from tests.assets.support.mixin_spy import SpyMixin
-from tests.assets.support.pipeline_spied import SpiedPipeline
 from tests.assets.support.resource_spied import SpiedResource
 from tests.assets.support.state_store_spied import SpiedStateStore
 
-from .directives import ExpectRuntime, OrchestrationStart
+from .directives import (
+    AfterWorkflowStepStarts,
+    Concurrent,
+    ExpectRuntime,
+    GruShutdown,
+    OrchestrationStart,
+    OrchestrationStop,
+)
 from .plan import ScenarioPlan
 from .runner import (
     OrchestrationStartReceipt,
@@ -67,13 +74,176 @@ class ExpectedCallCounts:
         type[SpiedMinion[Any, Any]] | type[SpiedResource] | type[SpiedStateStore],
         dict[str, int],
     ]
-    allow_unlisted: set[type[SpiedPipeline[Any]] | type[SpiedResource]]
+    allow_unlisted: set[type[SpiedResource]]
 
 
 @dataclass(frozen=True)
 class PipelineAttemptOutcomes:
     attempts_by_pipeline_id: defaultdict[str, int]
     successes_by_pipeline_id: defaultdict[str, int]
+
+
+@dataclass(frozen=True)
+class PipelineCallExpectations:
+    inits_by_pipeline_id: defaultdict[str, int]
+    starts_by_pipeline_id: defaultdict[str, int]
+    shutdowns_by_pipeline_id: defaultdict[str, int]
+    produce_events_by_pipeline_id: dict[str, "ProduceEventExpectation"]
+
+
+@dataclass(frozen=True)
+class ProduceEventExpectation:
+    minimum: int
+    maximum: int
+
+    @property
+    def is_exact(self) -> bool:
+        return self.minimum == self.maximum
+
+
+class _PipelineCallExpectationBuilder:
+    def __init__(self, plan: ScenarioPlan, result: ScenarioRunResult):
+        self._plan = plan
+        self._result = result
+
+    def build(self) -> PipelineCallExpectations | None:
+        exact_produce_events = not self._plan_has_ambiguous_pipeline_event_timing(
+            self._plan.directives
+        )
+
+        receipts_by_directive_index = {
+            receipt.directive_index: receipt for receipt in self._result.receipts
+        }
+        active_by_pipeline_id: defaultdict[str, int] = defaultdict(int)
+        inits_by_pipeline_id: defaultdict[str, int] = defaultdict(int)
+        starts_by_pipeline_id: defaultdict[str, int] = defaultdict(int)
+        shutdowns_by_pipeline_id: defaultdict[str, int] = defaultdict(int)
+        active_receipts_by_start_id: dict[int, OrchestrationStartReceipt] = {}
+
+        for directive in self._plan.flat_directives:
+            if isinstance(directive, OrchestrationStart):
+                receipt = receipts_by_directive_index.get(
+                    self._plan.directive_index(directive)
+                )
+                if receipt is None:
+                    continue
+                if not receipt.success:
+                    if active_by_pipeline_id[receipt.pipeline_id] == 0:
+                        if not self._is_event_type_validation_failure(receipt):
+                            return None
+                        inits_by_pipeline_id[receipt.pipeline_id] += 1
+                    continue
+                if active_by_pipeline_id[receipt.pipeline_id] == 0:
+                    inits_by_pipeline_id[receipt.pipeline_id] += 1
+                    starts_by_pipeline_id[receipt.pipeline_id] += 1
+                active_by_pipeline_id[receipt.pipeline_id] += 1
+                active_receipts_by_start_id[id(directive)] = receipt
+                continue
+
+            if isinstance(directive, OrchestrationStop):
+                receipt = self._resolve_active_stop_receipt(
+                    directive,
+                    active_receipts_by_start_id,
+                )
+                if receipt is None:
+                    continue
+                active_by_pipeline_id[receipt.pipeline_id] -= 1
+                if active_by_pipeline_id[receipt.pipeline_id] == 0:
+                    shutdowns_by_pipeline_id[receipt.pipeline_id] += 1
+                continue
+
+            if isinstance(directive, GruShutdown):
+                if not self._result.seen_shutdown:
+                    continue
+                for pipeline_id, active_count in list(active_by_pipeline_id.items()):
+                    if active_count > 0:
+                        shutdowns_by_pipeline_id[pipeline_id] += 1
+                        active_by_pipeline_id[pipeline_id] = 0
+
+        return PipelineCallExpectations(
+            inits_by_pipeline_id=inits_by_pipeline_id,
+            starts_by_pipeline_id=starts_by_pipeline_id,
+            shutdowns_by_pipeline_id=shutdowns_by_pipeline_id,
+            produce_events_by_pipeline_id=self._build_produce_event_expectations(
+                starts_by_pipeline_id,
+                exact_produce_events,
+            ),
+        )
+
+    def _build_produce_event_expectations(
+        self,
+        starts_by_pipeline_id: defaultdict[str, int],
+        exact_produce_events: bool,
+    ) -> dict[str, ProduceEventExpectation]:
+        expectations: dict[str, ProduceEventExpectation] = {}
+        for pipeline_id, expected_events in self._plan.pipeline_event_targets.items():
+            expected_starts = starts_by_pipeline_id.get(pipeline_id, 0)
+            if expected_starts <= 0:
+                expectations[pipeline_id] = ProduceEventExpectation(minimum=0, maximum=0)
+                continue
+            expected_events = self._expected_pipeline_produce_event_calls(
+                pipeline_id,
+                expected_events,
+            )
+            if exact_produce_events:
+                expected = expected_events * expected_starts
+                expectations[pipeline_id] = ProduceEventExpectation(
+                    minimum=expected,
+                    maximum=expected,
+                )
+                continue
+            expectations[pipeline_id] = ProduceEventExpectation(
+                minimum=expected_events * expected_starts,
+                maximum=(expected_events + 1) * expected_starts,
+            )
+        return expectations
+
+    def _expected_pipeline_produce_event_calls(
+        self,
+        pipeline_id: str,
+        expected_events: int,
+    ) -> int:
+        if self._result.spies is None:
+            return expected_events
+        p_cls = self._result.spies.pipelines.get(pipeline_id)
+        total_events = getattr(p_cls, "total_events", None)
+        if isinstance(total_events, int):
+            return total_events
+        return expected_events
+
+    def _is_event_type_validation_failure(
+        self,
+        receipt: OrchestrationStartReceipt,
+    ) -> bool:
+        return receipt.failure_category == "event_type_mismatch"
+
+    def _plan_has_ambiguous_pipeline_event_timing(
+        self,
+        directives: Sequence[object],
+    ) -> bool:
+        for directive in directives:
+            if isinstance(directive, AfterWorkflowStepStarts):
+                return True
+            if isinstance(directive, Concurrent) and self._plan_has_ambiguous_pipeline_event_timing(
+                list(directive.directives)
+            ):
+                return True
+        return False
+
+    def _resolve_active_stop_receipt(
+        self,
+        directive: OrchestrationStop,
+        active_receipts_by_start_id: dict[int, OrchestrationStartReceipt],
+    ) -> OrchestrationStartReceipt | None:
+        if not directive.expect_success:
+            return None
+        if isinstance(directive.id, OrchestrationStart):
+            return active_receipts_by_start_id.pop(id(directive.id), None)
+        for start_id, receipt in tuple(active_receipts_by_start_id.items()):
+            if receipt.orchestration_id == directive.id:
+                active_receipts_by_start_id.pop(start_id)
+                return receipt
+        return None
 
 
 @dataclass(frozen=True)
@@ -162,18 +332,11 @@ class ScenarioVerifier:
             type[SpiedMinion[Any, Any]] | type[SpiedResource] | type[SpiedStateStore],
             dict[str, int],
         ] = {}
-        allow_unlisted: set[type[SpiedPipeline[Any]] | type[SpiedResource]] = set()
+        allow_unlisted: set[type[SpiedResource]] = set()
 
         for r_cls in spies.resources:
             call_counts[r_cls] = {"__init__": 1, "startup": 1, "run": 1}
             allow_unlisted.add(r_cls)
-
-        for p_cls in spies.pipelines.values():
-            # TODO: Decide whether pipelines should be pinned in _pin_and_assert_calls.
-            # This allow-list entry is currently inert because pipelines are not added
-            # to call_counts; pipeline behavior is asserted separately in
-            # _assert_pipeline_events().
-            allow_unlisted.add(p_cls)
 
         for m_cls in spies.minions.values():
             starts = expectations.minion_start_counts.get(m_cls, 0)
@@ -1151,9 +1314,63 @@ class ScenarioVerifier:
     def _assert_pipeline_events(self) -> None:
         spies = self._require_spies()
         outcomes = self._compute_pipeline_attempt_outcomes()
+        call_expectations = self._compute_pipeline_call_expectations()
         for pipeline_id, p_cls in spies.pipelines.items():
             expected_events = self._plan.pipeline_event_targets.get(pipeline_id)
             counts = p_cls.get_call_counts()
+
+            if call_expectations is not None:
+                expected_starts = call_expectations.starts_by_pipeline_id.get(
+                    pipeline_id, 0
+                )
+                expected_shutdowns = call_expectations.shutdowns_by_pipeline_id.get(
+                    pipeline_id, 0
+                )
+                expected_inits = call_expectations.inits_by_pipeline_id.get(
+                    pipeline_id, 0
+                )
+                for name, expected in (
+                    ("__init__", expected_inits),
+                    ("startup", expected_starts),
+                    ("run", expected_starts),
+                    ("shutdown", expected_shutdowns),
+                ):
+                    actual = counts.get(name, 0)
+                    if actual != expected:
+                        pytest.fail(
+                            f"{p_cls.__name__} {name} mismatch: "
+                            f"expected {expected}, got {actual}"
+                        )
+
+                produce_events = call_expectations.produce_events_by_pipeline_id.get(
+                    pipeline_id
+                )
+                if produce_events is None:
+                    continue
+                actual = counts.get("produce_event", 0)
+                if produce_events.is_exact:
+                    expected = produce_events.minimum
+                    if actual != expected:
+                        pytest.fail(
+                            f"{p_cls.__name__} produce_event mismatch: "
+                            f"expected {expected}, got {actual}"
+                        )
+                    continue
+
+                if produce_events.minimum <= actual <= produce_events.maximum:
+                    continue
+                if produce_events.maximum > 0:
+                    pytest.fail(
+                        f"{p_cls.__name__} produce_event mismatch: "
+                        "expected "
+                        f"{produce_events.minimum}..{produce_events.maximum}, got {actual}"
+                    )
+                else:
+                    pytest.fail(
+                        f"{p_cls.__name__} produce_event mismatch: expected 0 when "
+                        f"no starts succeeded, got {actual}"
+                    )
+                continue
 
             attempts = max(
                 outcomes.attempts_by_pipeline_id.get(pipeline_id, 0),
@@ -1211,6 +1428,11 @@ class ScenarioVerifier:
                         f"no starts succeeded, got {actual}"
                     )
 
+    def _compute_pipeline_call_expectations(
+        self,
+    ) -> PipelineCallExpectations | None:
+        return _PipelineCallExpectationBuilder(self._plan, self._result).build()
+
     def _compute_pipeline_attempt_outcomes(self) -> PipelineAttemptOutcomes:
         attempts_by_pipeline_id: defaultdict[str, int] = defaultdict(int)
         successes_by_pipeline_id: defaultdict[str, int] = defaultdict(int)
@@ -1229,7 +1451,7 @@ class ScenarioVerifier:
             type[SpiedMinion[Any, Any]] | type[SpiedResource] | type[SpiedStateStore],
             dict[str, int],
         ],
-        allow_unlisted: set[type[SpiedPipeline[Any]] | type[SpiedResource]],
+        allow_unlisted: set[type[SpiedResource]],
     ) -> list[Callable[[], None]]:
         try:
             return await asyncio.gather(
