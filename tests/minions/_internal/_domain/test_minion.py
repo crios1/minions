@@ -326,11 +326,12 @@ class TestMinionSubclassingValid:
             logger=NoOpLogger(),
         )
 
-        with pytest.raises(
-            TypeError,
-            match="MyMinion.load_config: config type must be a dataclass or msgspec Struct type.",
-        ):
+        with pytest.raises(TypeError) as excinfo:
             await m._mn_load_config("mock")
+        assert str(excinfo.value) == (
+            "MyMinion.load_config: config type is not supported. "
+            "Supported user-declared types: (dataclass, msgspec.Struct)."
+        )
 
     @pytest.mark.asyncio
     async def test_minion_requires_file_config_loader_override(self):
@@ -372,7 +373,8 @@ class TestMinionSubclassingInvalid:
             class MyMinion(Minion[event_type, MyContext]):
                 ...
         assert str(excinfo.value) == (
-            "MyMinion: event type must be a structured type, not a primitive"
+            "MyMinion: event type is not supported. "
+            "Supported user-declared types: (dataclass, msgspec.Struct)."
         )
 
     @pytest.mark.parametrize("context_type", SERIALIZABLE_PRIMITIVE_TYPES)
@@ -381,7 +383,8 @@ class TestMinionSubclassingInvalid:
             class MyMinion(Minion[MyEvent, context_type]):
                 ...
         assert str(excinfo.value) == (
-            "MyMinion: workflow context type must be a structured type, not a primitive"
+            "MyMinion: workflow context type is not supported. "
+            "Supported user-declared types: (dataclass, msgspec.Struct)."
         )
 
     def test_invalid_event_and_context_types(self):
@@ -389,7 +392,35 @@ class TestMinionSubclassingInvalid:
             class MyMinion(Minion[int, int]):
                 ...
         assert str(excinfo.value) == (
-            "MyMinion: event type must be a structured type, not a primitive"
+            "MyMinion: event type is not supported. "
+            "Supported user-declared types: (dataclass, msgspec.Struct)."
+        )
+
+    def test_reject_any_event_type(self):
+        with pytest.raises(TypeError) as excinfo:
+            class MyMinion(Minion[Any, MyContext]):
+                ...
+        assert str(excinfo.value) == (
+            "MyMinion: event type is not supported. "
+            "Supported user-declared types: (dataclass, msgspec.Struct)."
+        )
+
+    def test_reject_any_context_type(self):
+        with pytest.raises(TypeError) as excinfo:
+            class MyMinion(Minion[MyEvent, Any]):
+                ...
+        assert str(excinfo.value) == (
+            "MyMinion: workflow context type is not supported. "
+            "Supported user-declared types: (dataclass, msgspec.Struct)."
+        )
+
+    def test_reject_any_event_and_context_types(self):
+        with pytest.raises(TypeError) as excinfo:
+            class MyMinion(Minion[Any, Any]):
+                ...
+        assert str(excinfo.value) == (
+            "MyMinion: event type is not supported. "
+            "Supported user-declared types: (dataclass, msgspec.Struct)."
         )
 
     def test_reject_bare_dict_event_type(self):
@@ -397,7 +428,8 @@ class TestMinionSubclassingInvalid:
             class MyMinion(Minion[dict, MyContext]):  # pyright: ignore[reportMissingTypeArgument]
                 ...
         assert str(excinfo.value) == (
-            "MyMinion: event type must be a dataclass or msgspec Struct type."
+            "MyMinion: event type is not supported. "
+            "Supported user-declared types: (dataclass, msgspec.Struct)."
         )
 
     def test_reject_bare_dict_context_type(self):
@@ -405,7 +437,8 @@ class TestMinionSubclassingInvalid:
             class MyMinion(Minion[MyEvent, dict]):  # pyright: ignore[reportMissingTypeArgument]
                 ...
         assert str(excinfo.value) == (
-            "MyMinion: workflow context type must be a dataclass or msgspec Struct type."
+            "MyMinion: workflow context type is not supported. "
+            "Supported user-declared types: (dataclass, msgspec.Struct)."
         )
 
     def test_reject_parameterized_dict_event_type(self):
@@ -413,7 +446,8 @@ class TestMinionSubclassingInvalid:
             class MyMinion(Minion[dict[str, int], MyContext]):
                 ...
         assert str(excinfo.value) == (
-            "MyMinion: event type must be a dataclass or msgspec Struct type."
+            "MyMinion: event type is not supported. "
+            "Supported user-declared types: (dataclass, msgspec.Struct)."
         )
 
     def test_reject_typed_dict_event_type(self):
@@ -421,7 +455,8 @@ class TestMinionSubclassingInvalid:
             class MyMinion(Minion[MyTypedDictEvent, MyContext]):
                 ...
         assert str(excinfo.value) == (
-            "MyMinion: event type must be a dataclass or msgspec Struct type."
+            "MyMinion: event type is not supported. "
+            "Supported user-declared types: (dataclass, msgspec.Struct)."
         )
     
     def test_reject_multiple_minion_bases(self):

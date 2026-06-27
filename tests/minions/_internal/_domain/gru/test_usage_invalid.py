@@ -201,8 +201,8 @@ class TestInvalidUsage:
 
             assert not result.success
             assert result.reason == (
-                "Gru.start_orchestration: minion_config type must be a dataclass "
-                "or msgspec Struct type."
+                "Gru.start_orchestration: minion_config type is not supported. "
+                "Supported user-declared types: (dataclass, msgspec.Struct)."
             )
 
     @pytest.mark.asyncio

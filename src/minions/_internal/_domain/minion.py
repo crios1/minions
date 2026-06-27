@@ -62,9 +62,7 @@ from .._framework.state_store import PersistenceOperationResult, StateStore
 from .._utils.get_original_bases import get_original_bases
 from .._utils.get_type_from_hint import get_type_from_hint
 from .._utils.serialization import (
-    require_type_model,
-    require_type_not_primitive,
-    require_type_serializable,
+    require_user_declared_type,
 )
 from .exceptions import AbortWorkflow
 from .minion_workflow_context import MinionWorkflowContext
@@ -176,40 +174,16 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         cls._mn_event_cls = args[0]
         cls._mn_workflow_ctx_cls = args[1]
 
-        require_type_serializable(
+        require_user_declared_type(
             cls._mn_event_cls,
             owner=cls.__name__,
-            type_label="event type",
+            type_label="event",
         )
 
-        require_type_not_primitive(
-            cls._mn_event_cls,
-            owner=cls.__name__,
-            type_label="event type",
-        )
-
-        require_type_model(
-            cls._mn_event_cls,
-            owner=cls.__name__,
-            type_label="event type",
-        )
-
-        require_type_serializable(
+        require_user_declared_type(
             cls._mn_workflow_ctx_cls,
             owner=cls.__name__,
             type_label="workflow context",
-        )
-
-        require_type_not_primitive(
-            cls._mn_workflow_ctx_cls,
-            owner=cls.__name__,
-            type_label="workflow context type",
-        )
-
-        require_type_model(
-            cls._mn_workflow_ctx_cls,
-            owner=cls.__name__,
-            type_label="workflow context type",
         )
 
         res_map: dict[str, list[str]] = {}
@@ -582,15 +556,10 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
 
     def _mn_bind_config(self, config: object, *, source: str) -> None:
         config_type = type(config)
-        require_type_serializable(
+        require_user_declared_type(
             config_type,
             owner=source,
-            type_label="config type",
-        )
-        require_type_model(
-            config_type,
-            owner=source,
-            type_label="config type",
+            type_label="config",
         )
 
         config_hint = get_type_hints(type(self)).get("config")

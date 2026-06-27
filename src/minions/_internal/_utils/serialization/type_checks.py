@@ -6,13 +6,15 @@ import types
 import typing
 from collections.abc import Mapping
 from dataclasses import fields, is_dataclass
-from typing import Any, get_args, get_origin, get_type_hints
+from typing import Any, Literal, get_args, get_origin, get_type_hints
 
 import msgspec
 
-from .constants import SUPPORTED_TYPES_MSG
-
-SERIALIZABLE_PRIMITIVE_TYPES = (str, int, float, bool, type(None), bytes)
+from .constants import (
+    SERIALIZABLE_PRIMITIVE_TYPES,
+    SUPPORTED_TYPES_MSG,
+    SUPPORTED_USER_DECLARED_TYPES_MSG,
+)
 
 
 def _is_typed_dict_type(tp: Any) -> bool:
@@ -158,29 +160,40 @@ def is_type_serializable(tp: Any) -> bool:
     return _is_serializable_field_type(tp)
 
 
-def require_type_serializable(tp: Any, *, owner: str, type_label: str) -> None:
-    """Raise TypeError when `tp` is not accepted by `is_type_serializable`."""
+def _require_type_serializable(tp: Any, *, owner: str, type_label: str) -> None:
     if is_type_serializable(tp):
         return
-
     raise TypeError(
         f"{owner}: {type_label} is not serializable. "
         f"{SUPPORTED_TYPES_MSG}"
     )
 
 
-def require_type_not_primitive(tp: Any, *, owner: str, type_label: str) -> None:
-    """Raise TypeError when `tp` is a serializable primitive type."""
-    if tp in SERIALIZABLE_PRIMITIVE_TYPES:
-        raise TypeError(
-            f"{owner}: {type_label} must be a structured type, not a primitive"
-        )
-
-
-def require_type_model(tp: Any, *, owner: str, type_label: str) -> None:
-    """Raise TypeError when a user event/context is not a runtime model type."""
+def _require_supported_user_declared_type_kind(
+    tp: Any,
+    *,
+    owner: str,
+    type_label: str,
+) -> None:
     if _is_dataclass_type(tp) or _is_msgspec_struct_type(tp):
         return
     raise TypeError(
-        f"{owner}: {type_label} must be a dataclass or msgspec Struct type."
+        f"{owner}: {type_label} is not supported. "
+        f"{SUPPORTED_USER_DECLARED_TYPES_MSG}"
     )
+
+
+def require_user_declared_type(
+    tp: Any,
+    *,
+    owner: str,
+    type_label: Literal["event", "workflow context", "config", "minion_config"],
+) -> None:
+    """Raise TypeError when a declared user type is unsupported."""
+    display_label = f"{type_label} type"
+    _require_supported_user_declared_type_kind(
+        tp,
+        owner=owner,
+        type_label=display_label,
+    )
+    _require_type_serializable(tp, owner=owner, type_label=display_label)

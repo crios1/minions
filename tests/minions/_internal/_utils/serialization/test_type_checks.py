@@ -12,12 +12,10 @@ from minions._internal._utils.serialization import (
     SERIALIZABLE_PRIMITIVE_TYPES,
     deserialize,
     is_type_serializable,
-    require_type_model,
-    require_type_not_primitive,
-    require_type_serializable,
+    require_user_declared_type,
     serialize,
+    type_checks,
 )
-from minions._internal._utils.serialization import type_checks as s
 
 
 @dataclass
@@ -76,7 +74,7 @@ class _DCWithTuple:
     t: Tuple[int, str]
 
 
-def test_is_type_serializable():
+def test_is_type_serializable_accepts_basic_supported_shapes():
     assert is_type_serializable(dict)
     assert is_type_serializable(MyTD)
     assert is_type_serializable(MyDC)
@@ -90,7 +88,7 @@ def test_serializable_primitive_types_are_serializable(primitive_type: object) -
     assert is_type_serializable(primitive_type)
 
 
-def test_require_type_serializable_raises_centralized_error_message():
+def test_private_require_type_serializable_raises_supported_types_message():
     with pytest.raises(
         TypeError,
         match=(
@@ -98,44 +96,109 @@ def test_require_type_serializable_raises_centralized_error_message():
             r"Supported types:"
         ),
     ):
-        require_type_serializable(set[int], owner="MyOwner", type_label="event type")
+        type_checks._require_type_serializable(set[int], owner="MyOwner", type_label="event type")
 
 
-def test_require_type_serializable_accepts_serializable_type():
-    require_type_serializable(MyDC, owner="MyOwner", type_label="event type")
+def test_private_require_type_serializable_accepts_serializable_type():
+    type_checks._require_type_serializable(MyDC, owner="MyOwner", type_label="event type")
 
 
 @pytest.mark.parametrize("primitive_type", SERIALIZABLE_PRIMITIVE_TYPES)
-def test_serializable_primitive_types_are_rejected_as_top_level_contracts(
+def test_require_user_declared_type_rejects_primitive_contracts(
     primitive_type: object,
 ) -> None:
     with pytest.raises(
         TypeError,
-        match=r"MyOwner: event type must be a structured type, not a primitive"
+        match=(
+            r"MyOwner: event type is not supported\. "
+            r"Supported user-declared types: "
+            r"\(dataclass, msgspec\.Struct\)\."
+        )
     ):
-        require_type_not_primitive(primitive_type, owner="MyOwner", type_label="event type")
+        require_user_declared_type(primitive_type, owner="MyOwner", type_label="event")
 
 
-def test_require_type_not_primitive_accepts_structured_type():
-    require_type_not_primitive(MyDC, owner="MyOwner", type_label="event type")
-
-
-def test_require_type_model_rejects_mapping_contracts():
+def test_require_user_declared_type_rejects_mapping_contracts():
     with pytest.raises(
         TypeError,
-        match=r"MyOwner: event type must be a dataclass or msgspec Struct type\."
+        match=r"MyOwner: event type is not supported\. Supported user-declared types:"
     ):
-        require_type_model(dict[str, int], owner="MyOwner", type_label="event type")
+        require_user_declared_type(dict[str, int], owner="MyOwner", type_label="event")
 
 
-def test_require_type_model_rejects_typed_dict_contracts():
+def test_require_user_declared_type_rejects_typed_dict_contracts():
     with pytest.raises(TypeError):
-        require_type_model(MyTD, owner="MyOwner", type_label="event type")
+        require_user_declared_type(MyTD, owner="MyOwner", type_label="event")
 
 
-def test_require_type_model_accepts_runtime_models():
-    require_type_model(MyDC, owner="MyOwner", type_label="event type")
-    require_type_model(MyStruct, owner="MyOwner", type_label="event type")
+def test_require_user_declared_type_accepts_dataclass_and_msgspec_struct():
+    require_user_declared_type(MyDC, owner="MyOwner", type_label="event")
+    require_user_declared_type(MyStruct, owner="MyOwner", type_label="event")
+
+
+def test_require_user_declared_type_rejects_any_with_contract_message():
+    with pytest.raises(
+        TypeError,
+        match=r"MyOwner: event type is not supported\. Supported user-declared types:",
+    ):
+        require_user_declared_type(Any, owner="MyOwner", type_label="event")
+
+
+def test_require_user_declared_type_rejects_plain_class_with_contract_message():
+    class PlainEvent:
+        pass
+
+    with pytest.raises(
+        TypeError,
+        match=r"MyOwner: event type is not supported\. Supported user-declared types:",
+    ):
+        require_user_declared_type(
+            PlainEvent,
+            owner="MyOwner",
+            type_label="event",
+        )
+
+
+def test_require_user_declared_type_checks_declared_type_fields_are_serializable():
+    with pytest.raises(
+        TypeError,
+        match=r"MyOwner: event type is not serializable\. Supported types:",
+    ):
+        require_user_declared_type(_BadDC, owner="MyOwner", type_label="event")
+
+
+def test_require_user_declared_type_labels_workflow_context_errors():
+    with pytest.raises(
+        TypeError,
+        match=(
+            r"MyOwner: workflow context type is not supported\. "
+            r"Supported user-declared types:"
+        ),
+    ):
+        require_user_declared_type(
+            Any,
+            owner="MyOwner",
+            type_label="workflow context",
+        )
+
+
+def test_require_user_declared_type_labels_config_errors():
+    with pytest.raises(
+        TypeError,
+        match=r"MyOwner: config type is not supported\. Supported user-declared types:",
+    ):
+        require_user_declared_type(Any, owner="MyOwner", type_label="config")
+
+
+def test_require_user_declared_type_labels_inline_minion_config_errors():
+    with pytest.raises(
+        TypeError,
+        match=(
+            r"MyOwner: minion_config type is not supported\. "
+            r"Supported user-declared types:"
+        ),
+    ):
+        require_user_declared_type(Any, owner="MyOwner", type_label="minion_config")
 
 
 def test_is_type_serializable_enforces_dict_key_and_value_recursion():
@@ -152,7 +215,7 @@ def test_is_type_serializable_recurses_dataclass_and_typed_dict_fields():
     assert is_type_serializable(_OKTD)
 
 
-def test_optional_and_union_supported_by_type_policy():
+def test_is_type_serializable_handles_optional_and_union_types():
     assert is_type_serializable(_DCWithOptional) is True
     assert is_type_serializable(_DCWithPEP604Optional) is True
     assert is_type_serializable(int | str) is True
@@ -160,7 +223,7 @@ def test_optional_and_union_supported_by_type_policy():
     assert is_type_serializable(_TDWithOptional) is True
 
 
-def test_bytes_and_union_handling():
+def test_is_type_serializable_handles_bytes_and_unions():
     assert is_type_serializable(bytes)
     assert is_type_serializable(Union[int, str])
     assert is_type_serializable(Union[int, None])
@@ -234,7 +297,7 @@ def test_dataclass_default_factory_any_annotation_but_serializable_instance():
     ],
 )
 def test_serializable_type_annotations_are_accepted(tp: object) -> None:
-    assert s.is_type_serializable(tp) is True
+    assert type_checks.is_type_serializable(tp) is True
 
 
 @pytest.mark.parametrize(
@@ -255,19 +318,19 @@ def test_serializable_type_annotations_are_accepted(tp: object) -> None:
     ],
 )
 def test_unserializable_type_annotations_are_rejected(tp: object) -> None:
-    assert s.is_type_serializable(tp) is False
+    assert type_checks.is_type_serializable(tp) is False
 
 
-def test_mapping_helper_and_edge_cases_direct():
-    assert s._mapping_value_type_if_str_key(dict, ()) == (True, None)
-    assert s._mapping_value_type_if_str_key(Mapping, ()) == (False, None)
-    assert s._mapping_value_type_if_str_key(dict, (int,)) == (False, None)
-    assert s._mapping_value_type_if_str_key(Mapping, (int,)) == (True, None)
-    assert s._mapping_value_type_if_str_key(dict, (int, int)) == (False, None)
-    assert s._mapping_value_type_if_str_key(Mapping, (int, int)) == (False, None)
+def test_mapping_value_type_helper_handles_key_policy_edge_cases():
+    assert type_checks._mapping_value_type_if_str_key(dict, ()) == (True, None)
+    assert type_checks._mapping_value_type_if_str_key(Mapping, ()) == (False, None)
+    assert type_checks._mapping_value_type_if_str_key(dict, (int,)) == (False, None)
+    assert type_checks._mapping_value_type_if_str_key(Mapping, (int,)) == (True, None)
+    assert type_checks._mapping_value_type_if_str_key(dict, (int, int)) == (False, None)
+    assert type_checks._mapping_value_type_if_str_key(Mapping, (int, int)) == (False, None)
 
-    ok, v = s._mapping_value_type_if_str_key(dict, (str, int))
+    ok, v = type_checks._mapping_value_type_if_str_key(dict, (str, int))
     assert ok is True and v is int
 
-    ok, v = s._mapping_value_type_if_str_key(Mapping, (str, int))
+    ok, v = type_checks._mapping_value_type_if_str_key(Mapping, (str, int))
     assert ok is True and v is int

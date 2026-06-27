@@ -2,11 +2,11 @@ from tests.assets.contexts.counter import CounterContext
 from tests.assets.support.minion_spied import SpiedMinion
 
 
-class UnserializableEvent:
+class UnsupportedEventType:
     pass
 
 
-class AssetMinion(SpiedMinion[UnserializableEvent, CounterContext]):
+class AssetMinion(SpiedMinion[UnsupportedEventType, CounterContext]):
     pass
 
 

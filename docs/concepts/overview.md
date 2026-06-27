@@ -13,7 +13,7 @@ Minions is a progressive execution platform for Python workflow-per-event comput
 - **Progressive execution**: the workflow model is designed to remain stable across Core, Compose, and Cluster execution modes ({doc}`execution-ladder`).
 - **Workflow-per-event compute**: each pipeline event is processed by minions through ordered, stateful steps.
 - **Explicit lifecycles**: every pipeline/minion/resource has `startup`, `run`, and `shutdown` hooks managed by the framework.
-- **Typed events and contexts**: minions declare the event type they consume and the workflow context they mutate; both must be JSON-serializable structured types.
+- **Typed events and contexts**: minions declare the event type they consume and the workflow context they mutate; both must be dataclasses or `msgspec.Struct` types with serializable fields.
 - **Resource graph**: dependencies are inferred from type hints so Gru can start/stop once and inject safely.
 - **Greedy concurrency**: the runtime pushes as much work as possible; backpressure lives in your resources ({ref}`concurrency-backpressure`).
 

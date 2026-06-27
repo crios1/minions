@@ -37,8 +37,7 @@ from .._utils.get_type_from_hint import get_type_from_hint
 from .._utils.safe_cancel_task import safe_cancel_task
 from .._utils.safe_create_task import safe_create_task
 from .._utils.serialization import (
-    require_type_model,
-    require_type_serializable,
+    require_user_declared_type,
     serialize,
 )
 from .component_identity import get_component_id
@@ -407,15 +406,10 @@ class Gru:
     @staticmethod
     def _make_inline_config_identity(minion_config: object) -> str:
         config_type = type(minion_config)
-        require_type_serializable(
+        require_user_declared_type(
             config_type,
             owner="Gru.start_orchestration",
-            type_label="minion_config type",
-        )
-        require_type_model(
-            config_type,
-            owner="Gru.start_orchestration",
-            type_label="minion_config type",
+            type_label="minion_config",
         )
 
         type_id = f"{config_type.__module__}.{config_type.__qualname__}".encode("utf-8")

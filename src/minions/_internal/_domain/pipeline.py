@@ -17,9 +17,7 @@ from .._framework.metrics_constants import (
 from .._framework.metrics_context import resource_metric_context
 from .._utils.get_original_bases import get_original_bases
 from .._utils.serialization import (
-    require_type_model,
-    require_type_not_primitive,
-    require_type_serializable,
+    require_user_declared_type,
 )
 from .minion import Minion
 from .types import T_Event
@@ -77,22 +75,10 @@ class Pipeline(AsyncService, Generic[T_Event]):
 
         cls._mn_event_cls = args[0]
 
-        require_type_serializable(
+        require_user_declared_type(
             cls._mn_event_cls,
             owner=cls.__name__,
-            type_label="event type",
-        )
-
-        require_type_not_primitive(
-            cls._mn_event_cls,
-            owner=cls.__name__,
-            type_label="event type",
-        )
-
-        require_type_model(
-            cls._mn_event_cls,
-            owner=cls.__name__,
-            type_label="event type",
+            type_label="event",
         )
 
     def __init__(

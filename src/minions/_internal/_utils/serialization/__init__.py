@@ -1,20 +1,22 @@
 from __future__ import annotations
 
 from .codec import deserialize, serialize
-from .type_checks import (
+from .constants import (
     SERIALIZABLE_PRIMITIVE_TYPES,
+    SUPPORTED_TYPES_MSG,
+    SUPPORTED_USER_DECLARED_TYPES_MSG,
+)
+from .type_checks import (
     is_type_serializable,
-    require_type_model,
-    require_type_not_primitive,
-    require_type_serializable,
+    require_user_declared_type,
 )
 
 __all__ = [
     "serialize",
     "deserialize",
-    "SERIALIZABLE_PRIMITIVE_TYPES",
     "is_type_serializable",
-    "require_type_model",
-    "require_type_not_primitive",
-    "require_type_serializable",
+    "require_user_declared_type",
+    "SERIALIZABLE_PRIMITIVE_TYPES",
+    "SUPPORTED_TYPES_MSG",
+    "SUPPORTED_USER_DECLARED_TYPES_MSG",
 ]

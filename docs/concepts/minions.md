@@ -25,8 +25,8 @@ class OrderMinion(Minion[dict, WorkflowCtx]):
 
 Rules from the runtime:
 
-- Declare **event** and **workflow context** types via generics. Both must be JSON-serializable structured types (dataclasses/TypedDicts are fine; bare primitives are rejected).
-- Bare `dict` is accepted for quick examples and prototypes. For durable workflow state, prefer explicit schemas such as dataclasses, TypedDicts, msgspec structs, or `dict[str, V]` / `Mapping[str, V]` with serializable values.
+- Declare **event** and **workflow context** types via generics. Both must be dataclasses or `msgspec.Struct` types with serializable fields.
+- For durable workflow state, prefer explicit schemas such as dataclasses or `msgspec.Struct` types.
 - Steps must be instance methods decorated with `{py:func}``@minion_step``. They run in source order.
 - Use `self.event` to access the current pipeline event; the event is contextvar-bound per workflow.
 - Use `self.context` to read and update the current workflow context; steps do not receive it as an argument.

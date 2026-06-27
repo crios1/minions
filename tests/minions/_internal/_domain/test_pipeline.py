@@ -1,6 +1,6 @@
 # pyright: reportUnusedClass=false
 
-from typing import TypedDict
+from typing import Any, TypedDict
 
 import msgspec
 import pytest
@@ -44,13 +44,24 @@ class TestPipelineSubclassingInvalid:
 
     @pytest.mark.parametrize("event_type", SERIALIZABLE_PRIMITIVE_TYPES)
     def test_reject_primitive_event_type(self, event_type: type[object]):
-        with pytest.raises(
-            TypeError,
-            match="SomePipeline: event type must be a structured type, not a primitive",
-        ):
+        with pytest.raises(TypeError) as excinfo:
             class SomePipeline(Pipeline[event_type]):
                 async def produce_event(self):  # pragma: no cover
                     ...
+        assert str(excinfo.value) == (
+            "SomePipeline: event type is not supported. "
+            "Supported user-declared types: (dataclass, msgspec.Struct)."
+        )
+
+    def test_reject_any_event_type(self):
+        with pytest.raises(TypeError) as excinfo:
+            class SomePipeline(Pipeline[Any]):
+                async def produce_event(self):  # pragma: no cover
+                    ...
+        assert str(excinfo.value) == (
+            "SomePipeline: event type is not supported. "
+            "Supported user-declared types: (dataclass, msgspec.Struct)."
+        )
 
     def test_reject_bare_dict_event_type(self):
         with pytest.raises(TypeError) as excinfo:
@@ -58,7 +69,8 @@ class TestPipelineSubclassingInvalid:
                 async def produce_event(self):  # pyright: ignore[reportIncompatibleMethodOverride] # pragma: no cover
                     ...
         assert str(excinfo.value) == (
-            "SomePipeline: event type must be a dataclass or msgspec Struct type."
+            "SomePipeline: event type is not supported. "
+            "Supported user-declared types: (dataclass, msgspec.Struct)."
         )
 
     def test_reject_parameterized_dict_event_type(self):
@@ -67,7 +79,8 @@ class TestPipelineSubclassingInvalid:
                 async def produce_event(self):  # pyright: ignore[reportIncompatibleMethodOverride] # pragma: no cover
                     ...
         assert str(excinfo.value) == (
-            "SomePipeline: event type must be a dataclass or msgspec Struct type."
+            "SomePipeline: event type is not supported. "
+            "Supported user-declared types: (dataclass, msgspec.Struct)."
         )
 
     def test_reject_typed_dict_event_type(self):
@@ -76,7 +89,8 @@ class TestPipelineSubclassingInvalid:
                 async def produce_event(self) -> MyTypedDictEvent:  # pragma: no cover
                     return {"ts": 1}
         assert str(excinfo.value) == (
-            "SomePipeline: event type must be a dataclass or msgspec Struct type."
+            "SomePipeline: event type is not supported. "
+            "Supported user-declared types: (dataclass, msgspec.Struct)."
         )
 
 
