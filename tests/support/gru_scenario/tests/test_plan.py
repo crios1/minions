@@ -38,6 +38,37 @@ def test_scenario_plan_copies_pipeline_event_counts():
     assert plan.pipeline_event_targets == {"p1": 2}
 
 
+def test_scenario_plan_normalizes_pipeline_class_event_count_key_to_component_id():
+    from tests.assets.pipelines.emit_one.counter.identified import AssetPipeline
+
+    d1 = OrchestrationStart(pipeline=AssetPipeline, minion="m1")
+
+    plan = ScenarioPlan([d1], pipeline_event_counts={AssetPipeline: 1})
+
+    assert plan.pipeline_event_targets == {
+        "12345678-1234-5678-9234-567812345678": 1,
+    }
+
+
+def test_scenario_plan_normalizes_pipeline_class_event_count_key_to_module_path():
+    from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
+
+    d1 = OrchestrationStart(pipeline=AssetPipeline, minion="m1")
+
+    plan = ScenarioPlan([d1], pipeline_event_counts={AssetPipeline: 1})
+
+    assert plan.pipeline_event_targets == {
+        "tests.assets.pipelines.emit_one.simple.default": 1,
+    }
+
+
+def test_scenario_plan_rejects_invalid_pipeline_event_count_key():
+    d1 = OrchestrationStart(pipeline="p1", minion="m1")
+
+    with pytest.raises(TypeError, match="pipeline_event_counts keys"):
+        ScenarioPlan([d1], pipeline_event_counts={object: 1})  # type: ignore[dict-item]
+
+
 def test_scenario_plan_uses_identity_for_index_lookup():
     start = OrchestrationStart(pipeline="p1", minion="m1")
     d1 = OrchestrationStop(id=start, expect_success=True)

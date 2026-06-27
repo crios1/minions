@@ -135,7 +135,6 @@ async def test_run_gru_scenario_accepts_class_start_with_inline_minion_config(
     )
     from tests.assets.support.minion_spied_configed import AssetMinionConfig
 
-    pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
     start = OrchestrationStart(
         pipeline=EmitOneSimplePipeline,
         minion=ConfiguredMinion,
@@ -162,7 +161,7 @@ async def test_run_gru_scenario_accepts_class_start_with_inline_minion_config(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_ref: 1},
+        pipeline_event_counts={EmitOneSimplePipeline: 1},
     )
 
 

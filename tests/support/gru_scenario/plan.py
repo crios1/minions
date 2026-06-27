@@ -1,5 +1,9 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any, cast
+
+from minions._internal._domain.component_identity import get_component_id
+from minions._internal._domain.pipeline import Pipeline
 
 from .directives import (
     AfterWorkflowStepStarts,
@@ -9,6 +13,8 @@ from .directives import (
     WaitWorkflowCompletions,
     iter_directives_flat,
 )
+
+PipelineEventCountKey = str | type[Any]
 
 
 @dataclass
@@ -22,7 +28,7 @@ class ScenarioPlan:
         self,
         directives: Sequence[Directive],
         *,
-        pipeline_event_counts: Mapping[str, object],
+        pipeline_event_counts: Mapping[Any, object],
     ) -> None:
         self.directives = list(directives)
         self.flat_directives = list(iter_directives_flat(self.directives))
@@ -30,13 +36,26 @@ class ScenarioPlan:
         self.directive_index_map = {id(d): idx for idx, d in enumerate(self.flat_directives)}
         self.pipeline_event_targets = {}
         for pipeline, count in pipeline_event_counts.items():
+            pipeline_id = self._pipeline_event_count_key_to_id(pipeline)
             if not isinstance(count, int):
                 raise ValueError(
                     f"pipeline_event_counts[{pipeline!r}] must be an int, got "
                     f"{type(count).__name__}."
                 )
-            self.pipeline_event_targets[pipeline] = count
+            self.pipeline_event_targets[pipeline_id] = count
         self._validate()
+
+    @staticmethod
+    def _pipeline_event_count_key_to_id(pipeline: object) -> str:
+        if isinstance(pipeline, str):
+            return pipeline
+        if not isinstance(pipeline, type) or not issubclass(pipeline, Pipeline):
+            raise TypeError(
+                "pipeline_event_counts keys must be pipeline IDs, module path strings, "
+                f"or Pipeline subclasses; got {pipeline!r}."
+            )
+        pipeline_cls = cast(type[Any], pipeline)
+        return get_component_id(pipeline_cls) or pipeline_cls.__module__
 
     def directive_index(self, directive: Directive) -> int:
         return self.directive_index_map[id(directive)]

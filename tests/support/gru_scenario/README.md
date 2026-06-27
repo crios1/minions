@@ -213,7 +213,7 @@ directives = [
 ```
 
 ## Per-Run Expectations
-Provide `pipeline_event_counts` for exactly the resolved pipeline IDs started by successful `OrchestrationStart(...)` directives:
+Provide `pipeline_event_counts` for exactly the resolved pipeline IDs started by successful `OrchestrationStart(...)` directives. Keys may be resolved pipeline ID strings, module-path strings, or `Pipeline` subclasses:
 ```python
 await run_gru_scenario(
     ...,
@@ -224,6 +224,7 @@ Expected workflow counts are derived from `pipeline_event_counts`:
 - For each successful `OrchestrationStart`, expected workflows = `pipeline_event_counts[pipeline_id]`.
 - For idless pipelines, `pipeline_id` is the module-path fallback ID. For decorated pipelines,
   it is the explicit `@pipeline_id(...)` value, even when the start ref is a module path.
+- Pipeline subclass keys are normalized to the same resolved ID before validation.
 - Counts are summed per minion class.
 - These counts drive `WaitWorkflowCompletions`, workflow-step expectations, and state store save/delete totals.
 - Validation is strict:

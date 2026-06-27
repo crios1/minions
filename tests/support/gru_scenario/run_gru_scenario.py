@@ -4,7 +4,7 @@ from tests.assets.support.metrics_spied import SpiedMetrics
 from tests.assets.support.state_store_spied import SpiedStateStore
 
 from .directives import Directive
-from .plan import ScenarioPlan
+from .plan import PipelineEventCountKey, ScenarioPlan
 from .runner import ScenarioRunner
 from .verify import ScenarioVerifier
 
@@ -16,7 +16,7 @@ async def run_gru_scenario(
     state_store: SpiedStateStore,
     directives: list[Directive],
     *,
-    pipeline_event_counts: dict[str, int],
+    pipeline_event_counts: dict[PipelineEventCountKey, int],
     per_verification_timeout: float = 5.0,
 ) -> None:
     plan = ScenarioPlan(directives, pipeline_event_counts=pipeline_event_counts)
