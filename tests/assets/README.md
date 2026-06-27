@@ -12,6 +12,16 @@ implementation.
 - `entrypoints/`: module-entrypoint composition fixtures.
 - `events/`: shared event types used by simple-event assets.
 
+## Support fixtures
+
+`tests.assets.support` contains shared base classes and spies used by concrete
+asset modules. For deterministic fanout and subscriber-window scenarios, prefer:
+
+- `pipeline_subscriber_ready_fixed_events.SubscriberReadyFixedEventsPipeline`
+  when every emitted event should wait for the same subscriber count.
+- `pipeline_subscriber_ready_events_by_emit.SubscriberReadyEventsByEmitPipeline`
+  when each emitted event has its own expected subscriber count.
+
 ## Component layouts
 
 Use one taxonomy dimension per path segment.
