@@ -284,10 +284,10 @@ class Gru:
         self._pipeline_resource_map: dict[str, set[str]] = {}  # pipeline_id -> set of resource_ids
         self._resource_dependencies: dict[str, set[str]] = defaultdict(
             set
-        )  # resource_id -> set(dep_id)
+        )  # dependent resource_id -> dependency resource_ids
         self._resource_dependents: dict[str, set[str]] = defaultdict(
             set
-        )  # resource_id -> set(parent_id)
+        )  # dependency resource_id -> dependent resource_ids
         self._resource_reference_counts: dict[str, int] = defaultdict(
             int
         )  # total refs (owners + edges)
@@ -1190,16 +1190,16 @@ class Gru:
             ),
             resource_dependencies_by_dependent_resource=MappingProxyType(
                 {
-                    parent_resource_id: frozenset(child_resource_ids)
-                    for parent_resource_id, child_resource_ids in (
+                    dependent_resource_id: frozenset(dependency_resource_ids)
+                    for dependent_resource_id, dependency_resource_ids in (
                         self._resource_dependencies.items()
                     )
                 }
             ),
             resource_dependents_by_dependency_resource=MappingProxyType(
                 {
-                    child_resource_id: frozenset(parent_resource_ids)
-                    for child_resource_id, parent_resource_ids in (
+                    dependency_resource_id: frozenset(dependent_resource_ids)
+                    for dependency_resource_id, dependent_resource_ids in (
                         self._resource_dependents.items()
                     )
                 }
