@@ -2,7 +2,7 @@ import asyncio
 from collections import defaultdict
 from collections.abc import Awaitable
 from dataclasses import dataclass, field
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 import pytest
 
@@ -12,12 +12,13 @@ from minions._internal._domain.minion_workflow_context import MinionWorkflowCont
 from minions._internal._framework.minion_workflow_context_codec import (
     deserialize_workflow_context_blob,
 )
-from minions._internal._framework.state_store import StateStore
 from tests.assets.support.logger_inmemory import InMemoryLogger
+from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.minion_spied import SpiedMinion
 from tests.assets.support.mixin_spy import SpyMixin
 from tests.assets.support.pipeline_spied import SpiedPipeline
 from tests.assets.support.resource_spied import SpiedResource
+from tests.assets.support.state_store_inmemory import InMemoryStateStore
 
 from .directives import (
     AfterWorkflowStepStarts,
@@ -181,12 +182,54 @@ class ScenarioRunner:
         self._plan = plan
         self._insp = GruIntrospector(gru)
         self._timeout = per_verification_timeout
+        self._logger = self._require_inmemory_logger()
+        self._metrics = self._require_inmemory_metrics()
+        self._state_store = self._require_inmemory_state_store()
         self._spies = SpyRegistry()
         self._result: ScenarioRunResult | None = None
         self._orchestration_start_receipts_by_directive_id: dict[
             int, OrchestrationStartReceipt
         ] = {}
         self._active_orchestration_start_indexes: set[int] = set()
+
+    def _require_inmemory_logger(self) -> InMemoryLogger:
+        logger = self._gru._logger
+        if not isinstance(logger, InMemoryLogger):
+            pytest.fail(
+                "Gru scenario DSL requires Gru._logger to be InMemoryLogger; "
+                f"got {type(logger).__module__}.{type(logger).__qualname__}."
+            )
+        return logger
+
+    def _require_inmemory_metrics(self) -> InMemoryMetrics:
+        metrics = self._gru._metrics
+        if not isinstance(metrics, InMemoryMetrics):
+            pytest.fail(
+                "Gru scenario DSL requires Gru._metrics to be InMemoryMetrics; "
+                f"got {type(metrics).__module__}.{type(metrics).__qualname__}."
+            )
+        return metrics
+
+    def _require_inmemory_state_store(self) -> InMemoryStateStore:
+        state_store = self._gru._state_store
+        if not isinstance(state_store, InMemoryStateStore):
+            pytest.fail(
+                "Gru scenario DSL requires Gru._state_store to be InMemoryStateStore; "
+                f"got {type(state_store).__module__}.{type(state_store).__qualname__}."
+            )
+        return state_store
+
+    @property
+    def logger(self) -> InMemoryLogger:
+        return self._logger
+
+    @property
+    def metrics(self) -> InMemoryMetrics:
+        return self._metrics
+
+    @property
+    def state_store(self) -> InMemoryStateStore:
+        return self._state_store
 
     async def run(self) -> ScenarioRunResult:
         self._discover_spies()
@@ -654,9 +697,7 @@ class ScenarioRunner:
         classes.update(self._spies.pipelines.values())
         classes.update(self._spies.resources)
 
-        state_store = getattr(self._gru, "_state_store", None)
-        if isinstance(state_store, SpyMixin):
-            classes.add(type(state_store))
+        classes.add(type(self._state_store))
 
         snapshots: dict[str, dict[str, int]] = {}
         for cls in classes:
@@ -670,9 +711,7 @@ class ScenarioRunner:
         classes.update(self._spies.pipelines.values())
         classes.update(self._spies.resources)
 
-        state_store = getattr(self._gru, "_state_store", None)
-        if isinstance(state_store, SpyMixin):
-            classes.add(type(state_store))
+        classes.add(type(self._state_store))
 
         snapshots: dict[str, dict[int, dict[str, int]]] = {}
         for cls in classes:
@@ -688,28 +727,17 @@ class ScenarioRunner:
 
     def _snapshot_workflow_step_started_ids_by_minion_id(
         self,
-    ) -> dict[str, dict[str, tuple[str, ...]]] | None:
-        logger = getattr(self._gru, "_logger", None)
-        logs = getattr(logger, "logs", None)
-        if not isinstance(logs, list):
-            return None
-        logs = cast(list[object], logs)
-
+    ) -> dict[str, dict[str, tuple[str, ...]]]:
         by_minion_id_step: defaultdict[str, defaultdict[str, set[str]]] = defaultdict(
             lambda: defaultdict(set)
         )
 
-        for log in logs:
-            if getattr(log, "msg", None) != "Workflow Step started":
+        for log in self._logger.logs:
+            if log.msg != "Workflow Step started":
                 continue
-            kwargs = getattr(log, "kwargs", None)
-            if not isinstance(kwargs, dict):
-                continue
-            kwargs = cast(dict[str, object], kwargs)
-
-            minion_id = kwargs.get("minion_id")
-            step_name = kwargs.get("step_name")
-            workflow_id = kwargs.get("workflow_id")
+            minion_id = log.kwargs.get("minion_id")
+            step_name = log.kwargs.get("step_name")
+            workflow_id = log.kwargs.get("workflow_id")
             if (
                 not isinstance(minion_id, str)
                 or not isinstance(step_name, str)
@@ -730,14 +758,10 @@ class ScenarioRunner:
     def _snapshot_workflow_step_started_ids_by_orchestration_id(
         self,
     ) -> dict[str, dict[str, tuple[str, ...]]]:
-        logger = self._gru._logger
-
-        assert isinstance(logger, InMemoryLogger), "InMemoryLogger required"
-
         by_orchestration_step: defaultdict[str, defaultdict[str, set[str]]] = defaultdict(
             lambda: defaultdict(set)
         )
-        for log in logger.logs:
+        for log in self._logger.logs:
             if log.msg != "Workflow Step started":
                 continue
             orchestration_id = log.kwargs.get("orchestration_id")
@@ -761,29 +785,18 @@ class ScenarioRunner:
 
     def _snapshot_workflow_step_start_events_by_minion_id(
         self,
-    ) -> dict[str, dict[str, tuple[tuple[int, str], ...]]] | None:
-        logger = getattr(self._gru, "_logger", None)
-        logs = getattr(logger, "logs", None)
-        if not isinstance(logs, list):
-            return None
-        logs = cast(list[object], logs)
-
+    ) -> dict[str, dict[str, tuple[tuple[int, str], ...]]]:
         by_minion_id_workflow: defaultdict[str, defaultdict[str, list[tuple[int, str]]]] = (
             defaultdict(lambda: defaultdict(list))
         )
 
-        for log in logs:
-            if getattr(log, "msg", None) != "Workflow Step started":
+        for log in self._logger.logs:
+            if log.msg != "Workflow Step started":
                 continue
-            kwargs = getattr(log, "kwargs", None)
-            if not isinstance(kwargs, dict):
-                continue
-            kwargs = cast(dict[str, object], kwargs)
-
-            minion_id = kwargs.get("minion_id")
-            step_name = kwargs.get("step_name")
-            step_index = kwargs.get("step_index")
-            workflow_id = kwargs.get("workflow_id")
+            minion_id = log.kwargs.get("minion_id")
+            step_name = log.kwargs.get("step_name")
+            step_index = log.kwargs.get("step_index")
+            workflow_id = log.kwargs.get("workflow_id")
             if (
                 not isinstance(minion_id, str)
                 or not isinstance(step_name, str)
@@ -801,14 +814,8 @@ class ScenarioRunner:
 
     async def _snapshot_persisted_context_snapshots_by_minion_id(
         self,
-    ) -> dict[str, tuple[MinionWorkflowContext[Any, Any], ...]] | None:
-        state_store = getattr(self._gru, "_state_store", None)
-        if not isinstance(state_store, StateStore):
-            return None
-        try:
-            stored_contexts = await state_store._mn_get_all_contexts()
-        except Exception:
-            return None
+    ) -> dict[str, tuple[MinionWorkflowContext[Any, Any], ...]]:
+        stored_contexts = await self._state_store._mn_get_all_contexts()
 
         receipts_by_orchestration_id = {
             r.orchestration_id: r
@@ -818,25 +825,22 @@ class ScenarioRunner:
         contexts_by_minion_id: defaultdict[str, list[MinionWorkflowContext[Any, Any]]] = (
             defaultdict(list)
         )
-        try:
-            for stored_context in stored_contexts:
-                receipt = receipts_by_orchestration_id.get(stored_context.orchestration_id)
-                ctx: MinionWorkflowContext[Any, Any]
-                if receipt is not None and receipt.minion_cls is not None:
-                    event_cls, context_cls = _get_minion_event_and_context_types(receipt.minion_cls)
-                    ctx = deserialize_workflow_context_blob(
-                        stored_context.context,
-                        event_cls=event_cls,
-                        context_cls=context_cls,
-                    )
-                else:
-                    ctx = deserialize_workflow_context_blob(stored_context.context)
-                if receipt is None:
-                    continue
-                minion_id = receipt.minion_id
-                contexts_by_minion_id[minion_id].append(ctx)
-        except Exception:
-            return None
+        for stored_context in stored_contexts:
+            receipt = receipts_by_orchestration_id.get(stored_context.orchestration_id)
+            ctx: MinionWorkflowContext[Any, Any]
+            if receipt is not None and receipt.minion_cls is not None:
+                event_cls, context_cls = _get_minion_event_and_context_types(receipt.minion_cls)
+                ctx = deserialize_workflow_context_blob(
+                    stored_context.context,
+                    event_cls=event_cls,
+                    context_cls=context_cls,
+                )
+            else:
+                ctx = deserialize_workflow_context_blob(stored_context.context)
+            if receipt is None:
+                continue
+            minion_id = receipt.minion_id
+            contexts_by_minion_id[minion_id].append(ctx)
 
         return {
             minion_id: tuple(sorted(contexts, key=lambda ctx: ctx.workflow_id))
@@ -845,10 +849,8 @@ class ScenarioRunner:
 
     def _count_persisted_context_snapshots(
         self,
-        snapshots: dict[str, tuple[MinionWorkflowContext[Any, Any], ...]] | None,
-    ) -> dict[str, int] | None:
-        if snapshots is None:
-            return None
+        snapshots: dict[str, tuple[MinionWorkflowContext[Any, Any], ...]],
+    ) -> dict[str, int]:
         counts: defaultdict[str, int] = defaultdict(int)
         for minion_id, contexts in snapshots.items():
             counts[minion_id] += len(contexts)
@@ -856,56 +858,19 @@ class ScenarioRunner:
 
     def _count_persisted_context_snapshots_by_orchestration_id(
         self,
-        snapshots: dict[str, tuple[MinionWorkflowContext[Any, Any], ...]] | None,
-    ) -> dict[str, int] | None:
-        if snapshots is None:
-            return None
+        snapshots: dict[str, tuple[MinionWorkflowContext[Any, Any], ...]],
+    ) -> dict[str, int]:
         counts: defaultdict[str, int] = defaultdict(int)
         for contexts in snapshots.values():
             for ctx in contexts:
                 counts[ctx.orchestration_id] += 1
         return dict(counts)
 
-    def _snapshot_metrics_counters(self) -> dict[str, list[dict[str, object]]] | None:
-        metrics = getattr(self._gru, "_metrics", None)
-        # Keep this as the direct user-facing counter snapshot hook. The
-        # verifier only consumes counters, and _mn_snapshot() would collapse
-        # unsupported/failing snapshots into an indistinguishable empty result.
-        snapshot_fn = getattr(metrics, "snapshot_counters", None)
-
-        if not callable(snapshot_fn):
-            return None
-
-        counters = snapshot_fn()
-
-        if not isinstance(counters, dict):
-            return None
-
-        counters = cast(dict[object, object], counters)
-
-        normalized: dict[str, list[dict[str, object]]] = {}
-
-        for name, samples in counters.items():
-            if not isinstance(name, str):
-                continue
-
-            if not isinstance(samples, list):
-                normalized[name] = []
-                continue
-
-            samples = cast(list[object], samples)
-            normalized_samples: list[dict[str, object]] = []
-
-            for sample in samples:
-                if not isinstance(sample, dict):
-                    continue
-
-                sample = cast(dict[str, object], sample)
-                normalized_samples.append(dict(sample))
-
-            normalized[name] = normalized_samples
-
-        return normalized
+    def _snapshot_metrics_counters(self) -> dict[str, list[dict[str, object]]]:
+        return {
+            name: [dict(sample) for sample in samples]
+            for name, samples in self._metrics.snapshot_counters().items()
+        }
 
 
 class ScenarioWaiter:

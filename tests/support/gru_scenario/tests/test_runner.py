@@ -4,6 +4,12 @@ import pytest
 
 from minions._internal._domain.component_identity import get_component_id
 from minions._internal._domain.gru import Gru, GruRuntimeStateSnapshot
+from minions._internal._framework.metrics_constants import (
+    LABEL_MINION,
+    LABEL_ORCHESTRATION_ID,
+    MINION_WORKFLOW_SUCCEEDED_TOTAL,
+)
+from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.support.gru_scenario.directives import (
     AfterWorkflowStepStarts,
     Concurrent,
@@ -68,34 +74,15 @@ async def test_runner_require_result_invariant_message_is_actionable(gru: Gru) -
 
 
 @pytest.mark.asyncio
-async def test_runner_metrics_counter_snapshot_uses_direct_snapshot_hook(gru: Gru) -> None:
-    class CounterSnapshotMetrics:
-        def __init__(self) -> None:
-            self.snapshot_counters_called = False
-            self.mn_snapshot_called = False
+async def test_runner_metrics_counter_snapshot_uses_inmemory_metrics(gru: Gru) -> None:
+    assert isinstance(gru._metrics, InMemoryMetrics)
+    counter = gru._metrics.create_metric(
+        MINION_WORKFLOW_SUCCEEDED_TOTAL,
+        [LABEL_MINION, LABEL_ORCHESTRATION_ID],
+        "counter",
+    )
+    counter.labels(minion="test-minion", orchestration_id="test-orchestration").inc()
 
-        def snapshot_counters(self) -> object:
-            self.snapshot_counters_called = True
-            return {
-                "events_total": [
-                    {"labels": {"status": "ok"}, "value": 1.0},
-                ],
-            }
-
-        async def _mn_snapshot(self) -> object:
-            self.mn_snapshot_called = True
-            return {
-                "counter": {
-                    "events_total": [
-                        {"labels": {"status": "wrapped"}, "value": 2.0},
-                    ],
-                },
-                "gauge": {},
-                "histogram": {},
-            }
-
-    metrics = CounterSnapshotMetrics()
-    gru._metrics = metrics  # type: ignore[assignment]
     runner = ScenarioRunner(
         gru,
         ScenarioPlan([], pipeline_event_counts={}),
@@ -103,43 +90,76 @@ async def test_runner_metrics_counter_snapshot_uses_direct_snapshot_hook(gru: Gr
     )
 
     assert runner._snapshot_metrics_counters() == {
-        "events_total": [
-            {"labels": {"status": "ok"}, "value": 1.0},
+        MINION_WORKFLOW_SUCCEEDED_TOTAL: [
+            {
+                "labels": {
+                    LABEL_MINION: "test-minion",
+                    LABEL_ORCHESTRATION_ID: "test-orchestration",
+                },
+                "value": 1.0,
+            },
         ],
     }
-    assert metrics.snapshot_counters_called is True
-    assert metrics.mn_snapshot_called is False
 
 
 @pytest.mark.asyncio
-async def test_runner_metrics_counter_snapshot_normalizes_only_supported_shape(
-    gru: Gru,
-) -> None:
-    class MalformedCounterSnapshotMetrics:
-        def snapshot_counters(self) -> object:
-            snapshot: dict[object, object] = {
-                "valid_total": [
-                    {"labels": {"status": "ok"}, "value": 1.0},
-                    "not-a-sample",
-                ],
-                "not_a_list_total": "not-a-list",
-                123: [{"labels": {}, "value": 2.0}],
-            }
-            return snapshot
+async def test_runner_rejects_non_inmemory_metrics(gru: Gru) -> None:
+    class UnsupportedMetrics:
+        pass
 
-    gru._metrics = MalformedCounterSnapshotMetrics()  # type: ignore[assignment]
-    runner = ScenarioRunner(
-        gru,
-        ScenarioPlan([], pipeline_event_counts={}),
-        per_verification_timeout=0.1,
-    )
+    original_metrics = gru._metrics
+    gru._metrics = UnsupportedMetrics()  # type: ignore[assignment]
 
-    snapshot = runner._snapshot_metrics_counters()
+    try:
+        with pytest.raises(pytest.fail.Exception, match="Gru._metrics to be InMemoryMetrics"):
+            ScenarioRunner(
+                gru,
+                ScenarioPlan([], pipeline_event_counts={}),
+                per_verification_timeout=0.1,
+            )
+    finally:
+        gru._metrics = original_metrics
 
-    assert snapshot == {
-        "valid_total": [{"labels": {"status": "ok"}, "value": 1.0}],
-        "not_a_list_total": [],
-    }
+
+@pytest.mark.asyncio
+async def test_runner_rejects_non_inmemory_logger(gru: Gru) -> None:
+    class UnsupportedLogger:
+        pass
+
+    original_logger = gru._logger
+    gru._logger = UnsupportedLogger()  # type: ignore[assignment]
+
+    try:
+        with pytest.raises(pytest.fail.Exception, match="Gru._logger to be InMemoryLogger"):
+            ScenarioRunner(
+                gru,
+                ScenarioPlan([], pipeline_event_counts={}),
+                per_verification_timeout=0.1,
+            )
+    finally:
+        gru._logger = original_logger
+
+
+@pytest.mark.asyncio
+async def test_runner_rejects_non_inmemory_state_store(gru: Gru) -> None:
+    class UnsupportedStateStore:
+        pass
+
+    original_state_store = gru._state_store
+    gru._state_store = UnsupportedStateStore()  # type: ignore[assignment]
+
+    try:
+        with pytest.raises(
+            pytest.fail.Exception,
+            match="Gru._state_store to be InMemoryStateStore",
+        ):
+            ScenarioRunner(
+                gru,
+                ScenarioPlan([], pipeline_event_counts={}),
+                per_verification_timeout=0.1,
+            )
+    finally:
+        gru._state_store = original_state_store
 
 
 @pytest.mark.asyncio

@@ -271,9 +271,6 @@ class TestInvalidUsageDSL:
 
         await run_gru_scenario(
             gru,
-            logger,
-            metrics,
-            state_store,
             directives,
             pipeline_event_counts={pipeline_module_path: 1},
         )
@@ -293,9 +290,6 @@ class TestInvalidUsageDSL:
 
         await run_gru_scenario(
             gru,
-            logger,
-            metrics,
-            state_store,
             directives,
             pipeline_event_counts={},
         )
@@ -320,9 +314,6 @@ class TestInvalidUsageDSL:
 
         await run_gru_scenario(
             gru,
-            logger,
-            metrics,
-            state_store,
             directives,
             pipeline_event_counts={},
         )

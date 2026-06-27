@@ -805,9 +805,6 @@ class TestValidUsageDSL:
 
         await run_gru_scenario(
             gru,
-            logger,
-            metrics,
-            state_store,
             directives,
             pipeline_event_counts={pipeline_module_path: 1},
         )
@@ -842,9 +839,6 @@ class TestValidUsageDSL:
 
         await run_gru_scenario(
             gru,
-            logger,
-            metrics,
-            state_store,
             directives,
             pipeline_event_counts={pipeline_module_path: 1},
         )
@@ -895,9 +889,6 @@ class TestValidUsageDSL:
 
         await run_gru_scenario(
             gru,
-            logger,
-            metrics,
-            state_store,
             directives,
             pipeline_event_counts={
                 pipeline1: 1,
@@ -952,9 +943,6 @@ class TestValidUsageDSL:
 
         await run_gru_scenario(
             gru,
-            logger,
-            metrics,
-            state_store,
             directives,
             pipeline_event_counts={pipeline_module_path: 1},
         )
@@ -991,9 +979,6 @@ class TestValidUsageDSL:
 
         await run_gru_scenario(
             gru,
-            logger,
-            metrics,
-            state_store,
             directives,
             pipeline_event_counts={pipeline_module_path: 1},
         )
@@ -1019,9 +1004,6 @@ class TestValidUsageDSL:
         )
         await run_gru_scenario(
             gru,
-            logger,
-            metrics,
-            state_store,
             [
                 first,
                 second,
@@ -1062,9 +1044,6 @@ class TestValidUsageDSL:
 
         await run_gru_scenario(
             gru,
-            logger,
-            metrics,
-            state_store,
             directives,
             pipeline_event_counts={pipeline_module_path: 1},
         )

@@ -12,11 +12,12 @@ from minions._internal._framework.metrics_constants import (
     MINION_WORKFLOW_FAILED_TOTAL,
     MINION_WORKFLOW_SUCCEEDED_TOTAL,
 )
-from tests.assets.support.logger_spied import SpiedLogger
-from tests.assets.support.metrics_spied import SpiedMetrics
+from tests.assets.support.logger_inmemory import InMemoryLogger
+from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.minion_spied import SpiedMinion
 from tests.assets.support.mixin_spy import SpyMixin
 from tests.assets.support.resource_spied import SpiedResource
+from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.assets.support.state_store_spied import SpiedStateStore
 
 from .directives import (
@@ -265,9 +266,9 @@ class ScenarioVerifier:
         plan: ScenarioPlan,
         result: ScenarioRunResult,
         *,
-        logger: SpiedLogger,
-        metrics: SpiedMetrics,
-        state_store: SpiedStateStore,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
         per_verification_timeout: float,
     ):
         self._plan = plan
@@ -317,11 +318,8 @@ class ScenarioVerifier:
                 unpin()
 
     def _assert_metrics_label_contract(self) -> None:
-        assert_fn = getattr(self._metrics, "assert_recorded_labels_match_contract", None)
-        if not callable(assert_fn):
-            return
         try:
-            assert_fn()
+            self._metrics.assert_recorded_labels_match_contract()
         except AssertionError as e:
             pytest.fail(f"Metrics label contract mismatch: {e}")
 

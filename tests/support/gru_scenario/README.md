@@ -5,12 +5,6 @@ This package provides a light, test-focused DSL for scripting Gru scenarios and 
 ## Status
 - Canonical package: `tests.support.gru_scenario`
 - Canonical entrypoint: `run_gru_scenario(...)` from this package
-- Scope: this is the only supported Gru scenario DSL implementation under `tests/support`
-- Canonical component contract for DSL runs:
-  - logger: `tests.assets.support.logger_spied.SpiedLogger`
-  - metrics: `tests.assets.support.metrics_spied.SpiedMetrics`
-  - state store: `tests.assets.support.state_store_spied.SpiedStateStore`
-  - default fixtures (`InMemoryLogger`, `InMemoryMetrics`, `InMemoryStateStore`) satisfy this contract.
 
 ## Scope Boundary
 - This DSL is for orchestration tests: lifecycle sequencing, waits, stop/shutdown behavior, concurrency, and shared-resource runtime behavior.
@@ -76,9 +70,6 @@ directives = [
 
 await run_gru_scenario(
     gru,
-    logger,
-    metrics,
-    state_store,
     directives,
     pipeline_event_counts={pipeline_id: 1},
 )

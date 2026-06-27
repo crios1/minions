@@ -45,9 +45,6 @@ async def test_run_gru_scenario_uses_durable_pipeline_id_for_event_targets(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={IdentifiedEmitOneCounterPipeline: 1},
     )
@@ -83,9 +80,6 @@ async def test_run_gru_scenario_with_new_assets(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_ref: 2},
     )
@@ -111,9 +105,6 @@ async def test_run_gru_scenario_helper_basic(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_ref: 1},
     )
@@ -156,9 +147,6 @@ async def test_run_gru_scenario_accepts_class_start_with_inline_minion_config(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={EmitOneSimplePipeline: 1},
     )
@@ -189,9 +177,6 @@ async def test_run_gru_scenario_wait_workflow_step_starts_then_stop_happy_path(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_ref: 1},
     )
@@ -225,9 +210,6 @@ async def test_run_gru_scenario_expect_runtime_persistence_after_stop(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_ref: 1},
     )
@@ -257,9 +239,6 @@ async def test_run_gru_scenario_expect_runtime_resolutions_after_completion(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_ref: 1},
     )
@@ -290,9 +269,6 @@ async def test_run_gru_scenario_expect_runtime_workflow_steps_exact_after_comple
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_ref: 1},
     )
@@ -338,9 +314,6 @@ async def test_run_gru_scenario_mixed_wait_workflow_step_modes_end_to_end(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={
             pipeline_ref_a: 1,
@@ -375,9 +348,6 @@ async def test_run_gru_scenario_expect_runtime_at_checkpoint_index(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_ref: 1},
     )
@@ -423,9 +393,6 @@ async def test_run_gru_scenario_restart_same_pipeline_with_persistence_and_resol
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_ref: 1},
     )
@@ -471,9 +438,6 @@ async def test_run_gru_scenario_resume_from_explicit_step_boundary_does_not_repl
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_ref: 1},
     )
@@ -540,9 +504,6 @@ async def test_run_gru_scenario_resume_identified_minion_without_persisted_minio
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_id: 1},
     )
@@ -580,9 +541,6 @@ async def test_run_gru_scenario_batches_stops_serial(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_ref: 1},
     )
@@ -614,9 +572,6 @@ async def test_run_gru_scenario_duplicate_start_fails(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_ref: 1},
     )
@@ -643,9 +598,6 @@ async def test_run_gru_scenario_failed_start_does_not_require_minion_startup(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={},
     )
@@ -672,9 +624,6 @@ async def test_run_gru_scenario_stop_unknown_fails(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_ref: 1},
     )
@@ -711,9 +660,6 @@ async def test_run_gru_scenario_parallel_starts(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_ref: 1},
     )
@@ -751,9 +697,6 @@ async def test_run_gru_scenario_wait_workflows_subset(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_ref: 1},
     )
@@ -785,9 +728,6 @@ async def test_run_gru_scenario_wait_workflows_unknown_start_fails(
     with pytest.raises(ValueError, match="outside this ScenarioPlan"):
         await run_gru_scenario(
             gru,
-            logger,
-            metrics,
-            state_store,
             directives,
             pipeline_event_counts={pipeline_ref: 1},
         )
@@ -838,9 +778,6 @@ async def test_run_gru_scenario_expect_runtime_exact_reports_mismatch(
     ):
         await run_gru_scenario(
             gru,
-            logger,
-            metrics,
-            state_store,
             directives,
             pipeline_event_counts={pipeline_ref: 1},
         )
@@ -888,9 +825,6 @@ async def test_run_gru_scenario_strict_wait_workflow_window_overlap_mismatch(
     ):
         await run_gru_scenario(
             gru,
-            logger,
-            metrics,
-            state_store,
             directives,
             pipeline_event_counts={pipeline_ref: 1},
         )
@@ -920,9 +854,6 @@ async def test_run_gru_scenario_wait_workflows_empty_is_noop(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_ref: 1},
     )
@@ -962,9 +893,6 @@ async def test_run_gru_scenario_parallel_mixed_directives(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_ref: 1},
     )
@@ -990,9 +918,6 @@ async def test_run_gru_scenario_simple_start_wait_shutdown(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_ref: 1},
     )
@@ -1029,9 +954,6 @@ async def test_dsl_exploration(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_ref: 1},
     )
@@ -1068,9 +990,6 @@ async def test_run_gru_scenario_golden_regression_mixed_concurrent_wait_subset(
 
     await run_gru_scenario(
         gru,
-        logger,
-        metrics,
-        state_store,
         directives,
         pipeline_event_counts={pipeline_ref: 1},
     )
