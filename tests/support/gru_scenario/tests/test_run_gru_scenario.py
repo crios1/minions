@@ -32,8 +32,7 @@ async def test_run_gru_scenario_uses_durable_pipeline_id_for_event_targets(
         AssetPipeline as IdentifiedEmitOneCounterPipeline,
     )
 
-    pipeline_id = get_component_id(IdentifiedEmitOneCounterPipeline)
-    assert pipeline_id is not None
+    assert get_component_id(IdentifiedEmitOneCounterPipeline) is not None
 
     directives: list[Directive] = [
         OrchestrationStart(
@@ -50,7 +49,7 @@ async def test_run_gru_scenario_uses_durable_pipeline_id_for_event_targets(
         metrics,
         state_store,
         directives,
-        pipeline_event_counts={pipeline_id: 1},
+        pipeline_event_counts={IdentifiedEmitOneCounterPipeline: 1},
     )
 
 
