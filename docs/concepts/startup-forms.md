@@ -1,11 +1,13 @@
-# Runtime Modes: Inline vs. Deployment
+# Startup Forms: Inline vs. Module-Based
 
-Minions supports two ways of starting minions:
+This page describes how Minions Core loads workflow components inside a running `Gru` process. It is separate from the broader Core/Compose/Cluster {doc}`execution ladder <execution-ladder>`.
+
+Minions Core supports two startup forms:
 
 1. **Inline mode** — pass Minion/Pipeline classes and an optional dataclass or `msgspec.Struct` config.
-2. **Deployment mode** — pass module paths and a file-based config.
+2. **Module-based mode** — pass module paths and a file-backed config.
 
-Both modes are fully supported. They differ in how Gru loads components and
+Both forms are fully supported. They differ in how Gru loads components and
 supplies config, but durable identity is controlled separately by component and
 config IDs.
 
@@ -45,9 +47,9 @@ Inline config identity is deterministic, but inline config is not intended as a
 long-lived deployment slot. Use a stamped file-backed config before relying on
 resume across deployment refactors.
 
-## Deployment mode (string-based)
+## Module-based mode
 
-Deployment mode loads components from module strings and can use a file-backed
+Module-based mode loads components from module strings and can use a file-backed
 config:
 
 ```python
@@ -58,7 +60,7 @@ gru.start_orchestration(
 )
 ```
 
-Use deployment mode for declared deployments, multiple configured instances,
+Use module-based mode for declared deployments, multiple configured instances,
 and operator-controlled startup. Component identities still come from
 `@minion_id(...)` and `@pipeline_id(...)` when present. Id-less components use
 the supplied module strings as fallback identities.
@@ -70,13 +72,13 @@ path, or its absolute path when it is outside the project.
 ## Choosing between the two
 
 - Pick **inline** for tests, notebooks/REPLs, and direct Python composition.
-- Pick **deployment** for declared, file-configured, or operator-managed runtime instances.
+- Pick **module-based** for declared, file-configured, or operator-managed runtime instances.
 - Stamp component and file config IDs before relying on refactor-stable resume or metric continuity in either mode.
 
 ## Why two modes?
 
 Minions supports direct Python composition without making module-based
-deployment cumbersome. The startup form and durability contract are separate:
+startup cumbersome. The startup form and durability contract are separate:
 choose the form that fits how the runtime is launched, then add explicit IDs
 when the identities must survive source and config moves. See
 {doc}`state-and-persistence` for the complete identity matrix and migration

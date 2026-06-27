@@ -132,8 +132,8 @@ gru.start_orchestration(
 The configured Minion declares `config: MyConfig` before its steps access
 `self.config`.
 
-Inline deployments are portable, but their identity is tied to the in-memory
-config value. They’re intended for development, teaching, and exploration. For
+Inline startup is portable, but its identity is tied to the in-memory
+config value. Use it for development, teaching, and exploration. For
 long-lived deployment slots, use file-based configs with
 `_minions_config_id`.
 

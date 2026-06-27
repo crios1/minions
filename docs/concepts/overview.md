@@ -1,30 +1,31 @@
 # Overview
 
-Minions is a single-process, event-driven runtime. Instead of spreading work across microservices, you define **pipelines** that emit events, **minions** that react to them, and **resources** those minions share. `Gru` wires everything together, persists workflow state, and tears components down in dependency order. The project is pre-alpha (`0.0.x`): expect APIs and docs to evolve.
+Minions is a progressive execution platform for Python workflow-per-event compute. You define **pipelines** that emit events, **minions** that react to them, **context** that carries workflow state, and **resources** those minions share. `Gru` wires everything together, persists workflow state, and tears components down in dependency order. The project is pre-alpha (`0.0.x`): expect APIs and docs to evolve.
 
 ## Why this exists
 
-- You want orchestration, metrics, and persistence without Kubernetes, a queue, or multiple deploys.
-- You have long-lived async workers—bots, scrapers, automations—that should be coordinated but not distributed.
-- You still want safety: structured logs, Prometheus metrics, state checkpoints, and clear lifecycles.
+- You want to build a workflow locally before committing to a final deployment topology.
+- You want event pipelines, ordered workflow steps, typed context, resources, metrics, and persistence as Python runtime concepts.
+- You want a path from single-process execution to isolated containers and self-hosted clusters without redesigning workflow code.
 
 ## Core ideas
 
-- **Single-process orchestration**: one event loop, many long-running services.
+- **Progressive execution**: the workflow model is designed to remain stable across Core, Compose, and Cluster execution modes ({doc}`execution-ladder`).
+- **Workflow-per-event compute**: each pipeline event is processed by minions through ordered, stateful steps.
 - **Explicit lifecycles**: every pipeline/minion/resource has `startup`, `run`, and `shutdown` hooks managed by the framework.
 - **Typed events and contexts**: minions declare the event type they consume and the workflow context they mutate; both must be JSON-serializable structured types.
 - **Resource graph**: dependencies are inferred from type hints so Gru can start/stop once and inject safely.
 - **Greedy concurrency**: the runtime pushes as much work as possible; backpressure lives in your resources ({ref}`concurrency-backpressure`).
 
-## Why single Gru per process
+## Gru in Minions Core
 
-`Gru` is a process-level runtime owner, not just a helper object.
+In Minions Core, `Gru` is a process-level runtime owner, not just a helper object.
 
 - It owns lifecycle coordination for all running minions, pipelines, and resources in the process.
 - It owns process-wide runtime services (metrics endpoint, persistence backend, background monitoring).
 - A single owner keeps startup/shutdown behavior deterministic and avoids conflicting defaults (for example: one metrics port, one default SQLite file).
 
-If you need multiple independent orchestrations at the same time, run multiple processes (one `Gru` per process).
+If you need multiple independent Core orchestrations at the same time, run multiple processes (one `Gru` per process). Compose and Cluster execution are the intended paths for stronger isolation or multi-machine deployment.
 
 ## Components
 
@@ -33,9 +34,3 @@ If you need multiple independent orchestrations at the same time, run multiple p
 - **Minion** – worker that runs an ordered workflow of `@minion_step` methods per event.
 - **Resource** – shared dependency with lifecycle hooks and automatic latency/error tracking.
 - **StateStore/Logger/Metrics** – pluggable infrastructure interfaces (defaults: SQLite store, Prometheus metrics, file/no-op loggers).
-
-## What this is not
-
-- A distributed task queue or message broker.
-- A replacement for Celery/Temporal/Kafka when you truly need horizontal scale.
-- A stable 1.0 API (yet).

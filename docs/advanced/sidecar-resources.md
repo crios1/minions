@@ -2,7 +2,7 @@
 
 Some tasks don’t fit comfortably inside a single Python interpreter: calling non-Python SDKs, running CPU-heavy algorithms, or isolating risky code. Minions lets you wrap a separate process as a `Resource`—a “sidecar”—so you can keep the main runtime stable while tapping external capabilities.
 
-“Minions runs everything in one event loop. If you do CPU-heavy or blocking work in a step, you’ll stall the loop and hurt every bot. Offload CPU to a separate process; offload blocking I/O to a thread.”
+In Minions Core, your workflow runs in one event loop. If you do CPU-heavy or blocking work in a step, you can stall unrelated workflow work. Offload CPU to a separate process; offload blocking I/O to a thread.
 
 ```python
 # blocking I/O (file/db client lib that isn't async)

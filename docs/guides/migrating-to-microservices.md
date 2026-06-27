@@ -1,8 +1,8 @@
 # Migrating from Minions to Microservices
 
-Minions is designed to keep your system **structured like microservices**, but deployed as **one Python process**. If you eventually need to move to a distributed architecture, the migration path is usually straightforward because your system is already decomposed into components with clear boundaries.
+Minions is designed to preserve Python workflow source code as you move from Core, to Compose, to Cluster (see {doc}`/concepts/execution-ladder`). That progressive path is the normal way to add isolation or distribution while staying inside the Minions model.
 
-This guide explains how to map a Minions system to microservices, what you’ll need to replace when you leave the runtime, and a practical step-by-step way to migrate without a rewrite.
+There are still cases where you may decide to leave the Minions runtime and operate the system as conventional microservices. This guide explains how to map a Minions workflow system to independently owned services, what you need to replace when you leave the runtime, and a practical step-by-step way to migrate without rewriting domain logic.
 
 ## The core idea: 1:1 component mapping
 
@@ -13,19 +13,19 @@ Most Minions systems already look like a microservice architecture on the inside
 - **Resources** encapsulate dependencies (DBs, HTTP clients, queues, chain nodes, caches).
 - **Orchestrations** define composition (which pipelines/minions run together).
 
-When you migrate to microservices, you usually turn each of those into a deployable unit (or a small set of deployable units), while keeping the domain logic largely intact.
+When you migrate out of Minions, you usually turn each of those into a deployable unit (or a small set of deployable units), while keeping the domain logic largely intact.
 
 ## When microservices are worth it
 
-Minions is often the simplest choice if you don’t need container-grade isolation or horizontal scaling. Consider migrating when you genuinely need things a single process can’t deliver well:
+Core, Compose, and Cluster are the preferred path when the Minions workflow model still fits. Consider migrating to conventional microservices when you genuinely need platform or organizational properties outside the Minions contract:
 
-- **Independent scaling** of hot components (e.g., many strategy workers, few ingress workers).
-- **Hard isolation** (security, untrusted code, stricter blast-radius constraints).
+- **Independent scaling** beyond the topology Minions supports.
+- **Hard isolation** for security, untrusted code, or stricter blast-radius constraints than your Minions deployment topology provides.
 - **Multi-language** components or heavy native dependencies you don’t want in one artifact.
 - **Multi-team ownership** with independent release trains and SLAs.
 - **Geographic distribution** or strong data-locality constraints.
 
-If you mostly want “separation of concerns” and “operational clarity”, a Minions deployment mode system can often get you there without going distributed (see {doc}`/concepts/runtime-modes` and {doc}`/guides/deployment-strategies`).
+If you mostly want separation of concerns, operational clarity, or containerized local topology, prefer the progressive Minions path first (see {doc}`/concepts/startup-forms` and {doc}`/guides/deployment-strategies`).
 
 If you’re primarily thinking about throughput, also consider the intermediate options in {doc}`/guides/scale-out-strategies`.
 
@@ -42,7 +42,7 @@ This isn’t the only mapping, but it’s the most common starting point:
 | State store / workflow context | A DB table, event store, or durable cache owned by the service |
 | Minion steps / retries | Queue retries + idempotency keys + compensations in the service |
 
-Minions makes step execution durable and resumable (see {doc}`/concepts/state-and-persistence`). When you migrate, you’ll re-create those guarantees explicitly using your platform and data store choices.
+Minions makes step execution durable and resumable (see {doc}`/concepts/state-and-persistence`). When you migrate out of Minions, you re-create those guarantees explicitly using your platform and data store choices.
 
 ## What tends to be “copy/paste”
 

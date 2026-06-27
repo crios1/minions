@@ -140,7 +140,7 @@ Recommendation:
 Check MyResource.shutdown() and ensure background tasks and caches are cleared.
 ```
 
-This kind of tool reinforces the single-process Minions model. Instead of pretending Gru has hard microservice-style cleanup isolation, it gives users a practical way to validate that their cooperative lifecycle code is healthy.
+This kind of tool reinforces the Minions Core model. Instead of pretending an in-process `Gru` has hard service-style cleanup isolation, it gives users a practical way to validate that their cooperative lifecycle code is healthy.
 
 ## Working Design Summary
 

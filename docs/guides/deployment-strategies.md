@@ -1,10 +1,12 @@
-# Deployment Strategies (and bits of performance tuning that will probably be its own page)
+# Deployment Strategies
 
-Minions is built for single-process orchestrations. Here are pragmatic ways to run it in the real world.
+Minions starts with Core: a single-process runtime for local workflow execution. Production deployment can stay there when that is enough, or move toward containerized and distributed topologies as Compose and Cluster mature.
+
+This page focuses on the practical Core deployment path that exists today.
 
 - **Supervised process**: wrap your app with `systemd`, `supervisord`, or a container runtime that restarts on failure. Gru enforces a single instance per process (see {doc}`../concepts/overview`).
 - **Separate risky code**: if you depend on native extensions that can segfault, keep them in subprocesses and talk over a narrow IPC API; let Gru restart cleanly.
-- **Scale-out topology**: when scale-up isn’t enough, replicate runtimes with sharded ownership or offload hotspots to sidecars (see {doc}`scale-out-strategies`).
+- **Scale-out topology**: when Core scale-up is not enough, replicate runtimes with sharded ownership or offload hotspots to sidecars while preserving the workflow model (see {doc}`scale-out-strategies`).
 - **Metrics endpoint**: expose Prometheus metrics (default port 8081) and alert on workflow failures, resource errors, and high memory/CPU gauges.
 - **Logs**: default logger writes to files; inject your own logger to ship to structured log pipelines.
 - **Persistence**: keep `minions.db` (SQLite) on durable storage if you rely on workflow resumption; or set `state_store=None` if you prefer stateless runs.

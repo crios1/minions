@@ -23,7 +23,7 @@ You can also persist this state in your own database, cache, or ledger if that f
 
 ## Reality check: contracts and limits
 
-Minions’ honest contract is: **ordered, durable, at-least-once step execution**. Business-level safety is yours: idempotency, compensation, invariants. That mirrors microservices land—platforms can retry and queue, but only the domain owner can make side effects safe.
+Minions’ honest contract is: **ordered, durable, at-least-once step execution**. Business-level safety is yours: idempotency, compensation, invariants. That mirrors distributed systems: platforms can retry and queue, but only the domain owner can make side effects safe.
 
 You can’t encode “idempotent” in an abstract base class without lying or forcing a one-size-fits-none pattern. Guidance beats inheritance here.
 

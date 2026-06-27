@@ -1,17 +1,19 @@
 # Scale-Out Strategies
 
-Minions is intentionally a **single-process runtime**. The default way to handle more load is to **scale up** (bigger box, more concurrency) and keep the system simple.
+Minions is designed around progressive execution: start with Core in one process, then add isolation or distribution when the workflow needs it (see {doc}`/concepts/execution-ladder`).
 
-When scale-up isn’t enough, “scale-out” with Minions is mostly about **topology**:
+The default Core path is still to **scale up** first: use a bigger box, tune concurrency, and keep the operational model simple while that remains correct.
+
+When scale-up is not enough, scale-out is mostly about **topology**:
 
 - replicate the runtime into multiple processes, and
 - ensure each process owns a **disjoint slice of work**, or offload hotspots to **sidecars**.
 
-Minions does not (yet) provide cross-process coordination. If you run multiple runtimes with the same inputs, you’ll usually get duplicated work unless you partition ownership explicitly.
+Minions Core does not provide cross-process coordination by itself. If you run multiple Core runtimes with the same inputs, you will usually get duplicated work unless you partition ownership explicitly. Compose and Cluster are the intended path for making those topologies more explicit as the platform matures.
 
 ## 0) Start with scale-up (the normal path)
 
-Scale-up preserves Minions’ simplest deployment model:
+Scale-up preserves the simplest Core deployment model:
 
 - Increase CPU/RAM.
 - Increase safe concurrency (more workflows/steps in flight).
@@ -27,7 +29,7 @@ If you have CPU headroom on the host but one dependency is the bottleneck (or ri
 - risky native libs (segfault risk)
 - slow/blocking integrations you want isolated
 
-Your Minions process stays the orchestrator; the sidecar scales independently (more processes/threads; different resource limits).
+Your Minions Core process stays the orchestrator; the sidecar scales independently (more processes/threads; different resource limits).
 
 Related reading: {doc}`/advanced/sidecar-resources`.
 
@@ -84,8 +86,8 @@ If you’re currently using SQLite for the state store, multiple replicas genera
 - one runtime per independent shard with its own local state file, or
 - moving persistence to a shared external store that can support your ownership model.
 
-## 5) When to stop scaling Minions and migrate
+## 5) When to leave the Minions model
 
-If you need independent scaling for many components, strong isolation boundaries, or lots of cross-process coordination, it may be time to migrate to microservices.
+If you need independent scaling for many components, strong isolation boundaries, or lots of cross-process coordination, first decide whether Compose or Cluster should own that topology inside the Minions model.
 
-See {doc}`/guides/migrating-to-microservices` for a pragmatic 1:1 mapping approach.
+If your requirements go beyond that contract, see {doc}`/guides/migrating-to-microservices` for a pragmatic 1:1 mapping approach out of Minions.

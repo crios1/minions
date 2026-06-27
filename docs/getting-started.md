@@ -1,6 +1,6 @@
 # Getting Started
 
-A quick “hello minion” to see how the pieces fit together. Everything here runs in a single Python process.
+A quick “hello minion” to see how the pieces fit together in Minions Core.
 
 ## Install the docs + dev stack
 
