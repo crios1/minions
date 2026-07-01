@@ -611,6 +611,7 @@ async def test_runner_records_lifecycle_observations_after_start_stop_and_shutdo
         pipeline_tasks=frozenset(),
         resources=frozenset(),
         resource_tasks=frozenset(),
+        minion_instance_by_orchestration={},
         pipeline_by_minion_instance={},
         resources_by_minion_instance={},
         resources_by_pipeline={},

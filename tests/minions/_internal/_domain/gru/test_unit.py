@@ -518,7 +518,7 @@ class TestUnit:
             minion = gru._minions_by_orchestration_id[result.orchestration_id]
             minion_instance_id = minion._mn_minion_instance_id
 
-            snapshot = gru._runtime_state_snapshot()
+            snapshot = gru.runtime_state_snapshot()
             assert snapshot.minion_instances == {minion_instance_id}
             assert snapshot.orchestrations == {result.orchestration_id}
             assert snapshot.minion_tasks == {minion_instance_id}
@@ -526,6 +526,9 @@ class TestUnit:
             assert snapshot.pipeline_tasks == {identified_pipeline_id}
             assert snapshot.resources == {identified_resource_id}
             assert snapshot.resource_tasks == {identified_resource_id}
+            assert snapshot.minion_instance_by_orchestration == {
+                result.orchestration_id: minion_instance_id
+            }
             assert snapshot.pipeline_by_minion_instance == {
                 minion_instance_id: identified_pipeline_id
             }
@@ -536,6 +539,18 @@ class TestUnit:
             assert snapshot.resource_dependencies_by_dependent_resource == {}
             assert snapshot.resource_dependents_by_dependency_resource == {}
             assert snapshot.resource_reference_counts == {identified_resource_id: 1}
+            assert snapshot.minion_instance_for_orchestration(
+                result.orchestration_id
+            ) == minion_instance_id
+            assert snapshot.pipeline_for_minion(minion_instance_id) == identified_pipeline_id
+            assert snapshot.resources_for_minion(minion_instance_id) == frozenset(
+                {identified_resource_id}
+            )
+            assert snapshot.resources_for_pipeline(identified_pipeline_id) == frozenset()
+            assert snapshot.dependencies_for_resource(identified_resource_id) == frozenset()
+            assert snapshot.dependents_for_resource(identified_resource_id) == frozenset()
+            assert snapshot.resource_refcount(identified_resource_id) == 1
+            assert snapshot.resource_refcount("missing") == 0
 
             with pytest.raises(TypeError):
                 snapshot.pipeline_by_minion_instance["other"] = "pipeline"  # type: ignore[index]

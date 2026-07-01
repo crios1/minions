@@ -13,6 +13,12 @@ from tests.assets.events.counter import CounterEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
+from tests.minions._internal._domain.gru.assertions import (
+    assert_pipeline_resource_dependency_singletons,
+    assert_pipeline_singleton,
+    assert_running_minions,
+    assert_runtime_empty,
+)
 from tests.support.race_window import GatedAsyncCallable, GatedLock
 
 
@@ -394,6 +400,110 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
         assert stop1.success
         assert stop2.success
         assert gru._runtime_state_snapshot().is_empty
+
+
+@pytest.mark.asyncio
+async def test_gru_runtime_state_uses_singletons_for_shared_pipeline_and_resources(
+    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+) -> None:
+    from tests.assets.resources.fixed.default import AssetResource as FixedResource
+    from tests.assets.resources.with_dependencies.depends_on_fixed import (
+        AssetResource as ResourceDependingOnFixed,
+    )
+
+    pipeline_ref = "tests.assets.pipelines.emit_one.counter.with_resource_depending_on_fixed"
+    minion_ref = "tests.assets.minions.two_steps.counter.with_file_config"
+    first_config = "tests/assets/config/minions/a.toml"
+    second_config = "tests/assets/config/minions/b.toml"
+
+    logger = InMemoryLogger()
+    metrics = InMemoryMetrics()
+    state_store = InMemoryStateStore(logger=logger)
+
+    async with gru_factory(
+        logger=logger,
+        metrics=metrics,
+        state_store=state_store,
+    ) as gru:
+        fixed_resource_id = gru._get_resource_identity(FixedResource)
+        depends_on_fixed_resource_id = gru._get_resource_identity(ResourceDependingOnFixed)
+
+        first_start = await gru.start_orchestration(
+            pipeline=pipeline_ref,
+            minion=minion_ref,
+            minion_config_path=first_config,
+        )
+        second_start = await gru.start_orchestration(
+            pipeline=pipeline_ref,
+            minion=minion_ref,
+            minion_config_path=second_config,
+        )
+        assert first_start.success
+        assert second_start.success
+        assert first_start.orchestration_id is not None
+        assert second_start.orchestration_id is not None
+        assert first_start.orchestration_id != second_start.orchestration_id
+
+        snapshot = gru.runtime_state_snapshot()
+        first_minion_instance_id = snapshot.minion_instance_for_orchestration(
+            first_start.orchestration_id
+        )
+        second_minion_instance_id = snapshot.minion_instance_for_orchestration(
+            second_start.orchestration_id
+        )
+        assert first_minion_instance_id is not None
+        assert second_minion_instance_id is not None
+        assert first_minion_instance_id != second_minion_instance_id
+        running_orchestrations = {
+            first_start.orchestration_id: first_minion_instance_id,
+            second_start.orchestration_id: second_minion_instance_id,
+        }
+
+        assert_running_minions(
+            gru,
+            orchestration_to_minion_instance=running_orchestrations,
+        )
+        assert_pipeline_singleton(
+            gru,
+            pipeline_id=pipeline_ref,
+            minion_instance_ids=set(running_orchestrations.values()),
+        )
+        assert_pipeline_resource_dependency_singletons(
+            gru,
+            pipeline_id=pipeline_ref,
+            owner_resource_id=depends_on_fixed_resource_id,
+            dependency_resource_id=fixed_resource_id,
+            owner_refcount=1,
+            dependency_refcount=1,
+        )
+
+        first_stop = await gru.stop_orchestration(first_start.orchestration_id)
+
+        assert first_stop.success
+        assert_running_minions(
+            gru,
+            orchestration_to_minion_instance={
+                second_start.orchestration_id: second_minion_instance_id
+            },
+        )
+        assert_pipeline_singleton(
+            gru,
+            pipeline_id=pipeline_ref,
+            minion_instance_ids={second_minion_instance_id},
+        )
+        assert_pipeline_resource_dependency_singletons(
+            gru,
+            pipeline_id=pipeline_ref,
+            owner_resource_id=depends_on_fixed_resource_id,
+            dependency_resource_id=fixed_resource_id,
+            owner_refcount=1,
+            dependency_refcount=1,
+        )
+
+        second_stop = await gru.stop_orchestration(second_start.orchestration_id)
+
+        assert second_stop.success
+        assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio

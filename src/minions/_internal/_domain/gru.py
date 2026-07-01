@@ -76,6 +76,7 @@ class GruRuntimeStateSnapshot:
     pipeline_tasks: frozenset[str]
     resources: frozenset[str]
     resource_tasks: frozenset[str]
+    minion_instance_by_orchestration: Mapping[str, str]
     pipeline_by_minion_instance: Mapping[str, str]
     resources_by_minion_instance: Mapping[str, frozenset[str]]
     resources_by_pipeline: Mapping[str, frozenset[str]]
@@ -86,6 +87,27 @@ class GruRuntimeStateSnapshot:
     @property
     def is_empty(self) -> bool:
         return all(not getattr(self, field.name) for field in fields(self))
+
+    def minion_instance_for_orchestration(self, orchestration_id: str) -> str | None:
+        return self.minion_instance_by_orchestration.get(orchestration_id)
+
+    def pipeline_for_minion(self, minion_instance_id: str) -> str | None:
+        return self.pipeline_by_minion_instance.get(minion_instance_id)
+
+    def resources_for_minion(self, minion_instance_id: str) -> frozenset[str]:
+        return self.resources_by_minion_instance.get(minion_instance_id, frozenset())
+
+    def resources_for_pipeline(self, pipeline_id: str) -> frozenset[str]:
+        return self.resources_by_pipeline.get(pipeline_id, frozenset())
+
+    def dependencies_for_resource(self, resource_id: str) -> frozenset[str]:
+        return self.resource_dependencies_by_dependent_resource.get(resource_id, frozenset())
+
+    def dependents_for_resource(self, resource_id: str) -> frozenset[str]:
+        return self.resource_dependents_by_dependency_resource.get(resource_id, frozenset())
+
+    def resource_refcount(self, resource_id: str) -> int:
+        return self.resource_reference_counts.get(resource_id, 0)
 
 
 class Gru:
@@ -1158,6 +1180,10 @@ class Gru:
                 val.clear()
 
     def _runtime_state_snapshot(self) -> GruRuntimeStateSnapshot:
+        return self.runtime_state_snapshot()
+
+    def runtime_state_snapshot(self) -> GruRuntimeStateSnapshot:
+        """Return a read-only diagnostic snapshot of Gru's live runtime graph."""
         # Registries of live components/tasks snapshot only their identity keys because
         # MappingProxyType would not make their mutable values immutable; relationship
         # maps preserve copied values as immutable point-in-time state.
@@ -1169,6 +1195,12 @@ class Gru:
             pipeline_tasks=frozenset(self._pipeline_tasks),
             resources=frozenset(self._resources),
             resource_tasks=frozenset(self._resource_tasks),
+            minion_instance_by_orchestration=MappingProxyType(
+                {
+                    orchestration_id: minion._mn_minion_instance_id
+                    for orchestration_id, minion in self._minions_by_orchestration_id.items()
+                }
+            ),
             pipeline_by_minion_instance=MappingProxyType(dict(self._minion_pipeline_map)),
             resources_by_minion_instance=MappingProxyType(
                 {
