@@ -27,6 +27,32 @@ In Minions Core, `Gru` is a process-level runtime owner, not just a helper objec
 
 If you need multiple independent Core orchestrations at the same time, run multiple processes (one `Gru` per process). Compose and Cluster execution are the intended paths for stronger isolation or multi-machine deployment.
 
+(runtime-component-sharing)=
+## Runtime component sharing
+
+Within one `Gru` process, `start_orchestration(...)` starts or joins a runtime composition. Each orchestration gets its own Minion instance, because the minion owns workflow execution for that minion/config/pipeline composition.
+
+Pipelines and Resources are shared by identity:
+
+- One Pipeline instance runs per pipeline identity.
+- One Resource instance runs per resource identity.
+- Additional orchestrations subscribe to the existing Pipeline and reuse existing Resources.
+- Gru reference-counts ownership and stops shared components only after the last dependent orchestration is stopped.
+
+This means `startup` for a Pipeline or Resource is not called once per orchestration. It is called once per running component identity in the process. Put per-orchestration state in Minion workflow context or config, not in shared Pipeline or Resource instance attributes.
+
+```text
+Gru process
+|-- Pipeline: PriceFeedPipeline   shared by identity
+|-- Resource: PriceAPI            shared by identity
+|-- Orchestration A
+|   `-- Minion instance for config A
+|-- Orchestration B
+|   `-- Minion instance for config B
+`-- Orchestration C
+    `-- Minion instance for config C
+```
+
 ## Components
 
 - **Gru** – orchestrator; manages lifecycles, dependency wiring, metrics, logging, and persistence.

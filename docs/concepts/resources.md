@@ -26,6 +26,7 @@ class PriceAPI(Resource):
 ## Dependency graph
 
 Resources can depend on other resources via type hints. Gru traverses the graph, starts everything once, reference-counts usage, and shuts down unused nodes when minions or pipelines stop.
+See {ref}`runtime-component-sharing` for how this fits into the broader orchestration sharing model.
 
 ```python
 class CachedPriceAPI(Resource):
