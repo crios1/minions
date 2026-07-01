@@ -202,7 +202,7 @@ async def test_gru_serializes_concurrent_stops_for_same_orchestration(
         assert len(successes) == 1
         assert len(failures) == 1
         assert failures[0].reason == "Minion is no longer running."
-        assert gru._runtime_state_snapshot().is_empty
+        assert gru.runtime_state_snapshot().is_empty
 
 
 @pytest.mark.asyncio
@@ -399,7 +399,7 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
 
         assert stop1.success
         assert stop2.success
-        assert gru._runtime_state_snapshot().is_empty
+        assert gru.runtime_state_snapshot().is_empty
 
 
 @pytest.mark.asyncio
@@ -557,7 +557,7 @@ async def test_gru_injects_resource_dependencies_before_resource_startup(
         stop = await gru.stop_orchestration(result.orchestration_id or "")
 
         assert stop.success
-        assert gru._runtime_state_snapshot().is_empty
+        assert gru.runtime_state_snapshot().is_empty
 
 
 @pytest.mark.asyncio
@@ -632,7 +632,7 @@ async def test_gru_starts_resource_with_multiple_resource_dependencies(
         stop = await gru.stop_orchestration(result.orchestration_id or "")
 
         assert stop.success
-        assert gru._runtime_state_snapshot().is_empty
+        assert gru.runtime_state_snapshot().is_empty
 
 
 @pytest.mark.asyncio
@@ -675,7 +675,7 @@ async def test_gru_start_fails_clearly_for_circular_resource_dependencies(
 
         assert not result.success
         assert result.reason == "Cycle detected in Resource dependencies"
-        assert gru._runtime_state_snapshot().is_empty
+        assert gru.runtime_state_snapshot().is_empty
 
 
 @pytest.mark.asyncio
@@ -804,7 +804,7 @@ async def test_gru_shutdown_waits_for_in_flight_start_orchestration(
 
         assert start_result.success
         assert shutdown_result.success
-        assert gru._runtime_state_snapshot().is_empty
+        assert gru.runtime_state_snapshot().is_empty
 
 
 @pytest.mark.asyncio
@@ -846,7 +846,7 @@ async def test_gru_shutdown_waits_for_in_flight_stop_orchestration(
 
         assert stop_result.success
         assert shutdown_result.success
-        assert gru._runtime_state_snapshot().is_empty
+        assert gru.runtime_state_snapshot().is_empty
 
 
 @pytest.mark.asyncio
@@ -986,4 +986,4 @@ async def test_gru_shutdown_serializes_concurrent_shutdown_calls(
         assert start_result.success
         assert shutdown_result_1.success
         assert shutdown_result_2.success
-        assert gru._runtime_state_snapshot().is_empty
+        assert gru.runtime_state_snapshot().is_empty

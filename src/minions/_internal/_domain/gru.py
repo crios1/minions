@@ -1179,9 +1179,6 @@ class Gru:
             if isinstance(val, (dict, set)):
                 val.clear()
 
-    def _runtime_state_snapshot(self) -> GruRuntimeStateSnapshot:
-        return self.runtime_state_snapshot()
-
     def runtime_state_snapshot(self) -> GruRuntimeStateSnapshot:
         """Return a read-only diagnostic snapshot of Gru's live runtime graph."""
         # Registries of live components/tasks snapshot only their identity keys because

@@ -42,7 +42,7 @@ async def test_stop_committed_minion_shutdown_failure_discards_runtime_state_whe
             "tests.assets.crash.minions.counter.boom_shutdown."
             "AssetMinion.shutdown failed"
         )
-        assert gru._runtime_state_snapshot().is_empty
+        assert gru.runtime_state_snapshot().is_empty
 
 
 @pytest.mark.asyncio
@@ -71,7 +71,7 @@ async def test_stop_unsubscribe_failure_discards_runtime_state_after_subscriptio
         assert not stop.success
         assert stop.reason == "unsubscribe boom"
         assert minion not in pipeline._mn_subs
-        assert gru._runtime_state_snapshot().is_empty
+        assert gru.runtime_state_snapshot().is_empty
 
 
 @pytest.mark.asyncio
@@ -107,7 +107,7 @@ async def test_start_resource_startup_failure_discards_runtime_state_when_cleanu
             "tests.assets.crash.resources.boom_startup."
             "AssetResource.startup failed"
         )
-        assert gru._runtime_state_snapshot().is_empty
+        assert gru.runtime_state_snapshot().is_empty
 
 
 @pytest.mark.asyncio
@@ -133,7 +133,7 @@ async def test_stop_resource_cleanup_failure_discards_runtime_state_when_no_shar
 
         assert not stop.success
         assert stop.reason == "resource cleanup boom"
-        assert gru._runtime_state_snapshot().is_empty
+        assert gru.runtime_state_snapshot().is_empty
 
 
 @pytest.mark.asyncio
@@ -194,7 +194,7 @@ async def test_stop_pipeline_resource_cleanup_failure_discards_runtime_state_whe
 
         assert not stop.success
         assert stop.reason == "resource cleanup boom"
-        assert gru._runtime_state_snapshot().is_empty
+        assert gru.runtime_state_snapshot().is_empty
 
 
 @pytest.mark.asyncio

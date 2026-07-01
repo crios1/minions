@@ -82,4 +82,4 @@ class GruIntrospector:
         return self._gru._resources.get(rid)
 
     def runtime_state_snapshot(self) -> GruRuntimeStateSnapshot:
-        return self._gru._runtime_state_snapshot()
+        return self._gru.runtime_state_snapshot()

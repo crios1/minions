@@ -482,7 +482,7 @@ class TestUnit:
             shutdown = await gru.shutdown()
 
             assert not shutdown.success
-            assert gru._runtime_state_snapshot().is_empty
+            assert gru.runtime_state_snapshot().is_empty
 
     @pytest.mark.asyncio
     async def test_runtime_state_snapshot_is_exact_detached_and_immutable(
@@ -594,7 +594,7 @@ class TestUnit:
             assert len(shutdown.errors) == 3
             assert all(error.phase == "cancel_task" for error in shutdown.errors)
             assert all(error.error_message == "cancel boom" for error in shutdown.errors)
-            assert gru._runtime_state_snapshot().is_empty
+            assert gru.runtime_state_snapshot().is_empty
 
     @pytest.mark.asyncio
     async def test_shutdown_clears_runtime_state_when_initial_log_fails(
@@ -631,7 +631,7 @@ class TestUnit:
             assert shutdown_components == [gru._state_store, gru._metrics]
             assert monitor_task.done()
             assert monitor_task.cancelled()
-            assert gru._runtime_state_snapshot().is_empty
+            assert gru.runtime_state_snapshot().is_empty
 
     @pytest.mark.asyncio
     async def test_shutdown_clears_runtime_state_when_logger_shutdown_fails(
@@ -658,4 +658,4 @@ class TestUnit:
 
             assert not shutdown.success
             assert shutdown.reason == "logger shutdown boom"
-            assert gru._runtime_state_snapshot().is_empty
+            assert gru.runtime_state_snapshot().is_empty
