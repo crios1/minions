@@ -28,6 +28,10 @@ async def test_inmemory_logger_logs_and_queries():
     assert logger.has_log("warning")
     assert logger.has_log("error")
     assert logger.has_log("debug", log_kwargs={"foo": 1})
+    debug_log = logger.find_first_log("debug", log_kwargs={"foo": 1})
+    assert debug_log is not None
+    assert debug_log.kwargs["foo"] == 1
+    assert logger.find_first_log("debug", log_kwargs={"foo": 2}) is None
     assert not logger.has_log("debug", log_kwargs={"foo": 2})
     assert not logger.has_log("debug", log_kwargs={"missing": "value"})
     assert not logger.has_log("debug", log_kwargs={"missing": None})

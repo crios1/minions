@@ -24,12 +24,12 @@ class InMemoryLogger(SpiedLogger):
     async def log(self, level: int, msg: str, **kwargs: Any) -> None:
         self.logs.append(Log(level, msg, kwargs))
 
-    def has_log(
+    def find_first_log(
         self,
         substr: str,
         min_level: int = DEBUG,
         log_kwargs: dict[str, object] | None = None,
-    ) -> bool:
+    ) -> Log | None:
         log_kwargs = log_kwargs or {}
         for log in self.logs:
             if (
@@ -37,8 +37,16 @@ class InMemoryLogger(SpiedLogger):
                 and substr in log.msg
                 and all(k in log.kwargs and log.kwargs[k] == v for k, v in log_kwargs.items())
             ):
-                return True
-        return False
+                return log
+        return None
+
+    def has_log(
+        self,
+        substr: str,
+        min_level: int = DEBUG,
+        log_kwargs: dict[str, object] | None = None,
+    ) -> bool:
+        return self.find_first_log(substr, min_level=min_level, log_kwargs=log_kwargs) is not None
 
     async def wait_for_log(
         self,
