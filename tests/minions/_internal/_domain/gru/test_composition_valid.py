@@ -10,6 +10,9 @@ from minions._internal._framework.state_store_noop import NoOpStateStore
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
+from tests.minions._internal._domain.gru.assertions import (
+    assert_runtime_component_counts_exact,
+)
 
 
 class TestMinionFile:
@@ -76,8 +79,7 @@ class TestMinionFile:
             )
 
             assert result.success
-            assert len(gru._pipelines) >= 1
-            assert len(gru._resources) >= 2
+            assert_runtime_component_counts_exact(gru, pipelines=1, resources=2)
             assert result.orchestration_id is not None
 
 

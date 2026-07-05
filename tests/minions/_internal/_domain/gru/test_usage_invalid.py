@@ -13,6 +13,7 @@ from minions._internal._framework.state_store_noop import NoOpStateStore
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
+from tests.minions._internal._domain.gru.assertions import assert_orchestration_running
 from tests.support.gru_scenario import (
     Directive,
     GruShutdown,
@@ -161,11 +162,7 @@ class TestInvalidUsage:
 
             assert result1.success
             assert result1.orchestration_id is not None
-            assert result1.orchestration_id in gru._minions_by_orchestration_id
-            assert (
-                gru._minions_by_orchestration_id[result1.orchestration_id]._mn_minion_instance_id
-                in gru._minion_tasks
-            )
+            assert_orchestration_running(gru, result1.orchestration_id)
 
             result2 = await gru.start_orchestration(
                 pipeline=pipeline_module_path,

@@ -14,10 +14,13 @@ from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.minions._internal._domain.gru.assertions import (
+    assert_orchestration_running,
     assert_pipeline_resource_dependency_singletons,
     assert_pipeline_singleton,
     assert_running_minions,
+    assert_runtime_component_counts_exact,
     assert_runtime_empty,
+    assert_runtime_resource_maps_consistent,
 )
 from tests.support.race_window import GatedAsyncCallable, GatedLock
 
@@ -143,7 +146,7 @@ async def test_gru_serializes_concurrent_starts_for_same_orchestration(
         assert len(successes) == 1
         assert len(failures) == 1
         assert failures[0].reason == "Orchestration already running - start request was rejected."
-        assert len(gru._minions_by_orchestration_id) == 1
+        assert_runtime_component_counts_exact(gru, minions=1)
 
 
 @pytest.mark.asyncio
@@ -259,7 +262,7 @@ async def test_gru_serializes_concurrent_start_and_stop_for_same_orchestration(
 
         assert stop_result.success
         assert restart_result.success
-        assert len(gru._minions_by_orchestration_id) == 1
+        assert_runtime_component_counts_exact(gru, minions=1)
 
 
 @pytest.mark.asyncio
@@ -329,7 +332,7 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations(
 
         assert result1.success
         assert result2.success
-        assert len(gru._minions_by_orchestration_id) == 2
+        assert_runtime_component_counts_exact(gru, minions=2)
 
 
 @pytest.mark.asyncio
@@ -385,14 +388,15 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
 
         assert result1.success
         assert result2.success
-        assert len(gru._pipelines) == 1
-        assert len(gru._resources) == 1
         assert fixed_resource_pipeline_module.AssetPipeline.get_call_counts()["_mn_startup"] == 1
         assert fixed_resource_module.AssetResource.get_call_counts()["_mn_startup"] == 1
 
         resource_id = gru._get_resource_identity(fixed_resource_module.AssetResource)
-        assert gru._pipeline_resource_map[pipeline_module_path] == {resource_id}
-        assert gru._resource_reference_counts[resource_id] == 1
+        assert_runtime_component_counts_exact(gru, pipelines=1, resources=1)
+        assert_runtime_resource_maps_consistent(gru)
+        snapshot = gru.runtime_state_snapshot()
+        assert snapshot.resources_for_pipeline(pipeline_module_path) == {resource_id}
+        assert snapshot.resource_refcount(resource_id) == 1
 
         stop1 = await gru.stop_orchestration(result1.orchestration_id or "")
         stop2 = await gru.stop_orchestration(result2.orchestration_id or "")
@@ -716,7 +720,7 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations_while_s
         orchestration2_start_result = await asyncio.wait_for(orchestration2_start_task, timeout=1.0)
         assert orchestration2_start_result.success
         assert orchestration2_start_result.orchestration_id is not None
-        assert orchestration2_start_result.orchestration_id in gru._minions_by_orchestration_id
+        assert_orchestration_running(gru, orchestration2_start_result.orchestration_id)
         orchestration2_id = Gru._make_orchestration_id(
             pipeline_id=gru._get_pipeline_identity_from_module_path(
                 pipeline_b_ref,
@@ -726,9 +730,10 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations_while_s
             ),
             minion_config_id="",
         )
-        assert orchestration2_id in gru._minions_by_orchestration_id
-        assert orchestration1_start_result.orchestration_id in gru._minions_by_orchestration_id
-        assert len(gru._minions_by_orchestration_id) == 2
+        assert_orchestration_running(gru, orchestration2_id)
+        assert orchestration1_start_result.orchestration_id is not None
+        assert_orchestration_running(gru, orchestration1_start_result.orchestration_id)
+        assert_runtime_component_counts_exact(gru, minions=2)
 
         orchestration1_stop_gate.release.set()
         orchestration1_stop_result = await orchestration1_stop_task

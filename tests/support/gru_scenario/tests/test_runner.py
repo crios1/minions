@@ -10,6 +10,7 @@ from minions._internal._framework.metrics_constants import (
     MINION_WORKFLOW_SUCCEEDED_TOTAL,
 )
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
+from tests.minions._internal._domain.gru.assertions import assert_orchestration_running
 from tests.support.gru_scenario.directives import (
     AfterWorkflowStepStarts,
     Concurrent,
@@ -328,14 +329,14 @@ async def test_runner_tracks_durable_minion_pipeline_and_resources(
     assert receipt.minion_id == minion_id
     assert receipt.pipeline_id == pipeline_id
     assert receipt.orchestration_id is not None
-    assert receipt.orchestration_id in gru._minions_by_orchestration_id
-    assert pipeline_id in gru._pipelines
-    assert resource_id in gru._resources
-
-    minion = gru._minions_by_orchestration_id[receipt.orchestration_id]
-    assert minion._mn_minion_id == minion_id
-    assert gru._minion_pipeline_map[minion._mn_minion_instance_id] == pipeline_id
-    assert gru._minion_resource_map[minion._mn_minion_instance_id] == {resource_id}
+    assert_orchestration_running(gru, receipt.orchestration_id)
+    snapshot = gru.runtime_state_snapshot()
+    minion_instance_id = snapshot.minion_instance_for_orchestration(receipt.orchestration_id)
+    assert minion_instance_id is not None
+    assert pipeline_id in snapshot.pipelines
+    assert resource_id in snapshot.resources
+    assert snapshot.pipeline_for_minion(minion_instance_id) == pipeline_id
+    assert snapshot.resources_for_minion(minion_instance_id) == {resource_id}
 
     assert result.spies is not None
     assert (
