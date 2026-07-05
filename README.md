@@ -1,4 +1,4 @@
-> **Status:** Pre-alpha (`0.0.x`). APIs and docs are still evolving and may change without notice.
+> **Status:** Pre-alpha (`0.0.x`). Core is active today; Compose and Cluster are roadmap direction. APIs and docs may change.
 
 <p align="center">
   <img src="docs/_static/mascot-856.png" width="256" alt="Minions mascot">
