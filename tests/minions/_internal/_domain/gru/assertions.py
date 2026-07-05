@@ -5,6 +5,14 @@ from collections.abc import Mapping, Set
 from minions._internal._domain.gru import Gru
 
 
+def assert_runtime_component_maps_consistent(gru: Gru) -> None:
+    snapshot = gru.runtime_state_snapshot()
+
+    assert snapshot.minion_instances == snapshot.minion_tasks
+    assert snapshot.pipelines == snapshot.pipeline_tasks
+    assert snapshot.resources == snapshot.resource_tasks
+
+
 def assert_runtime_empty(gru: Gru) -> None:
     assert gru.runtime_state_snapshot().is_empty
 
@@ -17,6 +25,7 @@ def assert_running_minions(
     snapshot = gru.runtime_state_snapshot()
     minion_instance_ids = set(orchestration_to_minion_instance.values())
 
+    assert_runtime_component_maps_consistent(gru)
     assert snapshot.minion_instance_by_orchestration == dict(orchestration_to_minion_instance)
     assert snapshot.orchestrations == set(orchestration_to_minion_instance)
     assert snapshot.minion_instances == minion_instance_ids
@@ -31,6 +40,7 @@ def assert_pipeline_singleton(
 ) -> None:
     snapshot = gru.runtime_state_snapshot()
 
+    assert_runtime_component_maps_consistent(gru)
     assert snapshot.pipelines == {pipeline_id}
     assert snapshot.pipeline_tasks == {pipeline_id}
     assert snapshot.pipeline_by_minion_instance == {
@@ -52,6 +62,7 @@ def assert_pipeline_resource_dependency_singletons(
 ) -> None:
     snapshot = gru.runtime_state_snapshot()
 
+    assert_runtime_component_maps_consistent(gru)
     assert snapshot.resources == {owner_resource_id, dependency_resource_id}
     assert snapshot.resource_tasks == {owner_resource_id, dependency_resource_id}
     assert snapshot.resources_for_pipeline(pipeline_id) == {owner_resource_id}

@@ -43,12 +43,18 @@ class Resource(AsyncService):
         logger: Logger,
         metrics: Metrics,
         resource_module_path: str,
-        resource_id: str | None = None,
+        resource_id: str,
     ):
         super().__init__(logger)
         self._mn_metrics = metrics
         self._mn_resource_module_path = resource_module_path
-        self._mn_resource_id = resource_id if resource_id is not None else resource_module_path
+        self._mn_resource_id = resource_id
+
+    def _mn_identity_log_kwargs(self) -> dict[str, object]:
+        return {
+            "resource_id": self._mn_resource_id,
+            "resource_module_path": self._mn_resource_module_path,
+        }
 
     async def _mn_startup(
         self,
@@ -60,7 +66,7 @@ class Resource(AsyncService):
         post_args: list[object] | None = None,
     ) -> None:
         return await super()._mn_startup(
-            log_kwargs={"resource_id": self._mn_resource_module_path},
+            log_kwargs=self._mn_identity_log_kwargs(),
             pre=self._mn_validate_and_wrap_public_async_methods,
         )
 
@@ -73,9 +79,7 @@ class Resource(AsyncService):
         post: LifecycleCallback | None = None,
         post_args: list[object] | None = None,
     ) -> None:
-        return await super()._mn_shutdown(
-            log_kwargs={"resource_id": self._mn_resource_module_path}
-        )
+        return await super()._mn_shutdown(log_kwargs=self._mn_identity_log_kwargs())
 
     async def _mn_run(
         self,
@@ -86,9 +90,7 @@ class Resource(AsyncService):
         post: LifecycleCallback | None = None,
         post_args: list[object] | None = None,
     ) -> None:
-        return await super()._mn_run(
-            log_kwargs={"resource_id": self._mn_resource_module_path}
-        )
+        return await super()._mn_run(log_kwargs=self._mn_identity_log_kwargs())
 
     def _mn_validate_and_wrap_public_async_methods(self) -> None:
         def _is_async_callable(
@@ -113,7 +115,6 @@ class Resource(AsyncService):
             ) -> Callable[..., Coroutine[Any, Any, object]]:
                 async def wrapper(*args: object, **kwargs: object) -> object:
                     return await self._mn_run_with_tracking(
-                        self._mn_resource_id,
                         attr_name,
                         method,
                         *args,
@@ -125,7 +126,6 @@ class Resource(AsyncService):
 
     async def _mn_run_with_tracking(
         self,
-        resource_id: str,
         resource_method: str,
         method: Callable[..., Coroutine[Any, Any, T]],
         *args: object,
@@ -134,7 +134,7 @@ class Resource(AsyncService):
         start = time.monotonic()
         caller_kind, caller = current_resource_metric_caller()
         base_labels = {
-            LABEL_RESOURCE: resource_id,
+            LABEL_RESOURCE: self._mn_resource_id,
             LABEL_RESOURCE_METHOD: resource_method,
             LABEL_RESOURCE_CALLER_KIND: caller_kind,
             LABEL_RESOURCE_CALLER: caller,
@@ -155,7 +155,7 @@ class Resource(AsyncService):
                     WARNING,
                     "Resource method failed",
                     e,
-                    resource=resource_id,
+                    **self._mn_identity_log_kwargs(),
                     resource_method=resource_method,
                     args=args,
                     kwargs=kwargs,
@@ -198,9 +198,7 @@ class Resource(AsyncService):
 
         def decorator(fn: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
             if not inspect.iscoroutinefunction(fn):
-                raise TypeError(
-                    f"@untracked must be used on async functions, got: {fn.__name__}"
-                )
+                raise TypeError(f"@untracked must be used on async functions, got: {fn.__name__}")
             setattr(fn, "__untracked__", True)
             return fn
 

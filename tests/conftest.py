@@ -37,17 +37,19 @@ def scrub_asset_modules() -> Generator[None, None, None]:
 
 
 @pytest.fixture
-def logger() -> InMemoryLogger:
+def logger() -> Generator[InMemoryLogger, None, None]:
     InMemoryLogger.enable_spy()
     InMemoryLogger.reset_spy()
-    return InMemoryLogger()
+    logger = InMemoryLogger()
+    yield logger
+    logger.assert_recorded_logs_match_contracts()
 
 
 @pytest.fixture
-def metrics() -> Generator[InMemoryMetrics, None, None]:
+def metrics(logger: InMemoryLogger) -> Generator[InMemoryMetrics, None, None]:
     InMemoryMetrics.enable_spy()
     InMemoryMetrics.reset_spy()
-    metrics = InMemoryMetrics()
+    metrics = InMemoryMetrics(logger=logger)
     yield metrics
     metrics.assert_recorded_labels_match_contract()
 

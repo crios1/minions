@@ -4,6 +4,7 @@ from typing import Any
 
 from minions._internal._framework.logger import DEBUG, INFO
 
+from .log_contracts import assert_each_log_matches_exactly_one_contract
 from .logger_spied import SpiedLogger
 
 
@@ -23,6 +24,9 @@ class InMemoryLogger(SpiedLogger):
 
     async def log(self, level: int, msg: str, **kwargs: Any) -> None:
         self.logs.append(Log(level, msg, kwargs))
+
+    def assert_recorded_logs_match_contracts(self) -> None:
+        assert_each_log_matches_exactly_one_contract(self.logs)
 
     def find_first_log(
         self,

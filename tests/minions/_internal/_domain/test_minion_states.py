@@ -175,11 +175,23 @@ def _persistence_blocked_sample(metrics: InMemoryMetrics, labels: dict[str, str]
 
 
 @pytest.mark.asyncio
-async def test_wait_until_tasks_idle_ignores_aux_tasks_by_default():
-    logger = InMemoryLogger()
-    metrics = InMemoryMetrics()
-    store = InMemoryStateStore(logger=logger)
-    m = IdleWaitMinion("iid", "ck", "tests.assets.idle_wait_minion", None, store, metrics, logger)
+async def test_wait_until_tasks_idle_ignores_aux_tasks_by_default(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+):
+    m = IdleWaitMinion(
+        "iid",
+        "ck",
+        "tests.assets.idle_wait_minion",
+        None,
+        state_store,
+        metrics,
+        logger,
+        minion_id="tests.assets.idle_wait_minion",
+        minion_config_id="",
+        pipeline_id="test-pipeline",
+    )
 
     event = asyncio.Event()
     task = await _tracked_wait_task(m, event, aux=True)
@@ -196,11 +208,23 @@ async def test_wait_until_tasks_idle_ignores_aux_tasks_by_default():
 
 
 @pytest.mark.asyncio
-async def test_wait_until_tasks_idle_can_include_aux_tasks():
-    logger = InMemoryLogger()
-    metrics = InMemoryMetrics()
-    store = InMemoryStateStore(logger=logger)
-    m = IdleWaitMinion("iid", "ck", "tests.assets.idle_wait_minion", None, store, metrics, logger)
+async def test_wait_until_tasks_idle_can_include_aux_tasks(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+):
+    m = IdleWaitMinion(
+        "iid",
+        "ck",
+        "tests.assets.idle_wait_minion",
+        None,
+        state_store,
+        metrics,
+        logger,
+        minion_id="tests.assets.idle_wait_minion",
+        minion_config_id="",
+        pipeline_id="test-pipeline",
+    )
 
     event = asyncio.Event()
     task = await _tracked_wait_task(m, event, aux=True)
@@ -221,32 +245,36 @@ async def test_wait_until_tasks_idle_can_include_aux_tasks():
 
 
 @pytest.mark.asyncio
-async def test_workflow_aborted_increments_aborted_counter():
+async def test_workflow_aborted_increments_aborted_counter(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+):
     # define a minion whose first step aborts
     class AbortMinion(Minion[DictEvent, DictContext]):
         @minion_step
         async def step_1(self):
             raise AbortWorkflow()
 
-    InMemoryLogger.enable_spy()
-    InMemoryLogger.reset_spy()
-    InMemoryMetrics.enable_spy()
-    InMemoryMetrics.reset_spy()
-    InMemoryStateStore.enable_spy()
-    InMemoryStateStore.reset_spy()
-
-    logger = InMemoryLogger()
-    metrics = InMemoryMetrics()
-    store = InMemoryStateStore(logger=logger)
-
     # start the minion by calling _mn_handle_event directly with a dummy event
-    m = AbortMinion("iid", "ck", "tests.assets.abort_minion", "cfg", store, metrics, logger)
+    m = AbortMinion(
+        "iid",
+        "ck",
+        "tests.assets.abort_minion",
+        "cfg",
+        state_store,
+        metrics,
+        logger,
+        minion_id="tests.assets.abort_minion",
+        minion_config_id="",
+        pipeline_id="test-pipeline",
+    )
     await _mark_minion_started_for_event_test(m)
     await m._mn_handle_event(DictEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
 
     # wait until the state store has recorded deletion (workflow finished)
-    await store.wait_for_call("delete_context", count=1, timeout=2)
+    await state_store.wait_for_call("delete_context", count=1, timeout=2)
 
     snap = metrics.snapshot()
     pprint(snap)
@@ -261,29 +289,33 @@ async def test_workflow_aborted_increments_aborted_counter():
 
 
 @pytest.mark.asyncio
-async def test_workflow_failed_increments_failed_counter():
+async def test_workflow_failed_increments_failed_counter(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+):
     class FailMinion(Minion[DictEvent, DictContext]):
         @minion_step
         async def step_1(self):
             raise RuntimeError("boom")
 
-    InMemoryLogger.enable_spy()
-    InMemoryLogger.reset_spy()
-    InMemoryMetrics.enable_spy()
-    InMemoryMetrics.reset_spy()
-    InMemoryStateStore.enable_spy()
-    InMemoryStateStore.reset_spy()
-
-    logger = InMemoryLogger()
-    metrics = InMemoryMetrics()
-    store = InMemoryStateStore(logger=logger)
-
-    m = FailMinion("iid", "ck", "tests.assets.fail_minion", "cfg", store, metrics, logger)
+    m = FailMinion(
+        "iid",
+        "ck",
+        "tests.assets.fail_minion",
+        "cfg",
+        state_store,
+        metrics,
+        logger,
+        minion_id="tests.assets.fail_minion",
+        minion_config_id="",
+        pipeline_id="test-pipeline",
+    )
     await _mark_minion_started_for_event_test(m)
     await m._mn_handle_event(DictEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
 
-    await store.wait_for_call("delete_context", count=1, timeout=2)
+    await state_store.wait_for_call("delete_context", count=1, timeout=2)
 
     snap = metrics.snapshot()
     pprint(snap)
@@ -316,7 +348,11 @@ async def test_workflow_failed_increments_failed_counter():
 
 
 @pytest.mark.asyncio
-async def test_workflow_cancellation_records_interrupted_duration_status_and_keeps_context():
+async def test_workflow_cancellation_records_interrupted_duration_status_and_keeps_context(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+):
     step_started = asyncio.Event()
     step_can_finish = asyncio.Event()
 
@@ -326,12 +362,17 @@ async def test_workflow_cancellation_records_interrupted_duration_status_and_kee
             step_started.set()
             await step_can_finish.wait()
 
-    logger = InMemoryLogger()
-    metrics = InMemoryMetrics()
-    store = InMemoryStateStore(logger=logger)
-
     m = InterruptedMinion(
-        "iid", "ck", "tests.assets.interrupted_minion", "cfg", store, metrics, logger
+        "iid",
+        "ck",
+        "tests.assets.interrupted_minion",
+        "cfg",
+        state_store,
+        metrics,
+        logger,
+        minion_id="tests.assets.interrupted_minion",
+        minion_config_id="",
+        pipeline_id="test-pipeline",
     )
     await _mark_minion_started_for_event_test(m)
     await m._mn_handle_event(DictEvent())
@@ -362,11 +403,14 @@ async def test_workflow_cancellation_records_interrupted_duration_status_and_kee
 
     assert workflow_duration_sample["count"] == 1
     assert step_duration_sample["count"] == 1
-    assert len(await store.get_all_contexts()) == 1
+    assert len(await state_store.get_all_contexts()) == 1
 
 
 @pytest.mark.asyncio
-async def test_workflow_persistence_continue_on_failure_advances_and_retries_at_next_checkpoint():
+async def test_workflow_persistence_continue_on_failure_advances_and_retries_at_next_checkpoint(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+):
     step_calls: list[str] = []
 
     class ContinueOnFailureMinion(Minion[DictEvent, DictContext]):
@@ -382,8 +426,6 @@ async def test_workflow_persistence_continue_on_failure_advances_and_retries_at_
         async def step_3(self):
             step_calls.append("step_3")
 
-    logger = InMemoryLogger()
-    metrics = InMemoryMetrics()
     store = FlakyPersistenceStateStore(logger=logger, fail_attempts={3})
     m = ContinueOnFailureMinion(
         minion_instance_id="iid",
@@ -393,6 +435,9 @@ async def test_workflow_persistence_continue_on_failure_advances_and_retries_at_
         state_store=store,
         metrics=metrics,
         logger=logger,
+        minion_id="tests.assets.continue_persistence_minion",
+        minion_config_id="",
+        pipeline_id="test-pipeline",
         workflow_persistence_failure_policy="continue-on-failure",
         workflow_persistence_retry_delay_seconds=0.01,
     )
@@ -426,7 +471,10 @@ async def test_workflow_persistence_continue_on_failure_advances_and_retries_at_
 
 
 @pytest.mark.asyncio
-async def test_workflow_persistence_idle_until_persisted_blocks_next_step_until_retry_succeeds():
+async def test_workflow_persistence_idle_until_persisted_blocks_next_step_until_retry_succeeds(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+):
     step_calls: list[str] = []
     step_1_done = asyncio.Event()
     step_2_started = asyncio.Event()
@@ -442,8 +490,6 @@ async def test_workflow_persistence_idle_until_persisted_blocks_next_step_until_
             step_calls.append("step_2")
             step_2_started.set()
 
-    logger = InMemoryLogger()
-    metrics = InMemoryMetrics()
     store = FlakyPersistenceStateStore(logger=logger, fail_attempts={3, 4})
     m = IdleUntilPersistedMinion(
         minion_instance_id="iid",
@@ -453,6 +499,9 @@ async def test_workflow_persistence_idle_until_persisted_blocks_next_step_until_
         state_store=store,
         metrics=metrics,
         logger=logger,
+        minion_id="tests.assets.idle_persistence_minion",
+        minion_config_id="",
+        pipeline_id="test-pipeline",
         workflow_persistence_failure_policy="idle-until-persisted",
         workflow_persistence_retry_delay_seconds=0.01,
     )
@@ -491,7 +540,10 @@ async def test_workflow_persistence_idle_until_persisted_blocks_next_step_until_
 
 
 @pytest.mark.asyncio
-async def test_workflow_persistence_blocked_gauge_counts_concurrent_workflows_for_same_label_set():
+async def test_workflow_persistence_blocked_gauge_counts_concurrent_workflows_for_same_label_set(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+):
     step_calls = 0
 
     class ConcurrentIdleUntilPersistedMinion(Minion[DictEvent, DictContext]):
@@ -500,8 +552,6 @@ async def test_workflow_persistence_blocked_gauge_counts_concurrent_workflows_fo
             nonlocal step_calls
             step_calls += 1
 
-    logger = InMemoryLogger()
-    metrics = InMemoryMetrics()
     store = FlakyPersistenceStateStore(logger=logger, fail_attempts=set(range(3, 100)))
     m = ConcurrentIdleUntilPersistedMinion(
         minion_instance_id="iid",
@@ -511,6 +561,9 @@ async def test_workflow_persistence_blocked_gauge_counts_concurrent_workflows_fo
         state_store=store,
         metrics=metrics,
         logger=logger,
+        minion_id="tests.assets.concurrent_idle_persistence_minion",
+        minion_config_id="",
+        pipeline_id="test-pipeline",
         workflow_persistence_failure_policy="idle-until-persisted",
         workflow_persistence_retry_delay_seconds=0.01,
         workflow_persistence_retry_jitter_ratio=0.0,
@@ -540,7 +593,10 @@ async def test_workflow_persistence_blocked_gauge_counts_concurrent_workflows_fo
 
 
 @pytest.mark.asyncio
-async def test_workflow_persistence_idle_until_persisted_relogs_and_escalates_sustained_failure():
+async def test_workflow_persistence_idle_until_persisted_relogs_and_escalates_sustained_failure(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+):
     step_1_done = asyncio.Event()
     step_2_started = asyncio.Event()
 
@@ -553,8 +609,6 @@ async def test_workflow_persistence_idle_until_persisted_relogs_and_escalates_su
         async def step_2(self):
             step_2_started.set()
 
-    logger = InMemoryLogger()
-    metrics = InMemoryMetrics()
     store = FlakyPersistenceStateStore(logger=logger, fail_attempts=set(range(3, 100)))
     m = SustainedIdleMinion(
         minion_instance_id="iid",
@@ -564,6 +618,9 @@ async def test_workflow_persistence_idle_until_persisted_relogs_and_escalates_su
         state_store=store,
         metrics=metrics,
         logger=logger,
+        minion_id="tests.assets.sustained_idle_persistence_minion",
+        minion_config_id="",
+        pipeline_id="test-pipeline",
         workflow_persistence_failure_policy="idle-until-persisted",
         workflow_persistence_retry_delay_seconds=0.01,
         workflow_persistence_retry_max_delay_seconds=0.04,
@@ -603,7 +660,10 @@ async def test_workflow_persistence_idle_until_persisted_relogs_and_escalates_su
 
 
 @pytest.mark.asyncio
-async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds():
+async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+):
     step_1_done = asyncio.Event()
 
     class DeleteBlockingSuccessMinion(Minion[DictEvent, DictContext]):
@@ -611,8 +671,6 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds():
         async def step_1(self):
             step_1_done.set()
 
-    logger = InMemoryLogger()
-    metrics = InMemoryMetrics()
     store = FlakyDeletePersistenceStateStore(logger=logger, fail_attempts={1, 2})
     m = DeleteBlockingSuccessMinion(
         minion_instance_id="iid",
@@ -622,6 +680,9 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds():
         state_store=store,
         metrics=metrics,
         logger=logger,
+        minion_id="tests.assets.delete_blocking_success_minion",
+        minion_config_id="",
+        pipeline_id="test-pipeline",
         workflow_persistence_failure_policy="continue-on-failure",
         workflow_persistence_retry_delay_seconds=0.01,
         workflow_persistence_retry_max_delay_seconds=0.02,
@@ -678,7 +739,11 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds():
 
 
 @pytest.mark.asyncio
-async def test_workflow_persistence_serialization_failure_is_non_retryable_and_preserves_prior_checkpoint():  # noqa: E501
+async def test_workflow_persistence_serialization_failure_is_non_retryable_and_preserves_prior_checkpoint(  # noqa: E501
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+):
     step_calls: list[str] = []
 
     class UnserializableValue:
@@ -694,17 +759,17 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
         async def step_2(self):
             step_calls.append("step_2")
 
-    logger = InMemoryLogger()
-    metrics = InMemoryMetrics()
-    store = InMemoryStateStore(logger=logger)
     m = NonRetryablePersistenceMinion(
         minion_instance_id="iid",
         orchestration_id="ck",
         minion_module_path="tests.assets.non_retryable_persistence_minion",
         config_path="cfg",
-        state_store=store,
+        state_store=state_store,
         metrics=metrics,
         logger=logger,
+        minion_id="tests.assets.non_retryable_persistence_minion",
+        minion_config_id="",
+        pipeline_id="test-pipeline",
         workflow_persistence_failure_policy="idle-until-persisted",
         workflow_persistence_retry_delay_seconds=0.01,
     )
@@ -714,7 +779,7 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
     await m._mn_wait_until_workflows_idle(timeout=2)
 
     assert step_calls == ["step_1"]
-    persisted_contexts = await store.get_all_contexts()
+    persisted_contexts = await state_store.get_all_contexts()
     assert len(persisted_contexts) == 1
     decoded = deserialize_workflow_context_blob(persisted_contexts[0].context)
     assert decoded.next_step_index == 0
@@ -727,12 +792,9 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
     assert failure_log.kwargs["persistence_failure_stage"] == "serialize"
     assert failure_log.kwargs["persistence_retryable"] is False
     assert failure_log.kwargs["persistence_retry_delay_seconds"] is None
-    assert (
-        failure_log.kwargs["suggestion"]
-        == (
-            "Ensure workflow event and context values are supported by the "
-            "Minions persistence codec."
-        )
+    assert failure_log.kwargs["suggestion"] == (
+        "Ensure workflow event and context values are supported by the "
+        "Minions persistence codec."
     )
     assert _sum_counter(metrics, MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 3
     assert _sum_counter(metrics, MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == 2
@@ -755,20 +817,21 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
 
 
 @pytest.mark.asyncio
-async def test_minion_startup_replays_only_own_contexts():
+async def test_minion_startup_replays_only_own_contexts(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+):
     class ReplayMinion(Minion[DictEvent, DictContext]):
         @minion_step
         async def step_1(self):
             return
 
-    logger = InMemoryLogger()
-    metrics = InMemoryMetrics()
-    store = InMemoryStateStore(logger=logger)
     minion_module_path = "mock.module_path.minion_replay_shared"
     own_orchestration_id = f"{minion_module_path}|cfg-own|tests.assets.pipelines.shared"
     other_orchestration_id = f"{minion_module_path}|cfg-other|tests.assets.pipelines.shared"
 
-    await store._mn_serialize_and_save_context(
+    await state_store._mn_serialize_and_save_context(
         MinionWorkflowContext(
             orchestration_id=own_orchestration_id,
             workflow_id="wf-own",
@@ -777,7 +840,7 @@ async def test_minion_startup_replays_only_own_contexts():
             context_cls=DictContext,
         )
     )
-    await store._mn_serialize_and_save_context(
+    await state_store._mn_serialize_and_save_context(
         MinionWorkflowContext(
             orchestration_id=other_orchestration_id,
             workflow_id="wf-other",
@@ -792,9 +855,12 @@ async def test_minion_startup_replays_only_own_contexts():
         own_orchestration_id,
         minion_module_path,
         None,
-        store,
+        state_store,
         metrics,
         logger,
+        minion_id=minion_module_path,
+        minion_config_id="cfg-own",
+        pipeline_id="tests.assets.pipelines.shared",
     )
 
     replayed_ids: list[str] = []
@@ -810,7 +876,11 @@ async def test_minion_startup_replays_only_own_contexts():
 
 
 @pytest.mark.asyncio
-async def test_minion_startup_replays_typed_msgspec_event_and_context():
+async def test_minion_startup_replays_typed_msgspec_event_and_context(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+):
     observed: list[tuple[type, type, int, int]] = []
 
     class ReplayMinion(Minion[ReplayEvent, ReplayContext]):
@@ -825,13 +895,7 @@ async def test_minion_startup_replays_typed_msgspec_event_and_context():
                 )
             )
 
-    logger = InMemoryLogger()
-    metrics = InMemoryMetrics()
-    InMemoryStateStore.enable_spy()
-    InMemoryStateStore.reset_spy()
-    store = InMemoryStateStore(logger=logger)
-
-    await store._mn_serialize_and_save_context(
+    await state_store._mn_serialize_and_save_context(
         MinionWorkflowContext(
             orchestration_id="mock.module_path.minion_replay_typed|cfg|tests.assets.pipelines.shared",
             workflow_id="wf-typed",
@@ -846,20 +910,27 @@ async def test_minion_startup_replays_typed_msgspec_event_and_context():
         "mock.module_path.minion_replay_typed|cfg|tests.assets.pipelines.shared",
         "mock.module_path.minion_replay_typed",
         None,
-        store,
+        state_store,
         metrics,
         logger,
+        minion_id="mock.module_path.minion_replay_typed",
+        minion_config_id="cfg",
+        pipeline_id="tests.assets.pipelines.shared",
     )
 
     await m._mn_startup()
     await m._mn_wait_until_workflows_idle(timeout=2)
-    await store.wait_for_call("delete_context", count=1, timeout=2)
+    await state_store.wait_for_call("delete_context", count=1, timeout=2)
 
     assert observed == [(ReplayEvent, ReplayContext, 7, 11)]
 
 
 @pytest.mark.asyncio
-async def test_runtime_guard_rejects_nested_step_invocation_via_indirect_call():
+async def test_runtime_guard_rejects_nested_step_invocation_via_indirect_call(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+):
     class NestedCallMinion(Minion[DictEvent, DictContext]):
         @minion_step
         async def step_1(self):
@@ -870,31 +941,23 @@ async def test_runtime_guard_rejects_nested_step_invocation_via_indirect_call():
         async def step_2(self):
             self.context.step2 = "step2"
 
-    InMemoryLogger.enable_spy()
-    InMemoryLogger.reset_spy()
-    InMemoryMetrics.enable_spy()
-    InMemoryMetrics.reset_spy()
-    InMemoryStateStore.enable_spy()
-    InMemoryStateStore.reset_spy()
-
-    logger = InMemoryLogger()
-    metrics = InMemoryMetrics()
-    store = InMemoryStateStore(logger=logger)
-
     m = NestedCallMinion(
         "iid",
         "ck",
         "tests.assets.nested_call_minion",
         None,
-        store,
+        state_store,
         metrics,
         logger,
+        minion_id="tests.assets.nested_call_minion",
+        minion_config_id="",
+        pipeline_id="test-pipeline",
     )
 
     await _mark_minion_started_for_event_test(m)
     await m._mn_handle_event(DictEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
-    await store.wait_for_call("delete_context", count=1, timeout=2)
+    await state_store.wait_for_call("delete_context", count=1, timeout=2)
 
     failed_logs = [log for log in logger.logs if log.msg == "Workflow Step failed"]
     assert len(failed_logs) == 1
@@ -906,14 +969,17 @@ async def test_runtime_guard_rejects_nested_step_invocation_via_indirect_call():
     snap = metrics.snapshot()
     counters = snap.get("counter", {})
     step_failed_total = sum(
-        s.get("value", 0)
-        for s in counters.get(MINION_WORKFLOW_STEP_FAILED_TOTAL, [])
+        s.get("value", 0) for s in counters.get(MINION_WORKFLOW_STEP_FAILED_TOTAL, [])
     )
     assert step_failed_total == 1
 
 
 @pytest.mark.asyncio
-async def test_minion_steps_can_access_event_and_context_across_workflow_steps():
+async def test_minion_steps_can_access_event_and_context_across_workflow_steps(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+):
     observed: list[tuple[str, int, object]] = []
 
     class AccessMinion(Minion[DictEvent, DictContext]):
@@ -928,30 +994,22 @@ async def test_minion_steps_can_access_event_and_context_across_workflow_steps()
             event_value = self.event.value
             observed.append(("step_2", event_value, self.context.from_step_1))
 
-    InMemoryLogger.enable_spy()
-    InMemoryLogger.reset_spy()
-    InMemoryMetrics.enable_spy()
-    InMemoryMetrics.reset_spy()
-    InMemoryStateStore.enable_spy()
-    InMemoryStateStore.reset_spy()
-
-    logger = InMemoryLogger()
-    metrics = InMemoryMetrics()
-    store = InMemoryStateStore(logger=logger)
-
     m = AccessMinion(
         "iid",
         "ck",
         "tests.assets.access_minion",
         None,
-        store,
+        state_store,
         metrics,
         logger,
+        minion_id="tests.assets.access_minion",
+        minion_config_id="",
+        pipeline_id="test-pipeline",
     )
     await _mark_minion_started_for_event_test(m)
     await m._mn_handle_event(DictEvent(value=10))
     await m._mn_wait_until_workflows_idle(timeout=2)
-    await store.wait_for_call("delete_context", count=1, timeout=2)
+    await state_store.wait_for_call("delete_context", count=1, timeout=2)
 
     assert observed == [
         ("step_1", 10, 11),
@@ -960,7 +1018,11 @@ async def test_minion_steps_can_access_event_and_context_across_workflow_steps()
 
 
 @pytest.mark.asyncio
-async def test_resumed_workflow_step_can_access_event_and_context_from_state_store():
+async def test_resumed_workflow_step_can_access_event_and_context_from_state_store(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+):
     observed: list[tuple[str, int, object]] = []
 
     class ResumeAccessMinion(Minion[DictEvent, DictContext]):
@@ -973,18 +1035,7 @@ async def test_resumed_workflow_step_can_access_event_and_context_from_state_sto
             event_value = self.event.value
             observed.append(("step_2", event_value, self.context.from_step_1))
 
-    InMemoryLogger.enable_spy()
-    InMemoryLogger.reset_spy()
-    InMemoryMetrics.enable_spy()
-    InMemoryMetrics.reset_spy()
-    InMemoryStateStore.enable_spy()
-    InMemoryStateStore.reset_spy()
-
-    logger = InMemoryLogger()
-    metrics = InMemoryMetrics()
-    store = InMemoryStateStore(logger=logger)
-
-    await store._mn_serialize_and_save_context(
+    await state_store._mn_serialize_and_save_context(
         MinionWorkflowContext(
             orchestration_id="tests.assets.resume_access_minion|cfg|tests.assets.pipelines.resume",
             workflow_id="wf-resume",
@@ -1000,20 +1051,27 @@ async def test_resumed_workflow_step_can_access_event_and_context_from_state_sto
         "tests.assets.resume_access_minion|cfg|tests.assets.pipelines.resume",
         "tests.assets.resume_access_minion",
         None,
-        store,
+        state_store,
         metrics,
         logger,
+        minion_id="tests.assets.resume_access_minion",
+        minion_config_id="",
+        pipeline_id="test-pipeline",
     )
 
     await m._mn_startup()
     await m._mn_wait_until_workflows_idle(timeout=2)
-    await store.wait_for_call("delete_context", count=1, timeout=2)
+    await state_store.wait_for_call("delete_context", count=1, timeout=2)
 
     assert observed == [("step_2", 7, 8)]
 
 
 @pytest.mark.asyncio
-async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_valid_context():
+async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_valid_context(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+):
     observed: list[int] = []
 
     class ReplayWithInvalidContextMinion(Minion[DictEvent, DictContext]):
@@ -1021,9 +1079,6 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
         async def step_1(self):
             observed.append(self.event.value)
 
-    logger = InMemoryLogger()
-    metrics = InMemoryMetrics()
-    store = InMemoryStateStore(logger=logger)
     minion_module_path = "tests.assets.replay_with_invalid_context_minion"
 
     valid_context: MinionWorkflowContext[DictEvent, DictContext] = MinionWorkflowContext(
@@ -1058,12 +1113,12 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
         schema_version=999,
     )
 
-    store._contexts["wf-valid"] = StoredWorkflowContext(
+    state_store._contexts["wf-valid"] = StoredWorkflowContext(
         workflow_id="wf-valid",
         orchestration_id=f"{minion_module_path}|cfg|tests.assets.pipelines.invalid",
         context=serialize_persisted_workflow_context(valid_context),
     )
-    store._contexts["wf-invalid"] = StoredWorkflowContext(
+    state_store._contexts["wf-invalid"] = StoredWorkflowContext(
         workflow_id="wf-invalid",
         orchestration_id=f"{minion_module_path}|cfg|tests.assets.pipelines.invalid",
         context=serialize(invalid_payload),
@@ -1074,9 +1129,12 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
         f"{minion_module_path}|cfg|tests.assets.pipelines.invalid",
         minion_module_path,
         None,
-        store,
+        state_store,
         metrics,
         logger,
+        minion_id=minion_module_path,
+        minion_config_id="cfg",
+        pipeline_id="tests.assets.pipelines.invalid",
     )
 
     await m._mn_startup()
@@ -1090,7 +1148,11 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
 
 
 @pytest.mark.asyncio
-async def test_minion_startup_replay_fails_closed_on_context_type_mismatch():
+async def test_minion_startup_replay_fails_closed_on_context_type_mismatch(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+):
     observed: list[int] = []
 
     class ReplayWithMismatchedContextMinion(Minion[DictEvent, DictContext]):
@@ -1098,9 +1160,6 @@ async def test_minion_startup_replay_fails_closed_on_context_type_mismatch():
         async def step_1(self):
             observed.append(self.event.value)
 
-    logger = InMemoryLogger()
-    metrics = InMemoryMetrics()
-    store = InMemoryStateStore(logger=logger)
     minion_module_path = "tests.assets.replay_with_mismatched_context_minion"
     orchestration_id = f"{minion_module_path}|cfg|tests.assets.pipelines.invalid"
 
@@ -1123,12 +1182,12 @@ async def test_minion_startup_replay_fails_closed_on_context_type_mismatch():
         )
     )
 
-    store._contexts["wf-valid"] = StoredWorkflowContext(
+    state_store._contexts["wf-valid"] = StoredWorkflowContext(
         workflow_id="wf-valid",
         orchestration_id=orchestration_id,
         context=serialize_persisted_workflow_context(valid_context),
     )
-    store._contexts["wf-mismatch"] = StoredWorkflowContext(
+    state_store._contexts["wf-mismatch"] = StoredWorkflowContext(
         workflow_id="wf-mismatch",
         orchestration_id=orchestration_id,
         context=serialize_persisted_workflow_context(mismatched_context),
@@ -1139,9 +1198,12 @@ async def test_minion_startup_replay_fails_closed_on_context_type_mismatch():
         orchestration_id,
         minion_module_path,
         None,
-        store,
+        state_store,
         metrics,
         logger,
+        minion_id=minion_module_path,
+        minion_config_id="cfg",
+        pipeline_id="tests.assets.pipelines.invalid",
     )
 
     with pytest.raises(Exception) as exc_info:

@@ -7,8 +7,9 @@ from typing import Any, TypedDict, TypeVar
 import msgspec
 import pytest
 
-from minions import Minion, Resource, minion_step
-from minions._internal._domain.exceptions import UnsupportedUserCode
+from minions import Minion, Resource, minion_step, resource_id
+from minions._internal._domain.component_identity import generate_component_id
+from minions._internal._domain.exceptions import MinionsError, UnsupportedUserCode
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_noop import NoOpStateStore
@@ -69,7 +70,6 @@ class TestMinionSubclassingValid:
             r2: MyResource2
 
     def test_mixins_allowed_in_any_order(self):
-        'mixins are used in testing suite, not intended for end user use'
         class MyMinion1(Mixin, Minion[MyEvent, MyContext]):
             ...
         class MyMinion2(Minion[MyEvent, MyContext], Mixin):
@@ -89,7 +89,18 @@ class TestMinionSubclassingValid:
         assert len(MyMinion._mn_workflow_spec) == 2
         assert MyMinion._mn_workflow_spec == ("step_1", "step_2")
 
-        m = MyMinion("", "", "", "", NoOpStateStore(), NoOpMetrics(), NoOpLogger())
+        m = MyMinion(
+            "",
+            "",
+            "",
+            "",
+            NoOpStateStore(),
+            NoOpMetrics(),
+            NoOpLogger(),
+            minion_id="test-minion",
+            minion_config_id="",
+            pipeline_id="test-pipeline",
+        )
 
         assert len(m._mn_workflow) == 2
 
@@ -107,6 +118,9 @@ class TestMinionSubclassingValid:
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
             logger=NoOpLogger(),
+            minion_id="test-minion",
+            minion_config_id="",
+            pipeline_id="test-pipeline",
         )
 
         assert not hasattr(m, "config")
@@ -128,6 +142,9 @@ class TestMinionSubclassingValid:
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
             logger=NoOpLogger(),
+            minion_id="test-minion",
+            minion_config_id="",
+            pipeline_id="test-pipeline",
         )
         m._mn_started.set()
 
@@ -140,10 +157,11 @@ class TestMinionSubclassingValid:
         assert captured_handles[0].workflow_id
 
     @pytest.mark.asyncio
-    async def test_workflow_handle_values_match_framework_log_and_state_identity(self):
-        logger = InMemoryLogger()
-        state_store = InMemoryStateStore(logger=logger)
-
+    async def test_workflow_handle_values_match_framework_log_and_state_identity(
+        self,
+        logger: InMemoryLogger,
+        state_store: InMemoryStateStore,
+    ):
         captured_handles: list[MinionWorkflowHandle] = []
         captured_stored_contexts: list[Any] = []
 
@@ -161,6 +179,9 @@ class TestMinionSubclassingValid:
             state_store=state_store,
             metrics=NoOpMetrics(),
             logger=logger,
+            minion_id="test-minion",
+            minion_config_id="",
+            pipeline_id="test-pipeline",
         )
         m._mn_started.set()
 
@@ -179,6 +200,42 @@ class TestMinionSubclassingValid:
         workflow_started = next(log for log in logger.logs if log.msg == "Workflow started")
         assert workflow_started.kwargs["orchestration_id"] == handle.orchestration_id
         assert workflow_started.kwargs["workflow_id"] == handle.workflow_id
+
+    @pytest.mark.asyncio
+    async def test_minion_startup_failure_context_includes_minion_identity(
+        self,
+        logger: InMemoryLogger,
+    ):
+        class FailingStartupMinion(Minion[MyEvent, EmptyContext]):
+            async def startup(self) -> None:
+                raise RuntimeError("boom")
+
+            @minion_step
+            async def step_1(self): ...
+
+        m = FailingStartupMinion(
+            minion_instance_id="instance-1",
+            orchestration_id="orchestration-1",
+            minion_module_path="tests.assets.FailingStartupMinion",
+            config_path=None,
+            state_store=NoOpStateStore(),
+            metrics=NoOpMetrics(),
+            logger=logger,
+            minion_id="stable-minion-id",
+            minion_config_id="config-1",
+            pipeline_id="pipeline-1",
+        )
+
+        with pytest.raises(MinionsError) as exc_info:
+            await m._mn_startup()
+
+        assert exc_info.value.context["minion_id"] == "stable-minion-id"
+        assert exc_info.value.context["minion_instance_id"] == "instance-1"
+        assert exc_info.value.context["minion_config_id"] == "config-1"
+        assert (
+            exc_info.value.context["minion_module_path"]
+            == "tests.assets.FailingStartupMinion"
+        )
 
     def test_workflow_handle_is_read_only(self):
         handle = MinionWorkflowHandle(
@@ -203,6 +260,9 @@ class TestMinionSubclassingValid:
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
             logger=NoOpLogger(),
+            minion_id="test-minion",
+            minion_config_id="",
+            pipeline_id="test-pipeline",
         )
 
         with pytest.raises(
@@ -235,6 +295,9 @@ class TestMinionSubclassingValid:
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
             logger=NoOpLogger(),
+            minion_id="test-minion",
+            minion_config_id="",
+            pipeline_id="test-pipeline",
         )
 
         await m._mn_load_config("alpha")
@@ -262,6 +325,9 @@ class TestMinionSubclassingValid:
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
             logger=NoOpLogger(),
+            minion_id="test-minion",
+            minion_config_id="",
+            pipeline_id="test-pipeline",
         )
 
         with pytest.raises(
@@ -298,6 +364,9 @@ class TestMinionSubclassingValid:
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
             logger=NoOpLogger(),
+            minion_id="test-minion",
+            minion_config_id="",
+            pipeline_id="test-pipeline",
         )
 
         with pytest.raises(
@@ -324,6 +393,9 @@ class TestMinionSubclassingValid:
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
             logger=NoOpLogger(),
+            minion_id="test-minion",
+            minion_config_id="",
+            pipeline_id="test-pipeline",
         )
 
         with pytest.raises(TypeError) as excinfo:
@@ -348,6 +420,9 @@ class TestMinionSubclassingValid:
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
             logger=NoOpLogger(),
+            minion_id="test-minion",
+            minion_config_id="",
+            pipeline_id="test-pipeline",
         )
 
         with pytest.raises(
@@ -458,13 +533,13 @@ class TestMinionSubclassingInvalid:
             "MyMinion: event type is not supported. "
             "Supported user-declared types: (dataclass, msgspec.Struct)."
         )
-    
+
     def test_reject_multiple_minion_bases(self):
         with pytest.raises(TypeError) as excinfo:
-            class MyMinion(Minion[MyEvent, MyContext], Minion[MyStructEvent, MyStructContext]): # type: ignore
+            class MyMinion(Minion[MyEvent, MyContext], Minion[MyStructEvent, MyStructContext]):  # type: ignore
                 ...
         assert str(excinfo.value) == "duplicate base class Minion"
-    
+
     def test_reject_subclassing_minion_subclasses(self):
         class MinionSub(Minion[MyEvent, MyContext]):
             ...
@@ -477,16 +552,20 @@ class TestMinionSubclassingInvalid:
         )
 
     def test_duplicate_resource_dependency(self):
+        resource_component_id = generate_component_id()
+
+        @resource_id(resource_component_id)
         class MyResource(Resource):
             ...
+
         with pytest.raises(TypeError) as excinfo:
             class MyMinion(Minion[MyEvent, MyContext]):
                 r1: MyResource
                 r2: MyResource
-        resource_id = f"{MyResource.__module__}.{MyResource.__name__}"
+
         assert str(excinfo.value) == (
             "MyMinion declares multiple class attributes with the same Resource type: "
-            f"{resource_id} -> ['r1', 'r2']. "
+            f"{resource_component_id} -> ['r1', 'r2']. "
             "Define only one class-level Resource per Resource type."
         )
 

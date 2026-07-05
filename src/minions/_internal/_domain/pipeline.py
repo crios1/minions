@@ -98,6 +98,18 @@ class Pipeline(AsyncService, Generic[T_Event]):
         self._mn_subs_lock = asyncio.Lock()
         self._mn_event_cls = type(self)._mn_event_cls
 
+    def _mn_identity_log_kwargs(self) -> dict[str, object]:
+        return {
+            "pipeline_id": self._mn_pipeline_id,
+            "pipeline_module_path": self._mn_pipeline_module_path,
+        }
+
+    def _mn_fanout_log_kwargs(self, minion: Minion[Any, Any]) -> dict[str, object]:
+        return {
+            **self._mn_identity_log_kwargs(),
+            **minion._mn_identity_log_kwargs(),
+        }
+
     async def _mn_startup(
         self,
         *,
@@ -108,7 +120,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
         post_args: list[object] | None = None,
     ) -> None:
         return await super()._mn_startup(
-            log_kwargs={"pipeline_id": self._mn_pipeline_id},
+            log_kwargs=self._mn_identity_log_kwargs(),
             pre=self._mn_validate_user_code,
             pre_args=[self.produce_event, self._mn_pipeline_module_path],
         )
@@ -123,7 +135,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
         post_args: list[object] | None = None,
     ) -> None:
         return await super()._mn_shutdown(
-            log_kwargs={"pipeline_id": self._mn_pipeline_id}
+            log_kwargs=self._mn_identity_log_kwargs()
         )
 
     async def _mn_run(
@@ -136,7 +148,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
         post_args: list[object] | None = None,
     ) -> None:
         return await super()._mn_run(
-            log_kwargs={"pipeline_id": self._mn_pipeline_id}
+            log_kwargs=self._mn_identity_log_kwargs()
         )
 
     async def run(self) -> None:
@@ -153,8 +165,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
             await self._mn_logger._mn_log(
                 DEBUG,
                 "Pipeline produced event",
-                pipeline_id=self._mn_pipeline_id,
-                pipeline_module_path=self._mn_pipeline_module_path,
+                **self._mn_identity_log_kwargs(),
                 event=repr(event),
             )
             await self._mn_metrics._mn_inc(
@@ -178,11 +189,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
                         self._mn_logger._mn_log(
                             DEBUG,
                             "Pipeline Fanout: dispatched event to minion",
-                            pipeline_id=self._mn_pipeline_id,
-                            minion_id=minion._mn_minion_id,
-                            minion_instance_id=minion._mn_minion_instance_id,
-                            orchestration_id=minion._mn_orchestration_id,
-                            minion_module_path=minion._mn_minion_module_path,
+                            **self._mn_fanout_log_kwargs(minion),
                         )
                         for minion in subs
                     ],

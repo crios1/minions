@@ -331,7 +331,10 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
             timeout=1.0,
             poll_interval=0.01,
         )
-        assert logger.has_log("Resource method failed", log_kwargs={"error_type": "BoomError"})
+        resource_failed = logger.find_first_log("Resource method failed")
+        assert resource_failed is not None
+        assert resource_failed.kwargs["error_type"] == "BoomError"
+        assert resource_failed.kwargs["resource_method"] == "explode"
         assert_counter(
             metrics,
             RESOURCE_ERROR_TOTAL,
@@ -391,8 +394,8 @@ async def test_shutdown_failures_are_reported_and_singleton_is_released(
 
     # The factory shutdown must release the global singleton even after a failed stop path.
     async with gru_factory(
-        logger=InMemoryLogger(),
-        metrics=InMemoryMetrics(),
-        state_store=InMemoryStateStore(logger=InMemoryLogger()),
+        logger=logger,
+        metrics=metrics,
+        state_store=state_store,
     ) as fresh_gru:
         await assert_gru_can_start_and_stop_known_good_orchestration(fresh_gru)

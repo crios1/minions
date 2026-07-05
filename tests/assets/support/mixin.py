@@ -4,6 +4,12 @@ T_Mixin = TypeVar("T_Mixin", bound="Mixin")
 
 
 class Mixin:
+    """Base for test-support mixins composed with a concrete class.
+
+    This class and its derivatives are test-suite utilities, not end-user
+    Minions subclassing patterns.
+    """
+
     def __new__(cls: type[T_Mixin], *args: Any, **kwargs: Any) -> T_Mixin:
         has_non_mixin = any(
             not issubclass(base, Mixin)

@@ -118,6 +118,7 @@ class Gru:
     or higher-level helpers.
 
     Concurrency contract:
+
     - Lifecycle operations on different orchestrations may run concurrently.
     - Lifecycle operations for the same orchestration id are serialized.
     - `shutdown()` is terminal: it waits for in-flight lifecycle work to drain
@@ -750,20 +751,34 @@ class Gru:
                         on_failure=self._make_task_failure_hook("resource", resource_id),
                     )
             if created:
-                await self._logger._mn_log(DEBUG, "Resource starting", resource_id=resource_id)
+                await self._logger._mn_log(
+                    DEBUG,
+                    "Resource starting",
+                    **resource._mn_identity_log_kwargs(),
+                )
             await resource._mn_wait_until_started()
-            await self._logger._mn_log(DEBUG, "Resource started", resource_id=resource_id)
+            await self._logger._mn_log(
+                DEBUG,
+                "Resource started",
+                **resource._mn_identity_log_kwargs(),
+            )
             return resource
 
     async def _stop_resource(self, resource_id: str):
         async with self._resource_locks[resource_id]:
-            await self._logger._mn_log(DEBUG, "Resource stopping", resource_id=resource_id)
+            resource = self._resources.get(resource_id)
+            if resource is None:
+                return
+
+            log_kwargs = resource._mn_identity_log_kwargs()
+            await self._logger._mn_log(DEBUG, "Resource stopping", **log_kwargs)
+
             async with self._runtime_state_lock:
                 self._resources.pop(resource_id, None)
-                task = self._resource_tasks.pop(resource_id, None)
-            if task is not None:
-                await safe_cancel_task(task=task, logger=self._logger)
-            await self._logger._mn_log(DEBUG, "Resource stopped", resource_id=resource_id)
+                task = self._resource_tasks.pop(resource_id)
+            await safe_cancel_task(task=task, logger=self._logger)
+
+            await self._logger._mn_log(DEBUG, "Resource stopped", **log_kwargs)
 
     def _is_resource_in_use(self, resource_id: str) -> bool:
         # A resource is considered in use if its total reference count is > 0
@@ -858,29 +873,44 @@ class Gru:
                         on_failure=self._make_task_failure_hook("pipeline", pipeline_id),
                     )
             if created:
-                await self._logger._mn_log(DEBUG, "Pipeline starting", pipeline_id=pipeline_id)
+                await self._logger._mn_log(
+                    DEBUG,
+                    "Pipeline starting",
+                    **pipeline._mn_identity_log_kwargs(),
+                )
             await pipeline._mn_wait_until_started()
-            await self._logger._mn_log(DEBUG, "Pipeline started", pipeline_id=pipeline_id)
+            await self._logger._mn_log(
+                DEBUG,
+                "Pipeline started",
+                **pipeline._mn_identity_log_kwargs(),
+            )
 
     async def _stop_pipeline(self, pipeline_id: str):
-        released_resource_ids: set[str] = set()
+        resource_ids_to_release: set[str] = set()
         resource_owner_refs_released = False
         resources_cleaned = False
         try:
-            resource_ids: Iterable[str] | None = None
             async with self._pipeline_locks[pipeline_id]:
-                await self._logger._mn_log(DEBUG, "Pipeline stopping", pipeline_id=pipeline_id)
+                pipeline = self._pipelines.get(pipeline_id)
+                if pipeline is None:
+                    return
+
+                await self._logger._mn_log(
+                    DEBUG,
+                    "Pipeline stopping",
+                    **pipeline._mn_identity_log_kwargs(),
+                )
+
                 # remove pipeline from active map and cancel its task
                 async with self._runtime_state_lock:
-                    self._pipelines.pop(pipeline_id, None)
-                    task = self._pipeline_tasks.pop(pipeline_id, None)
+                    self._pipelines.pop(pipeline_id)
+                    task = self._pipeline_tasks.pop(pipeline_id)
                     resource_ids = self._pipeline_resource_map.pop(pipeline_id, None)
-                if task:
-                    await safe_cancel_task(task=task, logger=self._logger)
+                await safe_cancel_task(task=task, logger=self._logger)
 
                 # manage resource lifecycle for resources owned by this pipeline
                 if resource_ids:
-                    released_resource_ids = set(resource_ids)
+                    resource_ids_to_release = set(resource_ids)
                     # Decrement owner refs and cleanup
                     async with self._runtime_state_lock:
                         for r_id in resource_ids:
@@ -889,13 +919,17 @@ class Gru:
                     await self._cleanup_resources(resource_ids)
                     resources_cleaned = True
 
-                await self._logger._mn_log(DEBUG, "Pipeline stopped", pipeline_id=pipeline_id)
+                await self._logger._mn_log(
+                    DEBUG,
+                    "Pipeline stopped",
+                    **pipeline._mn_identity_log_kwargs(),
+                )
         except Exception:
             await self._finalize_failed_stop_pipeline(
                 pipeline_id=pipeline_id,
                 resource_owner_refs_released=resource_owner_refs_released,
                 resources_cleaned=resources_cleaned,
-                released_resource_ids=released_resource_ids,
+                resource_ids_to_release=resource_ids_to_release,
             )
             raise
 
@@ -930,9 +964,8 @@ class Gru:
                         ERROR,
                         "Failed-start cleanup could not unsubscribe minion",
                         e,
-                        minion_id=minion._mn_minion_id,
-                        minion_instance_id=instance_id,
-                        pipeline_id=pipeline_id,
+                        **minion._mn_identity_log_kwargs(),
+                        **pipeline._mn_identity_log_kwargs(),
                     )
 
             async with self._runtime_state_lock:
@@ -964,8 +997,7 @@ class Gru:
                 ERROR,
                 "Failed-start cleanup could not stop minion",
                 e,
-                minion_id=minion._mn_minion_id,
-                minion_instance_id=minion._mn_minion_instance_id,
+                **minion._mn_identity_log_kwargs(),
             )
             await self._discard_orchestration_runtime_state(minion)
 
@@ -982,8 +1014,7 @@ class Gru:
                     ERROR,
                     "Minion task discard cleanup failed",
                     e,
-                    minion_id=minion._mn_minion_id,
-                    minion_instance_id=instance_id,
+                    **minion._mn_identity_log_kwargs(),
                 )
 
     async def _finalize_failed_stop_orchestration(
@@ -992,7 +1023,7 @@ class Gru:
         minion: Minion[Any, Any],
         resource_owner_refs_released: bool,
         resources_cleaned: bool,
-        released_resource_ids: Iterable[str] = (),
+        resource_ids_to_release: Iterable[str] = (),
     ) -> None:
         instance_id = minion._mn_minion_instance_id
         try:
@@ -1008,14 +1039,13 @@ class Gru:
                             ERROR,
                             "Stop cleanup could not discard pipeline subscription",
                             e,
-                            minion_id=minion._mn_minion_id,
-                            minion_instance_id=instance_id,
-                            pipeline_id=pipeline_id,
+                            **minion._mn_identity_log_kwargs(),
+                            **pipeline._mn_identity_log_kwargs(),
                         )
                 if not self._is_pipeline_in_use(pipeline_id):
                     await self._stop_pipeline_best_effort(pipeline_id)
 
-            resource_ids = list(released_resource_ids)
+            resource_ids = list(resource_ids_to_release)
             if not resource_ids:
                 resource_ids = list(self._minion_resource_map.pop(instance_id, ()) or ())
 
@@ -1033,8 +1063,7 @@ class Gru:
                 ERROR,
                 "Stop cleanup failed",
                 e,
-                minion_id=minion._mn_minion_id,
-                minion_instance_id=minion._mn_minion_instance_id,
+                **minion._mn_identity_log_kwargs(),
             )
         finally:
             await self._discard_orchestration_runtime_state(minion)
@@ -1152,10 +1181,10 @@ class Gru:
         pipeline_id: str,
         resource_owner_refs_released: bool,
         resources_cleaned: bool,
-        released_resource_ids: Iterable[str] = (),
+        resource_ids_to_release: Iterable[str] = (),
     ) -> None:
         async with self._runtime_state_lock:
-            resource_ids = list(released_resource_ids)
+            resource_ids = list(resource_ids_to_release)
             if not resource_ids:
                 resource_ids = list(self._pipeline_resource_map.pop(pipeline_id, ()) or ())
 
@@ -1743,42 +1772,34 @@ class Gru:
                     reason="Gru is shutting down.",
                 )
 
-            minion: Minion[Any, Any] | None = None
             stop_committed = False
             resource_owner_refs_released = False
             resources_cleaned = False
-            released_resource_ids: set[str] = set()
+            resource_ids_to_release: set[str] = set()
+
+            orchestration_id = orchestration_id.strip()
+            async with self._runtime_state_lock:
+                minion = self._minions_by_orchestration_id.get(orchestration_id, None)
+
+            if minion is None:
+                result = StopResult(
+                    success=False,
+                    reason="No orchestration found with the given ID.",
+                )
+                await self._logger._mn_log(
+                    INFO,
+                    "Failed to stop orchestration",
+                    reason=result.reason,
+                    **({"suggestion": result.suggestion} if result.suggestion else {}),
+                    attempted_key=orchestration_id,
+                )
+                return result
+
             try:
-                orchestration_id = orchestration_id.strip()
-
-                async with self._runtime_state_lock:
-                    minion = self._minions_by_orchestration_id.get(orchestration_id, None)
-                    if minion is not None:
-                        minion_or_result: Minion[Any, Any] | StopResult = minion
-                    else:
-                        minion_or_result = StopResult(
-                            success=False,
-                            reason="No orchestration found with the given ID."
-                        )
-
-                if isinstance(minion_or_result, StopResult):
-                    result = minion_or_result
-                    await self._logger._mn_log(
-                        INFO,
-                        "Failed to stop orchestration",
-                        reason=result.reason,
-                        **({"suggestion": result.suggestion} if result.suggestion else {}),
-                        attempted_key=orchestration_id,
-                    )
-                    return result
-
-                minion = minion_or_result
-
                 async with self._orchestration_locks[orchestration_id]:
                     await self._logger._mn_log(
                         DEBUG,
                         "Stopping orchestration...",
-                        minion_instance_id=minion._mn_minion_instance_id,
                         **minion._mn_orchestration_log_kwargs(),
                     )
 
@@ -1798,7 +1819,6 @@ class Gru:
                             INFO,
                             "Failed to stop orchestration",
                             reason=reason,
-                            minion_instance_id=minion._mn_minion_instance_id,
                             **minion._mn_orchestration_log_kwargs(),
                         )
                         return StopResult(
@@ -1820,7 +1840,7 @@ class Gru:
                             minion._mn_minion_instance_id, None
                         )
                         if resource_ids:
-                            released_resource_ids = set(resource_ids)
+                            resource_ids_to_release = set(resource_ids)
                             for r_id in resource_ids:
                                 # remove owner ref from minion
                                 self._resource_reference_counts[r_id] -= 1
@@ -1837,40 +1857,32 @@ class Gru:
                     await self._logger._mn_log(
                         INFO,
                         "Orchestration stopped",
-                        minion_instance_id=minion._mn_minion_instance_id,
                         **minion._mn_orchestration_log_kwargs(),
                     )
 
                     return StopResult(success=True)
 
             except Exception as e:
-                if stop_committed and minion is not None:
+                if stop_committed:
                     try:
                         await self._finalize_failed_stop_orchestration(
                             minion=minion,
                             resource_owner_refs_released=resource_owner_refs_released,
                             resources_cleaned=resources_cleaned,
-                            released_resource_ids=released_resource_ids,
+                            resource_ids_to_release=resource_ids_to_release,
                         )
                     except Exception as cleanup_err:
                         await self._logger._mn_log_exception(
                             ERROR,
                             "Failed-stop cleanup raised",
                             cleanup_err,
-                            minion_instance_id=minion._mn_minion_instance_id,
                             **minion._mn_orchestration_log_kwargs(),
                         )
-                stop_log_kwargs: dict[str, object] = {}
-                if minion is not None:
-                    stop_log_kwargs = {
-                        "minion_instance_id": minion._mn_minion_instance_id,
-                        **minion._mn_orchestration_log_kwargs(),
-                    }
                 await self._logger._mn_log_exception(
                     ERROR,
                     "Failed to stop orchestration",
                     e,
-                    **stop_log_kwargs,
+                    **minion._mn_orchestration_log_kwargs(),
                 )
                 return StopResult(
                     success=False,
