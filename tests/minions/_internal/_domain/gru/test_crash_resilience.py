@@ -67,13 +67,13 @@ def assert_counter(metrics: InMemoryMetrics, metric_name: str, labels: dict[str,
 
 @pytest.mark.asyncio
 async def test_start_orchestration_contains_state_store_resume_read_failure(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
 ) -> None:
     state_store = BoomGetContextsForOrchestrationStateStore(logger=logger)
 
-    async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_orchestration(
             "tests.assets.crash.pipelines.counter.healthy",
             "tests.assets.crash.minions.counter.healthy",
@@ -101,7 +101,7 @@ async def test_start_orchestration_contains_state_store_resume_read_failure(
 
 @pytest.mark.asyncio
 async def test_start_orchestration_fails_closed_on_persisted_workflow_decode_mismatch(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -124,7 +124,7 @@ async def test_start_orchestration_fails_closed_on_persisted_workflow_decode_mis
         context=serialize_persisted_workflow_context(persisted_context),
     )
 
-    async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_orchestration(
             "tests.assets.crash.pipelines.counter.healthy",
             "tests.assets.crash.minions.counter.healthy",
@@ -177,7 +177,7 @@ async def test_start_orchestration_fails_closed_on_persisted_workflow_decode_mis
     ],
 )
 async def test_start_orchestration_contains_user_code_startup_failures(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -186,7 +186,7 @@ async def test_start_orchestration_contains_user_code_startup_failures(
     tests_dir: Path,
 ) -> None:
     config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
-    async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_orchestration(
             minion=minion_module_path,
             pipeline=pipeline_module_path,
@@ -208,12 +208,12 @@ async def test_start_orchestration_contains_user_code_startup_failures(
 
 @pytest.mark.asyncio
 async def test_minion_step_failure_is_logged_measured_and_contained(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         healthy_counter_pipeline_id = gru._get_pipeline_identity_from_module_path(
             "tests.assets.crash.pipelines.counter.healthy",
         )
@@ -264,12 +264,12 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
 
 @pytest.mark.asyncio
 async def test_pipeline_produce_event_failure_is_logged_measured_and_shutdown_is_clean(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         boom_produce_event_pipeline_id = gru._get_pipeline_identity_from_module_path(
             "tests.assets.crash.pipelines.counter.boom_produce_event",
         )
@@ -300,12 +300,12 @@ async def test_pipeline_produce_event_failure_is_logged_measured_and_shutdown_is
 
 @pytest.mark.asyncio
 async def test_resource_method_failure_is_logged_measured_and_contained(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         healthy_counter_pipeline_id = gru._get_pipeline_identity_from_module_path(
             "tests.assets.crash.pipelines.counter.healthy",
         )
@@ -372,14 +372,14 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
     ],
 )
 async def test_shutdown_failures_are_reported_and_singleton_is_released(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     pipeline_module_path: str,
     minion_module_path: str,
 ) -> None:
-    async with gru_factory(logger=logger, metrics=metrics, state_store=state_store) as gru:
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_orchestration(pipeline_module_path, minion_module_path)
         assert result.success
         stop = await gru.stop_orchestration(result.orchestration_id or "")
@@ -394,7 +394,7 @@ async def test_shutdown_failures_are_reported_and_singleton_is_released(
         assert_runtime_empty(gru)
 
     # The factory shutdown must release the global singleton even after a failed stop path.
-    async with gru_factory(
+    async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,

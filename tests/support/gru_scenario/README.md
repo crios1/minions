@@ -254,9 +254,9 @@ Expected workflow counts are derived from `pipeline_event_counts`:
 
 ## Test Fixture Policy
 - Use `gru` fixture for default wiring (`InMemoryLogger`, `InMemoryMetrics`, `InMemoryStateStore`).
-- Use `gru_factory` when a test needs custom `Gru.create(...)` kwargs (for example `None`, `NoOp*`, `ConsoleLogger`).
+- Use `managed_gru_context` when a test needs custom `Gru.create(...)` kwargs (for example `None`, `NoOp*`, `ConsoleLogger`).
 - Do not import lifecycle helpers directly from `conftest.py`; tests should consume fixtures only.
-- Do not open concurrent/nested `gru_factory(...)` contexts in one test because only one `Gru` instance can exist per process.
+- Do not open concurrent/nested `managed_gru_context(...)` contexts in one test because only one `Gru` instance can exist per process.
 
 ## Debugging Tips
 - Use SpyMixin helpers: `get_call_counts()`, `get_call_history()`, `assert_call_order_for_instance()`.

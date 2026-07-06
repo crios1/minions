@@ -65,7 +65,7 @@ def state_store(logger: InMemoryLogger) -> InMemoryStateStore:
 
 
 @pytest.fixture
-def gru_factory() -> Callable[..., contextlib.AbstractAsyncContextManager[Gru]]:
+def managed_gru_context() -> Callable[..., contextlib.AbstractAsyncContextManager[Gru]]:
     active_context = False
 
     @contextlib.asynccontextmanager
@@ -73,7 +73,7 @@ def gru_factory() -> Callable[..., contextlib.AbstractAsyncContextManager[Gru]]:
         nonlocal active_context
         if active_context:
             raise RuntimeError(
-                "gru_factory does not allow concurrent GRU contexts in a single test."
+                "managed_gru_context does not allow concurrent GRU contexts in a single test."
             )
         active_context = True
         try:
@@ -93,9 +93,9 @@ async def gru(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
 ) -> AsyncGenerator[Gru, None]:
-    async with gru_factory(
+    async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,

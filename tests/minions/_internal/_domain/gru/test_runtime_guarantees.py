@@ -27,7 +27,7 @@ from tests.support.race_window import GatedAsyncCallable, GatedLock
 
 @pytest.mark.asyncio
 async def test_gru_does_not_replay_same_workflow_id_during_startup(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -38,7 +38,7 @@ async def test_gru_does_not_replay_same_workflow_id_during_startup(
 
     DuplicateWorkflowReplayMinion.reset_gates()
 
-    async with gru_factory(
+    async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,
@@ -92,13 +92,13 @@ async def test_gru_does_not_replay_same_workflow_id_during_startup(
 
 @pytest.mark.asyncio
 async def test_gru_serializes_concurrent_starts_for_same_orchestration(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
 
-    async with gru_factory(
+    async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,
@@ -151,13 +151,13 @@ async def test_gru_serializes_concurrent_starts_for_same_orchestration(
 
 @pytest.mark.asyncio
 async def test_gru_serializes_concurrent_stops_for_same_orchestration(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
 
-    async with gru_factory(
+    async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,
@@ -210,13 +210,13 @@ async def test_gru_serializes_concurrent_stops_for_same_orchestration(
 
 @pytest.mark.asyncio
 async def test_gru_serializes_concurrent_start_and_stop_for_same_orchestration(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
 
-    async with gru_factory(
+    async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,
@@ -267,13 +267,13 @@ async def test_gru_serializes_concurrent_start_and_stop_for_same_orchestration(
 
 @pytest.mark.asyncio
 async def test_gru_allows_concurrent_starts_for_different_orchestrations(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
 
-    async with gru_factory(
+    async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,
@@ -337,7 +337,7 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations(
 
 @pytest.mark.asyncio
 async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestration_starts(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -355,7 +355,7 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
 
     pipeline_module_path = "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
 
-    async with gru_factory(
+    async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,
@@ -408,7 +408,7 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
 
 @pytest.mark.asyncio
 async def test_gru_runtime_state_uses_singletons_for_shared_pipeline_and_resources(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -423,7 +423,7 @@ async def test_gru_runtime_state_uses_singletons_for_shared_pipeline_and_resourc
     first_config = "tests/assets/config/minions/a.toml"
     second_config = "tests/assets/config/minions/b.toml"
 
-    async with gru_factory(
+    async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,
@@ -511,7 +511,7 @@ async def test_gru_runtime_state_uses_singletons_for_shared_pipeline_and_resourc
 
 @pytest.mark.asyncio
 async def test_gru_injects_resource_dependencies_before_resource_startup(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -531,7 +531,7 @@ async def test_gru_injects_resource_dependencies_before_resource_startup(
         "tests.assets.pipelines.emit_one.counter.with_resource_depending_on_fixed"
     )
 
-    async with gru_factory(
+    async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,
@@ -568,7 +568,7 @@ async def test_gru_injects_resource_dependencies_before_resource_startup(
 
 @pytest.mark.asyncio
 async def test_gru_starts_resource_with_multiple_resource_dependencies(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -607,7 +607,7 @@ async def test_gru_starts_resource_with_multiple_resource_dependencies(
         async def record(self) -> None:
             self.context.seq = self.event.seq
 
-    async with gru_factory(
+    async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,
@@ -645,7 +645,7 @@ async def test_gru_starts_resource_with_multiple_resource_dependencies(
 
 @pytest.mark.asyncio
 async def test_gru_start_fails_clearly_for_circular_resource_dependencies(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -670,7 +670,7 @@ async def test_gru_start_fails_clearly_for_circular_resource_dependencies(
         async def record(self) -> None:
             self.context.seq = self.event.seq
 
-    async with gru_factory(
+    async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,
@@ -687,14 +687,14 @@ async def test_gru_start_fails_clearly_for_circular_resource_dependencies(
 
 @pytest.mark.asyncio
 async def test_gru_allows_concurrent_starts_for_different_orchestrations_while_stop_is_in_flight(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     monkeypatch: pytest.MonkeyPatch,
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
 
-    async with gru_factory(
+    async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,
@@ -750,13 +750,13 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations_while_s
 
 @pytest.mark.asyncio
 async def test_gru_shutdown_advertises_shutdown_before_waiting(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
 
-    async with gru_factory(
+    async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,
@@ -778,14 +778,14 @@ async def test_gru_shutdown_advertises_shutdown_before_waiting(
 
 @pytest.mark.asyncio
 async def test_gru_shutdown_waits_for_in_flight_start_orchestration(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     monkeypatch: pytest.MonkeyPatch,
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
 
-    async with gru_factory(
+    async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,
@@ -817,14 +817,14 @@ async def test_gru_shutdown_waits_for_in_flight_start_orchestration(
 
 @pytest.mark.asyncio
 async def test_gru_shutdown_waits_for_in_flight_stop_orchestration(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     monkeypatch: pytest.MonkeyPatch,
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
 
-    async with gru_factory(
+    async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,
@@ -859,13 +859,13 @@ async def test_gru_shutdown_waits_for_in_flight_stop_orchestration(
 
 @pytest.mark.asyncio
 async def test_gru_shutdown_rejects_new_lifecycle_work_while_shutdown_is_pending(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
 
-    async with gru_factory(
+    async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,
@@ -899,14 +899,14 @@ async def test_gru_shutdown_rejects_new_lifecycle_work_while_shutdown_is_pending
 
 @pytest.mark.asyncio
 async def test_gru_shutdown_rejects_new_lifecycle_work_during_shutdown_in_progress(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     monkeypatch: pytest.MonkeyPatch,
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
 
-    async with gru_factory(
+    async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,
@@ -950,14 +950,14 @@ async def test_gru_shutdown_rejects_new_lifecycle_work_during_shutdown_in_progre
 
 @pytest.mark.asyncio
 async def test_gru_shutdown_serializes_concurrent_shutdown_calls(
-    gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     monkeypatch: pytest.MonkeyPatch,
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
 
-    async with gru_factory(
+    async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,

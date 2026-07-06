@@ -437,11 +437,11 @@ class TestUnit:
     async def test_shutdown_surfaces_internal_shutdown_errors(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
     ):
-        async with gru_factory(
+        async with managed_gru_context(
             logger=logger,
             metrics=metrics,
             state_store=NoOpStateStore(),
@@ -468,11 +468,11 @@ class TestUnit:
     async def test_shutdown_clears_runtime_state_when_component_shutdown_fails(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
     ):
-        async with gru_factory(
+        async with managed_gru_context(
             logger=logger,
             metrics=metrics,
             state_store=NoOpStateStore(),
@@ -497,7 +497,7 @@ class TestUnit:
     @pytest.mark.asyncio
     async def test_runtime_state_snapshot_is_exact_detached_and_immutable(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
     ):
@@ -516,7 +516,7 @@ class TestUnit:
         assert identified_pipeline_id is not None
         assert identified_resource_id is not None
 
-        async with gru_factory(
+        async with managed_gru_context(
             logger=logger,
             metrics=metrics,
             state_store=NoOpStateStore(),
@@ -579,11 +579,11 @@ class TestUnit:
     async def test_shutdown_reports_task_cancel_errors_and_clears_runtime_state(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
     ):
-        async with gru_factory(
+        async with managed_gru_context(
             logger=logger,
             metrics=metrics,
             state_store=NoOpStateStore(),
@@ -614,11 +614,11 @@ class TestUnit:
     async def test_shutdown_clears_runtime_state_when_initial_log_fails(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
     ):
-        async with gru_factory(
+        async with managed_gru_context(
             logger=logger,
             metrics=metrics,
             state_store=NoOpStateStore(),
@@ -653,11 +653,11 @@ class TestUnit:
     async def test_shutdown_clears_runtime_state_when_logger_shutdown_fails(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
     ):
-        async with gru_factory(
+        async with managed_gru_context(
             logger=logger,
             metrics=metrics,
             state_store=NoOpStateStore(),

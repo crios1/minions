@@ -56,17 +56,17 @@ class TestValidUsage:
     @pytest.mark.asyncio
     async def test_gru_accepts_none_logger_metrics_state_store(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ) -> None:
-        async with gru_factory(logger=None, state_store=None, metrics=None):
+        async with managed_gru_context(logger=None, state_store=None, metrics=None):
             pass
 
     @pytest.mark.asyncio
     async def test_gru_allows_create_and_immediate_shutdown(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ) -> None:
-        async with gru_factory(
+        async with managed_gru_context(
             state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()
         ):
             pass
@@ -78,10 +78,10 @@ class TestValidUsage:
     )
     async def test_gru_accepts_workflow_persistence_failure_policy(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         policy: WorkflowPersistenceFailurePolicy,
     ) -> None:
-        async with gru_factory(
+        async with managed_gru_context(
             state_store=NoOpStateStore(),
             logger=NoOpLogger(),
             metrics=NoOpMetrics(),
@@ -92,9 +92,9 @@ class TestValidUsage:
     @pytest.mark.asyncio
     async def test_gru_accepts_workflow_persistence_retry_settings(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ) -> None:
-        async with gru_factory(
+        async with managed_gru_context(
             state_store=NoOpStateStore(),
             logger=NoOpLogger(),
             metrics=NoOpMetrics(),
@@ -110,7 +110,7 @@ class TestValidUsage:
     @pytest.mark.asyncio
     async def test_gru_start_stop_orchestration(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ) -> None:
         minion_module_path = "tests.assets.minions.two_steps.simple.default"
         pipeline_module_path = (
@@ -124,7 +124,7 @@ class TestValidUsage:
         AssetMinion.reset_spy()
         AssetPipeline.configure_gate(expected_subs=1)
 
-        async with gru_factory(
+        async with managed_gru_context(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
@@ -148,7 +148,7 @@ class TestValidUsage:
     @pytest.mark.asyncio
     async def test_gru_start_stop_orchestration_from_classes(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ) -> None:
         from tests.assets.minions.two_steps.counter.default import (
             AssetMinion as TwoStepCounterMinion,
@@ -157,7 +157,7 @@ class TestValidUsage:
             AssetPipeline as EmitOneCounterPipeline,
         )
 
-        async with gru_factory(
+        async with managed_gru_context(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
             metrics=NoOpMetrics(),
@@ -177,7 +177,7 @@ class TestValidUsage:
     @pytest.mark.asyncio
     async def test_gru_start_orchestration_uses_attached_component_ids(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         logger: InMemoryLogger,
     ) -> None:
         @pipeline_id(PIPELINE_COMPONENT_ID)
@@ -192,7 +192,7 @@ class TestValidUsage:
             async def step_1(self) -> None:
                 self.context.step1 = "step1"
 
-        async with gru_factory(
+        async with managed_gru_context(
             state_store=NoOpStateStore(),
             logger=logger,
             metrics=NoOpMetrics(),
@@ -223,7 +223,7 @@ class TestValidUsage:
     @pytest.mark.asyncio
     async def test_gru_start_orchestration_uses_attached_component_and_config_ids(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         logger: InMemoryLogger,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
@@ -284,7 +284,7 @@ class TestValidUsage:
         for module_name in ("durable_app.minion", "durable_app.pipeline"):
             sys.modules.pop(module_name, None)
 
-        async with gru_factory(
+        async with managed_gru_context(
             state_store=NoOpStateStore(),
             logger=logger,
             metrics=NoOpMetrics(),
@@ -318,7 +318,7 @@ class TestValidUsage:
     @pytest.mark.asyncio
     async def test_gru_resumes_moved_id_bearing_source_and_config_artifacts(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         logger: InMemoryLogger,
         state_store: InMemoryStateStore,
         monkeypatch: pytest.MonkeyPatch,
@@ -401,7 +401,7 @@ class TestValidUsage:
             )
         )
 
-        async with gru_factory(
+        async with managed_gru_context(
             state_store=state_store,
             logger=logger,
             metrics=NoOpMetrics(),
@@ -448,7 +448,7 @@ class TestValidUsage:
     @pytest.mark.asyncio
     async def test_gru_start_3_minions_3_pipelines_3_resources_no_sharing(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
@@ -464,7 +464,7 @@ class TestValidUsage:
         pipeline1 = "tests.assets.pipelines.emit_one.simple.default"
         pipeline2 = "tests.assets.pipelines.emit_one.simple.default_b"
         pipeline3 = "tests.assets.pipelines.emit_one.simple.default_c"
-        async with gru_factory(
+        async with managed_gru_context(
             state_store=state_store,
             logger=logger,
             metrics=metrics,
@@ -520,7 +520,7 @@ class TestValidUsage:
     @pytest.mark.asyncio
     async def test_gru_start_3_minions_1_pipeline_1_resource_sharing(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
@@ -558,7 +558,7 @@ class TestValidUsage:
         # ask copilot
         # !! will have to do the update across this whole test file !!
 
-        async with gru_factory(
+        async with managed_gru_context(
             state_store=state_store,
             logger=logger,
             metrics=metrics,
@@ -608,9 +608,9 @@ class TestValidUsage:
     @pytest.mark.asyncio
     async def test_gru_start_orchestration_shutdown_without_stop(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ) -> None:
-        async with gru_factory(
+        async with managed_gru_context(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
@@ -627,7 +627,7 @@ class TestValidUsage:
     @pytest.mark.asyncio
     async def test_gru_binds_file_config_to_minion(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
@@ -643,7 +643,7 @@ class TestValidUsage:
 
         FileConfigMinion.enable_spy()
         FileConfigMinion.reset_spy()
-        async with gru_factory(
+        async with managed_gru_context(
             state_store=state_store,
             logger=logger,
             metrics=metrics,
@@ -676,7 +676,7 @@ class TestValidUsage:
     )
     async def test_gru_loads_inline_minion_config_from_classes(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         inline_config_kind: str,
     ) -> None:
         from tests.assets.minions.one_step.counter.with_inline_config import (
@@ -695,7 +695,7 @@ class TestValidUsage:
             if inline_config_kind == "dataclass"
             else InlineStructConfig(name="struct")
         )
-        async with gru_factory(
+        async with managed_gru_context(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
             metrics=NoOpMetrics(),
@@ -719,7 +719,7 @@ class TestValidUsage:
     @pytest.mark.asyncio
     async def test_minion_and_pipeline_share_resource_dependency(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
@@ -728,7 +728,7 @@ class TestValidUsage:
         pipeline_module_path = (
             "tests.assets.pipelines.emit_one.simple.with_simple_resource"
         )
-        async with gru_factory(
+        async with managed_gru_context(
             state_store=state_store,
             logger=logger,
             metrics=metrics,

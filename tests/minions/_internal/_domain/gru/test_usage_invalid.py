@@ -145,12 +145,12 @@ class TestInvalidUsage:
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_starting_running_orchestration(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
     ) -> None:
         minion_module_path = "tests.assets.minions.two_steps.counter.default"
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
 
-        async with gru_factory(
+        async with managed_gru_context(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
@@ -176,7 +176,7 @@ class TestInvalidUsage:
     @pytest.mark.asyncio
     async def test_gru_rejects_dict_inline_minion_config(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ) -> None:
         from tests.assets.minions.two_steps.counter.with_file_config import (
             AssetMinion as FileConfigMinion,
@@ -185,7 +185,7 @@ class TestInvalidUsage:
             AssetPipeline as EmitOneCounterPipeline,
         )
 
-        async with gru_factory(
+        async with managed_gru_context(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
             metrics=NoOpMetrics(),
@@ -205,9 +205,9 @@ class TestInvalidUsage:
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_stopping_nonexistant_orchestration(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
     ) -> None:
-        async with gru_factory(
+        async with managed_gru_context(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
@@ -221,12 +221,12 @@ class TestInvalidUsage:
     @pytest.mark.asyncio
     async def test_gru_returns_error_when_mismatched_minion_and_pipeline_event_types(
         self,
-        gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
     ) -> None:
         minion_module_path = "tests.assets.minions.two_steps.counter.default"
         pipeline_module_path = "tests.assets.pipelines.emit_one.record.default"
 
-        async with gru_factory(
+        async with managed_gru_context(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
