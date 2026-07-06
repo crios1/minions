@@ -556,6 +556,7 @@ async def test_shutdown_waits_for_active_scheduled_flush_commit(
 
 async def test_shutdown_flushes_pending_batch_buffer(
     make_state_store_and_logger: MakeStateStoreAndLogger,
+    logger: InMemoryLogger,
 ):
     s, _ = await make_state_store_and_logger()
     # Keep the save buffered until shutdown performs the final flush.
@@ -570,11 +571,10 @@ async def test_shutdown_flushes_pending_batch_buffer(
     await s._mn_shutdown()
     await save_task
 
-    logger2 = InMemoryLogger()
-    s2 = SQLiteStateStore(db_path=s.db_path, logger=logger2)
-    await logger2._mn_startup()
+    s2 = SQLiteStateStore(db_path=s.db_path, logger=logger)
+    await logger._mn_startup()
     await s2._mn_startup()
     rows = await s2.get_all_contexts()
     await s2._mn_shutdown()
-    await logger2._mn_shutdown()
+    await logger._mn_shutdown()
     assert any(row.workflow_id == "wf-42" for row in rows)

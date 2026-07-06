@@ -25,7 +25,7 @@ async def test_cancels_task_cleanly():
 
 
 @pytest.mark.asyncio
-async def test_logs_on_timeout_with_label_using_logger():
+async def test_logs_on_timeout_with_label_using_logger(logger: InMemoryLogger):
     async def stubborn():
         try:
             while True:
@@ -33,7 +33,6 @@ async def test_logs_on_timeout_with_label_using_logger():
         except asyncio.CancelledError:
             await asyncio.sleep(0.2)
 
-    logger = InMemoryLogger()
     t = asyncio.create_task(stubborn())
     await asyncio.sleep(0)
     await safe_cancel_task(t, label="worker-1", timeout=0.05, logger=logger)

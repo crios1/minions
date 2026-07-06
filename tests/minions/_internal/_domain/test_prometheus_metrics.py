@@ -159,13 +159,9 @@ def test_unknown_metric_kind_raises_value_error():
 
 
 @pytest.mark.asyncio
-async def test_http_server_start_failure_logs_error():
+async def test_http_server_start_failure_logs_error(logger: InMemoryLogger):
     port = find_unused_port()
     registry = CollectorRegistry()
-
-    InMemoryLogger.enable_spy()
-    InMemoryLogger.reset_spy()
-    logger = InMemoryLogger()
 
     first = PrometheusMetrics(logger=logger, port=port, registry=registry)
     await first.startup()

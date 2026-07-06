@@ -6,13 +6,13 @@ import msgspec
 import pytest
 
 from minions import Pipeline
-from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_constants import (
     LABEL_ERROR_TYPE,
     LABEL_PIPELINE,
     PIPELINE_ERROR_TOTAL,
 )
 from minions._internal._utils.serialization import SERIALIZABLE_PRIMITIVE_TYPES
+from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 
 
@@ -95,17 +95,19 @@ class TestPipelineSubclassingInvalid:
 
 
 @pytest.mark.asyncio
-async def test_pipeline_error_metric_includes_error_type():
+async def test_pipeline_error_metric_includes_error_type(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+):
     class ErrorPipeline(Pipeline[MyStructEvent]):
         async def produce_event(self):
             raise RuntimeError("boom")
 
-    metrics = InMemoryMetrics()
     pipeline = ErrorPipeline(
         "test_pipeline",
         "tests.minions._internal._domain.test_pipeline.ErrorPipeline",
         metrics,
-        NoOpLogger(),
+        logger,
     )
 
     with pytest.raises(RuntimeError):

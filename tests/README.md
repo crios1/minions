@@ -65,6 +65,10 @@ This suite is intentionally layered. Each layer has a different purpose and conf
 - Testing componentry modules are also first-class code and must have their own tests.
 - When a test componentry directory contains multiple helper modules, prefer a localized `tests/` subdirectory in that same directory to validate those helpers.
 - This localized helper-test pattern is an accepted tradeoff to keep related test infrastructure and its validation close together.
+- Tests should use the shared `logger`, `metrics`, and `state_store` fixtures by default when those objects are collaborators in the behavior under test.
+- This keeps spy reset, lifecycle cleanup, log-contract checks, metric-label contract checks, and shared dependency wiring consistent across the suite.
+- Direct `InMemoryLogger`, `InMemoryMetrics`, or `InMemoryStateStore` construction is reserved for tests of those objects themselves, fixture/factory definitions, deliberately broken/custom implementations, multiple isolated instances, custom configuration, seeded state, or manual lifecycle ordering.
+- When a custom metrics or state-store implementation needs a normal logger, request the `logger` fixture and wire it into that custom component instead of constructing an inline logger.
 
 ## Component Reference Policy
 

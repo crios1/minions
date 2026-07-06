@@ -47,8 +47,10 @@ async def test_startup_creates_table_index_and_collects_measurements_even_in_man
     assert any(row[1] == "idx_workflows_orchestration_id" for row in rows)
 
 
-async def test_startup_scrubs_orphaned_probe_rows(tmp_path: Path):
-    logger = InMemoryLogger()
+async def test_startup_scrubs_orphaned_probe_rows(
+    tmp_path: Path,
+    logger: InMemoryLogger,
+):
     db_path = os.path.join(tmp_path, "state.db")
     conn = sqlite3.connect(db_path)
     try:
@@ -147,8 +149,8 @@ async def test_startup_applies_configured_synchronous(
 async def test_startup_degrades_when_page_size_lookup_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    logger: InMemoryLogger,
 ):
-    logger = InMemoryLogger()
     db_path = os.path.join(tmp_path, "state.db")
     s = SQLiteStateStore(
         db_path=db_path,
@@ -181,8 +183,8 @@ async def test_startup_degrades_when_page_size_lookup_fails(
 async def test_startup_degrades_when_page_size_is_unusable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    logger: InMemoryLogger,
 ):
-    logger = InMemoryLogger()
     db_path = os.path.join(tmp_path, "state.db")
     s = SQLiteStateStore(
         db_path=db_path,
@@ -210,8 +212,8 @@ async def test_startup_degrades_when_page_size_is_unusable(
 async def test_startup_uses_fallback_measurements_when_commit_timing_fails_without_cleanup_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    logger: InMemoryLogger,
 ):
-    logger = InMemoryLogger()
     db_path = os.path.join(tmp_path, "state.db")
     s = SQLiteStateStore(
         db_path=db_path,
@@ -308,8 +310,8 @@ async def test_measure_commit_latency_percentiles_raises_when_measurement_and_pr
 async def test_startup_closes_connection_when_startup_phase_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    logger: InMemoryLogger,
 ):
-    logger = InMemoryLogger()
     db_path = os.path.join(tmp_path, "state.db")
     s = SQLiteStateStore(db_path=db_path, logger=logger)
     close_called = False
@@ -341,8 +343,8 @@ async def test_startup_closes_connection_when_startup_phase_fails(
 async def test_startup_propagates_commit_measurement_probe_cleanup_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    logger: InMemoryLogger,
 ):
-    logger = InMemoryLogger()
     db_path = os.path.join(tmp_path, "state.db")
     s = SQLiteStateStore(
         db_path=db_path,
@@ -370,8 +372,10 @@ async def test_startup_propagates_commit_measurement_probe_cleanup_failure(
             s._db = None
 
 
-async def test_startup_probe_raises_when_cleanup_delete_fails(monkeypatch: pytest.MonkeyPatch):
-    logger = InMemoryLogger()
+async def test_startup_probe_raises_when_cleanup_delete_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    logger: InMemoryLogger,
+):
     s = SQLiteStateStore(db_path=":memory:", logger=logger)
     fake_db = StartupProbeDb(
         select_row=(WORKFLOW_ID_STARTUP_PROBE, b"startup-probe"),
@@ -386,8 +390,8 @@ async def test_startup_probe_raises_when_cleanup_delete_fails(monkeypatch: pytes
 
 async def test_startup_probe_preserves_primary_failure_when_cleanup_delete_also_fails(
     monkeypatch: pytest.MonkeyPatch,
+    logger: InMemoryLogger,
 ):
-    logger = InMemoryLogger()
     s = SQLiteStateStore(db_path=":memory:", logger=logger)
     fake_db = StartupProbeDb(
         select_row=("wrong-id", b"wrong-payload"),

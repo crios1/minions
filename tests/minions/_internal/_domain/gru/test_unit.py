@@ -289,7 +289,12 @@ class TestUnit:
         monkeypatch.setattr("asyncio.sleep", sleeper)
 
     @pytest.mark.asyncio
-    async def test_monitor_process_resources_healthy(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_monitor_process_resources_healthy(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+    ):
         """Single normal iteration: gauges set, counters/histograms untouched."""
 
         monkeypatch.setattr(
@@ -301,8 +306,6 @@ class TestUnit:
 
         self.patch_sleep_cancel_after(monkeypatch, 1)
 
-        metrics = InMemoryMetrics()
-        logger = InMemoryLogger()
         monitor = _ResourceMonitorHarness(metrics, logger)
 
         with pytest.raises(asyncio.CancelledError):
@@ -323,8 +326,11 @@ class TestUnit:
 
     @pytest.mark.asyncio
     async def test_monitor_high_ram_warn_once_with_reset(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+    ):
         """
         High RAM across two iterations should log exactly one WARNING,
         then drop to normal without logging another warning; also assert kwargs.
@@ -341,8 +347,6 @@ class TestUnit:
 
         self.patch_sleep_cancel_after(monkeypatch, 3)
 
-        metrics = InMemoryMetrics()
-        logger = InMemoryLogger()
         monitor = _ResourceMonitorHarness(metrics, logger)
 
         with pytest.raises(asyncio.CancelledError):
@@ -370,8 +374,11 @@ class TestUnit:
 
     @pytest.mark.asyncio
     async def test_monitor_failure_suppressed_then_recovery(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+    ):
         """
         Two failures → one CRITICAL total; next success → one INFO 'recovered'.
         Also assert error payload fields on the CRITICAL log.
@@ -399,8 +406,6 @@ class TestUnit:
 
         self.patch_sleep_cancel_after(monkeypatch, 3)  # two failures, then one success
 
-        metrics = InMemoryMetrics()
-        logger = InMemoryLogger()
         monitor = _ResourceMonitorHarness(metrics, logger)
 
         with pytest.raises(asyncio.CancelledError):
@@ -432,10 +437,12 @@ class TestUnit:
         self,
         monkeypatch: pytest.MonkeyPatch,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+    ):
         async with gru_factory(
-            logger=InMemoryLogger(),
-            metrics=InMemoryMetrics(),
+            logger=logger,
+            metrics=metrics,
             state_store=NoOpStateStore(),
         ) as gru:
 
@@ -461,10 +468,12 @@ class TestUnit:
         self,
         monkeypatch: pytest.MonkeyPatch,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+    ):
         async with gru_factory(
-            logger=InMemoryLogger(),
-            metrics=InMemoryMetrics(),
+            logger=logger,
+            metrics=metrics,
             state_store=NoOpStateStore(),
         ) as gru:
             result = await gru.start_orchestration(
@@ -488,7 +497,9 @@ class TestUnit:
     async def test_runtime_state_snapshot_is_exact_detached_and_immutable(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+    ):
         from tests.assets.minions.two_steps.counter.identified_with_fixed_resource import (
             AssetMinion as IdentifiedFixedResourceMinion,
         )
@@ -505,8 +516,8 @@ class TestUnit:
         assert identified_resource_id is not None
 
         async with gru_factory(
-            logger=InMemoryLogger(),
-            metrics=InMemoryMetrics(),
+            logger=logger,
+            metrics=metrics,
             state_store=NoOpStateStore(),
         ) as gru:
             result = await gru.start_orchestration(
@@ -568,10 +579,12 @@ class TestUnit:
         self,
         monkeypatch: pytest.MonkeyPatch,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+    ):
         async with gru_factory(
-            logger=InMemoryLogger(),
-            metrics=InMemoryMetrics(),
+            logger=logger,
+            metrics=metrics,
             state_store=NoOpStateStore(),
         ) as gru:
             result = await gru.start_orchestration(
@@ -601,10 +614,12 @@ class TestUnit:
         self,
         monkeypatch: pytest.MonkeyPatch,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+    ):
         async with gru_factory(
-            logger=InMemoryLogger(),
-            metrics=InMemoryMetrics(),
+            logger=logger,
+            metrics=metrics,
             state_store=NoOpStateStore(),
         ) as gru:
             result = await gru.start_orchestration(
@@ -638,10 +653,12 @@ class TestUnit:
         self,
         monkeypatch: pytest.MonkeyPatch,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+    ):
         async with gru_factory(
-            logger=InMemoryLogger(),
-            metrics=InMemoryMetrics(),
+            logger=logger,
+            metrics=metrics,
             state_store=NoOpStateStore(),
         ) as gru:
             result = await gru.start_orchestration(

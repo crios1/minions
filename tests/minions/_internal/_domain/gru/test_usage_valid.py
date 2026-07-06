@@ -178,6 +178,7 @@ class TestValidUsage:
     async def test_gru_start_orchestration_uses_attached_component_ids(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        logger: InMemoryLogger,
     ) -> None:
         @pipeline_id(PIPELINE_COMPONENT_ID)
         class LifecyclePipeline(Pipeline[SimpleEvent]):
@@ -191,7 +192,6 @@ class TestValidUsage:
             async def step_1(self) -> None:
                 self.context.step1 = "step1"
 
-        logger = InMemoryLogger()
         async with gru_factory(
             state_store=NoOpStateStore(),
             logger=logger,
@@ -224,6 +224,7 @@ class TestValidUsage:
     async def test_gru_start_orchestration_uses_attached_component_and_config_ids(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        logger: InMemoryLogger,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
@@ -283,7 +284,6 @@ class TestValidUsage:
         for module_name in ("durable_app.minion", "durable_app.pipeline"):
             sys.modules.pop(module_name, None)
 
-        logger = InMemoryLogger()
         async with gru_factory(
             state_store=NoOpStateStore(),
             logger=logger,
@@ -319,6 +319,8 @@ class TestValidUsage:
     async def test_gru_resumes_moved_id_bearing_source_and_config_artifacts(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        logger: InMemoryLogger,
+        state_store: InMemoryStateStore,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
@@ -388,8 +390,6 @@ class TestValidUsage:
             minion_id=MINION_COMPONENT_ID,
             minion_config_id=CONFIG_ID,
         )
-        logger = InMemoryLogger()
-        state_store = InMemoryStateStore(logger=logger)
         await state_store._mn_serialize_and_save_context(
             MinionWorkflowContext(
                 orchestration_id=expected_orchestration_id,
@@ -449,6 +449,9 @@ class TestValidUsage:
     async def test_gru_start_3_minions_3_pipelines_3_resources_no_sharing(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
     ) -> None:
         """
         Start three minions each with their own pipeline and their own Resource type
@@ -461,11 +464,10 @@ class TestValidUsage:
         pipeline1 = "tests.assets.pipelines.emit_one.simple.default"
         pipeline2 = "tests.assets.pipelines.emit_one.simple.default_b"
         pipeline3 = "tests.assets.pipelines.emit_one.simple.default_c"
-        logger = InMemoryLogger()
         async with gru_factory(
-            state_store=InMemoryStateStore(logger=logger),
+            state_store=state_store,
             logger=logger,
-            metrics=InMemoryMetrics()
+            metrics=metrics,
         ) as gru:
             from tests.assets.minions.two_steps.simple.with_simple_b_resource import (
                 AssetMinion as Simple2ResourceMinion,
@@ -519,6 +521,9 @@ class TestValidUsage:
     async def test_gru_start_3_minions_1_pipeline_1_resource_sharing(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
         tests_dir: Path,
     ) -> None:
         """
@@ -553,11 +558,10 @@ class TestValidUsage:
         # ask copilot
         # !! will have to do the update across this whole test file !!
 
-        logger = InMemoryLogger()
         async with gru_factory(
-            state_store=InMemoryStateStore(logger=logger),
+            state_store=state_store,
             logger=logger,
-            metrics=InMemoryMetrics()
+            metrics=metrics,
         ) as gru:
             r1 = await gru.start_orchestration(
                 pipeline=pipeline_module_path,
@@ -624,13 +628,15 @@ class TestValidUsage:
     async def test_gru_binds_file_config_to_minion(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
         tests_dir: Path,
     ) -> None:
         minion_module_path = "tests.assets.minions.two_steps.counter.with_file_config"
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
-        logger = InMemoryLogger()
         from tests.assets.minions.two_steps.counter.with_file_config import (
             AssetMinion as FileConfigMinion,
         )
@@ -638,9 +644,9 @@ class TestValidUsage:
         FileConfigMinion.enable_spy()
         FileConfigMinion.reset_spy()
         async with gru_factory(
-            state_store=InMemoryStateStore(logger=logger),
+            state_store=state_store,
             logger=logger,
-            metrics=InMemoryMetrics(),
+            metrics=metrics,
         ) as gru:
             result = await gru.start_orchestration(
                 minion=minion_module_path,
@@ -714,16 +720,18 @@ class TestValidUsage:
     async def test_minion_and_pipeline_share_resource_dependency(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
     ) -> None:
         minion_module_path = "tests.assets.minions.two_steps.simple.with_simple_resource"
         pipeline_module_path = (
             "tests.assets.pipelines.emit_one.simple.with_simple_resource"
         )
-        logger = InMemoryLogger()
         async with gru_factory(
-            state_store=InMemoryStateStore(logger=logger),
+            state_store=state_store,
             logger=logger,
-            metrics=InMemoryMetrics()
+            metrics=metrics,
         ) as gru:
             r1 = await gru.start_orchestration(
                 pipeline=pipeline_module_path,

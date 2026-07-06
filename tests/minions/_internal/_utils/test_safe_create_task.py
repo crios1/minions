@@ -15,9 +15,7 @@ class FailingLogger(InMemoryLogger):
 
 
 @pytest.mark.asyncio
-async def test_safe_create_task_logs_on_exception() -> None:
-    logger = InMemoryLogger()
-
+async def test_safe_create_task_logs_on_exception(logger: InMemoryLogger):
     async def faulty() -> None:
         raise ValueError("test failure")
 
@@ -34,9 +32,7 @@ async def test_safe_create_task_logs_on_exception() -> None:
 
 
 @pytest.mark.asyncio
-async def test_safe_create_task_success_does_not_log() -> None:
-    logger = InMemoryLogger()
-
+async def test_safe_create_task_success_does_not_log(logger: InMemoryLogger):
     async def okay() -> int:
         return 42
 
@@ -47,9 +43,7 @@ async def test_safe_create_task_success_does_not_log() -> None:
 
 
 @pytest.mark.asyncio
-async def test_safe_create_task_propagates_cancelled_error() -> None:
-    logger = InMemoryLogger()
-
+async def test_safe_create_task_propagates_cancelled_error(logger: InMemoryLogger):
     async def cancellable() -> None:
         raise asyncio.CancelledError()
 
@@ -73,8 +67,9 @@ async def test_safe_create_task_swallows_logger_failures() -> None:
 
 
 @pytest.mark.asyncio
-async def test_safe_create_task_calls_on_failure_for_user_exceptions() -> None:
-    logger = InMemoryLogger()
+async def test_safe_create_task_calls_on_failure_for_user_exceptions(
+    logger: InMemoryLogger,
+):
     on_failure = AsyncMock()
 
     async def faulty() -> None:
@@ -93,8 +88,9 @@ async def test_safe_create_task_calls_on_failure_for_user_exceptions() -> None:
 
 
 @pytest.mark.asyncio
-async def test_safe_create_task_calls_on_failure_for_system_exit() -> None:
-    logger = InMemoryLogger()
+async def test_safe_create_task_calls_on_failure_for_system_exit(
+    logger: InMemoryLogger,
+):
     on_failure = AsyncMock()
 
     async def exits() -> None:
@@ -111,9 +107,7 @@ async def test_safe_create_task_calls_on_failure_for_system_exit() -> None:
 
 
 @pytest.mark.asyncio
-async def test_safe_create_task_swallows_on_failure_errors() -> None:
-    logger = InMemoryLogger()
-
+async def test_safe_create_task_swallows_on_failure_errors(logger: InMemoryLogger):
     async def bad_failure_hook(*_args: object, **_kwargs: object):
         raise RuntimeError("failure hook crashed")
 

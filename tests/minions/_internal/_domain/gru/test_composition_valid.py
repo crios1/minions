@@ -60,6 +60,9 @@ class TestMinionFile:
     async def test_gru_starts_minion_with_multiple_distinct_resource_dependencies(
         self,
         gru_factory: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
     ) -> None:
         minion_module_path = (
             "tests.assets.minions.one_step.counter."
@@ -67,11 +70,10 @@ class TestMinionFile:
         )
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
 
-        logger = InMemoryLogger()
         async with gru_factory(
-            state_store=InMemoryStateStore(logger=logger),
+            state_store=state_store,
             logger=logger,
-            metrics=InMemoryMetrics(),
+            metrics=metrics,
         ) as gru:
             result = await gru.start_orchestration(
                 minion=minion_module_path,

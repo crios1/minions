@@ -21,10 +21,10 @@ from tests.minions._internal._framework.state_store_sqlite.conftest import MakeS
 pytestmark = pytest.mark.asyncio
 
 
-async def test_init_resolves_default_batch_config():
+async def test_init_resolves_default_batch_config(logger: InMemoryLogger):
     s = SQLiteStateStore(
         db_path=":memory:",
-        logger=InMemoryLogger(),
+        logger=logger,
     )
 
     assert s._batch_tuning == "manual"
@@ -32,10 +32,12 @@ async def test_init_resolves_default_batch_config():
     assert s._batch_max_flush_delay_ms == DEFAULT_BATCH_MAX_FLUSH_DELAY_MS
 
 
-async def test_init_preserves_configured_batch_max_queued_writes():
+async def test_init_preserves_configured_batch_max_queued_writes(
+    logger: InMemoryLogger,
+):
     s = SQLiteStateStore(
         db_path=":memory:",
-        logger=InMemoryLogger(),
+        logger=logger,
         batch_max_queued_writes=200,
     )
 
@@ -43,10 +45,12 @@ async def test_init_preserves_configured_batch_max_queued_writes():
     assert s._batch_max_flush_delay_ms == DEFAULT_BATCH_MAX_FLUSH_DELAY_MS
 
 
-async def test_init_accepts_immediate_batch_max_queued_writes():
+async def test_init_accepts_immediate_batch_max_queued_writes(
+    logger: InMemoryLogger,
+):
     s = SQLiteStateStore(
         db_path=":memory:",
-        logger=InMemoryLogger(),
+        logger=logger,
         batch_max_queued_writes=1,
     )
 
@@ -54,10 +58,12 @@ async def test_init_accepts_immediate_batch_max_queued_writes():
     assert s._batch_max_flush_delay_ms == DEFAULT_BATCH_MAX_FLUSH_DELAY_MS
 
 
-async def test_init_preserves_configured_batch_max_flush_delay_ms():
+async def test_init_preserves_configured_batch_max_flush_delay_ms(
+    logger: InMemoryLogger,
+):
     s = SQLiteStateStore(
         db_path=":memory:",
-        logger=InMemoryLogger(),
+        logger=logger,
         batch_max_flush_delay_ms=30,
     )
 
@@ -65,10 +71,12 @@ async def test_init_preserves_configured_batch_max_flush_delay_ms():
     assert s._batch_max_queued_writes == DEFAULT_BATCH_MAX_QUEUED_WRITES
 
 
-async def test_init_with_calibrated_batch_tuning_defers_batch_resolution_until_startup():
+async def test_init_with_calibrated_batch_tuning_defers_batch_resolution_until_startup(
+    logger: InMemoryLogger,
+):
     s = SQLiteStateStore(
         db_path=":memory:",
-        logger=InMemoryLogger(),
+        logger=logger,
         batch_tuning="calibrated",
     )
 
@@ -87,7 +95,8 @@ async def test_init_with_calibrated_batch_tuning_defers_batch_resolution_until_s
 async def test_init_rejects_explicit_batch_config_in_calibrated_mode(
     batch_max_queued_writes: int | None,
     batch_max_flush_delay_ms: int | None,
-) -> None:
+    logger: InMemoryLogger,
+):
     with pytest.raises(
         ValueError,
         match=(
@@ -97,7 +106,7 @@ async def test_init_rejects_explicit_batch_config_in_calibrated_mode(
     ):
         SQLiteStateStore(
             db_path=":memory:",
-            logger=InMemoryLogger(),
+            logger=logger,
             batch_tuning="calibrated",
             batch_max_queued_writes=batch_max_queued_writes,
             batch_max_flush_delay_ms=batch_max_flush_delay_ms,
@@ -107,20 +116,21 @@ async def test_init_rejects_explicit_batch_config_in_calibrated_mode(
 @pytest.mark.parametrize("batch_max_queued_writes", [0, 300])
 async def test_init_rejects_out_of_range_batch_max_queued_writes(
     batch_max_queued_writes: int,
-) -> None:
+    logger: InMemoryLogger,
+):
     with pytest.raises(ValueError, match="batch_max_queued_writes must be between 1 and 256"):
         SQLiteStateStore(
             db_path=":memory:",
-            logger=InMemoryLogger(),
+            logger=logger,
             batch_max_queued_writes=batch_max_queued_writes,
         )
 
 
-async def test_init_rejects_invalid_batch_tuning_mode():
+async def test_init_rejects_invalid_batch_tuning_mode(logger: InMemoryLogger):
     with pytest.raises(ValueError, match="batch_tuning must be 'manual' or 'calibrated'"):
         SQLiteStateStore(
             db_path=":memory:",
-            logger=InMemoryLogger(),
+            logger=logger,
             batch_tuning="boom",  # type: ignore[arg-type]
         )
 
@@ -128,11 +138,12 @@ async def test_init_rejects_invalid_batch_tuning_mode():
 @pytest.mark.parametrize("batch_max_flush_delay_ms", [4, 50])
 async def test_init_rejects_out_of_range_batch_max_flush_delay_ms(
     batch_max_flush_delay_ms: int,
-) -> None:
+    logger: InMemoryLogger,
+):
     with pytest.raises(ValueError, match="batch_max_flush_delay_ms must be between 5 and 40"):
         SQLiteStateStore(
             db_path=":memory:",
-            logger=InMemoryLogger(),
+            logger=logger,
             batch_max_flush_delay_ms=batch_max_flush_delay_ms,
         )
 
@@ -163,10 +174,12 @@ async def test_startup_resolves_calibrated_batch_config(
     )
 
 
-async def test_derive_calibrated_batch_config_maps_latency_to_profile():
+async def test_derive_calibrated_batch_config_maps_latency_to_profile(
+    logger: InMemoryLogger,
+):
     s = SQLiteStateStore(
         db_path=":memory:",
-        logger=InMemoryLogger(),
+        logger=logger,
         batch_tuning="calibrated",
     )
 

@@ -73,10 +73,10 @@ def mk_ctx(
 
 @pytest_asyncio.fixture(params=["inmemory", "sqlite"], ids=["inmemory", "sqlite"])
 async def store_and_logger(
-    request: pytest.FixtureRequest, tmp_path: Path
+    request: pytest.FixtureRequest,
+    tmp_path: Path,
+    logger: InMemoryLogger,
 ) -> AsyncGenerator[tuple[StateStore, InMemoryLogger], None]:
-    logger = InMemoryLogger()
-
     if request.param == "sqlite":
         db_path = os.path.join(str(tmp_path), "state.db")
         store = SQLiteStateStore(db_path=db_path, logger=logger)

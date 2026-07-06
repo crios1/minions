@@ -109,8 +109,9 @@ async def test_safe_run_and_log_rejects_method_bound_to_other_component():
 
 
 @pytest.mark.asyncio
-async def test_safe_run_and_log_failure_logs_default_message_and_relative_module_path():
-    logger = InMemoryLogger()
+async def test_safe_run_and_log_failure_logs_default_message_and_relative_module_path(
+    logger: InMemoryLogger,
+):
     comp = FailingComponent(logger)
 
     result = await comp._mn_safe_run_and_log_failure(comp.raise_runtime_error)
@@ -127,8 +128,9 @@ async def test_safe_run_and_log_failure_logs_default_message_and_relative_module
 
 
 @pytest.mark.asyncio
-async def test_safe_run_and_log_failure_accepts_log_message_override():
-    logger = InMemoryLogger()
+async def test_safe_run_and_log_failure_accepts_log_message_override(
+    logger: InMemoryLogger,
+):
     comp = FailingComponent(logger)
 
     result = await comp._mn_safe_run_and_log_failure(
@@ -145,8 +147,9 @@ async def test_safe_run_and_log_failure_accepts_log_message_override():
 
 
 @pytest.mark.asyncio
-async def test_safe_run_and_log_failure_relative_module_path_overrides_log_kwargs_collision():
-    logger = InMemoryLogger()
+async def test_safe_run_and_log_failure_relative_module_path_overrides_log_kwargs_collision(
+    logger: InMemoryLogger,
+):
     comp = FailingComponent(logger)
 
     result = await comp._mn_safe_run_and_log_failure(
@@ -174,8 +177,9 @@ async def test_run_and_log_failure_returns_successful_result():
 
 
 @pytest.mark.asyncio
-async def test_run_and_log_failure_logs_and_reraises_failure():
-    logger = InMemoryLogger()
+async def test_run_and_log_failure_logs_and_reraises_failure(
+    logger: InMemoryLogger,
+):
     comp = FailingComponent(logger)
 
     with pytest.raises(RuntimeError, match="boom"):
@@ -194,8 +198,9 @@ async def test_run_and_log_failure_logs_and_reraises_failure():
 
 
 @pytest.mark.asyncio
-async def test_run_and_log_failure_accepts_log_message_and_kwargs():
-    logger = InMemoryLogger()
+async def test_run_and_log_failure_accepts_log_message_and_kwargs(
+    logger: InMemoryLogger,
+):
     comp = FailingComponent(logger)
 
     with pytest.raises(RuntimeError, match="boom"):

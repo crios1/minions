@@ -36,6 +36,9 @@ def scrub_asset_modules() -> Generator[None, None, None]:
         sys.modules.pop(name, None)
 
 
+# Prefer these fixtures over direct InMemory* construction so spy reset,
+# contract assertions, and shared logger wiring stay consistent. See
+# tests/README.md for the exception policy.
 @pytest.fixture
 def logger() -> Generator[InMemoryLogger, None, None]:
     InMemoryLogger.enable_spy()
