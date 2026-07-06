@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Protocol
 
 import pytest
 
@@ -46,15 +46,6 @@ from tests.support.gru_scenario.runner import (
 from tests.support.gru_scenario.verify import ScenarioVerifier
 
 
-def _require_component_id(component_cls: type[Any]) -> str:
-    component_id = get_component_id(component_cls)
-    assert component_id is not None
-    return component_id
-
-
-identified_counter_minion_id = _require_component_id(IdentifiedMinion)
-
-
 def _stub_get_call_counts(counts: dict[str, int]) -> Any:
     def get_call_counts(cls: type[object]) -> dict[str, int]:
         return dict(counts)
@@ -62,27 +53,44 @@ def _stub_get_call_counts(counts: dict[str, int]) -> Any:
     return classmethod(get_call_counts)
 
 
-def _mk_verifier(
-    plan: ScenarioPlan,
-    result: ScenarioRunResult,
-    *,
-    state_store: InMemoryStateStore | None = None,
-) -> ScenarioVerifier:
-    logger = InMemoryLogger()
-    metrics = InMemoryMetrics()
-    state_store = state_store or InMemoryStateStore(logger=logger)
-    return ScenarioVerifier(
-        plan,
-        result,
-        logger=logger,
-        metrics=metrics,
-        state_store=state_store,
-        per_verification_timeout=0.1,
-    )
+class VerifierFactory(Protocol):
+    def __call__(
+        self,
+        plan: ScenarioPlan,
+        result: ScenarioRunResult,
+        *,
+        state_store: InMemoryStateStore | None = None,
+    ) -> ScenarioVerifier: ...
 
 
-def test_verifier_require_spies_invariant_message_is_actionable():
-    verifier = _mk_verifier(
+@pytest.fixture
+def verifier_factory(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> VerifierFactory:
+    default_state_store = state_store
+
+    def _mk_verifier(
+        plan: ScenarioPlan,
+        result: ScenarioRunResult,
+        *,
+        state_store: InMemoryStateStore | None = None,
+    ) -> ScenarioVerifier:
+        return ScenarioVerifier(
+            plan,
+            result,
+            logger=logger,
+            metrics=metrics,
+            state_store=state_store or default_state_store,
+            per_verification_timeout=0.1,
+        )
+
+    return _mk_verifier
+
+
+def test_verifier_require_spies_invariant_message_is_actionable(verifier_factory: VerifierFactory):
+    verifier = verifier_factory(
         ScenarioPlan([], pipeline_event_counts={}),
         ScenarioRunResult(spies=None, receipts=[]),
     )
@@ -113,8 +121,10 @@ def test_require_workflow_spec_rejects_empty_spec(monkeypatch: pytest.MonkeyPatc
         ScenarioVerifier._require_workflow_spec(TwoStepCounterMinion)
 
 
-def test_assert_metrics_label_contract_reports_recorded_mismatches():
-    verifier = _mk_verifier(
+def test_assert_metrics_label_contract_reports_recorded_mismatches(
+    verifier_factory: VerifierFactory,
+):
+    verifier = verifier_factory(
         ScenarioPlan([], pipeline_event_counts={}),
         ScenarioRunResult(spies=SpyRegistry(), receipts=[]),
     )
@@ -129,7 +139,9 @@ def test_assert_metrics_label_contract_reports_recorded_mismatches():
     verifier._metrics.clear_metric_label_emissions()
 
 
-def test_compute_minion_expectations_accumulates_starts_from_successful_receipts():
+def test_compute_minion_expectations_accumulates_starts_from_successful_receipts(
+    verifier_factory: VerifierFactory,
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -176,14 +188,16 @@ def test_compute_minion_expectations_accumulates_starts_from_successful_receipts
         ],
     )
 
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     expectations = verifier._compute_minion_expectations(spies)
 
     assert expectations.minion_start_counts[TwoStepCounterMinion] == 2
     assert expectations.expected_workflows_by_class[TwoStepCounterMinion] == 2
 
 
-def test_build_expected_call_counts_state_store_formula_for_mixed_success_and_failure():
+def test_build_expected_call_counts_state_store_formula_for_mixed_success_and_failure(
+    verifier_factory: VerifierFactory,
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -232,7 +246,7 @@ def test_build_expected_call_counts_state_store_formula_for_mixed_success_and_fa
         seen_shutdown=True,
     )
 
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     expected = verifier._build_expected_call_counts()
     state_store_counts = expected.call_counts[type(verifier._state_store)]
 
@@ -251,7 +265,9 @@ def test_build_expected_call_counts_state_store_formula_for_mixed_success_and_fa
     assert state_store_counts["shutdown"] == 1
 
 
-def test_build_expected_call_counts_scales_minion_init_with_successful_starts():
+def test_build_expected_call_counts_scales_minion_init_with_successful_starts(
+    verifier_factory: VerifierFactory,
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -298,7 +314,7 @@ def test_build_expected_call_counts_scales_minion_init_with_successful_starts():
         ],
     )
 
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     expected = verifier._build_expected_call_counts()
     minion_counts = expected.call_counts[TwoStepCounterMinion]
 
@@ -307,7 +323,9 @@ def test_build_expected_call_counts_scales_minion_init_with_successful_starts():
     assert minion_counts["run"] == 2
 
 
-def test_build_expected_call_counts_keeps_pipelines_out_of_exact_pinning():
+def test_build_expected_call_counts_keeps_pipelines_out_of_exact_pinning(
+    verifier_factory: VerifierFactory,
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
     minion_ref = "tests.assets.minions.two_steps.counter.with_fixed_resource"
     plan = ScenarioPlan(
@@ -336,7 +354,7 @@ def test_build_expected_call_counts_keeps_pipelines_out_of_exact_pinning():
         ],
     )
 
-    expected = _mk_verifier(plan, result)._build_expected_call_counts()
+    expected = verifier_factory(plan, result)._build_expected_call_counts()
 
     assert EmitOneCounterPipeline not in expected.call_counts
     assert EmitOneCounterPipeline not in expected.allow_unlisted
@@ -345,7 +363,10 @@ def test_build_expected_call_counts_keeps_pipelines_out_of_exact_pinning():
 
 
 @pytest.mark.asyncio
-async def test_build_expected_call_counts_does_not_require_get_all_for_overridden_context_lookup():
+async def test_build_expected_call_counts_does_not_require_get_all_for_overridden_context_lookup(
+    verifier_factory: VerifierFactory,
+    logger: InMemoryLogger,
+):
     class IndexedStateStore(InMemoryStateStore):
         async def get_contexts_for_orchestration(
             self,
@@ -384,10 +405,10 @@ async def test_build_expected_call_counts_does_not_require_get_all_for_overridde
         ],
     )
 
-    verifier = _mk_verifier(
+    verifier = verifier_factory(
         plan,
         result,
-        state_store=IndexedStateStore(logger=InMemoryLogger()),
+        state_store=IndexedStateStore(logger=logger),
     )
     expected = verifier._build_expected_call_counts()
     state_store_counts = expected.call_counts[type(verifier._state_store)]
@@ -399,13 +420,13 @@ async def test_build_expected_call_counts_does_not_require_get_all_for_overridde
     assert "get_all_contexts" not in state_store_counts
 
 
-def test_assert_call_order_reports_extra_calls_with_details():
+def test_assert_call_order_reports_extra_calls_with_details(verifier_factory: VerifierFactory):
     plan = ScenarioPlan([], pipeline_event_counts={})
     result = ScenarioRunResult(
         spies=SpyRegistry(),
         extra_calls=[(TwoStepCounterMinion, ("step_1",), {"count": 2})],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     # Scope this test to the extra-call diagnostics branch only.
     setattr(verifier._state_store, "_mspy_instance_tag", None)
 
@@ -414,6 +435,7 @@ def test_assert_call_order_reports_extra_calls_with_details():
 
 
 def test_assert_state_store_read_call_bounds_rejects_excess_get_all_calls(
+    verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directives = [
@@ -446,7 +468,7 @@ def test_assert_state_store_read_call_bounds_rejects_excess_get_all_calls(
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
 
     monkeypatch.setattr(
         type(verifier._state_store),
@@ -455,13 +477,13 @@ def test_assert_state_store_read_call_bounds_rejects_excess_get_all_calls(
     )
 
     with pytest.raises(
-        pytest.fail.Exception,
-        match="get_all_contexts called more times than allowed"
+        pytest.fail.Exception, match="get_all_contexts called more times than allowed"
     ):
         verifier._assert_state_store_read_call_bounds()
 
 
 def test_assert_minion_fanout_delivery_proves_pipeline_event_delivery_to_steps(
+    verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directives = [
@@ -495,7 +517,7 @@ def test_assert_minion_fanout_delivery_proves_pipeline_event_delivery_to_steps(
         ],
     )
 
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     monkeypatch.setattr(
         TwoStepCounterMinion,
         "get_call_counts",
@@ -506,6 +528,7 @@ def test_assert_minion_fanout_delivery_proves_pipeline_event_delivery_to_steps(
 
 
 def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnostics(
+    verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directives = [
@@ -557,7 +580,7 @@ def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnost
         ],
     )
 
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     monkeypatch.setattr(
         TwoStepCounterMinion,
         "get_call_counts",
@@ -580,6 +603,7 @@ def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnost
 
 
 def test_assert_minion_fanout_delivery_allows_plus_one_per_start_tolerance(
+    verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directives = [
@@ -613,7 +637,7 @@ def test_assert_minion_fanout_delivery_allows_plus_one_per_start_tolerance(
         ],
     )
 
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     monkeypatch.setattr(
         TwoStepCounterMinion,
         "get_call_counts",
@@ -624,6 +648,7 @@ def test_assert_minion_fanout_delivery_allows_plus_one_per_start_tolerance(
 
 
 def test_assert_minion_fanout_delivery_rejects_overage_beyond_plus_one(
+    verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directives = [
@@ -657,7 +682,7 @@ def test_assert_minion_fanout_delivery_rejects_overage_beyond_plus_one(
         ],
     )
 
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     monkeypatch.setattr(
         TwoStepCounterMinion,
         "get_call_counts",
@@ -676,6 +701,7 @@ def test_assert_minion_fanout_delivery_rejects_overage_beyond_plus_one(
 
 
 def test_assert_pipeline_events_uses_exact_singleton_activation_counts_by_default(
+    verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     directives = [
@@ -723,7 +749,7 @@ def test_assert_pipeline_events_uses_exact_singleton_activation_counts_by_defaul
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     monkeypatch.setattr(
         EmitOneCounterPipeline,
         "get_call_counts",
@@ -734,6 +760,7 @@ def test_assert_pipeline_events_uses_exact_singleton_activation_counts_by_defaul
 
 
 def test_assert_pipeline_events_uses_pipeline_total_events_for_produce_calls(
+    verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pipeline_ref = "tests.assets.pipelines.emit_two.simple.with_subscriber_counts_one_then_two"
@@ -762,7 +789,7 @@ def test_assert_pipeline_events_uses_pipeline_total_events_for_produce_calls(
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     monkeypatch.setattr(
         EmitTwoSimplePipeline,
         "get_call_counts",
@@ -773,6 +800,7 @@ def test_assert_pipeline_events_uses_pipeline_total_events_for_produce_calls(
 
 
 def test_assert_pipeline_events_keeps_concurrent_starts_exact(
+    verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
@@ -814,7 +842,7 @@ def test_assert_pipeline_events_keeps_concurrent_starts_exact(
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     monkeypatch.setattr(
         EmitOneCounterPipeline,
         "get_call_counts",
@@ -825,6 +853,7 @@ def test_assert_pipeline_events_keeps_concurrent_starts_exact(
 
 
 def test_assert_pipeline_events_keeps_lifecycle_exact_for_stop_boundary(
+    verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
@@ -862,7 +891,7 @@ def test_assert_pipeline_events_keeps_lifecycle_exact_for_stop_boundary(
         ],
         seen_shutdown=True,
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     monkeypatch.setattr(
         EmitOneCounterPipeline,
         "get_call_counts",
@@ -875,6 +904,7 @@ def test_assert_pipeline_events_keeps_lifecycle_exact_for_stop_boundary(
 
 
 def test_assert_pipeline_events_ignores_failed_start_when_pipeline_is_active(
+    verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
@@ -921,7 +951,7 @@ def test_assert_pipeline_events_ignores_failed_start_when_pipeline_is_active(
         ],
         seen_shutdown=True,
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     monkeypatch.setattr(
         EmitOneCounterPipeline,
         "get_call_counts",
@@ -934,6 +964,7 @@ def test_assert_pipeline_events_ignores_failed_start_when_pipeline_is_active(
 
 
 def test_assert_pipeline_events_falls_back_for_failed_start_before_activation(
+    verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
@@ -968,7 +999,7 @@ def test_assert_pipeline_events_falls_back_for_failed_start_before_activation(
         ],
         seen_shutdown=True,
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     monkeypatch.setattr(
         EmitOneCounterPipeline,
         "get_call_counts",
@@ -979,6 +1010,7 @@ def test_assert_pipeline_events_falls_back_for_failed_start_before_activation(
 
 
 def test_assert_pipeline_events_handles_event_type_failure_before_activation(
+    verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
@@ -1018,7 +1050,7 @@ def test_assert_pipeline_events_handles_event_type_failure_before_activation(
         ],
         seen_shutdown=True,
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     monkeypatch.setattr(
         EmitOneCounterPipeline,
         "get_call_counts",
@@ -1028,7 +1060,9 @@ def test_assert_pipeline_events_handles_event_type_failure_before_activation(
     verifier._assert_pipeline_events()
 
 
-def test_assert_workflow_step_start_events_are_monotonic_allows_resume_replay_at_same_step():
+def test_assert_workflow_step_start_events_are_monotonic_allows_resume_replay_at_same_step(
+    verifier_factory: VerifierFactory,
+):
     plan = ScenarioPlan(
         [
             OrchestrationStart(
@@ -1079,11 +1113,13 @@ def test_assert_workflow_step_start_events_are_monotonic_allows_resume_replay_at
         ],
     )
 
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     verifier._assert_workflow_step_start_events_are_monotonic()
 
 
-def test_assert_workflow_step_start_events_are_monotonic_rejects_regression():
+def test_assert_workflow_step_start_events_are_monotonic_rejects_regression(
+    verifier_factory: VerifierFactory,
+):
     plan = ScenarioPlan(
         [
             OrchestrationStart(
@@ -1134,12 +1170,14 @@ def test_assert_workflow_step_start_events_are_monotonic_rejects_regression():
         ],
     )
 
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     with pytest.raises(pytest.fail.Exception, match="not monotonic"):
         verifier._assert_workflow_step_start_events_are_monotonic()
 
 
-def test_assert_workflow_step_start_events_are_monotonic_rejects_step_name_index_mismatch():
+def test_assert_workflow_step_start_events_are_monotonic_rejects_step_name_index_mismatch(
+    verifier_factory: VerifierFactory,
+):
     plan = ScenarioPlan(
         [
             OrchestrationStart(
@@ -1186,12 +1224,14 @@ def test_assert_workflow_step_start_events_are_monotonic_rejects_step_name_index
         ],
     )
 
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     with pytest.raises(pytest.fail.Exception, match="step_name/index mismatch"):
         verifier._assert_workflow_step_start_events_are_monotonic()
 
 
-def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_checkpoint():
+def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_checkpoint(
+    verifier_factory: VerifierFactory,
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -1255,11 +1295,13 @@ def test_assert_checkpoint_window_workflow_step_progression_ignores_noop_wait_ch
         ],
     )
 
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     verifier._assert_checkpoint_window_workflow_step_progression()
 
 
-def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phase_windows():
+def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phase_windows(
+    verifier_factory: VerifierFactory,
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -1339,11 +1381,13 @@ def test_assert_checkpoint_window_workflow_step_progression_handles_restart_phas
         ],
     )
 
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     verifier._assert_checkpoint_window_workflow_step_progression()
 
 
-def test_checkpoint_window_workflow_step_progression_exact_fails_on_overage():
+def test_checkpoint_window_workflow_step_progression_exact_fails_on_overage(
+    verifier_factory: VerifierFactory,
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -1398,13 +1442,15 @@ def test_checkpoint_window_workflow_step_progression_exact_fails_on_overage():
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
 
     with pytest.raises(pytest.fail.Exception, match="expected workflow-id delta 1, got 2"):
         verifier._assert_checkpoint_window_workflow_step_progression()
 
 
-def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_window():
+def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_window(
+    verifier_factory: VerifierFactory,
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -1498,11 +1544,13 @@ def test_checkpoint_window_workflow_step_progression_supports_mixed_modes_per_wi
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     verifier._assert_checkpoint_window_workflow_step_progression()
 
 
-def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_allows_call_count_overage():  # noqa: E501
+def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_allows_call_count_overage(  # noqa: E501
+    verifier_factory: VerifierFactory,
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -1559,11 +1607,13 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_all
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     verifier._assert_checkpoint_window_workflow_step_progression()
 
 
-def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_rejects_overage_beyond_start_tolerance():  # noqa: E501
+def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_rejects_overage_beyond_start_tolerance(  # noqa: E501
+    verifier_factory: VerifierFactory,
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -1620,7 +1670,7 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_rej
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     with pytest.raises(
         pytest.fail.Exception,
         match=r"Checkpoint workflow-step progression mismatch.*expected call-count delta "
@@ -1629,7 +1679,9 @@ def test_checkpoint_window_workflow_step_progression_exact_with_workflow_ids_rej
         verifier._assert_checkpoint_window_workflow_step_progression()
 
 
-def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overlap_passes_with_workflow_id_exactness():  # noqa: E501
+def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overlap_passes_with_workflow_id_exactness(  # noqa: E501
+    verifier_factory: VerifierFactory,
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -1707,11 +1759,13 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     verifier._assert_checkpoint_window_workflow_step_progression()
 
 
-def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overlap_reports_instance_deltas_on_workflow_id_mismatch():  # noqa: E501
+def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overlap_reports_instance_deltas_on_workflow_id_mismatch(  # noqa: E501
+    verifier_factory: VerifierFactory,
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -1790,7 +1844,7 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     with pytest.raises(
         pytest.fail.Exception,
         match=r"expected workflow-id delta 2, got 1\..*Per-instance deltas: \{1: 2, 2: 1\}",
@@ -1798,7 +1852,9 @@ def test_checkpoint_window_workflow_step_progression_exact_multi_instance_overla
         verifier._assert_checkpoint_window_workflow_step_progression()
 
 
-def test_checkpoint_window_workflow_step_progression_exact_prioritizes_workflow_id_mismatch_when_both_fail():  # noqa: E501
+def test_checkpoint_window_workflow_step_progression_exact_prioritizes_workflow_id_mismatch_when_both_fail(  # noqa: E501
+    verifier_factory: VerifierFactory,
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -1855,7 +1911,7 @@ def test_checkpoint_window_workflow_step_progression_exact_prioritizes_workflow_
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     with pytest.raises(
         pytest.fail.Exception,
         match=(
@@ -1866,8 +1922,8 @@ def test_checkpoint_window_workflow_step_progression_exact_prioritizes_workflow_
         verifier._assert_checkpoint_window_workflow_step_progression()
 
 
-def test_instance_step_deltas_reports_non_zero_deltas_sorted():
-    verifier = _mk_verifier(
+def test_instance_step_deltas_reports_non_zero_deltas_sorted(verifier_factory: VerifierFactory):
+    verifier = verifier_factory(
         ScenarioPlan([], pipeline_event_counts={}),
         ScenarioRunResult(spies=SpyRegistry(), receipts=[]),
     )
@@ -1888,8 +1944,8 @@ def test_instance_step_deltas_reports_non_zero_deltas_sorted():
     assert deltas == {1: 1, 3: 4, 4: -5}
 
 
-def test_workflow_id_delta_count_computes_new_ids_only():
-    verifier = _mk_verifier(
+def test_workflow_id_delta_count_computes_new_ids_only(verifier_factory: VerifierFactory):
+    verifier = verifier_factory(
         ScenarioPlan([], pipeline_event_counts={}),
         ScenarioRunResult(spies=SpyRegistry(), receipts=[]),
     )
@@ -1898,7 +1954,9 @@ def test_workflow_id_delta_count_computes_new_ids_only():
     assert verifier._workflow_id_delta_count(curr=("w1",), prev=("w1", "w2")) == 0
 
 
-def test_checkpoint_window_fanout_fails_when_workflow_id_delta_below_expected():
+def test_checkpoint_window_fanout_fails_when_workflow_id_delta_below_expected(
+    verifier_factory: VerifierFactory,
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -1952,13 +2010,15 @@ def test_checkpoint_window_fanout_fails_when_workflow_id_delta_below_expected():
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
 
     with pytest.raises(pytest.fail.Exception, match="Checkpoint workflow-id progression mismatch"):
         verifier._assert_checkpoint_window_workflow_step_progression()
 
 
-def test_assert_runtime_expectations_persistence_at_latest_checkpoint():
+def test_assert_runtime_expectations_persistence_at_latest_checkpoint(
+    verifier_factory: VerifierFactory,
+):
     directives = [
         start := OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -2003,11 +2063,13 @@ def test_assert_runtime_expectations_persistence_at_latest_checkpoint():
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     verifier._assert_runtime_expectations()
 
 
-def test_assert_lifecycle_tracking_reports_untracked_successful_start():
+def test_assert_lifecycle_tracking_reports_untracked_successful_start(
+    verifier_factory: VerifierFactory,
+):
     plan = ScenarioPlan(
         [
             OrchestrationStart(
@@ -2070,10 +2132,12 @@ def test_assert_lifecycle_tracking_reports_untracked_successful_start():
             "state=orchestrations"
         ),
     ):
-        _mk_verifier(plan, result)._assert_lifecycle_tracking()
+        verifier_factory(plan, result)._assert_lifecycle_tracking()
 
 
-def test_assert_lifecycle_tracking_reports_resource_refcount_mismatch():
+def test_assert_lifecycle_tracking_reports_resource_refcount_mismatch(
+    verifier_factory: VerifierFactory,
+):
     minion_id = "tests.assets.minions.two_steps.counter.with_fixed_resource"
     pipeline_id = "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
     resource_id = "tests.assets.resources.fixed.default.AssetResource"
@@ -2131,10 +2195,12 @@ def test_assert_lifecycle_tracking_reports_resource_refcount_mismatch():
         pytest.fail.Exception,
         match="state=resource_reference_counts",
     ):
-        _mk_verifier(plan, result)._assert_lifecycle_tracking()
+        verifier_factory(plan, result)._assert_lifecycle_tracking()
 
 
-def test_assert_persisted_context_integrity_accepts_matching_snapshot():
+def test_assert_persisted_context_integrity_accepts_matching_snapshot(
+    verifier_factory: VerifierFactory,
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -2187,11 +2253,13 @@ def test_assert_persisted_context_integrity_accepts_matching_snapshot():
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     verifier._assert_persisted_context_integrity()
 
 
-def test_assert_runtime_expectations_resolutions_at_latest_checkpoint():
+def test_assert_runtime_expectations_resolutions_at_latest_checkpoint(
+    verifier_factory: VerifierFactory,
+):
     directives = [
         start := OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -2248,11 +2316,13 @@ def test_assert_runtime_expectations_resolutions_at_latest_checkpoint():
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     verifier._assert_runtime_expectations()
 
 
-def test_assert_runtime_expectations_workflow_steps_exact_at_latest_checkpoint():
+def test_assert_runtime_expectations_workflow_steps_exact_at_latest_checkpoint(
+    verifier_factory: VerifierFactory,
+):
     directives = [
         start := OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -2305,11 +2375,13 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_latest_checkpoint()
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     verifier._assert_runtime_expectations()
 
 
-def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage():
+def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage(
+    verifier_factory: VerifierFactory,
+):
     directives = [
         start := OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -2361,11 +2433,16 @@ def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage():
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     verifier._assert_runtime_expectations()
 
 
-def test_assert_runtime_expectations_persistence_at_checkpoint_index():
+def test_assert_runtime_expectations_persistence_at_checkpoint_index(
+    verifier_factory: VerifierFactory,
+):
+    identified_counter_minion_id = get_component_id(IdentifiedMinion)
+    assert identified_counter_minion_id is not None, "IdentifiedMinion must have a component id"
+
     directives = [
         start := OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -2426,11 +2503,13 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index():
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     verifier._assert_runtime_expectations()
 
 
-def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
+def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index(
+    verifier_factory: VerifierFactory,
+):
     directives = [
         start := OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -2500,11 +2579,13 @@ def test_assert_runtime_expectations_workflow_steps_exact_at_checkpoint_index():
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
     verifier._assert_runtime_expectations()
 
 
-def test_assert_runtime_expectations_fails_for_out_of_range_checkpoint_index():
+def test_assert_runtime_expectations_fails_for_out_of_range_checkpoint_index(
+    verifier_factory: VerifierFactory,
+):
     directives = [
         start := OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -2559,7 +2640,7 @@ def test_assert_runtime_expectations_fails_for_out_of_range_checkpoint_index():
             ),
         ],
     )
-    verifier = _mk_verifier(plan, result)
+    verifier = verifier_factory(plan, result)
 
     with pytest.raises(
         pytest.fail.Exception,
