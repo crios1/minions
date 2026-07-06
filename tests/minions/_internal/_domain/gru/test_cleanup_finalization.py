@@ -9,6 +9,11 @@ from minions._internal._domain.minion import Minion
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
+from tests.minions._internal._domain.gru.assertions import (
+    assert_orchestration_running,
+    assert_runtime_component_counts_exact,
+    assert_runtime_empty,
+)
 
 HEALTHY_MINION = "tests.assets.crash.minions.counter.healthy"
 HEALTHY_PIPELINE = "tests.assets.crash.pipelines.counter.healthy"
@@ -42,7 +47,7 @@ async def test_stop_committed_minion_shutdown_failure_discards_runtime_state_whe
             "tests.assets.crash.minions.counter.boom_shutdown."
             "AssetMinion.shutdown failed"
         )
-        assert gru.runtime_state_snapshot().is_empty
+        assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio
@@ -71,7 +76,7 @@ async def test_stop_unsubscribe_failure_discards_runtime_state_after_subscriptio
         assert not stop.success
         assert stop.reason == "unsubscribe boom"
         assert minion not in pipeline._mn_subs
-        assert gru.runtime_state_snapshot().is_empty
+        assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio
@@ -107,7 +112,7 @@ async def test_start_resource_startup_failure_discards_runtime_state_when_cleanu
             "tests.assets.crash.resources.boom_startup."
             "AssetResource.startup failed"
         )
-        assert gru.runtime_state_snapshot().is_empty
+        assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio
@@ -133,7 +138,7 @@ async def test_stop_resource_cleanup_failure_discards_runtime_state_when_no_shar
 
         assert not stop.success
         assert stop.reason == "resource cleanup boom"
-        assert gru.runtime_state_snapshot().is_empty
+        assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio
@@ -155,7 +160,7 @@ async def test_stop_resource_cleanup_failure_preserves_shared_runtime_state_for_
         )
         assert first.success
         assert second.success
-        assert gru._resource_reference_counts[FIXED_RESOURCE_ID] == 2
+        assert gru.runtime_state_snapshot().resource_refcount(FIXED_RESOURCE_ID) == 2
 
         async def failing_cleanup_resources(_resource_ids: set[str]) -> None:
             raise RuntimeError("resource cleanup boom")
@@ -165,10 +170,12 @@ async def test_stop_resource_cleanup_failure_preserves_shared_runtime_state_for_
 
         assert not stop.success
         assert stop.reason == "resource cleanup boom"
-        assert FIXED_RESOURCE_ID in gru._resources
-        assert gru._resource_reference_counts[FIXED_RESOURCE_ID] == 1
-        assert len(gru._minions_by_instance_id) == 1
-        assert second.orchestration_id in gru._minions_by_orchestration_id
+        snapshot = gru.runtime_state_snapshot()
+        assert FIXED_RESOURCE_ID in snapshot.resources
+        assert snapshot.resource_refcount(FIXED_RESOURCE_ID) == 1
+        assert second.orchestration_id is not None
+        assert_orchestration_running(gru, second.orchestration_id)
+        assert_runtime_component_counts_exact(gru, minions=1)
 
 
 @pytest.mark.asyncio
@@ -194,7 +201,7 @@ async def test_stop_pipeline_resource_cleanup_failure_discards_runtime_state_whe
 
         assert not stop.success
         assert stop.reason == "resource cleanup boom"
-        assert gru.runtime_state_snapshot().is_empty
+        assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio
@@ -211,8 +218,9 @@ async def test_start_subscribe_failure_preserves_shared_runtime_state_for_live_o
             "tests.assets.minions.two_steps.counter.with_fixed_resource",
         )
         assert first.success
-        assert FIXED_RESOURCE_ID in gru._resources
-        assert gru._resource_reference_counts[FIXED_RESOURCE_ID] == 1
+        snapshot = gru.runtime_state_snapshot()
+        assert FIXED_RESOURCE_ID in snapshot.resources
+        assert snapshot.resource_refcount(FIXED_RESOURCE_ID) == 1
 
         async def failing_cleanup_resources(_resource_ids: set[str]) -> None:
             raise RuntimeError("resource cleanup boom")
@@ -231,10 +239,12 @@ async def test_start_subscribe_failure_preserves_shared_runtime_state_for_live_o
 
         assert not second.success
         assert second.reason == "subscribe boom"
-        assert FIXED_RESOURCE_ID in gru._resources
-        assert gru._resource_reference_counts[FIXED_RESOURCE_ID] == 1
-        assert len(gru._minions_by_instance_id) == 1
-        assert first.orchestration_id in gru._minions_by_orchestration_id
+        snapshot = gru.runtime_state_snapshot()
+        assert FIXED_RESOURCE_ID in snapshot.resources
+        assert snapshot.resource_refcount(FIXED_RESOURCE_ID) == 1
+        assert first.orchestration_id is not None
+        assert_orchestration_running(gru, first.orchestration_id)
+        assert_runtime_component_counts_exact(gru, minions=1)
 
 
 @pytest.mark.asyncio
@@ -260,7 +270,8 @@ async def test_forced_resource_discard_releases_dependency_refcounts(
 
         await gru._discard_resource_runtime_state(parent_id)
 
-        assert parent_id not in gru._resources
-        assert dep_id not in gru._resources
-        assert parent_id not in gru._resource_reference_counts
-        assert dep_id not in gru._resource_reference_counts
+        snapshot = gru.runtime_state_snapshot()
+        assert parent_id not in snapshot.resources
+        assert dep_id not in snapshot.resources
+        assert snapshot.resource_refcount(parent_id) == 0
+        assert snapshot.resource_refcount(dep_id) == 0

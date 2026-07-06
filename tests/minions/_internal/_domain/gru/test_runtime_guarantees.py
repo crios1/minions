@@ -205,7 +205,7 @@ async def test_gru_serializes_concurrent_stops_for_same_orchestration(
         assert len(successes) == 1
         assert len(failures) == 1
         assert failures[0].reason == "Minion is no longer running."
-        assert gru.runtime_state_snapshot().is_empty
+        assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio
@@ -403,7 +403,7 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
 
         assert stop1.success
         assert stop2.success
-        assert gru.runtime_state_snapshot().is_empty
+        assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio
@@ -550,16 +550,20 @@ async def test_gru_injects_resource_dependencies_before_resource_startup(
         fixed_resource_id = gru._get_resource_identity(FixedResource)
         depends_on_fixed_resource_id = gru._get_resource_identity(ResourceDependingOnFixed)
         depends_on_fixed_resource_inst = gru._resources[depends_on_fixed_resource_id]
-        assert gru._pipeline_resource_map[pipeline_module_path] == {depends_on_fixed_resource_id}
-        assert gru._resource_dependencies[depends_on_fixed_resource_id] == {fixed_resource_id}
-        assert gru._resource_reference_counts[depends_on_fixed_resource_id] == 1
-        assert gru._resource_reference_counts[fixed_resource_id] == 1
+        assert_pipeline_resource_dependency_singletons(
+            gru,
+            pipeline_id=pipeline_module_path,
+            owner_resource_id=depends_on_fixed_resource_id,
+            dependency_resource_id=fixed_resource_id,
+            owner_refcount=1,
+            dependency_refcount=1,
+        )
         assert getattr(depends_on_fixed_resource_inst, "startup_value") == 123
 
         stop = await gru.stop_orchestration(result.orchestration_id or "")
 
         assert stop.success
-        assert gru.runtime_state_snapshot().is_empty
+        assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio
@@ -624,16 +628,19 @@ async def test_gru_starts_resource_with_multiple_resource_dependencies(
         assert compound.startup_value == 30
         assert compound.first is gru._resources[first_id]
         assert compound.second is gru._resources[second_id]
-        assert gru._pipeline_resource_map[CompoundDependencyPipeline.__module__] == {compound_id}
-        assert gru._resource_dependencies[compound_id] == {first_id, second_id}
-        assert gru._resource_reference_counts[compound_id] == 1
-        assert gru._resource_reference_counts[first_id] == 1
-        assert gru._resource_reference_counts[second_id] == 1
+        snapshot = gru.runtime_state_snapshot()
+        assert snapshot.resources_for_pipeline(CompoundDependencyPipeline.__module__) == {
+            compound_id
+        }
+        assert snapshot.dependencies_for_resource(compound_id) == {first_id, second_id}
+        assert snapshot.resource_refcount(compound_id) == 1
+        assert snapshot.resource_refcount(first_id) == 1
+        assert snapshot.resource_refcount(second_id) == 1
 
         stop = await gru.stop_orchestration(result.orchestration_id or "")
 
         assert stop.success
-        assert gru.runtime_state_snapshot().is_empty
+        assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio
@@ -675,7 +682,7 @@ async def test_gru_start_fails_clearly_for_circular_resource_dependencies(
 
         assert not result.success
         assert result.reason == "Cycle detected in Resource dependencies"
-        assert gru.runtime_state_snapshot().is_empty
+        assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio
@@ -805,7 +812,7 @@ async def test_gru_shutdown_waits_for_in_flight_start_orchestration(
 
         assert start_result.success
         assert shutdown_result.success
-        assert gru.runtime_state_snapshot().is_empty
+        assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio
@@ -847,7 +854,7 @@ async def test_gru_shutdown_waits_for_in_flight_stop_orchestration(
 
         assert stop_result.success
         assert shutdown_result.success
-        assert gru.runtime_state_snapshot().is_empty
+        assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio
@@ -987,4 +994,4 @@ async def test_gru_shutdown_serializes_concurrent_shutdown_calls(
         assert start_result.success
         assert shutdown_result_1.success
         assert shutdown_result_2.success
-        assert gru.runtime_state_snapshot().is_empty
+        assert_runtime_empty(gru)
