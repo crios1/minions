@@ -45,6 +45,16 @@ def test_component_id_decorators_validate_component_kind() -> None:
         resource_id(RESOURCE_COMPONENT_ID)(Pipeline)
 
 
+def test_component_id_decorators_require_string_ids() -> None:
+    with pytest.raises(TypeError, match="component id must be a string"):
+        resource_id(123)(Resource)  # pyright: ignore[reportArgumentType]
+
+
+def test_component_id_decorators_reject_empty_ids() -> None:
+    with pytest.raises(ValueError, match="component id must not be empty"):
+        resource_id("   ")(Resource)
+
+
 def test_component_id_decorators_require_uuid_ids() -> None:
     with pytest.raises(ValueError, match="component id"):
         resource_id("test.resource.alpha")(Resource)
@@ -62,3 +72,13 @@ def test_component_id_decorators_reject_duplicate_loaded_ids() -> None:
         @resource_id(RESOURCE_COMPONENT_ID)
         class SecondDuplicateResource(Resource):  # pyright: ignore[reportUnusedClass]
             pass
+
+
+def test_component_id_decorators_reject_conflicting_redecoration() -> None:
+    class MyResource(Resource):
+        pass
+
+    resource_id(RESOURCE_COMPONENT_ID)(MyResource)
+
+    with pytest.raises(ValueError, match="already has component id"):
+        resource_id("44444444-4444-4444-8444-44444444444d")(MyResource)
