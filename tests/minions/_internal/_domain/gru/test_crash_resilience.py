@@ -60,11 +60,6 @@ async def assert_gru_can_start_and_stop_known_good_orchestration(gru: Gru) -> No
     assert_runtime_empty(gru)
 
 
-def assert_counter(metrics: InMemoryMetrics, metric_name: str, labels: dict[str, str]) -> None:
-    sample = InMemoryMetrics.find_sample(metrics.snapshot_counters()[metric_name], labels)
-    assert sample["value"] >= 1
-
-
 @pytest.mark.asyncio
 async def test_start_orchestration_contains_state_store_resume_read_failure(
     managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
@@ -238,8 +233,7 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
             timeout=1.0,
             poll_interval=0.01,
         )
-        assert_counter(
-            metrics,
+        assert metrics.snapshot_counter_value(
             MINION_WORKFLOW_STEP_FAILED_TOTAL,
             {
                 LABEL_ORCHESTRATION_ID: expected_orchestration_id,
@@ -247,16 +241,15 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
                 LABEL_MINION_WORKFLOW_STEP: "step_1",
                 LABEL_ERROR_TYPE: "BoomError",
             },
-        )
-        assert_counter(
-            metrics,
+        ) >= 1
+        assert metrics.snapshot_counter_value(
             MINION_WORKFLOW_FAILED_TOTAL,
             {
                 LABEL_ORCHESTRATION_ID: expected_orchestration_id,
                 LABEL_MINION: boom_step_minion_id,
                 LABEL_ERROR_TYPE: "BoomError",
             },
-        )
+        ) >= 1
         stop = await gru.stop_orchestration(result.orchestration_id or "")
         assert stop.success
         assert_runtime_empty(gru)
@@ -286,14 +279,13 @@ async def test_pipeline_produce_event_failure_is_logged_measured_and_shutdown_is
             timeout=1.0,
             poll_interval=0.01,
         )
-        assert_counter(
-            metrics,
+        assert metrics.snapshot_counter_value(
             PIPELINE_ERROR_TOTAL,
             {
                 LABEL_PIPELINE: boom_produce_event_pipeline_id,
                 LABEL_ERROR_TYPE: "BoomError",
             },
-        )
+        ) >= 1
         shutdown = await gru.shutdown()
         assert shutdown.success
 
@@ -336,8 +328,7 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
         assert resource_failed is not None
         assert resource_failed.kwargs["error_type"] == "BoomError"
         assert resource_failed.kwargs["resource_method"] == "explode"
-        assert_counter(
-            metrics,
+        assert metrics.snapshot_counter_value(
             RESOURCE_ERROR_TOTAL,
             {
                 LABEL_RESOURCE: boom_method_resource_id,
@@ -347,7 +338,7 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
                 LABEL_ORCHESTRATION_ID: expected_orchestration_id,
                 LABEL_ERROR_TYPE: "BoomError",
             },
-        )
+        ) >= 1
         stop = await gru.stop_orchestration(result.orchestration_id or "")
         assert stop.success
         assert_runtime_empty(gru)

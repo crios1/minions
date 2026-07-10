@@ -321,17 +321,29 @@ class InMemoryMetrics(SpiedMetrics):
                 ]
         return out
 
-    def counter_value_total(self, metric_name: str) -> float:
+    def snapshot_counter_value_total(self, metric_name: str) -> float:
         return sum(sample["value"] for sample in self.snapshot_counters().get(metric_name, []))
 
-    def gauge_value_total(self, metric_name: str) -> float:
+    def snapshot_counter_value(self, metric_name: str, labels: dict[str, str]) -> float:
+        return self.find_sample(self.snapshot_counters()[metric_name], labels)["value"]
+
+    def snapshot_gauge_value_total(self, metric_name: str) -> float:
         return sum(sample["value"] for sample in self.snapshot_gauges().get(metric_name, []))
 
-    def histogram_count_total(self, metric_name: str) -> float:
+    def snapshot_gauge_value(self, metric_name: str, labels: dict[str, str]) -> float:
+        return self.find_sample(self.snapshot_gauges()[metric_name], labels)["value"]
+
+    def snapshot_histogram_count_total(self, metric_name: str) -> float:
         return sum(sample["count"] for sample in self.snapshot_histograms().get(metric_name, []))
 
-    def histogram_sum_total(self, metric_name: str) -> float:
+    def snapshot_histogram_count(self, metric_name: str, labels: dict[str, str]) -> float:
+        return self.find_sample(self.snapshot_histograms()[metric_name], labels)["count"]
+
+    def snapshot_histogram_sum_total(self, metric_name: str) -> float:
         return sum(sample["sum"] for sample in self.snapshot_histograms().get(metric_name, []))
+
+    def snapshot_histogram_sum(self, metric_name: str, labels: dict[str, str]) -> float:
+        return self.find_sample(self.snapshot_histograms()[metric_name], labels)["sum"]
 
     def snapshot(self) -> SnapshotResult:
         """Unified snapshot for tools/tests/shells.

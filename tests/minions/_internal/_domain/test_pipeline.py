@@ -113,12 +113,11 @@ async def test_pipeline_error_metric_includes_error_type(
     with pytest.raises(RuntimeError):
         await pipeline._mn_produce_and_handle_event()
 
-    counters = metrics.snapshot_counters()
-    sample = InMemoryMetrics.find_sample(
-        counters[PIPELINE_ERROR_TOTAL],
+    value = metrics.snapshot_counter_value(
+        PIPELINE_ERROR_TOTAL,
         {
             LABEL_PIPELINE: "test_pipeline",
             LABEL_ERROR_TYPE: "RuntimeError",
         },
     )
-    assert sample["value"] == 1.0
+    assert value == 1.0

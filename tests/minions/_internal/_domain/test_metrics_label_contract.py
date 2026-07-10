@@ -110,8 +110,8 @@ async def test_pipeline_runtime_metric_labels_match_contract(
 
     metrics.assert_recorded_labels_match_contract()
     # Resource metrics preserve the immediate caller: pipeline -> resource -> transitive resource.
-    serve_sample = InMemoryMetrics.find_sample(
-        metrics.snapshot_counters()[RESOURCE_SERVES_TOTAL],
+    serve_value = metrics.snapshot_counter_value(
+        RESOURCE_SERVES_TOTAL,
         {
             LABEL_RESOURCE: "contract-pipeline-event-resource",
             LABEL_RESOURCE_METHOD: "build_event",
@@ -120,9 +120,9 @@ async def test_pipeline_runtime_metric_labels_match_contract(
             LABEL_ORCHESTRATION_ID: "",
         },
     )
-    assert serve_sample["value"] == 1
-    nested_serve_sample = InMemoryMetrics.find_sample(
-        metrics.snapshot_counters()[RESOURCE_SERVES_TOTAL],
+    assert serve_value == 1
+    nested_serve_value = metrics.snapshot_counter_value(
+        RESOURCE_SERVES_TOTAL,
         {
             LABEL_RESOURCE: "contract-event-value-resource",
             LABEL_RESOURCE_METHOD: "read_value",
@@ -131,7 +131,7 @@ async def test_pipeline_runtime_metric_labels_match_contract(
             LABEL_ORCHESTRATION_ID: "",
         },
     )
-    assert nested_serve_sample["value"] == 1
+    assert nested_serve_value == 1
 
 
 @pytest.mark.asyncio
@@ -157,8 +157,8 @@ async def test_resource_runtime_metric_labels_match_contract(
         await resource._mn_run_with_tracking("fail", fail)
 
     metrics.assert_recorded_labels_match_contract()
-    serve_sample = InMemoryMetrics.find_sample(
-        metrics.snapshot_counters()[RESOURCE_SERVES_TOTAL],
+    serve_value = metrics.snapshot_counter_value(
+        RESOURCE_SERVES_TOTAL,
         {
             LABEL_RESOURCE: "contract-resource",
             LABEL_RESOURCE_METHOD: "succeed",
@@ -167,7 +167,7 @@ async def test_resource_runtime_metric_labels_match_contract(
             LABEL_ORCHESTRATION_ID: "",
         },
     )
-    assert serve_sample["value"] == 1
+    assert serve_value == 1
 
 
 @pytest.mark.asyncio

@@ -312,15 +312,10 @@ class TestUnit:
         with pytest.raises(asyncio.CancelledError):
             await monitor._monitor_process_resources(interval=0)
 
-        gsnap = metrics.snapshot_gauges()
-        assert InMemoryMetrics.find_sample(gsnap[SYSTEM_MEMORY_USED_PERCENT], {})["value"] == 55
-        assert InMemoryMetrics.find_sample(gsnap[SYSTEM_CPU_USED_PERCENT], {})["value"] == 20
-        assert (
-            InMemoryMetrics.find_sample(gsnap[PROCESS_MEMORY_USED_PERCENT], {})["value"] == 12
-        )  # 1234/10000*100
-        assert (
-            InMemoryMetrics.find_sample(gsnap[PROCESS_CPU_USED_PERCENT], {})["value"] == 2
-        )  # 16/8
+        assert metrics.snapshot_gauge_value(SYSTEM_MEMORY_USED_PERCENT, {}) == 55
+        assert metrics.snapshot_gauge_value(SYSTEM_CPU_USED_PERCENT, {}) == 20
+        assert metrics.snapshot_gauge_value(PROCESS_MEMORY_USED_PERCENT, {}) == 12
+        assert metrics.snapshot_gauge_value(PROCESS_CPU_USED_PERCENT, {}) == 2
 
         assert metrics.snapshot_counters() == {}
         assert metrics.snapshot_histograms() == {}
@@ -363,15 +358,10 @@ class TestUnit:
         assert warns[0].kwargs.get("system_memory_used_percent") in (95, 96)
 
         # Metrics reflect the last (normal) iteration too
-        gsnap = metrics.snapshot_gauges()
-        assert InMemoryMetrics.find_sample(gsnap[SYSTEM_MEMORY_USED_PERCENT], {})["value"] == 55
-        assert InMemoryMetrics.find_sample(gsnap[SYSTEM_CPU_USED_PERCENT], {})["value"] == 20
-        assert (
-            InMemoryMetrics.find_sample(gsnap[PROCESS_MEMORY_USED_PERCENT], {})["value"] == 10
-        )  # 1000/10000*100
-        assert (
-            InMemoryMetrics.find_sample(gsnap[PROCESS_CPU_USED_PERCENT], {})["value"] == 2
-        )  # int(8/4)
+        assert metrics.snapshot_gauge_value(SYSTEM_MEMORY_USED_PERCENT, {}) == 55
+        assert metrics.snapshot_gauge_value(SYSTEM_CPU_USED_PERCENT, {}) == 20
+        assert metrics.snapshot_gauge_value(PROCESS_MEMORY_USED_PERCENT, {}) == 10
+        assert metrics.snapshot_gauge_value(PROCESS_CPU_USED_PERCENT, {}) == 2
 
     @pytest.mark.asyncio
     async def test_monitor_failure_suppressed_then_recovery(
@@ -427,11 +417,10 @@ class TestUnit:
         assert isinstance(tb, str) and "RuntimeError: " in tb
 
         # After recovery, gauges should be present (from the success iteration)
-        gsnap = metrics.snapshot_gauges()
-        assert InMemoryMetrics.find_sample(gsnap[SYSTEM_MEMORY_USED_PERCENT], {})["value"] == 50
-        assert InMemoryMetrics.find_sample(gsnap[SYSTEM_CPU_USED_PERCENT], {})["value"] == 10
-        assert InMemoryMetrics.find_sample(gsnap[PROCESS_MEMORY_USED_PERCENT], {})["value"] == 10
-        assert InMemoryMetrics.find_sample(gsnap[PROCESS_CPU_USED_PERCENT], {})["value"] == 2
+        assert metrics.snapshot_gauge_value(SYSTEM_MEMORY_USED_PERCENT, {}) == 50
+        assert metrics.snapshot_gauge_value(SYSTEM_CPU_USED_PERCENT, {}) == 10
+        assert metrics.snapshot_gauge_value(PROCESS_MEMORY_USED_PERCENT, {}) == 10
+        assert metrics.snapshot_gauge_value(PROCESS_CPU_USED_PERCENT, {}) == 2
 
     @pytest.mark.asyncio
     async def test_shutdown_surfaces_internal_shutdown_errors(

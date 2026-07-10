@@ -38,9 +38,8 @@ class TestInMemoryMetrics:
         gauge.labels(region="us-east").set(7.0)
         gauge.labels(region="us-east").set(8.0)  # overwrite
 
-        samples = m.snapshot_gauges()["cpu_gauge"]
-        assert InMemoryMetrics.find_sample(samples, {"region": ""})["value"] == 10.5
-        assert InMemoryMetrics.find_sample(samples, {"region": "us-east"})["value"] == 8.0
+        assert m.snapshot_gauge_value("cpu_gauge", {"region": ""}) == 10.5
+        assert m.snapshot_gauge_value("cpu_gauge", {"region": "us-east"}) == 8.0
 
     def test_histogram_observe_aggregates(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """
@@ -62,7 +61,10 @@ class TestInMemoryMetrics:
             abs=1e-9,
         )
 
-    def test_counter_value_total_across_label_sets(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_snapshot_counter_value_total_across_label_sets(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         monkeypatch.setitem(METRIC_LABEL_NAMES, "requests_total", ["route"])
 
         metrics = InMemoryMetrics()
@@ -70,9 +72,25 @@ class TestInMemoryMetrics:
         counter.labels(route="/a").inc(2)
         counter.labels(route="/b").inc(3)
 
-        assert metrics.counter_value_total("requests_total") == 5
+        assert metrics.snapshot_counter_value_total("requests_total") == 5
 
-    def test_gauge_value_total_across_label_sets(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_snapshot_counter_value_selects_label_set(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setitem(METRIC_LABEL_NAMES, "requests_total", ["route"])
+
+        metrics = InMemoryMetrics()
+        counter = metrics._mn_get_metric_unsafe("counter", "requests_total")
+        counter.labels(route="/a").inc(2)
+        counter.labels(route="/b").inc(3)
+
+        assert metrics.snapshot_counter_value("requests_total", {"route": "/b"}) == 3
+
+    def test_snapshot_gauge_value_total_across_label_sets(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         monkeypatch.setitem(METRIC_LABEL_NAMES, "connections", ["host"])
 
         metrics = InMemoryMetrics()
@@ -80,9 +98,22 @@ class TestInMemoryMetrics:
         gauge.labels(host="a").set(4)
         gauge.labels(host="b").set(5)
 
-        assert metrics.gauge_value_total("connections") == 9
+        assert metrics.snapshot_gauge_value_total("connections") == 9
 
-    def test_histogram_count_total_across_label_sets(
+    def test_snapshot_gauge_value_selects_label_set(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setitem(METRIC_LABEL_NAMES, "connections", ["host"])
+
+        metrics = InMemoryMetrics()
+        gauge = metrics._mn_get_metric_unsafe("gauge", "connections")
+        gauge.labels(host="a").set(4)
+        gauge.labels(host="b").set(5)
+
+        assert metrics.snapshot_gauge_value("connections", {"host": "b"}) == 5
+
+    def test_snapshot_histogram_count_total_across_label_sets(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setitem(METRIC_LABEL_NAMES, "latency_seconds", ["route"])
@@ -93,9 +124,12 @@ class TestInMemoryMetrics:
         histogram.labels(route="/b").observe(0.2)
         histogram.labels(route="/b").observe(0.3)
 
-        assert metrics.histogram_count_total("latency_seconds") == 3
+        assert metrics.snapshot_histogram_count_total("latency_seconds") == 3
 
-    def test_histogram_sum_total_across_label_sets(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_snapshot_histogram_count_selects_label_set(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         monkeypatch.setitem(METRIC_LABEL_NAMES, "latency_seconds", ["route"])
 
         metrics = InMemoryMetrics()
@@ -104,10 +138,54 @@ class TestInMemoryMetrics:
         histogram.labels(route="/b").observe(0.2)
         histogram.labels(route="/b").observe(0.3)
 
-        assert metrics.histogram_sum_total("latency_seconds") == pytest.approx(  # pyright: ignore[reportUnknownMemberType]
+        assert metrics.snapshot_histogram_count("latency_seconds", {"route": "/b"}) == 2
+
+    def test_snapshot_histogram_sum_total_across_label_sets(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setitem(METRIC_LABEL_NAMES, "latency_seconds", ["route"])
+
+        metrics = InMemoryMetrics()
+        histogram = metrics._mn_get_metric_unsafe("histogram", "latency_seconds")
+        histogram.labels(route="/a").observe(0.1)
+        histogram.labels(route="/b").observe(0.2)
+        histogram.labels(route="/b").observe(0.3)
+
+        assert metrics.snapshot_histogram_sum_total("latency_seconds") == pytest.approx(  # pyright: ignore[reportUnknownMemberType]
             0.6,
             abs=1e-9,
         )
+
+    def test_snapshot_histogram_sum_selects_label_set(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setitem(METRIC_LABEL_NAMES, "latency_seconds", ["route"])
+
+        metrics = InMemoryMetrics()
+        histogram = metrics._mn_get_metric_unsafe("histogram", "latency_seconds")
+        histogram.labels(route="/a").observe(0.1)
+        histogram.labels(route="/b").observe(0.2)
+        histogram.labels(route="/b").observe(0.3)
+
+        assert metrics.snapshot_histogram_sum(
+            "latency_seconds",
+            {"route": "/b"},
+        ) == pytest.approx(0.5)  # pyright: ignore[reportUnknownMemberType]
+
+    def test_snapshot_counter_value_raises_when_labels_are_not_found(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setitem(METRIC_LABEL_NAMES, "requests_total", ["route"])
+
+        metrics = InMemoryMetrics()
+        counter = metrics._mn_get_metric_unsafe("counter", "requests_total")
+        counter.labels(route="/a").inc()
+
+        with pytest.raises(AssertionError, match="labels not found in snapshot"):
+            metrics.snapshot_counter_value("requests_total", {"route": "/missing"})
 
     def test_unbound_metric_methods_raise(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """
@@ -163,16 +241,18 @@ class TestInMemoryMetrics:
         ctr.labels(queue="alpha", status="fail").inc(2)
         ctr.labels(queue="beta", status="ok").inc()
 
-        samples = m.snapshot_counters()["jobs_total"]
-        assert (
-            InMemoryMetrics.find_sample(samples, {"queue": "alpha", "status": "ok"})["value"] == 5.0
-        )
-        assert (
-            InMemoryMetrics.find_sample(samples, {"queue": "alpha", "status": "fail"})["value"] == 2.0  # noqa: E501
-        )
-        assert (
-            InMemoryMetrics.find_sample(samples, {"queue": "beta", "status": "ok"})["value"] == 1.0
-        )
+        assert m.snapshot_counter_value(
+            "jobs_total",
+            {"queue": "alpha", "status": "ok"},
+        ) == 5.0
+        assert m.snapshot_counter_value(
+            "jobs_total",
+            {"queue": "alpha", "status": "fail"},
+        ) == 2.0
+        assert m.snapshot_counter_value(
+            "jobs_total",
+            {"queue": "beta", "status": "ok"},
+        ) == 1.0
 
     @pytest.mark.asyncio
     async def test_metrics_async_healthy(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -202,20 +282,18 @@ class TestInMemoryMetrics:
         await m._mn_observe("op_latency_seconds", 0.25, labels={"route": "/v1/foo"})
 
         # Assert counters
-        csnap = m.snapshot_counters()["jobs_total"]
-        assert (
-            InMemoryMetrics.find_sample(csnap, {"queue": "alpha", "status": "ok"})["value"] == 3.0
-        )
-        assert (
-            InMemoryMetrics.find_sample(csnap, {"queue": "beta", "status": "fail"})["value"] == 5.0
-        )
+        assert m.snapshot_counter_value(
+            "jobs_total",
+            {"queue": "alpha", "status": "ok"},
+        ) == 3.0
+        assert m.snapshot_counter_value(
+            "jobs_total",
+            {"queue": "beta", "status": "fail"},
+        ) == 5.0
 
         # Assert gauges
-        gsnap = m.snapshot_gauges()["cpu_used_percent"]
-        assert InMemoryMetrics.find_sample(gsnap, {"region": ""})["value"] == 11.0
-        assert (
-            InMemoryMetrics.find_sample(gsnap, {"region": "us"})["value"] == 9.0
-        )  # last write wins
+        assert m.snapshot_gauge_value("cpu_used_percent", {"region": ""}) == 11.0
+        assert m.snapshot_gauge_value("cpu_used_percent", {"region": "us"}) == 9.0
 
         # Assert histograms
         hsnap = m.snapshot_histograms()["op_latency_seconds"]
@@ -241,11 +319,14 @@ class TestInMemoryMetrics:
         # both present, order in kwargs shouldn't matter
         await m._mn_set("mem_used_bytes", 456.0, labels={"region": "us-east", "host": "h1"})
 
-        gsnap = m.snapshot_gauges()["mem_used_bytes"]
-        assert InMemoryMetrics.find_sample(gsnap, {"host": "h1", "region": ""})["value"] == 123.0
-        assert (
-            InMemoryMetrics.find_sample(gsnap, {"host": "h1", "region": "us-east"})["value"] == 456.0  # noqa: E501
-        )
+        assert m.snapshot_gauge_value(
+            "mem_used_bytes",
+            {"host": "h1", "region": ""},
+        ) == 123.0
+        assert m.snapshot_gauge_value(
+            "mem_used_bytes",
+            {"host": "h1", "region": "us-east"},
+        ) == 456.0
 
     @pytest.mark.asyncio
     async def test_metrics_async_concurrent_updates(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -263,5 +344,4 @@ class TestInMemoryMetrics:
         tasks = [asyncio.create_task(bump(200)) for _ in range(5)]
         await asyncio.gather(*tasks)
 
-        csnap = m.snapshot_counters()["events_total"]
-        assert InMemoryMetrics.find_sample(csnap, {"minion": "m1"})["value"] == 1000.0
+        assert m.snapshot_counter_value("events_total", {"minion": "m1"}) == 1000.0
