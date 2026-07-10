@@ -1331,7 +1331,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         self,
         timeout: float,
         *,
-        include_aux_tasks: bool = False,
+        include_service_tasks: bool = False,
         timeout_msg: str,
     ) -> None:
         deadline = asyncio.get_running_loop().time() + timeout
@@ -1340,7 +1340,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             async with self._mn_tasks_gate:
                 tasks = tuple(
                     self._mn_workflow_tasks | self._mn_service_tasks
-                    if include_aux_tasks
+                    if include_service_tasks
                     else self._mn_workflow_tasks
                 )
             if not tasks:
@@ -1365,6 +1365,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     async def _mn_wait_until_all_tasks_idle(self, timeout: float = 2.0) -> None:
         await self._mn_wait_until_tasks_idle(
             timeout,
-            include_aux_tasks=True,
+            include_service_tasks=True,
             timeout_msg=f"{type(self).__name__} tasks did not become idle within {timeout:.2f}s",
         )
