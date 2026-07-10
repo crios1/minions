@@ -26,7 +26,7 @@
     - `tests/assets/support/state_store_inmemory.py`: review the test-store move to the stored-row/blob model
     - `tests/minions/_internal/_framework/test_state_store_contract.py`: review the end-to-end contract expectations
     - `tests/minions/_internal/_framework/state_store_sqlite/`: review SQLite-specific backend expectations
-    - `tests/minions/_internal/_domain/test_minion_states.py`: review the replay test update for the new persisted payload shape
+    - `tests/minions/_internal/_domain/minion/test_workflow_replay.py`: review the replay test update for the new persisted payload shape
     - `tests/support/gru_scenario/verify.py`: review the verifier rename from minion-context lookup to orchestration-context lookup
     - `tests/support/gru_scenario/tests/test_verify.py`: review the matching verifier test updates
     - `benchmarks/minion_workflow_context_persistence.py`: review the canonical blob-path benchmark coverage
@@ -43,11 +43,11 @@
     - complete the robust reusable Gru testing routine
     - rewrite Gru tests to use the routine
     - integrate Gru tests from other files:
-      - test_minion_states.py is basically a Gru test where checking for counters should be handled by the reusable testing routine
+      - workflow outcome/metrics coverage in `tests/minions/_internal/_domain/minion/test_workflow_execution.py` should use the reusable Gru testing routine where it is exercising orchestration-level behavior
 
 - todo: ensure immediate user-facing domain objects (minion, pipeline, resource) and non-immediate user-facing domain objects (like StateStore, logger, metrics)...
   - 1: validate composition at class definition time and raise user friendly exception msg (good onboarding DX)
-    - ex: tests/minions/_internal/_domain/test_minion.py
+    - ex: `tests/minions/_internal/_domain/minion/test_subclassing_invalid.py`
   - 2: validate usage at orchestration time (like in test_gru.py or one of its subdirectories if it got reorganized)
     - ex: tests/minions/_internal/_domain/test_gru.py::TestValidUsage.test_gru_accepts_none_logger_metrics_state_store
   - note: for non-immediate user-facing domain objects, validating composition at class definition time may not always be possible, so it's fine to only validate at orchestration time if that's the case
