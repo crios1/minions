@@ -1,5 +1,6 @@
 # pyright: reportUnusedClass=false
 
+from dataclasses import is_dataclass
 from typing import Any, TypedDict
 
 import msgspec
@@ -12,6 +13,8 @@ from minions._internal._framework.metrics_constants import (
     PIPELINE_ERROR_TOTAL,
 )
 from minions._internal._utils.serialization import SERIALIZABLE_PRIMITIVE_TYPES
+from tests.assets.events.empty import EmptyEvent
+from tests.assets.events.simple import SimpleEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 
@@ -25,13 +28,35 @@ class MyTypedDictEvent(TypedDict):
 
 
 class TestPipelineSubclassingValid:
-    def test_valid_msgspec_struct_event_type(self):
-        class SomePipeline(Pipeline[MyStructEvent]):
-            async def produce_event(self):
-                return MyStructEvent(1)
+    def test_accepts_dataclass_event_type(self):
+        assert is_dataclass(SimpleEvent)
+
+        class DataclassEventPipeline(Pipeline[SimpleEvent]):
+            async def produce_event(self) -> SimpleEvent:
+                return SimpleEvent(timestamp=0)
+
+    def test_accepts_msgspec_struct_event_type(self):
+        assert issubclass(EmptyEvent, msgspec.Struct)
+
+        class MsgspecStructEventPipeline(Pipeline[EmptyEvent]):
+            async def produce_event(self) -> EmptyEvent:
+                return EmptyEvent()
 
 
 class TestPipelineSubclassingInvalid:
+    def test_reject_subclassing_pipeline_subclass(self):
+        class MyPipelineA(Pipeline[EmptyEvent]):
+            async def produce_event(self) -> EmptyEvent:
+                return EmptyEvent()
+
+        with pytest.raises(TypeError) as excinfo:
+            class MyPipelineB(MyPipelineA): ...
+
+        assert str(excinfo.value) == (
+            "MyPipelineB must subclass Pipeline directly. "
+            "Subclasses of Pipeline subclasses are not supported."
+        )
+
     def test_missing_event_type(self):
         with pytest.raises(TypeError) as excinfo:
             class SomePipeline(Pipeline):  # pyright: ignore[reportMissingTypeArgument]

@@ -1,6 +1,6 @@
 import asyncio
 from abc import abstractmethod
-from typing import Any, Generic, get_args, get_origin
+from typing import Any, ClassVar, Generic, get_args, get_origin
 
 from .._framework.async_lifecycle import LifecycleCallback
 from .._framework.async_service import AsyncService
@@ -25,6 +25,7 @@ from .types import T_Event
 
 class Pipeline(AsyncService, Generic[T_Event]):
     _mn_user_facing = True
+    _mn_defer_pipeline_setup: ClassVar[bool] = False
 
     def __init_subclass__(
         cls,
@@ -34,10 +35,27 @@ class Pipeline(AsyncService, Generic[T_Event]):
     ) -> None:
         super().__init_subclass__(**kwargs)
 
+        cls._mn_defer_pipeline_setup = bool(defer_pipeline_setup)
+
         if defer_pipeline_setup:
             return
 
         subclassing_ex = "(e.g. class MyPipeline(Pipeline[MyEvent]): ...)"
+
+        nearest_pipeline: type[Any] | None = None
+        for base in cls.__mro__[1:]:
+            if Pipeline in base.__mro__:
+                nearest_pipeline = base
+                break
+        if nearest_pipeline is None:
+            raise TypeError(f"{cls.__name__} must subclass Pipeline.")
+        if nearest_pipeline is not Pipeline and not getattr(
+            nearest_pipeline, "_mn_defer_pipeline_setup", False
+        ):
+            raise TypeError(
+                f"{cls.__name__} must subclass Pipeline directly. "
+                "Subclasses of Pipeline subclasses are not supported."
+            )
 
         bases = get_original_bases(cls)
         pipelineish = [
