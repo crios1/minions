@@ -124,6 +124,50 @@ class TestInvalidUsage:
             )
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("kwarg", "match"),
+        [
+            (
+                "workflow_persistence_retry_delay_seconds",
+                "must be a positive number of seconds",
+            ),
+            (
+                "workflow_persistence_retry_max_delay_seconds",
+                "must be a positive number of seconds",
+            ),
+            (
+                "workflow_persistence_retry_backoff_multiplier",
+                "must be a number greater than or equal to 1",
+            ),
+            (
+                "workflow_persistence_retry_jitter_ratio",
+                "must be a number between 0 and 1",
+            ),
+            (
+                "workflow_persistence_retry_warning_interval_seconds",
+                "must be a positive number of seconds",
+            ),
+            (
+                "workflow_persistence_retry_error_after_seconds",
+                "must be None or a non-negative number of seconds",
+            ),
+        ],
+    )
+    async def test_gru_rejects_boolean_workflow_persistence_retry_settings(
+        self,
+        kwarg: str,
+        match: str,
+    ) -> None:
+        kwargs: dict[str, Any] = {kwarg: True}
+        with pytest.raises(ValueError, match=match):
+            await Gru.create(
+                logger=NoOpLogger(),
+                metrics=NoOpMetrics(),
+                state_store=NoOpStateStore(),
+                **kwargs,
+            )
+
+    @pytest.mark.asyncio
     async def test_gru_raises_when_workflow_persistence_retry_max_delay_is_below_initial_delay(
         self,
     ) -> None:
