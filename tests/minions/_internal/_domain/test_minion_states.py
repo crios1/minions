@@ -1,5 +1,4 @@
 import asyncio
-from pprint import pprint
 from typing import Any, Callable
 
 import msgspec
@@ -41,67 +40,54 @@ from minions._internal._framework.minion_workflow_context_codec import (
 )
 from minions._internal._framework.state_store import StoredWorkflowContext
 from minions._internal._utils.serialization import serialize
+from tests.assets.contexts.empty import EmptyContext
+from tests.assets.events.empty import EmptyEvent
+from tests.assets.events.int_value import IntValueEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
+from tests.assets.support.state_store_failable import FailableStateStore
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
 
 
-class ReplayEvent(msgspec.Struct):
-    value: int
-
-
-class ReplayContext(msgspec.Struct):
-    count: int = 0
-
-
-class StringValueEvent(msgspec.Struct):
-    value: str
-
-
-class DictEvent(msgspec.Struct):
-    value: int = 0
-
-
-class DictContext(msgspec.Struct):
-    from_step_1: int | None = None
-    step2: str | None = None
-    bad: int | None = None
-
-
-class IdleWaitMinion(Minion[DictEvent, DictContext]):
+class NoOpMinion(Minion[EmptyEvent, EmptyContext]):
     @minion_step
     async def step_1(self):
         return
 
 
-async def _wait_for_event(event: asyncio.Event) -> None:
-    await event.wait()
-
-
-async def _tracked_wait_task(
-    m: Minion[Any, Any],
-    event: asyncio.Event,
-    *,
-    aux: bool,
-) -> asyncio.Task[None]:
-    task = asyncio.create_task(_wait_for_event(event))
-    async with m._mn_tasks_gate:
-        if aux:
-            m._mn_service_tasks.add(task)
-        else:
-            m._mn_workflow_tasks.add(task)
-    task.add_done_callback(
-        lambda t: (
-            m._mn_service_tasks.discard(t)
-            if aux
-            else m._mn_workflow_tasks.discard(t)
-        )
+def _make_no_op_minion(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> NoOpMinion:
+    return NoOpMinion(
+        minion_instance_id="dummy-minion-instance-id",
+        orchestration_id="dummy-orchestration-id",
+        minion_id="dummy-minion-id",
+        minion_config_id="dummy-minion-config-id",
+        pipeline_id="dummy-pipeline-id",
+        minion_module_path="dummy-minion-module-path",
+        config_path=None,
+        state_store=state_store,
+        metrics=metrics,
+        logger=logger,
     )
+
+
+async def _add_pending_service_task(
+    minion: Minion[Any, Any],
+    event: asyncio.Event,
+) -> asyncio.Task[None]:
+    async def _wait_for_event() -> None:
+        await event.wait()
+
+    task = asyncio.create_task(_wait_for_event())
+    async with minion._mn_tasks_gate:
+        minion._mn_service_tasks.add(task)
+
+    task.add_done_callback(lambda t: minion._mn_service_tasks.discard(t))
+
     return task
-
-
-async def _mark_minion_started_for_event_test(m: Minion[Any, Any]) -> None:
-    m._mn_started.set()
 
 
 async def _wait_until(
@@ -118,88 +104,21 @@ async def _wait_until(
     raise TimeoutError("condition did not become true before timeout")
 
 
-class FlakyPersistenceStateStore(InMemoryStateStore):
-    def __init__(self, logger: InMemoryLogger, *, fail_attempts: set[int]):
-        super().__init__(logger=logger)
-        self.fail_attempts = set(fail_attempts)
-        self.save_attempt_count = 0
-        self.failed_attempts: list[int] = []
-        self.persisted_next_step_indexes: list[int] = []
-
-    async def save_context(
-        self,
-        workflow_id: str,
-        orchestration_id: str,
-        context: bytes,
-    ) -> None:
-        self.save_attempt_count += 1
-        attempt = self.save_attempt_count
-        if attempt in self.fail_attempts:
-            self.failed_attempts.append(attempt)
-            raise RuntimeError(f"intentional save failure at attempt {attempt}")
-
-        decoded = deserialize_workflow_context_blob(context)
-        self.persisted_next_step_indexes.append(decoded.next_step_index)
-        await super().save_context(workflow_id, orchestration_id, context)
-
-
-class FlakyDeletePersistenceStateStore(InMemoryStateStore):
-    def __init__(self, logger: InMemoryLogger, *, fail_attempts: set[int]):
-        super().__init__(logger=logger)
-        self.fail_attempts = set(fail_attempts)
-        self.delete_attempt_count = 0
-        self.failed_attempts: list[int] = []
-
-    async def delete_context(self, workflow_id: str) -> None:
-        self.delete_attempt_count += 1
-        attempt = self.delete_attempt_count
-        if attempt in self.fail_attempts:
-            self.failed_attempts.append(attempt)
-            raise RuntimeError(f"intentional delete failure at attempt {attempt}")
-        await super().delete_context(workflow_id)
-
-
-def _sum_counter(metrics: InMemoryMetrics, metric_name: str) -> float:
-    return sum(sample["value"] for sample in metrics.snapshot_counters().get(metric_name, []))
-
-
-def _histogram_count(metrics: InMemoryMetrics, metric_name: str) -> float:
-    return sum(sample["count"] for sample in metrics.snapshot_histograms().get(metric_name, []))
-
-
-def _persistence_blocked_sample(metrics: InMemoryMetrics, labels: dict[str, str]):
-    return InMemoryMetrics.find_sample(
-        metrics.snapshot_gauges()[MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE],
-        labels,
-    )
-
-
 @pytest.mark.asyncio
-async def test_wait_until_tasks_idle_ignores_aux_tasks_by_default(
+async def test_wait_until_tasks_idle_ignores_service_tasks_by_default(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ):
-    m = IdleWaitMinion(
-        "iid",
-        "ck",
-        "tests.assets.idle_wait_minion",
-        None,
-        state_store,
-        metrics,
-        logger,
-        minion_id="tests.assets.idle_wait_minion",
-        minion_config_id="",
-        pipeline_id="test-pipeline",
-    )
+    minion = _make_no_op_minion(logger, metrics, state_store)
 
     event = asyncio.Event()
-    task = await _tracked_wait_task(m, event, aux=True)
+    task = await _add_pending_service_task(minion, event)
 
     try:
-        await m._mn_wait_until_tasks_idle(
+        await minion._mn_wait_until_tasks_idle(
             timeout=0.01,
-            timeout_msg="IdleWaitMinion tasks did not become idle within 0.01s",
+            timeout_msg="NoOpMinion tasks did not become idle within 0.01s",
         )
         assert not task.done()
     finally:
@@ -208,36 +127,25 @@ async def test_wait_until_tasks_idle_ignores_aux_tasks_by_default(
 
 
 @pytest.mark.asyncio
-async def test_wait_until_tasks_idle_can_include_aux_tasks(
+async def test_wait_until_tasks_idle_can_include_service_tasks(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ):
-    m = IdleWaitMinion(
-        "iid",
-        "ck",
-        "tests.assets.idle_wait_minion",
-        None,
-        state_store,
-        metrics,
-        logger,
-        minion_id="tests.assets.idle_wait_minion",
-        minion_config_id="",
-        pipeline_id="test-pipeline",
-    )
+    minion = _make_no_op_minion(logger, metrics, state_store)
 
     event = asyncio.Event()
-    task = await _tracked_wait_task(m, event, aux=True)
+    task = await _add_pending_service_task(minion, event)
 
     try:
         with pytest.raises(
             TimeoutError,
-            match="IdleWaitMinion tasks did not become idle within 0.01s",
+            match="NoOpMinion tasks did not become idle within 0.01s",
         ):
-            await m._mn_wait_until_tasks_idle(
+            await minion._mn_wait_until_tasks_idle(
                 timeout=0.01,
-                include_aux_tasks=True,
-                timeout_msg="IdleWaitMinion tasks did not become idle within 0.01s",
+                include_service_tasks=True,
+                timeout_msg="NoOpMinion tasks did not become idle within 0.01s",
             )
     finally:
         event.set()
@@ -251,7 +159,7 @@ async def test_workflow_aborted_increments_aborted_counter(
     state_store: InMemoryStateStore,
 ):
     # define a minion whose first step aborts
-    class AbortMinion(Minion[DictEvent, DictContext]):
+    class AbortMinion(Minion[EmptyEvent, EmptyContext]):
         @minion_step
         async def step_1(self):
             raise AbortWorkflow()
@@ -269,23 +177,19 @@ async def test_workflow_aborted_increments_aborted_counter(
         minion_config_id="",
         pipeline_id="test-pipeline",
     )
-    await _mark_minion_started_for_event_test(m)
-    await m._mn_handle_event(DictEvent())
+    m._mn_started.set()
+    await m._mn_handle_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
 
     # wait until the state store has recorded deletion (workflow finished)
     await state_store.wait_for_call("delete_context", count=1, timeout=2)
 
-    snap = metrics.snapshot()
-    pprint(snap)
-    counters = snap.get("counter", {})
+    counters = metrics.snapshot().get("counter", {})
     aborted_total = sum(s.get("value", 0) for s in counters.get(MINION_WORKFLOW_ABORTED_TOTAL, []))
 
     # workflow started should be incremented and aborted counter incremented
     assert counters.get(MINION_WORKFLOW_STARTED_TOTAL)
     assert aborted_total == 1
-
-    # no Gru instance created here
 
 
 @pytest.mark.asyncio
@@ -294,7 +198,7 @@ async def test_workflow_failed_increments_failed_counter(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ):
-    class FailMinion(Minion[DictEvent, DictContext]):
+    class FailMinion(Minion[EmptyEvent, EmptyContext]):
         @minion_step
         async def step_1(self):
             raise RuntimeError("boom")
@@ -311,40 +215,36 @@ async def test_workflow_failed_increments_failed_counter(
         minion_config_id="",
         pipeline_id="test-pipeline",
     )
-    await _mark_minion_started_for_event_test(m)
-    await m._mn_handle_event(DictEvent())
+    m._mn_started.set()
+    await m._mn_handle_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
 
     await state_store.wait_for_call("delete_context", count=1, timeout=2)
 
-    snap = metrics.snapshot()
-    pprint(snap)
-    counters = snap.get("counter", {})
+    counters = metrics.snapshot().get("counter", {})
     failed_total = sum(s.get("value", 0) for s in counters.get(MINION_WORKFLOW_FAILED_TOTAL, []))
 
     assert counters.get(MINION_WORKFLOW_STARTED_TOTAL)
     assert failed_total == 1
-    workflow_duration_sample = InMemoryMetrics.find_sample(
-        metrics.snapshot_histograms()[MINION_WORKFLOW_DURATION_SECONDS],
+    workflow_duration_count = metrics.snapshot_histogram_count(
+        MINION_WORKFLOW_DURATION_SECONDS,
         {
-            LABEL_ORCHESTRATION_ID: "ck",
-            LABEL_MINION: "tests.assets.fail_minion",
+            LABEL_ORCHESTRATION_ID: m._mn_orchestration_id,
+            LABEL_MINION: m._mn_minion_id,
             LABEL_STATUS: "failed",
         },
     )
-    step_duration_sample = InMemoryMetrics.find_sample(
-        metrics.snapshot_histograms()[MINION_WORKFLOW_STEP_DURATION_SECONDS],
+    step_duration_count = metrics.snapshot_histogram_count(
+        MINION_WORKFLOW_STEP_DURATION_SECONDS,
         {
-            LABEL_ORCHESTRATION_ID: "ck",
-            LABEL_MINION: "tests.assets.fail_minion",
+            LABEL_ORCHESTRATION_ID: m._mn_orchestration_id,
+            LABEL_MINION: m._mn_minion_id,
             LABEL_MINION_WORKFLOW_STEP: "step_1",
             LABEL_STATUS: "failed",
         },
     )
-    assert workflow_duration_sample["count"] == 1
-    assert step_duration_sample["count"] == 1
-
-    # nothing to shutdown (no Gru instance)
+    assert workflow_duration_count == 1
+    assert step_duration_count == 1
 
 
 @pytest.mark.asyncio
@@ -356,7 +256,7 @@ async def test_workflow_cancellation_records_interrupted_duration_status_and_kee
     step_started = asyncio.Event()
     step_can_finish = asyncio.Event()
 
-    class InterruptedMinion(Minion[DictEvent, DictContext]):
+    class InterruptedMinion(Minion[EmptyEvent, EmptyContext]):
         @minion_step
         async def step_1(self):
             step_started.set()
@@ -374,8 +274,8 @@ async def test_workflow_cancellation_records_interrupted_duration_status_and_kee
         minion_config_id="",
         pipeline_id="test-pipeline",
     )
-    await _mark_minion_started_for_event_test(m)
-    await m._mn_handle_event(DictEvent())
+    m._mn_started.set()
+    await m._mn_handle_event(EmptyEvent())
     await asyncio.wait_for(step_started.wait(), timeout=1.0)
     async with m._mn_tasks_gate:
         workflow_tasks = list(m._mn_workflow_tasks)
@@ -383,26 +283,26 @@ async def test_workflow_cancellation_records_interrupted_duration_status_and_kee
     workflow_tasks[0].cancel()
     await m._mn_wait_until_workflows_idle(timeout=2)
 
-    workflow_duration_sample = InMemoryMetrics.find_sample(
-        metrics.snapshot_histograms()[MINION_WORKFLOW_DURATION_SECONDS],
+    workflow_duration_count = metrics.snapshot_histogram_count(
+        MINION_WORKFLOW_DURATION_SECONDS,
         {
-            LABEL_ORCHESTRATION_ID: "ck",
-            LABEL_MINION: "tests.assets.interrupted_minion",
+            LABEL_ORCHESTRATION_ID: m._mn_orchestration_id,
+            LABEL_MINION: m._mn_minion_id,
             LABEL_STATUS: "interrupted",
         },
     )
-    step_duration_sample = InMemoryMetrics.find_sample(
-        metrics.snapshot_histograms()[MINION_WORKFLOW_STEP_DURATION_SECONDS],
+    step_duration_count = metrics.snapshot_histogram_count(
+        MINION_WORKFLOW_STEP_DURATION_SECONDS,
         {
-            LABEL_ORCHESTRATION_ID: "ck",
-            LABEL_MINION: "tests.assets.interrupted_minion",
+            LABEL_ORCHESTRATION_ID: m._mn_orchestration_id,
+            LABEL_MINION: m._mn_minion_id,
             LABEL_MINION_WORKFLOW_STEP: "step_1",
             LABEL_STATUS: "interrupted",
         },
     )
 
-    assert workflow_duration_sample["count"] == 1
-    assert step_duration_sample["count"] == 1
+    assert workflow_duration_count == 1
+    assert step_duration_count == 1
     assert len(await state_store.get_all_contexts()) == 1
 
 
@@ -413,20 +313,22 @@ async def test_workflow_persistence_continue_on_failure_advances_and_retries_at_
 ):
     step_calls: list[str] = []
 
-    class ContinueOnFailureMinion(Minion[DictEvent, DictContext]):
+    class ContinueOnFailureMinion(Minion[EmptyEvent, EmptyContext]):
         @minion_step
         async def step_1(self):
             step_calls.append("step_1")
+            store.save_failures.enable()
 
         @minion_step
         async def step_2(self):
             step_calls.append("step_2")
+            store.save_failures.disable()
 
         @minion_step
         async def step_3(self):
             step_calls.append("step_3")
 
-    store = FlakyPersistenceStateStore(logger=logger, fail_attempts={3})
+    store = FailableStateStore(logger=logger)
     m = ContinueOnFailureMinion(
         minion_instance_id="iid",
         orchestration_id="ck",
@@ -442,13 +344,16 @@ async def test_workflow_persistence_continue_on_failure_advances_and_retries_at_
         workflow_persistence_retry_delay_seconds=0.01,
     )
 
-    await _mark_minion_started_for_event_test(m)
-    await m._mn_handle_event(DictEvent())
+    m._mn_started.set()
+    await m._mn_handle_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
 
     assert step_calls == ["step_1", "step_2", "step_3"]
-    assert store.failed_attempts == [3]
-    assert 2 in store.persisted_next_step_indexes
+    assert store.save_failures.count == 1
+    assert any(
+        deserialize_workflow_context_blob(stored.context).next_step_index == 2
+        for stored in store.saved_context_history
+    )
     assert logger.has_log("Workflow continuing after persistence failure")
     failure_log = next(
         log for log in logger.logs if log.msg == "Workflow continuing after persistence failure"
@@ -460,13 +365,13 @@ async def test_workflow_persistence_continue_on_failure_advances_and_retries_at_
         == "Ensure the configured StateStore is available and can persist workflow context blobs."
     )
     assert failure_log.kwargs["error_type"] == "RuntimeError"
-    assert failure_log.kwargs[LABEL_STATE_STORE] == "FlakyPersistenceStateStore"
-    assert failure_log.kwargs["event_type"] == "DictEvent"
-    assert failure_log.kwargs["context_type"] == "DictContext"
-    assert _sum_counter(metrics, MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 5
-    assert _sum_counter(metrics, MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == 4
-    assert _sum_counter(metrics, MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL) == 1
-    assert _histogram_count(metrics, MINION_WORKFLOW_PERSISTENCE_DURATION_SECONDS) == 5
+    assert failure_log.kwargs[LABEL_STATE_STORE] == "FailableStateStore"
+    assert failure_log.kwargs["event_type"] == "EmptyEvent"
+    assert failure_log.kwargs["context_type"] == "EmptyContext"
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 5
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == 4
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL) == 1
+    assert metrics.snapshot_histogram_count_total(MINION_WORKFLOW_PERSISTENCE_DURATION_SECONDS) == 5
     assert MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE not in metrics.snapshot_gauges()
 
 
@@ -479,10 +384,11 @@ async def test_workflow_persistence_idle_until_persisted_blocks_next_step_until_
     step_1_done = asyncio.Event()
     step_2_started = asyncio.Event()
 
-    class IdleUntilPersistedMinion(Minion[DictEvent, DictContext]):
+    class IdleUntilPersistedMinion(Minion[EmptyEvent, EmptyContext]):
         @minion_step
         async def step_1(self):
             step_calls.append("step_1")
+            store.save_failures.enable()
             step_1_done.set()
 
         @minion_step
@@ -490,7 +396,7 @@ async def test_workflow_persistence_idle_until_persisted_blocks_next_step_until_
             step_calls.append("step_2")
             step_2_started.set()
 
-    store = FlakyPersistenceStateStore(logger=logger, fail_attempts={3, 4})
+    store = FailableStateStore(logger=logger)
     m = IdleUntilPersistedMinion(
         minion_instance_id="iid",
         orchestration_id="ck",
@@ -506,37 +412,38 @@ async def test_workflow_persistence_idle_until_persisted_blocks_next_step_until_
         workflow_persistence_retry_delay_seconds=0.01,
     )
 
-    await _mark_minion_started_for_event_test(m)
-    await m._mn_handle_event(DictEvent())
+    m._mn_started.set()
+    await m._mn_handle_event(EmptyEvent())
     await asyncio.wait_for(step_1_done.wait(), timeout=1.0)
-    await _wait_until(lambda: store.save_attempt_count >= 4, timeout=1.0)
+    await store.save_failures.wait_for(2)
 
     assert step_calls == ["step_1"]
     assert not step_2_started.is_set()
 
+    store.save_failures.disable()
     await asyncio.wait_for(step_2_started.wait(), timeout=1.0)
     await m._mn_wait_until_workflows_idle(timeout=2)
 
     assert step_calls == ["step_1", "step_2"]
-    assert store.failed_attempts == [3, 4]
+    assert store.save_failures.count == 2
     assert logger.has_log("Workflow idled waiting for persistence")
     assert logger.has_log("Workflow persistence resumed")
-    assert _sum_counter(metrics, MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 6
-    assert _sum_counter(metrics, MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == 4
-    assert _sum_counter(metrics, MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL) == 2
-    blocked_sample = _persistence_blocked_sample(
-        metrics,
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 6
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == 4
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL) == 2
+    blocked_value = metrics.snapshot_gauge_value(
+        MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
         {
-            LABEL_ORCHESTRATION_ID: "ck",
-            LABEL_MINION: "tests.assets.idle_persistence_minion",
+            LABEL_ORCHESTRATION_ID: m._mn_orchestration_id,
+            LABEL_MINION: m._mn_minion_id,
             LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "before_step",
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
             LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "save",
             LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: "idle-until-persisted",
-            LABEL_STATE_STORE: "FlakyPersistenceStateStore",
+            LABEL_STATE_STORE: "FailableStateStore",
         },
     )
-    assert blocked_sample["value"] == 0
+    assert blocked_value == 0
 
 
 @pytest.mark.asyncio
@@ -544,15 +451,26 @@ async def test_workflow_persistence_blocked_gauge_counts_concurrent_workflows_fo
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
 ):
-    step_calls = 0
+    step_calls: list[str] = []
+    step_1_count = 0
+    both_workflows_reached_step_1 = asyncio.Event()
 
-    class ConcurrentIdleUntilPersistedMinion(Minion[DictEvent, DictContext]):
+    class ConcurrentIdleUntilPersistedMinion(Minion[EmptyEvent, EmptyContext]):
         @minion_step
         async def step_1(self):
-            nonlocal step_calls
-            step_calls += 1
+            nonlocal step_1_count
+            step_calls.append("step_1")
+            step_1_count += 1
+            if step_1_count == 2:
+                store.save_failures.enable()
+                both_workflows_reached_step_1.set()
+            await both_workflows_reached_step_1.wait()
 
-    store = FlakyPersistenceStateStore(logger=logger, fail_attempts=set(range(3, 100)))
+        @minion_step
+        async def step_2(self):
+            step_calls.append("step_2")
+
+    store = FailableStateStore(logger=logger)
     m = ConcurrentIdleUntilPersistedMinion(
         minion_instance_id="iid",
         orchestration_id="ck",
@@ -569,27 +487,40 @@ async def test_workflow_persistence_blocked_gauge_counts_concurrent_workflows_fo
         workflow_persistence_retry_jitter_ratio=0.0,
     )
 
-    await _mark_minion_started_for_event_test(m)
-    await asyncio.gather(m._mn_handle_event(DictEvent()), m._mn_handle_event(DictEvent()))
-    await _wait_until(lambda: store.save_attempt_count >= 4, timeout=1.0)
+    m._mn_started.set()
+    await asyncio.gather(
+        m._mn_handle_event(EmptyEvent()),
+        m._mn_handle_event(EmptyEvent()),
+    )
+    await store.save_failures.wait_for(2)
 
     labels = {
-        LABEL_ORCHESTRATION_ID: "ck",
-        LABEL_MINION: "tests.assets.concurrent_idle_persistence_minion",
+        LABEL_ORCHESTRATION_ID: m._mn_orchestration_id,
+        LABEL_MINION: m._mn_minion_id,
         LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "before_step",
         LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
         LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "save",
         LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: "idle-until-persisted",
-        LABEL_STATE_STORE: "FlakyPersistenceStateStore",
+        LABEL_STATE_STORE: "FailableStateStore",
     }
-    assert _persistence_blocked_sample(metrics, labels)["value"] == 2
-    assert step_calls == 0
+    await _wait_until(
+        lambda: (
+            MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE in metrics.snapshot_gauges()
+            and metrics.snapshot_gauge_value(
+                MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
+                labels,
+            )
+            == 2
+        )
+    )
+    assert metrics.snapshot_gauge_value(MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE, labels) == 2
+    assert step_calls == ["step_1", "step_1"]
 
-    store.fail_attempts.clear()
+    store.save_failures.disable()
     await m._mn_wait_until_workflows_idle(timeout=2)
 
-    assert step_calls == 2
-    assert _persistence_blocked_sample(metrics, labels)["value"] == 0
+    assert step_calls.count("step_2") == 2
+    assert metrics.snapshot_gauge_value(MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE, labels) == 0
 
 
 @pytest.mark.asyncio
@@ -600,16 +531,17 @@ async def test_workflow_persistence_idle_until_persisted_relogs_and_escalates_su
     step_1_done = asyncio.Event()
     step_2_started = asyncio.Event()
 
-    class SustainedIdleMinion(Minion[DictEvent, DictContext]):
+    class SustainedIdleMinion(Minion[EmptyEvent, EmptyContext]):
         @minion_step
         async def step_1(self):
+            store.save_failures.enable()
             step_1_done.set()
 
         @minion_step
         async def step_2(self):
             step_2_started.set()
 
-    store = FlakyPersistenceStateStore(logger=logger, fail_attempts=set(range(3, 100)))
+    store = FailableStateStore(logger=logger)
     m = SustainedIdleMinion(
         minion_instance_id="iid",
         orchestration_id="ck",
@@ -630,8 +562,8 @@ async def test_workflow_persistence_idle_until_persisted_relogs_and_escalates_su
         workflow_persistence_retry_error_after_seconds=0.03,
     )
 
-    await _mark_minion_started_for_event_test(m)
-    await m._mn_handle_event(DictEvent())
+    m._mn_started.set()
+    await m._mn_handle_event(EmptyEvent())
     await asyncio.wait_for(step_1_done.wait(), timeout=1.0)
     assert not step_2_started.is_set()
 
@@ -654,7 +586,7 @@ async def test_workflow_persistence_idle_until_persisted_relogs_and_escalates_su
         0.04,
     }
 
-    store.fail_attempts.clear()
+    store.save_failures.disable()
     await asyncio.wait_for(step_2_started.wait(), timeout=1.0)
     await m._mn_wait_until_workflows_idle(timeout=2)
 
@@ -666,12 +598,13 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds(
 ):
     step_1_done = asyncio.Event()
 
-    class DeleteBlockingSuccessMinion(Minion[DictEvent, DictContext]):
+    class DeleteBlockingSuccessMinion(Minion[EmptyEvent, EmptyContext]):
         @minion_step
         async def step_1(self):
             step_1_done.set()
 
-    store = FlakyDeletePersistenceStateStore(logger=logger, fail_attempts={1, 2})
+    store = FailableStateStore(logger=logger)
+    store.delete_failures.enable()
     m = DeleteBlockingSuccessMinion(
         minion_instance_id="iid",
         orchestration_id="ck",
@@ -692,50 +625,57 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds(
         workflow_persistence_retry_error_after_seconds=None,
     )
 
-    await _mark_minion_started_for_event_test(m)
-    await m._mn_handle_event(DictEvent())
+    m._mn_started.set()
+    await m._mn_handle_event(EmptyEvent())
     await asyncio.wait_for(step_1_done.wait(), timeout=1.0)
-    await _wait_until(lambda: store.delete_attempt_count >= 2, timeout=1.0)
+    await store.delete_failures.wait_for(2)
 
-    assert not logger.has_log("Workflow succeeded")
-    assert _sum_counter(metrics, MINION_WORKFLOW_SUCCEEDED_TOTAL) == 0
-    blocked_sample = _persistence_blocked_sample(
-        metrics,
-        {
-            LABEL_ORCHESTRATION_ID: "ck",
-            LABEL_MINION: "tests.assets.delete_blocking_success_minion",
-            LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "workflow_resolve",
-            LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "delete",
-            LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "delete",
-            LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: "continue-on-failure",
-            LABEL_STATE_STORE: "FlakyDeletePersistenceStateStore",
-        },
+    blocked_labels = {
+        LABEL_ORCHESTRATION_ID: m._mn_orchestration_id,
+        LABEL_MINION: m._mn_minion_id,
+        LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "workflow_resolve",
+        LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "delete",
+        LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "delete",
+        LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: "continue-on-failure",
+        LABEL_STATE_STORE: "FailableStateStore",
+    }
+    await _wait_until(
+        lambda: (
+            MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE in metrics.snapshot_gauges()
+            and metrics.snapshot_gauge_value(
+                MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
+                blocked_labels,
+            )
+            == 1
+        )
     )
-    assert blocked_sample["value"] == 1
+    assert not logger.has_log("Workflow succeeded")
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_SUCCEEDED_TOTAL) == 0
+    blocked_value = metrics.snapshot_gauge_value(
+        MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
+        blocked_labels,
+    )
+    assert blocked_value == 1
 
-    store.fail_attempts.clear()
+    store.delete_failures.disable()
     await m._mn_wait_until_workflows_idle(timeout=2)
 
     assert logger.has_log("Workflow idled waiting for checkpoint delete")
     assert logger.has_log("Workflow checkpoint delete resumed")
     assert logger.has_log("Workflow succeeded")
-    assert _sum_counter(metrics, MINION_WORKFLOW_SUCCEEDED_TOTAL) == 1
-    assert _sum_counter(metrics, MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 5
-    assert _sum_counter(metrics, MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == 3
-    assert _sum_counter(metrics, MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL) == 2
-    blocked_sample = _persistence_blocked_sample(
-        metrics,
-        {
-            LABEL_ORCHESTRATION_ID: "ck",
-            LABEL_MINION: "tests.assets.delete_blocking_success_minion",
-            LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "workflow_resolve",
-            LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "delete",
-            LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "delete",
-            LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: "continue-on-failure",
-            LABEL_STATE_STORE: "FlakyDeletePersistenceStateStore",
-        },
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_SUCCEEDED_TOTAL) == 1
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 5
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == 3
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL) == 2
+    blocked_value = metrics.snapshot_gauge_value(
+        MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
+        blocked_labels,
     )
-    assert blocked_sample["value"] == 0
+    assert blocked_value == 0
+
+
+class SerializationFailureContext(msgspec.Struct):
+    bad: int | None = None
 
 
 @pytest.mark.asyncio
@@ -749,7 +689,7 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
     class UnserializableValue:
         pass
 
-    class NonRetryablePersistenceMinion(Minion[DictEvent, DictContext]):
+    class NonRetryablePersistenceMinion(Minion[EmptyEvent, SerializationFailureContext]):
         @minion_step
         async def step_1(self):
             step_calls.append("step_1")
@@ -774,8 +714,8 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
         workflow_persistence_retry_delay_seconds=0.01,
     )
 
-    await _mark_minion_started_for_event_test(m)
-    await m._mn_handle_event(DictEvent())
+    m._mn_started.set()
+    await m._mn_handle_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
 
     assert step_calls == ["step_1"]
@@ -783,7 +723,7 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
     assert len(persisted_contexts) == 1
     decoded = deserialize_workflow_context_blob(persisted_contexts[0].context)
     assert decoded.next_step_index == 0
-    assert decoded.context == DictContext()
+    assert decoded.context == SerializationFailureContext()
     failure_log = next(
         log
         for log in logger.logs
@@ -793,18 +733,16 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
     assert failure_log.kwargs["persistence_retryable"] is False
     assert failure_log.kwargs["persistence_retry_delay_seconds"] is None
     assert failure_log.kwargs["suggestion"] == (
-        "Ensure workflow event and context values are supported by the "
-        "Minions persistence codec."
+        "Ensure workflow event and context values are supported by the Minions persistence codec."
     )
-    assert _sum_counter(metrics, MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 3
-    assert _sum_counter(metrics, MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == 2
-    assert _sum_counter(metrics, MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL) == 1
-    failure_samples = metrics.snapshot_counters()[MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL]
-    failure_sample = InMemoryMetrics.find_sample(
-        failure_samples,
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 3
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == 2
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL) == 1
+    failure_value = metrics.snapshot_counter_value(
+        MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL,
         {
-            LABEL_ORCHESTRATION_ID: "ck",
-            LABEL_MINION: "tests.assets.non_retryable_persistence_minion",
+            LABEL_ORCHESTRATION_ID: m._mn_orchestration_id,
+            LABEL_MINION: m._mn_minion_id,
             LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "before_step",
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
             LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "serialize",
@@ -813,7 +751,7 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
             LABEL_STATE_STORE: "InMemoryStateStore",
         },
     )
-    assert failure_sample["value"] == 1
+    assert failure_value == 1
 
 
 @pytest.mark.asyncio
@@ -822,34 +760,15 @@ async def test_minion_startup_replays_only_own_contexts(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ):
-    class ReplayMinion(Minion[DictEvent, DictContext]):
+    class ReplayMinion(Minion[EmptyEvent, EmptyContext]):
         @minion_step
         async def step_1(self):
             return
 
     minion_module_path = "mock.module_path.minion_replay_shared"
-    own_orchestration_id = f"{minion_module_path}|cfg-own|tests.assets.pipelines.shared"
-    other_orchestration_id = f"{minion_module_path}|cfg-other|tests.assets.pipelines.shared"
-
-    await state_store._mn_serialize_and_save_context(
-        MinionWorkflowContext(
-            orchestration_id=own_orchestration_id,
-            workflow_id="wf-own",
-            event=DictEvent(),
-            context=DictContext(),
-            context_cls=DictContext,
-        )
-    )
-    await state_store._mn_serialize_and_save_context(
-        MinionWorkflowContext(
-            orchestration_id=other_orchestration_id,
-            workflow_id="wf-other",
-            event=DictEvent(),
-            context=DictContext(),
-            context_cls=DictContext,
-        )
-    )
-
+    pipeline_id = "tests.assets.pipelines.shared"
+    own_orchestration_id = f"{minion_module_path}|cfg-own|{pipeline_id}"
+    other_orchestration_id = f"{minion_module_path}|cfg-other|{pipeline_id}"
     m = ReplayMinion(
         "iid",
         own_orchestration_id,
@@ -860,12 +779,31 @@ async def test_minion_startup_replays_only_own_contexts(
         logger,
         minion_id=minion_module_path,
         minion_config_id="cfg-own",
-        pipeline_id="tests.assets.pipelines.shared",
+        pipeline_id=pipeline_id,
+    )
+
+    await state_store._mn_serialize_and_save_context(
+        MinionWorkflowContext(
+            orchestration_id=own_orchestration_id,
+            workflow_id="wf-own",
+            event=EmptyEvent(),
+            context=EmptyContext(),
+            context_cls=EmptyContext,
+        )
+    )
+    await state_store._mn_serialize_and_save_context(
+        MinionWorkflowContext(
+            orchestration_id=other_orchestration_id,
+            workflow_id="wf-other",
+            event=EmptyEvent(),
+            context=EmptyContext(),
+            context_cls=EmptyContext,
+        )
     )
 
     replayed_ids: list[str] = []
 
-    async def _capture(ctx: MinionWorkflowContext[DictEvent, DictContext]) -> None:
+    async def _capture(ctx: MinionWorkflowContext[EmptyEvent, EmptyContext]) -> None:
         replayed_ids.append(ctx.workflow_id)
 
     m._mn_run_workflow = _capture  # type: ignore[method-assign]
@@ -883,6 +821,12 @@ async def test_minion_startup_replays_typed_msgspec_event_and_context(
 ):
     observed: list[tuple[type, type, int, int]] = []
 
+    class ReplayEvent(msgspec.Struct):
+        value: int
+
+    class ReplayContext(msgspec.Struct):
+        count: int = 0
+
     class ReplayMinion(Minion[ReplayEvent, ReplayContext]):
         @minion_step
         async def step_1(self):
@@ -895,27 +839,30 @@ async def test_minion_startup_replays_typed_msgspec_event_and_context(
                 )
             )
 
+    minion_module_path = "mock.module_path.minion_replay_typed"
+    pipeline_id = "tests.assets.pipelines.shared"
+    orchestration_id = f"{minion_module_path}|cfg|{pipeline_id}"
+    m = ReplayMinion(
+        "iid",
+        orchestration_id,
+        minion_module_path,
+        None,
+        state_store,
+        metrics,
+        logger,
+        minion_id=minion_module_path,
+        minion_config_id="cfg",
+        pipeline_id=pipeline_id,
+    )
+
     await state_store._mn_serialize_and_save_context(
         MinionWorkflowContext(
-            orchestration_id="mock.module_path.minion_replay_typed|cfg|tests.assets.pipelines.shared",
+            orchestration_id=orchestration_id,
             workflow_id="wf-typed",
             event=ReplayEvent(7),
             context=ReplayContext(11),
             context_cls=ReplayContext,
         )
-    )
-
-    m = ReplayMinion(
-        "iid",
-        "mock.module_path.minion_replay_typed|cfg|tests.assets.pipelines.shared",
-        "mock.module_path.minion_replay_typed",
-        None,
-        state_store,
-        metrics,
-        logger,
-        minion_id="mock.module_path.minion_replay_typed",
-        minion_config_id="cfg",
-        pipeline_id="tests.assets.pipelines.shared",
     )
 
     await m._mn_startup()
@@ -931,7 +878,10 @@ async def test_runtime_guard_rejects_nested_step_invocation_via_indirect_call(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ):
-    class NestedCallMinion(Minion[DictEvent, DictContext]):
+    class NestedCallContext(msgspec.Struct):
+        step2: str | None = None
+
+    class NestedCallMinion(Minion[EmptyEvent, NestedCallContext]):
         @minion_step
         async def step_1(self):
             nested = getattr(self, "step_2")
@@ -954,8 +904,8 @@ async def test_runtime_guard_rejects_nested_step_invocation_via_indirect_call(
         pipeline_id="test-pipeline",
     )
 
-    await _mark_minion_started_for_event_test(m)
-    await m._mn_handle_event(DictEvent())
+    m._mn_started.set()
+    await m._mn_handle_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
     await state_store.wait_for_call("delete_context", count=1, timeout=2)
 
@@ -982,7 +932,10 @@ async def test_minion_steps_can_access_event_and_context_across_workflow_steps(
 ):
     observed: list[tuple[str, int, object]] = []
 
-    class AccessMinion(Minion[DictEvent, DictContext]):
+    class AccessContext(msgspec.Struct):
+        from_step_1: int | None = None
+
+    class AccessMinion(Minion[IntValueEvent, AccessContext]):
         @minion_step
         async def step_1(self):
             event_value = self.event.value
@@ -1006,8 +959,8 @@ async def test_minion_steps_can_access_event_and_context_across_workflow_steps(
         minion_config_id="",
         pipeline_id="test-pipeline",
     )
-    await _mark_minion_started_for_event_test(m)
-    await m._mn_handle_event(DictEvent(value=10))
+    m._mn_started.set()
+    await m._mn_handle_event(IntValueEvent(value=10))
     await m._mn_wait_until_workflows_idle(timeout=2)
     await state_store.wait_for_call("delete_context", count=1, timeout=2)
 
@@ -1025,7 +978,10 @@ async def test_resumed_workflow_step_can_access_event_and_context_from_state_sto
 ):
     observed: list[tuple[str, int, object]] = []
 
-    class ResumeAccessMinion(Minion[DictEvent, DictContext]):
+    class ResumeAccessContext(msgspec.Struct):
+        from_step_1: int | None = None
+
+    class ResumeAccessMinion(Minion[IntValueEvent, ResumeAccessContext]):
         @minion_step
         async def step_1(self):
             pytest.fail("step_1 should not execute when replay resumes at next_step_index=1")
@@ -1035,28 +991,31 @@ async def test_resumed_workflow_step_can_access_event_and_context_from_state_sto
             event_value = self.event.value
             observed.append(("step_2", event_value, self.context.from_step_1))
 
-    await state_store._mn_serialize_and_save_context(
-        MinionWorkflowContext(
-            orchestration_id="tests.assets.resume_access_minion|cfg|tests.assets.pipelines.resume",
-            workflow_id="wf-resume",
-            event=DictEvent(value=7),
-            context=DictContext(from_step_1=8),
-            context_cls=DictContext,
-            next_step_index=1,
-        )
-    )
-
+    minion_module_path = "tests.assets.resume_access_minion"
+    pipeline_id = "tests.assets.pipelines.resume"
+    orchestration_id = f"{minion_module_path}|cfg|{pipeline_id}"
     m = ResumeAccessMinion(
         "iid",
-        "tests.assets.resume_access_minion|cfg|tests.assets.pipelines.resume",
-        "tests.assets.resume_access_minion",
+        orchestration_id,
+        minion_module_path,
         None,
         state_store,
         metrics,
         logger,
-        minion_id="tests.assets.resume_access_minion",
-        minion_config_id="",
-        pipeline_id="test-pipeline",
+        minion_id=minion_module_path,
+        minion_config_id="cfg",
+        pipeline_id=pipeline_id,
+    )
+
+    await state_store._mn_serialize_and_save_context(
+        MinionWorkflowContext(
+            orchestration_id=orchestration_id,
+            workflow_id="wf-resume",
+            event=IntValueEvent(value=7),
+            context=ResumeAccessContext(from_step_1=8),
+            context_cls=ResumeAccessContext,
+            next_step_index=1,
+        )
     )
 
     await m._mn_startup()
@@ -1074,29 +1033,43 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
 ):
     observed: list[int] = []
 
-    class ReplayWithInvalidContextMinion(Minion[DictEvent, DictContext]):
+    class ReplayWithInvalidContextMinion(Minion[IntValueEvent, EmptyContext]):
         @minion_step
         async def step_1(self):
             observed.append(self.event.value)
 
     minion_module_path = "tests.assets.replay_with_invalid_context_minion"
+    pipeline_id = "tests.assets.pipelines.invalid"
+    orchestration_id = f"{minion_module_path}|cfg|{pipeline_id}"
+    m = ReplayWithInvalidContextMinion(
+        "iid",
+        orchestration_id,
+        minion_module_path,
+        None,
+        state_store,
+        metrics,
+        logger,
+        minion_id=minion_module_path,
+        minion_config_id="cfg",
+        pipeline_id=pipeline_id,
+    )
 
-    valid_context: MinionWorkflowContext[DictEvent, DictContext] = MinionWorkflowContext(
-        orchestration_id=f"{minion_module_path}|cfg|tests.assets.pipelines.invalid",
+    valid_context: MinionWorkflowContext[IntValueEvent, EmptyContext] = MinionWorkflowContext(
+        orchestration_id=orchestration_id,
         workflow_id="wf-valid",
-        event=DictEvent(value=123),
-        context=DictContext(),
-        context_cls=DictContext,
+        event=IntValueEvent(value=123),
+        context=EmptyContext(),
+        context_cls=EmptyContext,
         next_step_index=0,
         started_at=None,
         error_msg=None,
     )
-    invalid_context: MinionWorkflowContext[DictEvent, DictContext] = MinionWorkflowContext(
-        orchestration_id=f"{minion_module_path}|cfg|tests.assets.pipelines.invalid",
+    invalid_context: MinionWorkflowContext[IntValueEvent, EmptyContext] = MinionWorkflowContext(
+        orchestration_id=orchestration_id,
         workflow_id="wf-invalid",
-        event=DictEvent(value=456),
-        context=DictContext(),
-        context_cls=DictContext,
+        event=IntValueEvent(value=456),
+        context=EmptyContext(),
+        context_cls=EmptyContext,
         next_step_index=0,
         started_at=None,
         error_msg=None,
@@ -1115,26 +1088,13 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
 
     state_store._contexts["wf-valid"] = StoredWorkflowContext(
         workflow_id="wf-valid",
-        orchestration_id=f"{minion_module_path}|cfg|tests.assets.pipelines.invalid",
+        orchestration_id=orchestration_id,
         context=serialize_persisted_workflow_context(valid_context),
     )
     state_store._contexts["wf-invalid"] = StoredWorkflowContext(
         workflow_id="wf-invalid",
-        orchestration_id=f"{minion_module_path}|cfg|tests.assets.pipelines.invalid",
+        orchestration_id=orchestration_id,
         context=serialize(invalid_payload),
-    )
-
-    m = ReplayWithInvalidContextMinion(
-        "iid",
-        f"{minion_module_path}|cfg|tests.assets.pipelines.invalid",
-        minion_module_path,
-        None,
-        state_store,
-        metrics,
-        logger,
-        minion_id=minion_module_path,
-        minion_config_id="cfg",
-        pipeline_id="tests.assets.pipelines.invalid",
     )
 
     await m._mn_startup()
@@ -1155,29 +1115,45 @@ async def test_minion_startup_replay_fails_closed_on_context_type_mismatch(
 ):
     observed: list[int] = []
 
-    class ReplayWithMismatchedContextMinion(Minion[DictEvent, DictContext]):
+    class StringValueEvent(msgspec.Struct):
+        value: str
+
+    class ReplayWithMismatchedContextMinion(Minion[IntValueEvent, EmptyContext]):
         @minion_step
         async def step_1(self):
             observed.append(self.event.value)
 
     minion_module_path = "tests.assets.replay_with_mismatched_context_minion"
-    orchestration_id = f"{minion_module_path}|cfg|tests.assets.pipelines.invalid"
+    pipeline_id = "tests.assets.pipelines.invalid"
+    orchestration_id = f"{minion_module_path}|cfg|{pipeline_id}"
+    m = ReplayWithMismatchedContextMinion(
+        "iid",
+        orchestration_id,
+        minion_module_path,
+        None,
+        state_store,
+        metrics,
+        logger,
+        minion_id=minion_module_path,
+        minion_config_id="cfg",
+        pipeline_id=pipeline_id,
+    )
 
-    valid_context: MinionWorkflowContext[DictEvent, DictContext] = MinionWorkflowContext(
+    valid_context: MinionWorkflowContext[IntValueEvent, EmptyContext] = MinionWorkflowContext(
         orchestration_id=orchestration_id,
         workflow_id="wf-valid",
-        event=DictEvent(value=123),
-        context=DictContext(),
-        context_cls=DictContext,
+        event=IntValueEvent(value=123),
+        context=EmptyContext(),
+        context_cls=EmptyContext,
         next_step_index=0,
     )
-    mismatched_context: MinionWorkflowContext[StringValueEvent, DictContext] = (
+    mismatched_context: MinionWorkflowContext[StringValueEvent, EmptyContext] = (
         MinionWorkflowContext(
             orchestration_id=orchestration_id,
             workflow_id="wf-mismatch",
             event=StringValueEvent(value="not-an-int"),
-            context=DictContext(),
-            context_cls=DictContext,
+            context=EmptyContext(),
+            context_cls=EmptyContext,
             next_step_index=0,
         )
     )
@@ -1191,19 +1167,6 @@ async def test_minion_startup_replay_fails_closed_on_context_type_mismatch(
         workflow_id="wf-mismatch",
         orchestration_id=orchestration_id,
         context=serialize_persisted_workflow_context(mismatched_context),
-    )
-
-    m = ReplayWithMismatchedContextMinion(
-        "iid",
-        orchestration_id,
-        minion_module_path,
-        None,
-        state_store,
-        metrics,
-        logger,
-        minion_id=minion_module_path,
-        minion_config_id="cfg",
-        pipeline_id="tests.assets.pipelines.invalid",
     )
 
     with pytest.raises(Exception) as exc_info:
