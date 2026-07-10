@@ -57,7 +57,57 @@ class TestInMemoryMetrics:
         samples = m.snapshot_histograms()["latency_seconds"]
         stats = InMemoryMetrics.find_sample(samples, {"route": "/v1/foo"})
         assert stats["count"] == 3.0
-        assert abs(stats["sum"] - 0.400) < 1e-9
+        assert stats["sum"] == pytest.approx(  # pyright: ignore[reportUnknownMemberType]
+            0.400,
+            abs=1e-9,
+        )
+
+    def test_counter_value_total_across_label_sets(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setitem(METRIC_LABEL_NAMES, "requests_total", ["route"])
+
+        metrics = InMemoryMetrics()
+        counter = metrics._mn_get_metric_unsafe("counter", "requests_total")
+        counter.labels(route="/a").inc(2)
+        counter.labels(route="/b").inc(3)
+
+        assert metrics.counter_value_total("requests_total") == 5
+
+    def test_gauge_value_total_across_label_sets(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setitem(METRIC_LABEL_NAMES, "connections", ["host"])
+
+        metrics = InMemoryMetrics()
+        gauge = metrics._mn_get_metric_unsafe("gauge", "connections")
+        gauge.labels(host="a").set(4)
+        gauge.labels(host="b").set(5)
+
+        assert metrics.gauge_value_total("connections") == 9
+
+    def test_histogram_count_total_across_label_sets(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setitem(METRIC_LABEL_NAMES, "latency_seconds", ["route"])
+
+        metrics = InMemoryMetrics()
+        histogram = metrics._mn_get_metric_unsafe("histogram", "latency_seconds")
+        histogram.labels(route="/a").observe(0.1)
+        histogram.labels(route="/b").observe(0.2)
+        histogram.labels(route="/b").observe(0.3)
+
+        assert metrics.histogram_count_total("latency_seconds") == 3
+
+    def test_histogram_sum_total_across_label_sets(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setitem(METRIC_LABEL_NAMES, "latency_seconds", ["route"])
+
+        metrics = InMemoryMetrics()
+        histogram = metrics._mn_get_metric_unsafe("histogram", "latency_seconds")
+        histogram.labels(route="/a").observe(0.1)
+        histogram.labels(route="/b").observe(0.2)
+        histogram.labels(route="/b").observe(0.3)
+
+        assert metrics.histogram_sum_total("latency_seconds") == pytest.approx(  # pyright: ignore[reportUnknownMemberType]
+            0.6,
+            abs=1e-9,
+        )
 
     def test_unbound_metric_methods_raise(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """
@@ -171,7 +221,10 @@ class TestInMemoryMetrics:
         hsnap = m.snapshot_histograms()["op_latency_seconds"]
         stats = InMemoryMetrics.find_sample(hsnap, {"route": "/v1/foo"})
         assert stats["count"] == 3.0
-        assert abs(stats["sum"] - 0.50) < 1e-9
+        assert stats["sum"] == pytest.approx(  # pyright: ignore[reportUnknownMemberType]
+            0.50,
+            abs=1e-9,
+        )
 
     @pytest.mark.asyncio
     async def test_metrics_async_label_defaults_and_ordering(

@@ -321,6 +321,18 @@ class InMemoryMetrics(SpiedMetrics):
                 ]
         return out
 
+    def counter_value_total(self, metric_name: str) -> float:
+        return sum(sample["value"] for sample in self.snapshot_counters().get(metric_name, []))
+
+    def gauge_value_total(self, metric_name: str) -> float:
+        return sum(sample["value"] for sample in self.snapshot_gauges().get(metric_name, []))
+
+    def histogram_count_total(self, metric_name: str) -> float:
+        return sum(sample["count"] for sample in self.snapshot_histograms().get(metric_name, []))
+
+    def histogram_sum_total(self, metric_name: str) -> float:
+        return sum(sample["sum"] for sample in self.snapshot_histograms().get(metric_name, []))
+
     def snapshot(self) -> SnapshotResult:
         """Unified snapshot for tools/tests/shells.
 
