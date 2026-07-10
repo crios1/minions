@@ -1,5 +1,9 @@
 # pyright: reportUnusedClass=false
 
+import asyncio
+import os
+import sys
+
 import pytest
 
 from minions import Resource
@@ -43,3 +47,49 @@ def test_subclass_rejects_asyncio_create_task_in_method():
                     ...
 
                 asyncio.create_task(async_do())
+
+
+def test_subclass_rejects_asyncio_ensure_future_in_method():
+    with pytest.raises(
+        UnsupportedUserCode,
+        match=r"Unsupported use of `asyncio\.ensure_future`",
+    ):
+
+        class MyResource(Resource):
+            async def do(self):
+                async def async_do(): ...
+
+                asyncio.ensure_future(async_do())
+
+
+def test_subclass_rejects_sys_exit_in_method():
+    with pytest.raises(
+        UnsupportedUserCode,
+        match=r"Unsupported use of `sys\.exit`",
+    ):
+
+        class MyResource(Resource):
+            async def do(self):
+                sys.exit()
+
+
+def test_subclass_rejects_os_exit_in_method():
+    with pytest.raises(
+        UnsupportedUserCode,
+        match=r"Unsupported use of `os\._exit`",
+    ):
+
+        class MyResource(Resource):
+            async def do(self):
+                os._exit(1)
+
+
+def test_subclass_rejects_indirect_reserved_attribute_assignment():
+    with pytest.raises(
+        UnsupportedUserCode,
+        match=r"Invalid attribute assignment: `self\._mn_value`",
+    ):
+
+        class MyResource(Resource):
+            async def do(self):
+                setattr(self, "_mn_value", 1)
