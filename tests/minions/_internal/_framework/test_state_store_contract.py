@@ -1,4 +1,3 @@
-import os
 import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
@@ -70,13 +69,13 @@ def mk_ctx(
 
 
 @pytest_asyncio.fixture(params=["inmemory", "sqlite"], ids=["inmemory", "sqlite"])
-async def store_and_logger(
+async def state_store_under_contract(
     request: pytest.FixtureRequest,
     tmp_path: Path,
     logger: InMemoryLogger,
 ) -> AsyncGenerator[tuple[StateStore, InMemoryLogger], None]:
     if request.param == "sqlite":
-        db_path = os.path.join(str(tmp_path), "state.db")
+        db_path = str(tmp_path / "state.db")
         store = SQLiteStateStore(db_path=db_path, logger=logger)
         await logger._mn_startup()
         await store._mn_startup()
@@ -95,9 +94,9 @@ async def store_and_logger(
 
 
 async def test_state_store_starts_empty(
-    store_and_logger: tuple[StateStore, InMemoryLogger],
+    state_store_under_contract: tuple[StateStore, InMemoryLogger],
 ):
-    store, _ = store_and_logger
+    store, _ = state_store_under_contract
 
     ctxs = await store._mn_get_all_decoded_contexts()
 
@@ -105,9 +104,9 @@ async def test_state_store_starts_empty(
 
 
 async def test_state_store_roundtrips_runtime_context(
-    store_and_logger: tuple[StateStore, InMemoryLogger],
+    state_store_under_contract: tuple[StateStore, InMemoryLogger],
 ):
-    store, _ = store_and_logger
+    store, _ = state_store_under_contract
     expected = mk_ctx(
         workflow_id="wf-roundtrip",
         event={"i": 1},
@@ -124,9 +123,9 @@ async def test_state_store_roundtrips_runtime_context(
 
 
 async def test_state_store_overwrites_existing_workflow_context(
-    store_and_logger: tuple[StateStore, InMemoryLogger],
+    state_store_under_contract: tuple[StateStore, InMemoryLogger],
 ):
-    store, _ = store_and_logger
+    store, _ = state_store_under_contract
     workflow_id = "wf-overwrite"
     original = mk_ctx(
         workflow_id=workflow_id,
@@ -158,9 +157,9 @@ async def test_state_store_overwrites_existing_workflow_context(
 
 
 async def test_state_store_deletes_existing_workflow_context(
-    store_and_logger: tuple[StateStore, InMemoryLogger],
+    state_store_under_contract: tuple[StateStore, InMemoryLogger],
 ):
-    store, _ = store_and_logger
+    store, _ = state_store_under_contract
     workflow_id = "wf-delete"
     context = mk_ctx(
         workflow_id=workflow_id,
@@ -177,9 +176,9 @@ async def test_state_store_deletes_existing_workflow_context(
 
 
 async def test_state_store_delete_missing_workflow_context_is_noop(
-    store_and_logger: tuple[StateStore, InMemoryLogger],
+    state_store_under_contract: tuple[StateStore, InMemoryLogger],
 ):
-    store, _ = store_and_logger
+    store, _ = state_store_under_contract
 
     await store._mn_delete_context("wf-missing")
     ctxs = await store._mn_get_all_decoded_contexts()
@@ -191,9 +190,9 @@ async def test_state_store_delete_missing_workflow_context_is_noop(
 
 
 async def test_state_store_get_all_contexts_returns_blob_records(
-    store_and_logger: tuple[StateStore, InMemoryLogger],
+    state_store_under_contract: tuple[StateStore, InMemoryLogger],
 ):
-    store, _ = store_and_logger
+    store, _ = state_store_under_contract
     expected = mk_ctx(
         workflow_id="wf-record",
         event={"i": 1},
@@ -224,9 +223,9 @@ async def test_state_store_get_all_contexts_returns_blob_records(
 
 
 async def test_state_store_get_contexts_for_orchestration_filters_by_identity(
-    store_and_logger: tuple[StateStore, InMemoryLogger],
+    state_store_under_contract: tuple[StateStore, InMemoryLogger],
 ):
-    store, _ = store_and_logger
+    store, _ = state_store_under_contract
     target_module_path = "app.minion.shared"
     target_a = mk_ctx(
         config="cfg-a",
@@ -276,11 +275,11 @@ async def test_state_store_get_contexts_for_orchestration_filters_by_identity(
     ids=["dataclass", "msgspec-struct"],
 )
 async def test_state_store_get_contexts_for_orchestration_restores_typed_models(
-    store_and_logger: tuple[StateStore, InMemoryLogger],
+    state_store_under_contract: tuple[StateStore, InMemoryLogger],
     event: Any,
     context: Any,
 ):
-    store, _ = store_and_logger
+    store, _ = state_store_under_contract
     event_cls = cast(type[Any], type(event))
     context_cls = cast(type[Any], type(context))
     expected = mk_ctx(
@@ -308,9 +307,9 @@ async def test_state_store_get_contexts_for_orchestration_restores_typed_models(
 
 
 async def test_state_store_skips_legacy_unversioned_blob(
-    store_and_logger: tuple[StateStore, InMemoryLogger],
+    state_store_under_contract: tuple[StateStore, InMemoryLogger],
 ):
-    store, logger = store_and_logger
+    store, logger = state_store_under_contract
     legacy_payload = serialize_workflow_context(
         mk_ctx(
             workflow_id="wf-legacy-v1",
@@ -334,9 +333,9 @@ async def test_state_store_skips_legacy_unversioned_blob(
 
 
 async def test_state_store_skips_unknown_schema_blob(
-    store_and_logger: tuple[StateStore, InMemoryLogger],
+    state_store_under_contract: tuple[StateStore, InMemoryLogger],
 ):
-    store, logger = store_and_logger
+    store, logger = state_store_under_contract
     unknown_ctx = mk_ctx(
         workflow_id="wf-unknown",
         event={"i": 100},
