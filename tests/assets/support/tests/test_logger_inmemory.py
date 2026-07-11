@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from minions._internal._framework.logger import CRITICAL, DEBUG, ERROR, INFO, WARNING
@@ -5,7 +7,7 @@ from tests.assets.support.logger_inmemory import InMemoryLogger
 
 
 @pytest.mark.asyncio
-async def test_inmemory_logger_logs_and_queries():
+async def test_logs_and_queries():
     logger = InMemoryLogger(level=DEBUG)
 
     await logger.log(DEBUG, "debug msg", foo=1)
@@ -40,7 +42,7 @@ async def test_inmemory_logger_logs_and_queries():
 
 
 @pytest.mark.asyncio
-async def test_inmemory_logger_wait_for_log_matches_kwargs():
+async def test_wait_for_log_matches_kwargs():
     logger = InMemoryLogger(level=DEBUG)
 
     async def log_later() -> None:
@@ -51,3 +53,45 @@ async def test_inmemory_logger_wait_for_log_matches_kwargs():
 
     assert await logger.wait_for_log("first", log_kwargs={"status": "right"})
     assert not await logger.wait_for_log("first", log_kwargs={"status": "missing"}, timeout=0.001)
+
+
+@pytest.mark.asyncio
+async def test_wait_for_log_is_notified_by_matching_log():
+    logger = InMemoryLogger(level=DEBUG)
+    waiter = asyncio.create_task(
+        logger.wait_for_log("target", min_level=WARNING, log_kwargs={"status": "ready"})
+    )
+    await asyncio.sleep(0)
+
+    await logger.log(INFO, "target", status="ready")
+    await logger.log(WARNING, "target", status="waiting")
+    assert not waiter.done()
+
+    await logger.log(WARNING, "target", status="ready")
+
+    assert await waiter
+
+
+@pytest.mark.asyncio
+async def test_wait_for_log_does_not_miss_log_recorded_before_waiting():
+    logger = InMemoryLogger(level=DEBUG)
+    waiter = asyncio.create_task(logger.wait_for_log("target", timeout=0.1))
+
+    await logger.log(INFO, "target")
+
+    assert await waiter
+
+
+@pytest.mark.asyncio
+async def test_wait_for_log_notifies_concurrent_waiters_for_their_own_matches():
+    logger = InMemoryLogger(level=DEBUG)
+    first_waiter = asyncio.create_task(logger.wait_for_log("first"))
+    second_waiter = asyncio.create_task(logger.wait_for_log("second"))
+    await asyncio.sleep(0)
+
+    await logger.log(INFO, "first")
+    assert await first_waiter
+    assert not second_waiter.done()
+
+    await logger.log(INFO, "second")
+    assert await second_waiter

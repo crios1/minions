@@ -54,7 +54,7 @@ async def assert_gru_can_start_and_stop_known_good_orchestration(gru: Gru) -> No
     assert result.success
     assert result.orchestration_id is not None
     assert isinstance(gru._logger, InMemoryLogger)
-    assert await gru._logger.wait_for_log("Workflow succeeded", timeout=1.0, poll_interval=0.01)
+    assert await gru._logger.wait_for_log("Workflow succeeded", timeout=1.0)
     stop = await gru.stop_orchestration(result.orchestration_id)
     assert stop.success
     assert_runtime_empty(gru)
@@ -230,7 +230,6 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
             "Workflow failed",
             log_kwargs={"error_type": "BoomError"},
             timeout=1.0,
-            poll_interval=0.01,
         )
         assert metrics.snapshot_counter_value(
             MINION_WORKFLOW_STEP_FAILED_TOTAL,
@@ -276,7 +275,6 @@ async def test_pipeline_produce_event_failure_is_logged_measured_and_shutdown_is
             "Gru runtime task failure observed",
             log_kwargs={"component": "pipeline"},
             timeout=1.0,
-            poll_interval=0.01,
         )
         assert metrics.snapshot_counter_value(
             PIPELINE_ERROR_TOTAL,
@@ -321,7 +319,6 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
             "Workflow failed",
             log_kwargs={"error_type": "BoomError"},
             timeout=1.0,
-            poll_interval=0.01,
         )
         resource_failed = logger.find_first_log("Resource method failed")
         assert resource_failed is not None

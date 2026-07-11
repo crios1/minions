@@ -425,7 +425,6 @@ class TestValidUsage:
                     "minion_config_id": CONFIG_ID,
                 },
                 timeout=1.0,
-                poll_interval=0.01,
             )
             assert await logger.wait_for_log(
                 "Workflow succeeded",
@@ -437,7 +436,6 @@ class TestValidUsage:
                     "minion_config_id": CONFIG_ID,
                 },
                 timeout=1.0,
-                poll_interval=0.01,
             )
             assert await state_store.get_contexts_for_orchestration(expected_orchestration_id) == []
 

@@ -21,9 +21,12 @@ class InMemoryLogger(SpiedLogger):
     def __init__(self, level: int = INFO) -> None:
         super().__init__(level)
         self.logs: list[Log] = []
+        self._log_recorded = asyncio.Condition()
 
     async def log(self, level: int, msg: str, **kwargs: Any) -> None:
-        self.logs.append(Log(level, msg, kwargs))
+        async with self._log_recorded:
+            self.logs.append(Log(level, msg, kwargs))
+            self._log_recorded.notify_all()
 
     def assert_recorded_logs_match_contracts(self) -> None:
         assert_each_log_matches_exactly_one_contract(self.logs)
@@ -57,15 +60,21 @@ class InMemoryLogger(SpiedLogger):
         substr: str,
         timeout: float = 0.5,
         min_level: int = DEBUG,
-        poll_interval: float = 0.005,
         log_kwargs: dict[str, object] | None = None,
     ) -> bool:
-        deadline = asyncio.get_running_loop().time() + timeout
-        while asyncio.get_running_loop().time() < deadline:
-            if self.has_log(substr, min_level=min_level, log_kwargs=log_kwargs):
-                return True
-            await asyncio.sleep(poll_interval)
-        return False
+        def matching_log_exists() -> bool:
+            return self.has_log(substr, min_level=min_level, log_kwargs=log_kwargs)
+
+        if matching_log_exists():
+            return True
+
+        try:
+            async with asyncio.timeout(timeout):
+                async with self._log_recorded:
+                    await self._log_recorded.wait_for(matching_log_exists)
+        except TimeoutError:
+            return False
+        return True
 
     def logged_before(self, substr_1: str, substr_2: str, min_level: int = DEBUG) -> bool:
         def _find_idx(substr: str) -> int | None:
