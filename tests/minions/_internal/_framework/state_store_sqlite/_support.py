@@ -29,7 +29,6 @@ def mk_ctx(
         workflow_id=f"wf-{i}",
         event={"i": i},
         context={"p": "x" * size},
-        context_cls=dict,
         next_step_index=i,
         started_at=time.time(),
         error_msg=None,

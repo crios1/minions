@@ -2245,7 +2245,6 @@ def test_assert_persisted_context_integrity_accepts_matching_snapshot(
                             workflow_id="workflow-1",
                             event=CounterEvent(seq=1),
                             context=CounterContext(),
-                            context_cls=CounterContext,
                             next_step_index=0,
                         ),
                     )

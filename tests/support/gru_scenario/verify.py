@@ -507,11 +507,11 @@ class ScenarioVerifier:
                             f"workflow_id={ctx.workflow_id!r}, "
                             f"expected {context_cls.__name__}, got {type(ctx.context).__name__}."
                         )
-                    if ctx.context_cls is not context_cls:
+                    if type(ctx.context) is not context_cls:
                         pytest.fail(
-                            "Persisted context context_cls mismatch: "
+                            "Persisted context type mismatch: "
                             f"workflow_id={ctx.workflow_id!r}, "
-                            f"expected {context_cls!r}, got {ctx.context_cls!r}."
+                            f"expected {context_cls!r}, got {type(ctx.context)!r}."
                         )
                     if ctx.next_step_index < 0 or ctx.next_step_index >= workflow_len:
                         pytest.fail(

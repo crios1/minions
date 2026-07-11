@@ -110,7 +110,6 @@ async def test_start_orchestration_fails_closed_on_persisted_workflow_decode_mis
         workflow_id="wf-incompatible",
         event=SimpleEvent(timestamp=1.0),
         context=SimpleContext(value=1),
-        context_cls=SimpleContext,
         next_step_index=0,
     )
     state_store._contexts["wf-incompatible"] = StoredWorkflowContext(

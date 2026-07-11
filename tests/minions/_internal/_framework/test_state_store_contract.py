@@ -55,7 +55,6 @@ def mk_ctx(
     pipeline: str = "app.pipeline",
     event: Any | None = None,
     context: Any | None = None,
-    context_cls: type[Any] = dict,
     next_step_index: int = 0,
     error_msg: str | None = None,
 ) -> MinionWorkflowContext[Any, Any]:
@@ -64,7 +63,6 @@ def mk_ctx(
         workflow_id=workflow_id,
         event={} if event is None else event,
         context={} if context is None else context,
-        context_cls=context_cls,
         next_step_index=next_step_index,
         started_at=time.time(),
         error_msg=error_msg,
@@ -154,7 +152,7 @@ async def test_state_store_overwrites_existing_workflow_context(
     assert actual.orchestration_id == updated.orchestration_id
     assert actual.event == updated.event
     assert actual.context == updated.context
-    assert actual.context_cls is dict
+    assert type(actual.context) is dict
     assert actual.next_step_index == updated.next_step_index
     assert actual.error_msg == updated.error_msg
 
@@ -216,7 +214,7 @@ async def test_state_store_get_all_contexts_returns_blob_records(
     assert persisted.workflow_id == expected.workflow_id
     assert not hasattr(persisted, "minion_module_path")
     assert not hasattr(persisted, "minion_id")
-    assert persisted.context_cls == "builtins.dict"
+    assert persisted.context_type_path == "builtins.dict"
     assert persisted.schema_version == CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION
     decoded = deserialize_workflow_context_blob(ctx.context)
     assert decoded == expected
@@ -289,7 +287,6 @@ async def test_state_store_get_contexts_for_orchestration_restores_typed_models(
         workflow_id="wf-typed",
         event=event,
         context=context,
-        context_cls=context_cls,
         next_step_index=2,
     )
 
@@ -350,7 +347,7 @@ async def test_state_store_skips_unknown_schema_blob(
         workflow_id=unknown_ctx.workflow_id,
         event=unknown_ctx.event,
         context=unknown_ctx.context,
-        context_cls="builtins.dict",
+        context_type_path="builtins.dict",
         next_step_index=unknown_ctx.next_step_index,
         error_msg=unknown_ctx.error_msg,
         started_at=unknown_ctx.started_at,

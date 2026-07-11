@@ -3,16 +3,18 @@
 This module has two related but distinct shapes:
 
 * `serialize_workflow_context` / `deserialize_workflow_context` operate on the
-  normalized dict adapter shape used by codec tests and schema normalization.
+  normalized, self-describing dict adapter shape used by codec tests and schema
+  normalization. Untyped hydration imports the persisted `context_type_path`.
 * `serialize_persisted_workflow_context` / `deserialize_workflow_context_blob`
-  operate on the canonical bytes stored by `StateStore` implementations.
+  operate on the canonical bytes stored by `StateStore` implementations. Typed
+  replay uses the current Minion's declared context class as authoritative.
 """
 
 import importlib
 from collections.abc import Mapping
 from dataclasses import fields
 from functools import lru_cache
-from typing import Any, TypeAlias, overload
+from typing import Any, TypeAlias, cast, overload
 
 import msgspec
 
@@ -25,7 +27,10 @@ from .._utils.serialization import deserialize, serialize
 CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION = 2
 
 _WORKFLOW_CONTEXT_FIELD_NAMES = {field.name for field in fields(MinionWorkflowContext)}
-_CODEC_METADATA_KEYS = {"schema_version"}
+_SERIALIZED_WORKFLOW_CONTEXT_METADATA_FIELD_NAMES = {
+    "context_type_path",
+    "schema_version",
+}
 
 # Naming rule: keep codec-only helpers neutral, but keep explicit `Minion...`
 # names for structs that mirror the runtime/domain envelope shape.
@@ -36,13 +41,17 @@ _MsgspecFieldSpec: TypeAlias = str | tuple[str, Any] | tuple[str, Any, Any]
 
 
 class PersistedMinionWorkflowContext(msgspec.Struct, forbid_unknown_fields=True):
-    """Versioned StateStore payload for one runtime MinionWorkflowContext."""
+    """Versioned StateStore payload for one runtime MinionWorkflowContext.
+
+    ``context_type_path`` is importable metadata for untyped hydration, not a
+    runtime class object and not the authoritative schema during typed replay.
+    """
 
     orchestration_id: str
     workflow_id: str
     event: object
     context: object
-    context_cls: str
+    context_type_path: str
     next_step_index: int = 0
     error_msg: str | None = None
     started_at: float | None = None
@@ -87,12 +96,12 @@ def _normalize_workflow_context_data(
     return dict(data)
 
 
-def _serialize_context_cls(t: type) -> str:
+def _serialize_context_type_path(t: type[Any]) -> str:
     return f"{t.__module__}.{t.__qualname__}"
 
 
 @lru_cache(maxsize=128)
-def _deserialize_context_cls(s: str) -> type:
+def _deserialize_context_type_path(s: str) -> type:
     module, _, cls = s.rpartition(".")
     return getattr(importlib.import_module(module), cls)
 
@@ -129,16 +138,15 @@ def serialize_workflow_context(ctx: MinionWorkflowContext[Any, Any]) -> Workflow
     versioned msgspec payload and encodes it to bytes.
     """
 
-    workflow_context_data = {
+    context_type = cast(type[Any], type(ctx.context))
+    workflow_context_data: WorkflowContextData = {
         **ctx.as_dict(),
+        "context_type_path": _serialize_context_type_path(context_type),
         "schema_version": CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION,
     }
     data = _normalize_workflow_context_data(workflow_context_data)
     store_payload: WorkflowContextData = {}
     for key, value in data.items():
-        if key == "context_cls" and isinstance(value, type):
-            store_payload[key] = _serialize_context_cls(value)
-            continue
         if isinstance(value, type):
             raise WorkflowContextSchemaError(
                 f"Unexpected type-valued workflow context field during serialization: {key!r}."
@@ -153,12 +161,13 @@ def persist_workflow_context(
 ) -> PersistedMinionWorkflowContext:
     """Build the versioned StateStore payload object for a runtime context."""
 
+    context_type = cast(type[Any], type(ctx.context))
     return PersistedMinionWorkflowContext(
         orchestration_id=ctx.orchestration_id,
         workflow_id=ctx.workflow_id,
         event=ctx.event,
         context=ctx.context,
-        context_cls=_serialize_context_cls(ctx.context_cls),
+        context_type_path=_serialize_context_type_path(context_type),
         next_step_index=ctx.next_step_index,
         error_msg=ctx.error_msg,
         started_at=ctx.started_at,
@@ -177,6 +186,7 @@ def serialize_persisted_workflow_context(
 def restore_workflow_context_types(
     ctx: MinionWorkflowContext[Any, Any],
     *,
+    context_cls: type,
     event_cls: Any | None = None,
 ) -> MinionWorkflowContext[Any, Any]:
     event = ctx.event
@@ -184,7 +194,7 @@ def restore_workflow_context_types(
 
     context = _restore_typed_value(
         ctx.context,
-        ctx.context_cls,
+        context_cls,
         field_name="context",
     )
     if event_cls is not None:
@@ -199,7 +209,6 @@ def restore_workflow_context_types(
         workflow_id=ctx.workflow_id,
         event=event,
         context=context,
-        context_cls=ctx.context_cls,
         next_step_index=ctx.next_step_index,
         error_msg=ctx.error_msg,
         started_at=ctx.started_at,
@@ -225,11 +234,11 @@ def hydrate_persisted_workflow_context(
             workflow_id=persisted.workflow_id,
             event=persisted.event,
             context=persisted.context,
-            context_cls=_deserialize_context_cls(persisted.context_cls),
             next_step_index=persisted.next_step_index,
             error_msg=persisted.error_msg,
             started_at=persisted.started_at,
         ),
+        context_cls=_deserialize_context_type_path(persisted.context_type_path),
         event_cls=event_cls,
     )
 
@@ -244,7 +253,7 @@ def _typed_persisted_workflow_context_decoder(
         ("workflow_id", str),
         ("event", event_cls),
         ("context", context_cls),
-        ("context_cls", str),
+        ("context_type_path", str),
         ("next_step_index", int, 0),
         ("error_msg", str | None, None),
         ("started_at", float | None, None),
@@ -298,15 +307,13 @@ def decode_persisted_workflow_context_typed(
             f"{CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION}."
         )
 
-    # Typed startup decode treats the current Minion schema as authoritative.
-    # The persisted context_cls string is retained as inspectable metadata, but
-    # must not block compatible context class relocation across refactors.
+    # Typed replay uses the current Minion schema. The persisted type path is
+    # informational and may be stale after the context class moves.
     return MinionWorkflowContext(
         orchestration_id=persisted.orchestration_id,
         workflow_id=persisted.workflow_id,
         event=persisted.event,
         context=persisted.context,
-        context_cls=context_cls,
         next_step_index=persisted.next_step_index,
         error_msg=persisted.error_msg,
         started_at=persisted.started_at,
@@ -355,11 +362,11 @@ def deserialize_workflow_context_blob(
     ctx = hydrate_persisted_workflow_context(persisted, event_cls=event_cls)
 
     if context_cls is not None:
-        if ctx.context_cls is context_cls:
+        if type(ctx.context) is context_cls:
             return ctx
         raise WorkflowContextSchemaError(
-            "Persisted workflow context_cls mismatch: "
-            f"expected {context_cls!r}, got {ctx.context_cls!r}."
+            "Persisted workflow context type mismatch: "
+            f"expected {context_cls!r}, got {type(ctx.context)!r}."
         )
     return ctx
 
@@ -372,20 +379,22 @@ def deserialize_workflow_context(
     """Hydrate the normalized dict adapter shape into runtime context shape."""
 
     data: WorkflowContextData = dict(payload)
-    context_cls = payload.get("context_cls")
-    if isinstance(context_cls, str):
+    context_type_path = payload.get("context_type_path")
+    if isinstance(context_type_path, str):
         try:
-            data["context_cls"] = _deserialize_context_cls(context_cls)
+            context_cls = _deserialize_context_type_path(context_type_path)
         except Exception as e:
             raise WorkflowContextSchemaError(
-                f"Invalid workflow context context_cls: {context_cls!r}."
+                "Invalid workflow context context_type_path: "
+                f"{context_type_path!r}."
             ) from e
+    else:
+        context_cls = None
     data = _normalize_workflow_context_data(data)
-    resolved_context_cls = data.get("context_cls")
-    if isinstance(resolved_context_cls, type) and "context" in data:
+    if isinstance(context_cls, type) and "context" in data:
         data["context"] = _restore_typed_value(
             data["context"],
-            resolved_context_cls,
+            context_cls,
             field_name="context",
         )
     if event_cls is not None and "event" in data:
@@ -397,7 +406,7 @@ def deserialize_workflow_context(
     unknown_keys = (
         set(data)
         - _WORKFLOW_CONTEXT_FIELD_NAMES
-        - _CODEC_METADATA_KEYS
+        - _SERIALIZED_WORKFLOW_CONTEXT_METADATA_FIELD_NAMES
     )
     if unknown_keys:
         raise WorkflowContextSchemaError(
@@ -407,7 +416,6 @@ def deserialize_workflow_context(
 
     orchestration_id = data.get("orchestration_id")
     workflow_id = data.get("workflow_id")
-    context_cls = data.get("context_cls")
     next_step_index = data.get("next_step_index", 0)
     error_msg = data.get("error_msg")
     started_at = data.get("started_at")
@@ -421,7 +429,9 @@ def deserialize_workflow_context(
     if "context" not in data:
         raise WorkflowContextSchemaError("Invalid workflow context context.")
     if not isinstance(context_cls, type):
-        raise WorkflowContextSchemaError("Invalid workflow context context_cls.")
+        raise WorkflowContextSchemaError(
+            "Invalid workflow context context_type_path."
+        )
     if not isinstance(next_step_index, int):
         raise WorkflowContextSchemaError("Invalid workflow context next_step_index.")
     if error_msg is not None and not isinstance(error_msg, str):
@@ -436,7 +446,6 @@ def deserialize_workflow_context(
         workflow_id=workflow_id,
         event=data["event"],
         context=data["context"],
-        context_cls=context_cls,
         next_step_index=next_step_index,
         error_msg=error_msg,
         started_at=started_at,

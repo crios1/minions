@@ -27,7 +27,6 @@ def make_context() -> MinionWorkflowContext[CounterEvent, dict[str, Any]]:
         workflow_id="wf-boom",
         event=CounterEvent(seq=1),
         context={},
-        context_cls=dict,
     )
 
 

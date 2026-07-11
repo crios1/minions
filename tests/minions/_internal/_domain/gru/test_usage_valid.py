@@ -396,7 +396,6 @@ class TestValidUsage:
                 workflow_id="wf-moved-resume",
                 event=SimpleEvent(timestamp=123),
                 context=SimpleContext(step1="already-complete"),
-                context_cls=SimpleContext,
                 next_step_index=1,
             )
         )

@@ -6,14 +6,16 @@ from .types import T_Ctx, T_Event
 
 @dataclass
 class MinionWorkflowContext(Generic[T_Event, T_Ctx]):
-    """If you change this dataclass, review minion_workflow_context_codec.py and
-    add any needed codec updates or migration."""
+    """Runtime state for one workflow execution.
+
+    If you change this dataclass, review minion_workflow_context_codec.py and
+    add any needed codec updates or migration.
+    """
 
     orchestration_id: str
     workflow_id: str
     event: T_Event
     context: T_Ctx
-    context_cls: type
     next_step_index: int = 0
     error_msg: str | None = None
     started_at: float | None = None
@@ -25,7 +27,6 @@ class MinionWorkflowContext(Generic[T_Event, T_Ctx]):
             "workflow_id": self.workflow_id,
             "event": self.event,
             "context": self.context,
-            "context_cls": self.context_cls,
             "next_step_index": self.next_step_index,
             "error_msg": self.error_msg,
             "started_at": self.started_at,

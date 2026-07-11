@@ -798,7 +798,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             "suggestion": suggestion_by_stage[result.failure_stage],
             "state_store": type(self._mn_state_store).__name__,
             "event_type": type(ctx.event).__name__,
-            "context_type": getattr(ctx.context_cls, "__name__", type(ctx.context).__name__),
+            "context_type": type(ctx.context).__name__,
             **self._mn_orchestration_log_kwargs(),
         }
         if error is not None:
@@ -1310,7 +1310,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             workflow_id=workflow_id,
             event=t_event,
             context=type(self)._mn_workflow_ctx_cls(),
-            context_cls=type(self)._mn_workflow_ctx_cls,
         )
 
         await self._mn_run_workflow_persistence_checkpoint(

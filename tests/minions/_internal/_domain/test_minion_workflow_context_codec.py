@@ -58,7 +58,6 @@ def test_adapter_payload_roundtrip_restores_typed_event_and_context(
         workflow_id="wf-typed-blob",
         event=event,
         context=context,
-        context_cls=context_cls,
         next_step_index=1,
     )
 
@@ -90,7 +89,6 @@ def test_direct_typed_decoder_accepts_persisted_workflow_context(
         workflow_id="wf-direct-typed",
         event=event,
         context=context,
-        context_cls=context_cls,
         next_step_index=1,
     )
 
@@ -106,13 +104,12 @@ def test_direct_typed_decoder_accepts_persisted_workflow_context(
     assert loaded_ctx == ctx
 
 
-def test_direct_typed_decoder_ignores_stale_persisted_context_cls_path() -> None:
+def test_direct_typed_decoder_ignores_stale_persisted_context_type_path() -> None:
     ctx: MinionWorkflowContext[Any, Any] = MinionWorkflowContext(
         orchestration_id="moved",
         workflow_id="wf-moved-context-cls",
         event=DataclassEvent(1),
         context=DataclassContext(2),
-        context_cls=DataclassContext,
         next_step_index=1,
     )
     persisted = deserialize(
@@ -126,7 +123,7 @@ def test_direct_typed_decoder_ignores_stale_persisted_context_cls_path() -> None
             workflow_id=persisted.workflow_id,
             event=persisted.event,
             context=persisted.context,
-            context_cls="old_app.contexts.DataclassContext",
+            context_type_path="old_app.contexts.DataclassContext",
             next_step_index=persisted.next_step_index,
             error_msg=persisted.error_msg,
             started_at=persisted.started_at,
@@ -143,7 +140,7 @@ def test_direct_typed_decoder_ignores_stale_persisted_context_cls_path() -> None
     assert isinstance(loaded_ctx.event, DataclassEvent)
     assert isinstance(loaded_ctx.context, DataclassContext)
     assert loaded_ctx.context == ctx.context
-    assert loaded_ctx.context_cls is DataclassContext
+    assert type(loaded_ctx.context) is DataclassContext
 
 
 def test_serialize_workflow_context_writes_adapter_shape():
@@ -152,14 +149,13 @@ def test_serialize_workflow_context_writes_adapter_shape():
         workflow_id="wf-1",
         event={"v": 1},
         context={"c": 1},
-        context_cls=dict,
         next_step_index=2,
     )
 
     payload = serialize_workflow_context(ctx)
 
     assert payload["orchestration_id"] == ctx.orchestration_id
-    assert payload["context_cls"] == "builtins.dict"
+    assert payload["context_type_path"] == "builtins.dict"
     assert payload["next_step_index"] == 2
     assert payload["schema_version"] == CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION
 
@@ -170,7 +166,6 @@ def test_serialize_persisted_workflow_context_writes_blob_contract():
         workflow_id="wf-blob-contract",
         event={"v": 1},
         context={"c": 1},
-        context_cls=dict,
         next_step_index=2,
     )
 
@@ -180,7 +175,7 @@ def test_serialize_persisted_workflow_context_writes_blob_contract():
 
     assert persisted.workflow_id == ctx.workflow_id
     assert not hasattr(persisted, "minion_module_path")
-    assert persisted.context_cls == "builtins.dict"
+    assert persisted.context_type_path == "builtins.dict"
     assert persisted.schema_version == CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION
     assert loaded_ctx == ctx
 
@@ -191,7 +186,6 @@ def test_adapter_payload_roundtrips_msgspec_struct_payloads():
         workflow_id="wf-structs",
         event=MsgspecStructEvent(1),
         context=MsgspecStructContext(2),
-        context_cls=MsgspecStructContext,
         next_step_index=3,
     )
 
@@ -199,7 +193,7 @@ def test_adapter_payload_roundtrips_msgspec_struct_payloads():
     loaded_ctx = deserialize_workflow_context(adapter_payload)
 
     assert (
-        adapter_payload["context_cls"]
+        adapter_payload["context_type_path"]
         == f"{MsgspecStructContext.__module__}.{MsgspecStructContext.__qualname__}"
     )
     assert loaded_ctx == ctx
@@ -211,7 +205,7 @@ def test_normalize_workflow_context_data_rejects_legacy_unversioned_payload():
         "workflow_id": "wf-legacy",
         "event": {"v": 1},
         "context": {"c": 1},
-        "context_cls": "builtins.dict",
+        "context_type_path": "builtins.dict",
         "step_index": 1,
     }
 
@@ -219,7 +213,7 @@ def test_normalize_workflow_context_data_rejects_legacy_unversioned_payload():
         _normalize_workflow_context_data(
             {
                 **v1_payload,
-                "context_cls": dict,
+                "context_type_path": "builtins.dict",
             }
         )
 
@@ -235,7 +229,7 @@ def test_normalize_workflow_context_data_rejects_future_schema_version():
         "workflow_id": "wf-future",
         "event": {"v": 1},
         "context": {"c": 1},
-        "context_cls": dict,
+        "context_type_path": "builtins.dict",
         "next_step_index": 0,
     }
 
@@ -243,37 +237,38 @@ def test_normalize_workflow_context_data_rejects_future_schema_version():
         _normalize_workflow_context_data(payload)
 
 
-def test_adapter_payload_roundtrips_context_cls_and_schema_version():
+def test_adapter_payload_roundtrips_context_type_path_and_schema_version():
     ctx = MinionWorkflowContext(
         orchestration_id="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
         workflow_id="wf-storage",
         event={"v": 1},
         context={"c": 1},
-        context_cls=dict,
         next_step_index=0,
     )
     adapter_payload = serialize_workflow_context(ctx)
     loaded_ctx = deserialize_workflow_context(adapter_payload)
 
-    assert adapter_payload["context_cls"] == "builtins.dict"
+    assert adapter_payload["context_type_path"] == "builtins.dict"
     assert adapter_payload["schema_version"] == CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION
     assert loaded_ctx == ctx
 
 
-def test_deserialize_workflow_context_rejects_invalid_context_cls_string():
+def test_deserialize_workflow_context_rejects_invalid_context_type_path():
     payload = serialize_workflow_context(
         MinionWorkflowContext(
             orchestration_id="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
             workflow_id="wf-invalid-context-cls",
             event={"v": 1},
             context={"c": 1},
-            context_cls=dict,
             next_step_index=0,
         )
     )
-    payload["context_cls"] = "not-a-real.module.Class"
+    payload["context_type_path"] = "not-a-real.module.Class"
 
-    with pytest.raises(WorkflowContextSchemaError, match="Invalid workflow context context_cls"):
+    with pytest.raises(
+        WorkflowContextSchemaError,
+        match="Invalid workflow context context_type_path",
+    ):
         deserialize_workflow_context(payload)
 
 
@@ -284,7 +279,6 @@ def test_deserialize_workflow_context_accepts_integer_started_at():
             workflow_id="wf-int-started-at",
             event={"v": 1},
             context={"c": 1},
-            context_cls=dict,
             next_step_index=0,
         )
     )
@@ -303,7 +297,6 @@ def test_deserialize_workflow_context_rejects_unknown_leftover_fields():
             workflow_id="wf-unknown-leftover",
             event={"v": 1},
             context={"c": 1},
-            context_cls=dict,
             next_step_index=0,
         )
     )

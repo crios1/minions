@@ -53,7 +53,6 @@ async def test_minion_startup_replays_only_own_contexts(
             workflow_id="wf-own",
             event=EmptyEvent(),
             context=EmptyContext(),
-            context_cls=EmptyContext,
         )
     )
     await state_store._mn_serialize_and_save_context(
@@ -62,7 +61,6 @@ async def test_minion_startup_replays_only_own_contexts(
             workflow_id="wf-other",
             event=EmptyEvent(),
             context=EmptyContext(),
-            context_cls=EmptyContext,
         )
     )
 
@@ -120,7 +118,6 @@ async def test_minion_startup_replays_typed_msgspec_event_and_context(
             workflow_id="wf-typed",
             event=IntValueEvent(7),
             context=IntValueContext(11),
-            context_cls=IntValueContext,
         )
     )
 
@@ -171,7 +168,6 @@ async def test_resumed_workflow_step_can_access_event_and_context_from_state_sto
             workflow_id="wf-resume",
             event=IntValueEvent(value=7),
             context=IntValueContext(value=8),
-            context_cls=IntValueContext,
             next_step_index=1,
         )
     )
@@ -217,7 +213,6 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
         workflow_id="wf-valid",
         event=IntValueEvent(value=123),
         context=EmptyContext(),
-        context_cls=EmptyContext,
         next_step_index=0,
         started_at=None,
         error_msg=None,
@@ -227,7 +222,6 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
         workflow_id="wf-invalid",
         event=IntValueEvent(value=456),
         context=EmptyContext(),
-        context_cls=EmptyContext,
         next_step_index=0,
         started_at=None,
         error_msg=None,
@@ -237,7 +231,7 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
         workflow_id=invalid_context.workflow_id,
         event=invalid_context.event,
         context=invalid_context.context,
-        context_cls="builtins.dict",
+        context_type_path="builtins.dict",
         next_step_index=invalid_context.next_step_index,
         error_msg=invalid_context.error_msg,
         started_at=invalid_context.started_at,
@@ -302,7 +296,6 @@ async def test_minion_startup_replay_fails_closed_on_context_type_mismatch(
         workflow_id="wf-valid",
         event=IntValueEvent(value=123),
         context=EmptyContext(),
-        context_cls=EmptyContext,
         next_step_index=0,
     )
     mismatched_context: MinionWorkflowContext[StringValueEvent, EmptyContext] = (
@@ -311,7 +304,6 @@ async def test_minion_startup_replay_fails_closed_on_context_type_mismatch(
             workflow_id="wf-mismatch",
             event=StringValueEvent(value="not-an-int"),
             context=EmptyContext(),
-            context_cls=EmptyContext,
             next_step_index=0,
         )
     )
