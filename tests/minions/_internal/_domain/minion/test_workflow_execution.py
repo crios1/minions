@@ -2,7 +2,6 @@ import asyncio
 from dataclasses import FrozenInstanceError
 from typing import Any
 
-import msgspec
 import pytest
 
 from minions import Minion, minion_step
@@ -24,6 +23,7 @@ from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_noop import NoOpStateStore
 from minions.types import MinionWorkflowHandle
 from tests.assets.contexts.empty import EmptyContext
+from tests.assets.contexts.int_value import IntValueContext
 from tests.assets.events.empty import EmptyEvent
 from tests.assets.events.int_value import IntValueEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
@@ -191,10 +191,7 @@ async def test_runtime_guard_rejects_nested_step_invocation_via_indirect_call(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ):
-    class NestedCallContext(msgspec.Struct):
-        step2: str | None = None
-
-    class NestedCallMinion(Minion[EmptyEvent, NestedCallContext]):
+    class MyMinion(Minion[EmptyEvent, EmptyContext]):
         @minion_step
         async def step_1(self):
             nested = getattr(self, "step_2")
@@ -202,9 +199,9 @@ async def test_runtime_guard_rejects_nested_step_invocation_via_indirect_call(
 
         @minion_step
         async def step_2(self):
-            self.context.step2 = "step2"
+            pass
 
-    m = NestedCallMinion(
+    m = MyMinion(
         "iid",
         "ck",
         "tests.assets.nested_call_minion",
@@ -225,7 +222,7 @@ async def test_runtime_guard_rejects_nested_step_invocation_via_indirect_call(
     failed_logs = [log for log in logger.logs if log.msg == "Workflow Step failed"]
     assert len(failed_logs) == 1
     assert failed_logs[0].kwargs["error_message"] == (
-        "NestedCallMinion.step_2 cannot be called from within another @minion_step; "
+        "MyMinion.step_2 cannot be called from within another @minion_step; "
         "workflow step sequencing is owned by the runtime workflow engine."
     )
 
@@ -245,22 +242,19 @@ async def test_minion_steps_can_access_event_and_context_across_workflow_steps(
 ):
     observed: list[tuple[str, int, object]] = []
 
-    class AccessContext(msgspec.Struct):
-        from_step_1: int | None = None
-
-    class AccessMinion(Minion[IntValueEvent, AccessContext]):
+    class MyMinion(Minion[IntValueEvent, IntValueContext]):
         @minion_step
         async def step_1(self):
             event_value = self.event.value
-            self.context.from_step_1 = event_value + 1
-            observed.append(("step_1", event_value, self.context.from_step_1))
+            self.context.value = event_value + 1
+            observed.append(("step_1", event_value, self.context.value))
 
         @minion_step
         async def step_2(self):
             event_value = self.event.value
-            observed.append(("step_2", event_value, self.context.from_step_1))
+            observed.append(("step_2", event_value, self.context.value))
 
-    m = AccessMinion(
+    m = MyMinion(
         "iid",
         "ck",
         "tests.assets.access_minion",

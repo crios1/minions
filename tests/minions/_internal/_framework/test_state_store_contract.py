@@ -3,7 +3,7 @@ import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import msgspec
 import pytest
@@ -26,20 +26,20 @@ pytestmark = pytest.mark.asyncio
 
 
 @dataclass
-class EventDC:
+class DataclassEvent:
     value: int
 
 
 @dataclass
-class ContextDC:
+class DataclassContext:
     total: int = 0
 
 
-class EventStruct(msgspec.Struct):
+class MsgspecStructEvent(msgspec.Struct):
     value: int
 
 
-class ContextStruct(msgspec.Struct):
+class MsgspecStructContext(msgspec.Struct):
     total: int = 0
 
 
@@ -270,20 +270,21 @@ async def test_state_store_get_contexts_for_orchestration_filters_by_identity(
 
 
 @pytest.mark.parametrize(
-    ("event", "context", "event_cls", "context_cls"),
+    ("event", "context"),
     [
-        (EventDC(10), ContextDC(20), EventDC, ContextDC),
-        (EventStruct(10), ContextStruct(20), EventStruct, ContextStruct),
+        (DataclassEvent(10), DataclassContext(20)),
+        (MsgspecStructEvent(10), MsgspecStructContext(20)),
     ],
+    ids=["dataclass", "msgspec-struct"],
 )
 async def test_state_store_get_contexts_for_orchestration_restores_typed_models(
     store_and_logger: tuple[StateStore, InMemoryLogger],
     event: Any,
     context: Any,
-    event_cls: type[Any],
-    context_cls: type[Any],
 ):
     store, _ = store_and_logger
+    event_cls = cast(type[Any], type(event))
+    context_cls = cast(type[Any], type(context))
     expected = mk_ctx(
         workflow_id="wf-typed",
         event=event,

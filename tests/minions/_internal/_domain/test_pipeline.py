@@ -19,14 +19,6 @@ from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 
 
-class MyStructEvent(msgspec.Struct):
-    ts: int
-
-
-class MyTypedDictEvent(TypedDict):
-    ts: int
-
-
 class TestPipelineSubclassingValid:
     def test_accepts_dataclass_event_type(self):
         assert is_dataclass(SimpleEvent)
@@ -60,7 +52,7 @@ class TestPipelineSubclassingInvalid:
     def test_missing_event_type(self):
         with pytest.raises(TypeError) as excinfo:
             class SomePipeline(Pipeline):  # pyright: ignore[reportMissingTypeArgument]
-                async def produce_event(self) -> MyTypedDictEvent:  # pragma: no cover
+                async def produce_event(self) -> EmptyEvent:  # pragma: no cover
                     ...
         assert str(excinfo.value) == (
             "SomePipeline must declare an event type "
@@ -109,12 +101,15 @@ class TestPipelineSubclassingInvalid:
         )
 
     def test_reject_typed_dict_event_type(self):
+        class TypedDictEvent(TypedDict):
+            value: int
+
         with pytest.raises(TypeError) as excinfo:
-            class SomePipeline(Pipeline[MyTypedDictEvent]):
-                async def produce_event(self) -> MyTypedDictEvent:  # pragma: no cover
-                    return {"ts": 1}
+            class MyPipeline(Pipeline[TypedDictEvent]):
+                async def produce_event(self) -> TypedDictEvent:  # pragma: no cover
+                    return {"value": 1}
         assert str(excinfo.value) == (
-            "SomePipeline: event type is not supported. "
+            "MyPipeline: event type is not supported. "
             "Supported user-declared types: (dataclass, msgspec.Struct)."
         )
 
@@ -124,7 +119,7 @@ async def test_pipeline_error_metric_includes_error_type(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
 ):
-    class ErrorPipeline(Pipeline[MyStructEvent]):
+    class ErrorPipeline(Pipeline[EmptyEvent]):
         async def produce_event(self):
             raise RuntimeError("boom")
 

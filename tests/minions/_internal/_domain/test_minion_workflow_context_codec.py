@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import msgspec
 import pytest
@@ -22,36 +22,37 @@ from minions._internal._utils.serialization import deserialize, serialize
 
 
 @dataclass
-class EventDC:
+class DataclassEvent:
     value: int
 
 
 @dataclass
-class ContextDC:
+class DataclassContext:
     count: int = 0
 
 
-class EventStruct(msgspec.Struct):
+class MsgspecStructEvent(msgspec.Struct):
     value: int
 
 
-class ContextStruct(msgspec.Struct):
+class MsgspecStructContext(msgspec.Struct):
     count: int = 0
 
 
 @pytest.mark.parametrize(
-    ("event", "context", "event_cls", "context_cls"),
+    ("event", "context"),
     [
-        (EventDC(1), ContextDC(2), EventDC, ContextDC),
-        (EventStruct(1), ContextStruct(2), EventStruct, ContextStruct),
+        (DataclassEvent(1), DataclassContext(2)),
+        (MsgspecStructEvent(1), MsgspecStructContext(2)),
     ],
+    ids=["dataclass", "msgspec-struct"],
 )
 def test_adapter_payload_roundtrip_restores_typed_event_and_context(
     event: Any,
     context: Any,
-    event_cls: type[Any],
-    context_cls: type[Any],
 ) -> None:
+    event_cls = cast(type[Any], type(event))
+    context_cls = cast(type[Any], type(context))
     ctx: MinionWorkflowContext[Any, Any] = MinionWorkflowContext(
         orchestration_id="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
         workflow_id="wf-typed-blob",
@@ -71,18 +72,19 @@ def test_adapter_payload_roundtrip_restores_typed_event_and_context(
 
 
 @pytest.mark.parametrize(
-    ("event", "context", "event_cls", "context_cls"),
+    ("event", "context"),
     [
-        (EventDC(1), ContextDC(2), EventDC, ContextDC),
-        (EventStruct(1), ContextStruct(2), EventStruct, ContextStruct),
+        (DataclassEvent(1), DataclassContext(2)),
+        (MsgspecStructEvent(1), MsgspecStructContext(2)),
     ],
+    ids=["dataclass", "msgspec-struct"],
 )
 def test_direct_typed_decoder_accepts_persisted_workflow_context(
     event: Any,
     context: Any,
-    event_cls: type[Any],
-    context_cls: type[Any],
 ) -> None:
+    event_cls = cast(type[Any], type(event))
+    context_cls = cast(type[Any], type(context))
     ctx: MinionWorkflowContext[Any, Any] = MinionWorkflowContext(
         orchestration_id="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
         workflow_id="wf-direct-typed",
@@ -108,9 +110,9 @@ def test_direct_typed_decoder_ignores_stale_persisted_context_cls_path() -> None
     ctx: MinionWorkflowContext[Any, Any] = MinionWorkflowContext(
         orchestration_id="moved",
         workflow_id="wf-moved-context-cls",
-        event=EventDC(1),
-        context=ContextDC(2),
-        context_cls=ContextDC,
+        event=DataclassEvent(1),
+        context=DataclassContext(2),
+        context_cls=DataclassContext,
         next_step_index=1,
     )
     persisted = deserialize(
@@ -124,7 +126,7 @@ def test_direct_typed_decoder_ignores_stale_persisted_context_cls_path() -> None
             workflow_id=persisted.workflow_id,
             event=persisted.event,
             context=persisted.context,
-            context_cls="old_app.contexts.ContextDC",
+            context_cls="old_app.contexts.DataclassContext",
             next_step_index=persisted.next_step_index,
             error_msg=persisted.error_msg,
             started_at=persisted.started_at,
@@ -134,14 +136,14 @@ def test_direct_typed_decoder_ignores_stale_persisted_context_cls_path() -> None
 
     loaded_ctx = decode_persisted_workflow_context_typed(
         moved_payload,
-        event_cls=EventDC,
-        context_cls=ContextDC,
+        event_cls=DataclassEvent,
+        context_cls=DataclassContext,
     )
 
-    assert isinstance(loaded_ctx.event, EventDC)
-    assert isinstance(loaded_ctx.context, ContextDC)
+    assert isinstance(loaded_ctx.event, DataclassEvent)
+    assert isinstance(loaded_ctx.context, DataclassContext)
     assert loaded_ctx.context == ctx.context
-    assert loaded_ctx.context_cls is ContextDC
+    assert loaded_ctx.context_cls is DataclassContext
 
 
 def test_serialize_workflow_context_writes_adapter_shape():
@@ -187,9 +189,9 @@ def test_adapter_payload_roundtrips_msgspec_struct_payloads():
     ctx = MinionWorkflowContext(
         orchestration_id="tests.assets.minions.sample|cfg-a|tests.assets.pipelines.sample",
         workflow_id="wf-structs",
-        event=EventStruct(1),
-        context=ContextStruct(2),
-        context_cls=ContextStruct,
+        event=MsgspecStructEvent(1),
+        context=MsgspecStructContext(2),
+        context_cls=MsgspecStructContext,
         next_step_index=3,
     )
 
@@ -197,7 +199,8 @@ def test_adapter_payload_roundtrips_msgspec_struct_payloads():
     loaded_ctx = deserialize_workflow_context(adapter_payload)
 
     assert (
-        adapter_payload["context_cls"] == f"{ContextStruct.__module__}.{ContextStruct.__qualname__}"
+        adapter_payload["context_cls"]
+        == f"{MsgspecStructContext.__module__}.{MsgspecStructContext.__qualname__}"
     )
     assert loaded_ctx == ctx
 

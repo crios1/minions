@@ -1,7 +1,6 @@
 import asyncio
 from typing import Callable
 
-import msgspec
 import pytest
 
 from minions import Minion, minion_step
@@ -26,6 +25,7 @@ from minions._internal._framework.minion_workflow_context_codec import (
     deserialize_workflow_context_blob,
 )
 from tests.assets.contexts.empty import EmptyContext
+from tests.assets.contexts.int_value import IntValueContext
 from tests.assets.events.empty import EmptyEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
@@ -415,10 +415,6 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds(
     assert blocked_value == 0
 
 
-class SerializationFailureContext(msgspec.Struct):
-    bad: int | None = None
-
-
 @pytest.mark.asyncio
 async def test_workflow_persistence_serialization_failure_is_non_retryable_and_preserves_prior_checkpoint(  # noqa: E501
     logger: InMemoryLogger,
@@ -430,17 +426,17 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
     class UnserializableValue:
         pass
 
-    class NonRetryablePersistenceMinion(Minion[EmptyEvent, SerializationFailureContext]):
+    class MyMinion(Minion[EmptyEvent, IntValueContext]):
         @minion_step
         async def step_1(self):
             step_calls.append("step_1")
-            self.context.bad = UnserializableValue()  # pyright: ignore[reportAttributeAccessIssue]
+            self.context.value = UnserializableValue()  # pyright: ignore[reportAttributeAccessIssue]
 
         @minion_step
         async def step_2(self):
             step_calls.append("step_2")
 
-    m = NonRetryablePersistenceMinion(
+    m = MyMinion(
         minion_instance_id="iid",
         orchestration_id="ck",
         minion_module_path="tests.assets.non_retryable_persistence_minion",
@@ -464,7 +460,7 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
     assert len(persisted_contexts) == 1
     decoded = deserialize_workflow_context_blob(persisted_contexts[0].context)
     assert decoded.next_step_index == 0
-    assert decoded.context == SerializationFailureContext()
+    assert decoded.context.value == 0
     failure_log = next(
         log
         for log in logger.logs

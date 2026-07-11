@@ -11,6 +11,7 @@ from minions._internal._framework.minion_workflow_context_codec import (
 from minions._internal._framework.state_store import StoredWorkflowContext
 from minions._internal._utils.serialization import serialize
 from tests.assets.contexts.empty import EmptyContext
+from tests.assets.contexts.int_value import IntValueContext
 from tests.assets.events.empty import EmptyEvent
 from tests.assets.events.int_value import IntValueEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
@@ -85,13 +86,7 @@ async def test_minion_startup_replays_typed_msgspec_event_and_context(
 ):
     observed: list[tuple[type, type, int, int]] = []
 
-    class ReplayEvent(msgspec.Struct):
-        value: int
-
-    class ReplayContext(msgspec.Struct):
-        count: int = 0
-
-    class ReplayMinion(Minion[ReplayEvent, ReplayContext]):
+    class MyMinion(Minion[IntValueEvent, IntValueContext]):
         @minion_step
         async def step_1(self):
             observed.append(
@@ -99,14 +94,14 @@ async def test_minion_startup_replays_typed_msgspec_event_and_context(
                     type(self.event),
                     type(self.context),
                     self.event.value,
-                    self.context.count,
+                    self.context.value,
                 )
             )
 
     minion_module_path = "mock.module_path.minion_replay_typed"
     pipeline_id = "tests.assets.pipelines.shared"
     orchestration_id = f"{minion_module_path}|cfg|{pipeline_id}"
-    m = ReplayMinion(
+    m = MyMinion(
         "iid",
         orchestration_id,
         minion_module_path,
@@ -123,9 +118,9 @@ async def test_minion_startup_replays_typed_msgspec_event_and_context(
         MinionWorkflowContext(
             orchestration_id=orchestration_id,
             workflow_id="wf-typed",
-            event=ReplayEvent(7),
-            context=ReplayContext(11),
-            context_cls=ReplayContext,
+            event=IntValueEvent(7),
+            context=IntValueContext(11),
+            context_cls=IntValueContext,
         )
     )
 
@@ -133,7 +128,7 @@ async def test_minion_startup_replays_typed_msgspec_event_and_context(
     await m._mn_wait_until_workflows_idle(timeout=2)
     await state_store.wait_for_call("delete_context", count=1, timeout=2)
 
-    assert observed == [(ReplayEvent, ReplayContext, 7, 11)]
+    assert observed == [(IntValueEvent, IntValueContext, 7, 11)]
 
 
 @pytest.mark.asyncio
@@ -144,10 +139,7 @@ async def test_resumed_workflow_step_can_access_event_and_context_from_state_sto
 ):
     observed: list[tuple[str, int, object]] = []
 
-    class ResumeAccessContext(msgspec.Struct):
-        from_step_1: int | None = None
-
-    class ResumeAccessMinion(Minion[IntValueEvent, ResumeAccessContext]):
+    class MyMinion(Minion[IntValueEvent, IntValueContext]):
         @minion_step
         async def step_1(self):
             pytest.fail("step_1 should not execute when replay resumes at next_step_index=1")
@@ -155,12 +147,12 @@ async def test_resumed_workflow_step_can_access_event_and_context_from_state_sto
         @minion_step
         async def step_2(self):
             event_value = self.event.value
-            observed.append(("step_2", event_value, self.context.from_step_1))
+            observed.append(("step_2", event_value, self.context.value))
 
     minion_module_path = "tests.assets.resume_access_minion"
     pipeline_id = "tests.assets.pipelines.resume"
     orchestration_id = f"{minion_module_path}|cfg|{pipeline_id}"
-    m = ResumeAccessMinion(
+    m = MyMinion(
         "iid",
         orchestration_id,
         minion_module_path,
@@ -178,8 +170,8 @@ async def test_resumed_workflow_step_can_access_event_and_context_from_state_sto
             orchestration_id=orchestration_id,
             workflow_id="wf-resume",
             event=IntValueEvent(value=7),
-            context=ResumeAccessContext(from_step_1=8),
-            context_cls=ResumeAccessContext,
+            context=IntValueContext(value=8),
+            context_cls=IntValueContext,
             next_step_index=1,
         )
     )

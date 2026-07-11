@@ -1,6 +1,5 @@
 import asyncio
 from collections.abc import Coroutine
-from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -15,18 +14,10 @@ from minions._internal._framework.metrics_constants import (
     RESOURCE_SERVES_TOTAL,
 )
 from minions._internal._framework.state_store_noop import NoOpStateStore
+from tests.assets.contexts.empty import EmptyContext
+from tests.assets.events.empty import EmptyEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
-
-
-@dataclass
-class ContractEvent:
-    value: int = 1
-
-
-@dataclass
-class ContractContext:
-    value: int = 0
 
 
 @pytest.mark.asyncio
@@ -41,8 +32,9 @@ async def test_pipeline_runtime_metric_labels_match_contract(
     class PipelineEventResource(Resource):
         value_source: EventValueResource
 
-        async def build_event(self) -> ContractEvent:
-            return ContractEvent(value=await self.value_source.read_value())
+        async def build_event(self) -> EmptyEvent:
+            await self.value_source.read_value()
+            return EmptyEvent()
 
     value_resource = EventValueResource(
         logger,
@@ -60,12 +52,12 @@ async def test_pipeline_runtime_metric_labels_match_contract(
     value_resource._mn_validate_and_wrap_public_async_methods()
     event_resource._mn_validate_and_wrap_public_async_methods()
 
-    class SuccessPipeline(Pipeline[ContractEvent]):
-        async def produce_event(self) -> ContractEvent:
+    class SuccessPipeline(Pipeline[EmptyEvent]):
+        async def produce_event(self) -> EmptyEvent:
             return await event_resource.build_event()
 
-    class ErrorPipeline(Pipeline[ContractEvent]):
-        async def produce_event(self) -> ContractEvent:
+    class ErrorPipeline(Pipeline[EmptyEvent]):
+        async def produce_event(self) -> EmptyEvent:
             raise RuntimeError("boom")
 
     # Minimal pipeline subscriber double, intentionally not a Minion: this test
@@ -76,7 +68,7 @@ async def test_pipeline_runtime_metric_labels_match_contract(
         def __init__(self) -> None:
             self.tasks: list[asyncio.Task[None]] = []
 
-        async def _mn_handle_event(self, event: ContractEvent) -> None:
+        async def _mn_handle_event(self, event: EmptyEvent) -> None:
             return None
 
         def safe_create_task(self, coro: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
@@ -175,12 +167,12 @@ async def test_minion_runtime_metric_labels_match_contract(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
 ):
-    class SuccessMinion(Minion[ContractEvent, ContractContext]):
+    class SuccessMinion(Minion[EmptyEvent, EmptyContext]):
         @minion_step
         async def step_one(self):
-            self.context.value += self.event.value
+            pass
 
-    class FailureMinion(Minion[ContractEvent, ContractContext]):
+    class FailureMinion(Minion[EmptyEvent, EmptyContext]):
         @minion_step
         async def step_one(self):
             raise ValueError("boom")
@@ -198,7 +190,7 @@ async def test_minion_runtime_metric_labels_match_contract(
         pipeline_id="test-pipeline",
     )
     success_minion._mn_started.set()
-    await success_minion._mn_handle_event(ContractEvent())
+    await success_minion._mn_handle_event(EmptyEvent())
 
     failure_minion = FailureMinion(
         "contract-failure-minion",
@@ -213,6 +205,6 @@ async def test_minion_runtime_metric_labels_match_contract(
         pipeline_id="test-pipeline",
     )
     failure_minion._mn_started.set()
-    await failure_minion._mn_handle_event(ContractEvent())
+    await failure_minion._mn_handle_event(EmptyEvent())
 
     metrics.assert_recorded_labels_match_contract()
