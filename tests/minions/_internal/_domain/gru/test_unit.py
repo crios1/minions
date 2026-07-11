@@ -258,7 +258,7 @@ class TestUnit:
             minion_config_path: str | None = None,
         ) -> StartResult:
             start_calls.append((pipeline, minion, minion_config, minion_config_path))
-            return StartResult(success=True, orchestration_id="iid")
+            return StartResult(success=True, orchestration_id="dummy-orchestration-id")
 
         async def fake_stop_orchestration(self: Gru, id: str) -> StopResult:
             stop_calls.append(id)
@@ -267,13 +267,19 @@ class TestUnit:
         monkeypatch.setattr(Gru, "start_orchestration", fake_start_orchestration)
         monkeypatch.setattr(Gru, "stop_orchestration", fake_stop_orchestration)
 
-        start_result = await gru.start("pipeline", "minion", minion_config_path="cfg")
-        stop_result = await gru.stop("iid")
+        start_result = await gru.start(
+            "dummy-pipeline",
+            "dummy-minion",
+            minion_config_path="dummy-minion-config-path",
+        )
+        stop_result = await gru.stop("dummy-orchestration-id")
 
         assert start_result.success
         assert stop_result.success
-        assert start_calls == [("pipeline", "minion", None, "cfg")]
-        assert stop_calls == ["iid"]
+        assert start_calls == [
+            ("dummy-pipeline", "dummy-minion", None, "dummy-minion-config-path")
+        ]
+        assert stop_calls == ["dummy-orchestration-id"]
 
     def patch_sleep_cancel_after(self, monkeypatch: pytest.MonkeyPatch, n: int) -> None:
         """

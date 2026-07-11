@@ -42,23 +42,17 @@ class MsgspecStructContext(msgspec.Struct):
     total: int = 0
 
 
-def _ck(minion_module_path: str, *, config: str = "cfg", pipeline: str = "app.pipeline") -> str:
-    return f"{minion_module_path}|{config}|{pipeline}"
-
-
 def mk_ctx(
-    workflow_id: str = "wf-0",
+    workflow_id: str = "dummy-workflow-id",
     *,
-    minion_module_path: str = "app.minion",
-    config: str = "cfg",
-    pipeline: str = "app.pipeline",
+    orchestration_id: str = "dummy-orchestration-id",
     event: Any | None = None,
     context: Any | None = None,
     next_step_index: int = 0,
     error_msg: str | None = None,
 ) -> MinionWorkflowContext[Any, Any]:
     return MinionWorkflowContext(
-        orchestration_id=_ck(minion_module_path, config=config, pipeline=pipeline),
+        orchestration_id=orchestration_id,
         workflow_id=workflow_id,
         event={} if event is None else event,
         context={} if context is None else context,
@@ -226,22 +220,21 @@ async def test_state_store_get_contexts_for_orchestration_filters_by_identity(
     state_store_under_contract: tuple[StateStore, InMemoryLogger],
 ):
     store, _ = state_store_under_contract
-    target_module_path = "app.minion.shared"
     target_a = mk_ctx(
-        config="cfg-a",
+        orchestration_id="dummy-target-a-orchestration-id",
         workflow_id="wf-target-a",
         event={"i": 1},
         context={"k": "a"},
     )
     target_b = mk_ctx(
-        config="cfg-b",
+        orchestration_id="dummy-target-b-orchestration-id",
         workflow_id="wf-target-b",
         event={"i": 2},
         context={"k": "b"},
         next_step_index=1,
     )
     other = mk_ctx(
-        config="cfg-c",
+        orchestration_id="dummy-other-orchestration-id",
         workflow_id="wf-other",
         event={"i": 3},
         context={"k": "c"},
@@ -258,7 +251,7 @@ async def test_state_store_get_contexts_for_orchestration_filters_by_identity(
     assert all(ctx.orchestration_id == target_a.orchestration_id for ctx in filtered)
 
     missing = await store._mn_get_decoded_contexts_for_orchestration(
-        _ck(target_module_path, config="cfg-missing")
+        "dummy-missing-orchestration-id"
     )
     assert missing == []
 
@@ -323,7 +316,7 @@ async def test_state_store_skips_legacy_unversioned_blob(
 
     await store.save_context(
         "wf-legacy-v1",
-        _ck("app.minion"),
+        "dummy-orchestration-id",
         serialize(dict(legacy_payload)),
     )
     ctxs = await store._mn_get_all_decoded_contexts()
@@ -355,7 +348,7 @@ async def test_state_store_skips_unknown_schema_blob(
 
     await store.save_context(
         "wf-unknown",
-        _ck("app.minion"),
+        "dummy-orchestration-id",
         serialize(unknown_payload),
     )
     ctxs = await store._mn_get_all_decoded_contexts()

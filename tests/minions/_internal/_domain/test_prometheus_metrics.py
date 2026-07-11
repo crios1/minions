@@ -83,14 +83,20 @@ async def test_counter_exposed_on_http():
         MINION_WORKFLOW_STARTED_TOTAL, [LABEL_ORCHESTRATION_ID, LABEL_MINION], "counter"
     )
     counter.labels(
-        **{LABEL_ORCHESTRATION_ID: "minion|config|pipeline", LABEL_MINION: "minion"}
+        **{
+            LABEL_ORCHESTRATION_ID: "dummy-orchestration-id",
+            LABEL_MINION: "dummy-minion-id",
+        }
     ).inc()
 
     page = await poll_read_metrics_from_http(port)
     value = extract_metric_value(
         page,
         MINION_WORKFLOW_STARTED_TOTAL,
-        {LABEL_ORCHESTRATION_ID: "minion|config|pipeline", LABEL_MINION: "minion"},
+        {
+            LABEL_ORCHESTRATION_ID: "dummy-orchestration-id",
+            LABEL_MINION: "dummy-minion-id",
+        },
     )
     assert value == 1.0
 

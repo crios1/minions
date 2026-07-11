@@ -256,7 +256,7 @@ class TestInvalidUsage:
             logger=ConsoleLogger(),
             metrics=NoOpMetrics()
         ) as gru:
-            result = await gru.stop_orchestration("mock")
+            result = await gru.stop_orchestration("dummy-orchestration-id")
 
             assert not result.success
             assert result.reason
@@ -325,7 +325,7 @@ class TestInvalidUsageDSL:
         state_store: InMemoryStateStore,
     ) -> None:
         directives: list[Directive] = [
-            OrchestrationStop(id="mock", expect_success=False),
+            OrchestrationStop(id="dummy-orchestration-id", expect_success=False),
             GruShutdown(expect_success=True),
         ]
 

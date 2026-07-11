@@ -82,7 +82,10 @@ async def test_runner_metrics_counter_snapshot_uses_inmemory_metrics(gru: Gru) -
         [LABEL_MINION, LABEL_ORCHESTRATION_ID],
         "counter",
     )
-    counter.labels(minion="test-minion", orchestration_id="test-orchestration").inc()
+    counter.labels(
+        minion="dummy-minion-id",
+        orchestration_id="dummy-orchestration-id",
+    ).inc()
 
     runner = ScenarioRunner(
         gru,
@@ -94,8 +97,8 @@ async def test_runner_metrics_counter_snapshot_uses_inmemory_metrics(gru: Gru) -
         MINION_WORKFLOW_SUCCEEDED_TOTAL: [
             {
                 "labels": {
-                    LABEL_MINION: "test-minion",
-                    LABEL_ORCHESTRATION_ID: "test-orchestration",
+                    LABEL_MINION: "dummy-minion-id",
+                    LABEL_ORCHESTRATION_ID: "dummy-orchestration-id",
                 },
                 "value": 1.0,
             },

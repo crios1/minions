@@ -19,16 +19,16 @@ class TestMinionConfiguration:
             async def step_1(self): ...
 
         m = MyMinion(
-            minion_instance_id="mock",
-            orchestration_id="mock",
-            minion_module_path="mock",
+            minion_instance_id="dummy-minion-instance-id",
+            orchestration_id="dummy-orchestration-id",
+            minion_module_path="dummy-minion-module-path",
             config_path=None,
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
             logger=NoOpLogger(),
-            minion_id="test-minion",
+            minion_id="dummy-minion-id",
             minion_config_id="",
-            pipeline_id="test-pipeline",
+            pipeline_id="dummy-pipeline-id",
         )
 
         assert not hasattr(m, "config")
@@ -49,16 +49,16 @@ class TestMinionConfiguration:
             async def step_1(self): ...
 
         m = MyMinion(
-            minion_instance_id="mock",
-            orchestration_id="mock",
-            minion_module_path="mock",
-            config_path="mock",
+            minion_instance_id="dummy-minion-instance-id",
+            orchestration_id="dummy-orchestration-id",
+            minion_module_path="dummy-minion-module-path",
+            config_path="dummy-config-path",
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
             logger=NoOpLogger(),
-            minion_id="test-minion",
+            minion_id="dummy-minion-id",
             minion_config_id="",
-            pipeline_id="test-pipeline",
+            pipeline_id="dummy-pipeline-id",
         )
 
         await m._mn_load_config("alpha")
@@ -78,23 +78,23 @@ class TestMinionConfiguration:
             async def step_1(self): ...
 
         m = MyMinion(
-            minion_instance_id="mock",
-            orchestration_id="mock",
-            minion_module_path="mock",
-            config_path="mock",
+            minion_instance_id="dummy-minion-instance-id",
+            orchestration_id="dummy-orchestration-id",
+            minion_module_path="dummy-minion-module-path",
+            config_path="dummy-config-path",
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
             logger=NoOpLogger(),
-            minion_id="test-minion",
+            minion_id="dummy-minion-id",
             minion_config_id="",
-            pipeline_id="test-pipeline",
+            pipeline_id="dummy-pipeline-id",
         )
 
         with pytest.raises(
             TypeError,
             match="MyMinion must declare a `config` type annotation",
         ):
-            await m._mn_load_config("mock")
+            await m._mn_load_config("dummy-config-path")
 
     @pytest.mark.asyncio
     async def test_minion_rejects_config_type_mismatch(self):
@@ -116,23 +116,23 @@ class TestMinionConfiguration:
             async def step_1(self): ...
 
         m = MyMinion(
-            minion_instance_id="mock",
-            orchestration_id="mock",
-            minion_module_path="mock",
-            config_path="mock",
+            minion_instance_id="dummy-minion-instance-id",
+            orchestration_id="dummy-orchestration-id",
+            minion_module_path="dummy-minion-module-path",
+            config_path="dummy-config-path",
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
             logger=NoOpLogger(),
-            minion_id="test-minion",
+            minion_id="dummy-minion-id",
             minion_config_id="",
-            pipeline_id="test-pipeline",
+            pipeline_id="dummy-pipeline-id",
         )
 
         with pytest.raises(
             TypeError,
             match="MyMinion.config expects .*DeclaredConfig.* got LoadedConfig",
         ):
-            await m._mn_load_config("mock")
+            await m._mn_load_config("dummy-config-path")
 
     @pytest.mark.asyncio
     async def test_minion_rejects_non_model_config_loads(self):
@@ -144,20 +144,20 @@ class TestMinionConfiguration:
             async def step_1(self): ...
 
         m = MyMinion(
-            minion_instance_id="mock",
-            orchestration_id="mock",
-            minion_module_path="mock",
-            config_path="mock",
+            minion_instance_id="dummy-minion-instance-id",
+            orchestration_id="dummy-orchestration-id",
+            minion_module_path="dummy-minion-module-path",
+            config_path="dummy-config-path",
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
             logger=NoOpLogger(),
-            minion_id="test-minion",
+            minion_id="dummy-minion-id",
             minion_config_id="",
-            pipeline_id="test-pipeline",
+            pipeline_id="dummy-pipeline-id",
         )
 
         with pytest.raises(TypeError) as excinfo:
-            await m._mn_load_config("mock")
+            await m._mn_load_config("dummy-config-path")
         assert str(excinfo.value) == (
             "MyMinion.load_config: config type is not supported. "
             "Supported user-declared types: (dataclass, msgspec.Struct)."
@@ -170,20 +170,20 @@ class TestMinionConfiguration:
             async def step_1(self): ...
 
         m = MyMinion(
-            minion_instance_id="mock",
-            orchestration_id="mock",
-            minion_module_path="mock",
-            config_path="mock",
+            minion_instance_id="dummy-minion-instance-id",
+            orchestration_id="dummy-orchestration-id",
+            minion_module_path="dummy-minion-module-path",
+            config_path="dummy-config-path",
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
             logger=NoOpLogger(),
-            minion_id="test-minion",
+            minion_id="dummy-minion-id",
             minion_config_id="",
-            pipeline_id="test-pipeline",
+            pipeline_id="dummy-pipeline-id",
         )
 
         with pytest.raises(
             NotImplementedError,
             match="MyMinion.load_config must be overridden",
         ):
-            await m.load_config("mock")
+            await m.load_config("dummy-config-path")

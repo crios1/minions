@@ -45,16 +45,16 @@ async def test_workflow_aborted_increments_aborted_counter(
 
     # start the minion by calling _mn_handle_event directly with a dummy event
     m = AbortMinion(
-        "iid",
-        "ck",
-        "tests.assets.abort_minion",
-        "cfg",
+        "dummy-minion-instance-id",
+        "dummy-orchestration-id",
+        "dummy-minion-module-path",
+        "dummy-config-path",
         state_store,
         metrics,
         logger,
-        minion_id="tests.assets.abort_minion",
+        minion_id="dummy-minion-id",
         minion_config_id="",
-        pipeline_id="test-pipeline",
+        pipeline_id="dummy-pipeline-id",
     )
     m._mn_started.set()
     await m._mn_handle_event(EmptyEvent())
@@ -83,16 +83,16 @@ async def test_workflow_failed_increments_failed_counter(
             raise RuntimeError("boom")
 
     m = FailMinion(
-        "iid",
-        "ck",
-        "tests.assets.fail_minion",
-        "cfg",
+        "dummy-minion-instance-id",
+        "dummy-orchestration-id",
+        "dummy-minion-module-path",
+        "dummy-config-path",
         state_store,
         metrics,
         logger,
-        minion_id="tests.assets.fail_minion",
+        minion_id="dummy-minion-id",
         minion_config_id="",
-        pipeline_id="test-pipeline",
+        pipeline_id="dummy-pipeline-id",
     )
     m._mn_started.set()
     await m._mn_handle_event(EmptyEvent())
@@ -142,16 +142,16 @@ async def test_workflow_cancellation_records_interrupted_duration_status_and_kee
             await step_can_finish.wait()
 
     m = InterruptedMinion(
-        "iid",
-        "ck",
-        "tests.assets.interrupted_minion",
-        "cfg",
+        "dummy-minion-instance-id",
+        "dummy-orchestration-id",
+        "dummy-minion-module-path",
+        "dummy-config-path",
         state_store,
         metrics,
         logger,
-        minion_id="tests.assets.interrupted_minion",
+        minion_id="dummy-minion-id",
         minion_config_id="",
-        pipeline_id="test-pipeline",
+        pipeline_id="dummy-pipeline-id",
     )
     m._mn_started.set()
     await m._mn_handle_event(EmptyEvent())
@@ -202,16 +202,16 @@ async def test_runtime_guard_rejects_nested_step_invocation_via_indirect_call(
             pass
 
     m = MyMinion(
-        "iid",
-        "ck",
-        "tests.assets.nested_call_minion",
+        "dummy-minion-instance-id",
+        "dummy-orchestration-id",
+        "dummy-minion-module-path",
         None,
         state_store,
         metrics,
         logger,
-        minion_id="tests.assets.nested_call_minion",
+        minion_id="dummy-minion-id",
         minion_config_id="",
-        pipeline_id="test-pipeline",
+        pipeline_id="dummy-pipeline-id",
     )
 
     m._mn_started.set()
@@ -255,16 +255,16 @@ async def test_minion_steps_can_access_event_and_context_across_workflow_steps(
             observed.append(("step_2", event_value, self.context.value))
 
     m = MyMinion(
-        "iid",
-        "ck",
-        "tests.assets.access_minion",
+        "dummy-minion-instance-id",
+        "dummy-orchestration-id",
+        "dummy-minion-module-path",
         None,
         state_store,
         metrics,
         logger,
-        minion_id="tests.assets.access_minion",
+        minion_id="dummy-minion-id",
         minion_config_id="",
-        pipeline_id="test-pipeline",
+        pipeline_id="dummy-pipeline-id",
     )
     m._mn_started.set()
     await m._mn_handle_event(IntValueEvent(value=10))
@@ -288,16 +288,16 @@ class TestMinionWorkflowHandle:
                 captured_handles.append(self.workflow_handle)
 
         m = MyMinion(
-            minion_instance_id="instance-1",
-            orchestration_id="orchestration-1",
-            minion_module_path="mock",
+            minion_instance_id="dummy-minion-instance-id",
+            orchestration_id="dummy-orchestration-id",
+            minion_module_path="dummy-minion-module-path",
             config_path=None,
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
             logger=NoOpLogger(),
-            minion_id="test-minion",
+            minion_id="dummy-minion-id",
             minion_config_id="",
-            pipeline_id="test-pipeline",
+            pipeline_id="dummy-pipeline-id",
         )
         m._mn_started.set()
 
@@ -305,7 +305,7 @@ class TestMinionWorkflowHandle:
         await m._mn_wait_until_tasks_idle(timeout=1.0, timeout_msg="workflow did not finish")
 
         assert len(captured_handles) == 1
-        assert captured_handles[0].orchestration_id == "orchestration-1"
+        assert captured_handles[0].orchestration_id == "dummy-orchestration-id"
         assert isinstance(captured_handles[0].workflow_id, str)
         assert captured_handles[0].workflow_id
 
@@ -325,16 +325,16 @@ class TestMinionWorkflowHandle:
                 captured_stored_contexts.extend(await state_store.get_all_contexts())
 
         m = MyMinion(
-            minion_instance_id="instance-1",
-            orchestration_id="orchestration-1",
-            minion_module_path="mock",
+            minion_instance_id="dummy-minion-instance-id",
+            orchestration_id="dummy-orchestration-id",
+            minion_module_path="dummy-minion-module-path",
             config_path=None,
             state_store=state_store,
             metrics=NoOpMetrics(),
             logger=logger,
-            minion_id="test-minion",
+            minion_id="dummy-minion-id",
             minion_config_id="",
-            pipeline_id="test-pipeline",
+            pipeline_id="dummy-pipeline-id",
         )
         m._mn_started.set()
 
@@ -356,8 +356,8 @@ class TestMinionWorkflowHandle:
 
     def test_workflow_handle_is_read_only(self):
         handle = MinionWorkflowHandle(
-            orchestration_id="orchestration-1",
-            workflow_id="workflow-1",
+            orchestration_id="dummy-orchestration-id",
+            workflow_id="dummy-workflow-id",
         )
 
         with pytest.raises(FrozenInstanceError):
@@ -369,16 +369,16 @@ class TestMinionWorkflowHandle:
             async def step_1(self): ...
 
         m = MyMinion(
-            minion_instance_id="instance-1",
-            orchestration_id="orchestration-1",
-            minion_module_path="mock",
+            minion_instance_id="dummy-minion-instance-id",
+            orchestration_id="dummy-orchestration-id",
+            minion_module_path="dummy-minion-module-path",
             config_path=None,
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
             logger=NoOpLogger(),
-            minion_id="test-minion",
+            minion_id="dummy-minion-id",
             minion_config_id="",
-            pipeline_id="test-pipeline",
+            pipeline_id="dummy-pipeline-id",
         )
 
         with pytest.raises(

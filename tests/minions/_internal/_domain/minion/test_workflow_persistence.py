@@ -71,16 +71,16 @@ async def test_workflow_persistence_continue_on_failure_advances_and_retries_at_
 
     store = FailableStateStore(logger=logger)
     m = ContinueOnFailureMinion(
-        minion_instance_id="iid",
-        orchestration_id="ck",
-        minion_module_path="tests.assets.continue_persistence_minion",
-        config_path="cfg",
+        minion_instance_id="dummy-minion-instance-id",
+        orchestration_id="dummy-orchestration-id",
+        minion_module_path="dummy-minion-module-path",
+        config_path="dummy-config-path",
         state_store=store,
         metrics=metrics,
         logger=logger,
         minion_id="tests.assets.continue_persistence_minion",
         minion_config_id="",
-        pipeline_id="test-pipeline",
+        pipeline_id="dummy-pipeline-id",
         workflow_persistence_failure_policy="continue-on-failure",
         workflow_persistence_retry_delay_seconds=0.01,
     )
@@ -139,16 +139,16 @@ async def test_workflow_persistence_idle_until_persisted_blocks_next_step_until_
 
     store = FailableStateStore(logger=logger)
     m = IdleUntilPersistedMinion(
-        minion_instance_id="iid",
-        orchestration_id="ck",
-        minion_module_path="tests.assets.idle_persistence_minion",
-        config_path="cfg",
+        minion_instance_id="dummy-minion-instance-id",
+        orchestration_id="dummy-orchestration-id",
+        minion_module_path="dummy-minion-module-path",
+        config_path="dummy-config-path",
         state_store=store,
         metrics=metrics,
         logger=logger,
         minion_id="tests.assets.idle_persistence_minion",
         minion_config_id="",
-        pipeline_id="test-pipeline",
+        pipeline_id="dummy-pipeline-id",
         workflow_persistence_failure_policy="idle-until-persisted",
         workflow_persistence_retry_delay_seconds=0.01,
     )
@@ -213,16 +213,16 @@ async def test_workflow_persistence_blocked_gauge_counts_concurrent_workflows_fo
 
     store = FailableStateStore(logger=logger)
     m = ConcurrentIdleUntilPersistedMinion(
-        minion_instance_id="iid",
-        orchestration_id="ck",
-        minion_module_path="tests.assets.concurrent_idle_persistence_minion",
-        config_path="cfg",
+        minion_instance_id="dummy-minion-instance-id",
+        orchestration_id="dummy-orchestration-id",
+        minion_module_path="dummy-minion-module-path",
+        config_path="dummy-config-path",
         state_store=store,
         metrics=metrics,
         logger=logger,
         minion_id="tests.assets.concurrent_idle_persistence_minion",
         minion_config_id="",
-        pipeline_id="test-pipeline",
+        pipeline_id="dummy-pipeline-id",
         workflow_persistence_failure_policy="idle-until-persisted",
         workflow_persistence_retry_delay_seconds=0.01,
         workflow_persistence_retry_jitter_ratio=0.0,
@@ -284,16 +284,16 @@ async def test_workflow_persistence_idle_until_persisted_relogs_and_escalates_su
 
     store = FailableStateStore(logger=logger)
     m = SustainedIdleMinion(
-        minion_instance_id="iid",
-        orchestration_id="ck",
-        minion_module_path="tests.assets.sustained_idle_persistence_minion",
-        config_path="cfg",
+        minion_instance_id="dummy-minion-instance-id",
+        orchestration_id="dummy-orchestration-id",
+        minion_module_path="dummy-minion-module-path",
+        config_path="dummy-config-path",
         state_store=store,
         metrics=metrics,
         logger=logger,
         minion_id="tests.assets.sustained_idle_persistence_minion",
         minion_config_id="",
-        pipeline_id="test-pipeline",
+        pipeline_id="dummy-pipeline-id",
         workflow_persistence_failure_policy="idle-until-persisted",
         workflow_persistence_retry_delay_seconds=0.01,
         workflow_persistence_retry_max_delay_seconds=0.04,
@@ -347,16 +347,16 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds(
     store = FailableStateStore(logger=logger)
     store.delete_failures.enable()
     m = DeleteBlockingSuccessMinion(
-        minion_instance_id="iid",
-        orchestration_id="ck",
-        minion_module_path="tests.assets.delete_blocking_success_minion",
-        config_path="cfg",
+        minion_instance_id="dummy-minion-instance-id",
+        orchestration_id="dummy-orchestration-id",
+        minion_module_path="dummy-minion-module-path",
+        config_path="dummy-config-path",
         state_store=store,
         metrics=metrics,
         logger=logger,
         minion_id="tests.assets.delete_blocking_success_minion",
         minion_config_id="",
-        pipeline_id="test-pipeline",
+        pipeline_id="dummy-pipeline-id",
         workflow_persistence_failure_policy="continue-on-failure",
         workflow_persistence_retry_delay_seconds=0.01,
         workflow_persistence_retry_max_delay_seconds=0.02,
@@ -437,16 +437,16 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
             step_calls.append("step_2")
 
     m = MyMinion(
-        minion_instance_id="iid",
-        orchestration_id="ck",
-        minion_module_path="tests.assets.non_retryable_persistence_minion",
-        config_path="cfg",
+        minion_instance_id="dummy-minion-instance-id",
+        orchestration_id="dummy-orchestration-id",
+        minion_module_path="dummy-minion-module-path",
+        config_path="dummy-config-path",
         state_store=state_store,
         metrics=metrics,
         logger=logger,
         minion_id="tests.assets.non_retryable_persistence_minion",
         minion_config_id="",
-        pipeline_id="test-pipeline",
+        pipeline_id="dummy-pipeline-id",
         workflow_persistence_failure_policy="idle-until-persisted",
         workflow_persistence_retry_delay_seconds=0.01,
     )

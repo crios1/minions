@@ -2225,7 +2225,7 @@ def test_assert_persisted_context_integrity_accepts_matching_snapshot(
                 instance_id="id-ok",
                 minion_cls=TwoStepCounterMinion,
                 success=True,
-                orchestration_id="ck",
+                orchestration_id="dummy-orchestration-id",
                 pipeline_id="tests.assets.pipelines.emit_one.counter.default",
                 minion_id="durable-two-step-minion",
             ),
@@ -2241,7 +2241,7 @@ def test_assert_persisted_context_integrity_accepts_matching_snapshot(
                 persisted_context_snapshots_by_minion_id={
                     "durable-two-step-minion": (
                         MinionWorkflowContext(
-                            orchestration_id="ck",
+                            orchestration_id="dummy-orchestration-id",
                             workflow_id="workflow-1",
                             event=CounterEvent(seq=1),
                             context=CounterContext(),

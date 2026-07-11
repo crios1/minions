@@ -30,35 +30,32 @@ async def test_minion_startup_replays_only_own_contexts(
         async def step_1(self):
             return
 
-    minion_module_path = "mock.module_path.minion_replay_shared"
-    pipeline_id = "tests.assets.pipelines.shared"
-    own_orchestration_id = f"{minion_module_path}|cfg-own|{pipeline_id}"
-    other_orchestration_id = f"{minion_module_path}|cfg-other|{pipeline_id}"
+    own_orchestration_id = "dummy-own-orchestration-id"
     m = ReplayMinion(
-        "iid",
+        "dummy-minion-instance-id",
         own_orchestration_id,
-        minion_module_path,
+        "dummy-minion-module-path",
         None,
         state_store,
         metrics,
         logger,
-        minion_id=minion_module_path,
-        minion_config_id="cfg-own",
-        pipeline_id=pipeline_id,
+        minion_id="dummy-minion-id",
+        minion_config_id="dummy-minion-config-id",
+        pipeline_id="dummy-pipeline-id",
     )
 
     await state_store._mn_serialize_and_save_context(
         MinionWorkflowContext(
             orchestration_id=own_orchestration_id,
-            workflow_id="wf-own",
+            workflow_id="dummy-own-workflow-id",
             event=EmptyEvent(),
             context=EmptyContext(),
         )
     )
     await state_store._mn_serialize_and_save_context(
         MinionWorkflowContext(
-            orchestration_id=other_orchestration_id,
-            workflow_id="wf-other",
+            orchestration_id="dummy-other-orchestration-id",
+            workflow_id="dummy-other-workflow-id",
             event=EmptyEvent(),
             context=EmptyContext(),
         )
@@ -73,7 +70,7 @@ async def test_minion_startup_replays_only_own_contexts(
 
     await m._mn_startup()
 
-    assert replayed_ids == ["wf-own"]
+    assert replayed_ids == ["dummy-own-workflow-id"]
 
 
 @pytest.mark.asyncio
@@ -96,26 +93,24 @@ async def test_minion_startup_replays_typed_msgspec_event_and_context(
                 )
             )
 
-    minion_module_path = "mock.module_path.minion_replay_typed"
-    pipeline_id = "tests.assets.pipelines.shared"
-    orchestration_id = f"{minion_module_path}|cfg|{pipeline_id}"
+    orchestration_id = "dummy-orchestration-id"
     m = MyMinion(
-        "iid",
+        "dummy-minion-instance-id",
         orchestration_id,
-        minion_module_path,
+        "dummy-minion-module-path",
         None,
         state_store,
         metrics,
         logger,
-        minion_id=minion_module_path,
-        minion_config_id="cfg",
-        pipeline_id=pipeline_id,
+        minion_id="dummy-minion-id",
+        minion_config_id="dummy-minion-config-id",
+        pipeline_id="dummy-pipeline-id",
     )
 
     await state_store._mn_serialize_and_save_context(
         MinionWorkflowContext(
             orchestration_id=orchestration_id,
-            workflow_id="wf-typed",
+            workflow_id="dummy-workflow-id",
             event=IntValueEvent(7),
             context=IntValueContext(11),
         )
@@ -146,26 +141,24 @@ async def test_resumed_workflow_step_can_access_event_and_context_from_state_sto
             event_value = self.event.value
             observed.append(("step_2", event_value, self.context.value))
 
-    minion_module_path = "tests.assets.resume_access_minion"
-    pipeline_id = "tests.assets.pipelines.resume"
-    orchestration_id = f"{minion_module_path}|cfg|{pipeline_id}"
+    orchestration_id = "dummy-orchestration-id"
     m = MyMinion(
-        "iid",
+        "dummy-minion-instance-id",
         orchestration_id,
-        minion_module_path,
+        "dummy-minion-module-path",
         None,
         state_store,
         metrics,
         logger,
-        minion_id=minion_module_path,
-        minion_config_id="cfg",
-        pipeline_id=pipeline_id,
+        minion_id="dummy-minion-id",
+        minion_config_id="dummy-minion-config-id",
+        pipeline_id="dummy-pipeline-id",
     )
 
     await state_store._mn_serialize_and_save_context(
         MinionWorkflowContext(
             orchestration_id=orchestration_id,
-            workflow_id="wf-resume",
+            workflow_id="dummy-workflow-id",
             event=IntValueEvent(value=7),
             context=IntValueContext(value=8),
             next_step_index=1,
@@ -192,25 +185,23 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
         async def step_1(self):
             observed.append(self.event.value)
 
-    minion_module_path = "tests.assets.replay_with_invalid_context_minion"
-    pipeline_id = "tests.assets.pipelines.invalid"
-    orchestration_id = f"{minion_module_path}|cfg|{pipeline_id}"
+    orchestration_id = "dummy-orchestration-id"
     m = ReplayWithInvalidContextMinion(
-        "iid",
+        "dummy-minion-instance-id",
         orchestration_id,
-        minion_module_path,
+        "dummy-minion-module-path",
         None,
         state_store,
         metrics,
         logger,
-        minion_id=minion_module_path,
-        minion_config_id="cfg",
-        pipeline_id=pipeline_id,
+        minion_id="dummy-minion-id",
+        minion_config_id="dummy-minion-config-id",
+        pipeline_id="dummy-pipeline-id",
     )
 
     valid_context: MinionWorkflowContext[IntValueEvent, EmptyContext] = MinionWorkflowContext(
         orchestration_id=orchestration_id,
-        workflow_id="wf-valid",
+        workflow_id="dummy-valid-workflow-id",
         event=IntValueEvent(value=123),
         context=EmptyContext(),
         next_step_index=0,
@@ -219,7 +210,7 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
     )
     invalid_context: MinionWorkflowContext[IntValueEvent, EmptyContext] = MinionWorkflowContext(
         orchestration_id=orchestration_id,
-        workflow_id="wf-invalid",
+        workflow_id="dummy-invalid-workflow-id",
         event=IntValueEvent(value=456),
         context=EmptyContext(),
         next_step_index=0,
@@ -238,13 +229,13 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
         schema_version=999,
     )
 
-    state_store._contexts["wf-valid"] = StoredWorkflowContext(
-        workflow_id="wf-valid",
+    state_store._contexts["dummy-valid-workflow-id"] = StoredWorkflowContext(
+        workflow_id="dummy-valid-workflow-id",
         orchestration_id=orchestration_id,
         context=serialize_persisted_workflow_context(valid_context),
     )
-    state_store._contexts["wf-invalid"] = StoredWorkflowContext(
-        workflow_id="wf-invalid",
+    state_store._contexts["dummy-invalid-workflow-id"] = StoredWorkflowContext(
+        workflow_id="dummy-invalid-workflow-id",
         orchestration_id=orchestration_id,
         context=serialize(invalid_payload),
     )
@@ -275,25 +266,23 @@ async def test_minion_startup_replay_fails_closed_on_context_type_mismatch(
         async def step_1(self):
             observed.append(self.event.value)
 
-    minion_module_path = "tests.assets.replay_with_mismatched_context_minion"
-    pipeline_id = "tests.assets.pipelines.invalid"
-    orchestration_id = f"{minion_module_path}|cfg|{pipeline_id}"
+    orchestration_id = "dummy-orchestration-id"
     m = ReplayWithMismatchedContextMinion(
-        "iid",
+        "dummy-minion-instance-id",
         orchestration_id,
-        minion_module_path,
+        "dummy-minion-module-path",
         None,
         state_store,
         metrics,
         logger,
-        minion_id=minion_module_path,
-        minion_config_id="cfg",
-        pipeline_id=pipeline_id,
+        minion_id="dummy-minion-id",
+        minion_config_id="dummy-minion-config-id",
+        pipeline_id="dummy-pipeline-id",
     )
 
     valid_context: MinionWorkflowContext[IntValueEvent, EmptyContext] = MinionWorkflowContext(
         orchestration_id=orchestration_id,
-        workflow_id="wf-valid",
+        workflow_id="dummy-valid-workflow-id",
         event=IntValueEvent(value=123),
         context=EmptyContext(),
         next_step_index=0,
@@ -301,20 +290,20 @@ async def test_minion_startup_replay_fails_closed_on_context_type_mismatch(
     mismatched_context: MinionWorkflowContext[StringValueEvent, EmptyContext] = (
         MinionWorkflowContext(
             orchestration_id=orchestration_id,
-            workflow_id="wf-mismatch",
+            workflow_id="dummy-mismatched-workflow-id",
             event=StringValueEvent(value="not-an-int"),
             context=EmptyContext(),
             next_step_index=0,
         )
     )
 
-    state_store._contexts["wf-valid"] = StoredWorkflowContext(
-        workflow_id="wf-valid",
+    state_store._contexts["dummy-valid-workflow-id"] = StoredWorkflowContext(
+        workflow_id="dummy-valid-workflow-id",
         orchestration_id=orchestration_id,
         context=serialize_persisted_workflow_context(valid_context),
     )
-    state_store._contexts["wf-mismatch"] = StoredWorkflowContext(
-        workflow_id="wf-mismatch",
+    state_store._contexts["dummy-mismatched-workflow-id"] = StoredWorkflowContext(
+        workflow_id="dummy-mismatched-workflow-id",
         orchestration_id=orchestration_id,
         context=serialize_persisted_workflow_context(mismatched_context),
     )
@@ -327,7 +316,7 @@ async def test_minion_startup_replay_fails_closed_on_context_type_mismatch(
     assert logger.has_log(
         "StateStore failed to decode stored workflow context",
         log_kwargs={
-            "workflow_id": "wf-mismatch",
+            "workflow_id": "dummy-mismatched-workflow-id",
             "error_type": "WorkflowContextTypeMismatchError",
         },
     )

@@ -211,16 +211,16 @@ def test_reject_instantiating_minion_without_steps():
 
     with pytest.raises(TypeError) as excinfo:
         MyMinion(
-            "minion-instance-id",
-            "orchestration-id",
-            "tests.MyMinion",
+            "dummy-minion-instance-id",
+            "dummy-orchestration-id",
+            "dummy-minion-module-path",
             None,
             NoOpStateStore(),
             NoOpMetrics(),
             NoOpLogger(),
-            minion_id="minion-id",
-            minion_config_id="minion-config-id",
-            pipeline_id="pipeline-id",
+            minion_id="dummy-minion-id",
+            minion_config_id="dummy-minion-config-id",
+            pipeline_id="dummy-pipeline-id",
         )
 
     assert str(excinfo.value) == (

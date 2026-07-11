@@ -59,16 +59,16 @@ def test_minion_workflow_created_properly():
     assert MyMinion._mn_workflow_spec == ("step_1", "step_2")
 
     m = MyMinion(
-        "",
-        "",
-        "",
-        "",
+        "dummy-minion-instance-id",
+        "dummy-orchestration-id",
+        "dummy-minion-module-path",
+        None,
         NoOpStateStore(),
         NoOpMetrics(),
         NoOpLogger(),
-        minion_id="test-minion",
+        minion_id="dummy-minion-id",
         minion_config_id="",
-        pipeline_id="test-pipeline",
+        pipeline_id="dummy-pipeline-id",
     )
 
     assert len(m._mn_workflow) == 2

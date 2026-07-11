@@ -117,22 +117,22 @@ class TestMinionLifecycle:
             async def step_1(self): ...
 
         m = FailingStartupMinion(
-            minion_instance_id="instance-1",
-            orchestration_id="orchestration-1",
-            minion_module_path="tests.assets.FailingStartupMinion",
+            minion_instance_id="dummy-minion-instance-id",
+            orchestration_id="dummy-orchestration-id",
+            minion_module_path="dummy-minion-module-path",
             config_path=None,
             state_store=NoOpStateStore(),
             metrics=NoOpMetrics(),
             logger=logger,
-            minion_id="stable-minion-id",
-            minion_config_id="config-1",
-            pipeline_id="pipeline-1",
+            minion_id="dummy-minion-id",
+            minion_config_id="dummy-minion-config-id",
+            pipeline_id="dummy-pipeline-id",
         )
 
         with pytest.raises(MinionsError) as exc_info:
             await m._mn_startup()
 
-        assert exc_info.value.context["minion_id"] == "stable-minion-id"
-        assert exc_info.value.context["minion_instance_id"] == "instance-1"
-        assert exc_info.value.context["minion_config_id"] == "config-1"
-        assert exc_info.value.context["minion_module_path"] == "tests.assets.FailingStartupMinion"
+        assert exc_info.value.context["minion_id"] == "dummy-minion-id"
+        assert exc_info.value.context["minion_instance_id"] == "dummy-minion-instance-id"
+        assert exc_info.value.context["minion_config_id"] == "dummy-minion-config-id"
+        assert exc_info.value.context["minion_module_path"] == "dummy-minion-module-path"

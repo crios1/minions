@@ -23,8 +23,8 @@ from tests.assets.support.logger_inmemory import InMemoryLogger
 
 def make_context() -> MinionWorkflowContext[CounterEvent, dict[str, Any]]:
     return MinionWorkflowContext(
-        orchestration_id="minion|config|pipeline",
-        workflow_id="wf-boom",
+        orchestration_id="dummy-orchestration-id",
+        workflow_id="dummy-workflow-id",
         event=CounterEvent(seq=1),
         context={},
     )
