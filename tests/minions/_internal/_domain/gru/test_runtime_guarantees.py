@@ -624,8 +624,8 @@ async def test_failed_start_preserves_existing_gru_runtime_state(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    healthy_pipeline = "tests.assets.crash.pipelines.counter.healthy"
-    healthy_minion = "tests.assets.crash.minions.counter.healthy"
+    healthy_pipeline = "tests.assets.pipelines.emit_one.counter.default"
+    healthy_minion = "tests.assets.minions.one_step.counter.default"
     incompatible_pipeline_module = importlib.import_module(
         "tests.assets.pipelines.emit_one.record.default"
     )
@@ -698,7 +698,7 @@ async def test_failed_start_does_not_clean_up_resource_created_by_concurrent_sta
 
         failed_start_task = asyncio.create_task(
             gru.start_orchestration(
-                "tests.assets.crash.pipelines.counter.healthy",
+                "tests.assets.pipelines.emit_one.counter.default",
                 failing_minion,
             )
         )

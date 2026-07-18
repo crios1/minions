@@ -16,8 +16,8 @@ from tests.minions._internal._domain.gru.assertions import (
     assert_runtime_empty,
 )
 
-HEALTHY_MINION = "tests.assets.crash.minions.counter.healthy"
-HEALTHY_PIPELINE = "tests.assets.crash.pipelines.counter.healthy"
+HEALTHY_MINION = "tests.assets.minions.one_step.counter.default"
+HEALTHY_PIPELINE = "tests.assets.pipelines.emit_one.counter.default"
 FIXED_RESOURCE_ID = "tests.assets.resources.fixed.default.AssetResource"
 
 

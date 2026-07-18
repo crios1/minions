@@ -473,8 +473,8 @@ class TestUnit:
             state_store=NoOpStateStore(),
         ) as gru:
             result = await gru.start_orchestration(
-                "tests.assets.crash.pipelines.counter.healthy",
-                "tests.assets.crash.minions.counter.healthy",
+                "tests.assets.pipelines.emit_one.counter.default",
+                "tests.assets.minions.one_step.counter.default",
             )
             assert result.success
 
@@ -603,8 +603,8 @@ class TestUnit:
             state_store=NoOpStateStore(),
         ) as gru:
             result = await gru.start_orchestration(
-                "tests.assets.crash.pipelines.counter.healthy",
-                "tests.assets.crash.minions.counter.healthy",
+                "tests.assets.pipelines.emit_one.counter.default",
+                "tests.assets.minions.one_step.counter.default",
             )
             assert result.success
 
@@ -638,8 +638,8 @@ class TestUnit:
             state_store=NoOpStateStore(),
         ) as gru:
             result = await gru.start_orchestration(
-                "tests.assets.crash.pipelines.counter.healthy",
-                "tests.assets.crash.minions.counter.healthy",
+                "tests.assets.pipelines.emit_one.counter.default",
+                "tests.assets.minions.one_step.counter.default",
             )
             assert result.success
             monitor_task = gru._resource_monitor_task
@@ -677,8 +677,8 @@ class TestUnit:
             state_store=NoOpStateStore(),
         ) as gru:
             result = await gru.start_orchestration(
-                "tests.assets.crash.pipelines.counter.healthy",
-                "tests.assets.crash.minions.counter.healthy",
+                "tests.assets.pipelines.emit_one.counter.default",
+                "tests.assets.minions.one_step.counter.default",
             )
             assert result.success
 
