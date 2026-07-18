@@ -1009,7 +1009,7 @@ def test_assert_pipeline_events_falls_back_for_failed_start_before_activation(
     verifier._assert_pipeline_events()
 
 
-def test_assert_pipeline_events_handles_event_type_failure_before_activation(
+def test_assert_pipeline_events_expects_no_lifecycle_calls_for_event_type_failure(
     verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1054,7 +1054,7 @@ def test_assert_pipeline_events_handles_event_type_failure_before_activation(
     monkeypatch.setattr(
         EmitOneCounterPipeline,
         "get_call_counts",
-        _stub_get_call_counts({"__init__": 1}),
+        _stub_get_call_counts({}),
     )
 
     verifier._assert_pipeline_events()
@@ -2113,7 +2113,7 @@ def test_assert_lifecycle_tracking_reports_untracked_successful_start(
                     resources=frozenset(),
                     resource_tasks=frozenset(),
                     minion_instance_by_orchestration={},
-                    pipeline_by_minion_instance={},
+                    pipeline_by_orchestration={},
                     resources_by_minion_instance={},
                     resources_by_pipeline={},
                     resource_dependencies_by_dependent_resource={},
@@ -2180,7 +2180,7 @@ def test_assert_lifecycle_tracking_reports_resource_refcount_mismatch(
                     resources=frozenset({resource_id}),
                     resource_tasks=frozenset({resource_id}),
                     minion_instance_by_orchestration={"orchestration-1": "minion-instance-1"},
-                    pipeline_by_minion_instance={"minion-instance-1": pipeline_id},
+                    pipeline_by_orchestration={"orchestration-1": pipeline_id},
                     resources_by_minion_instance={"minion-instance-1": frozenset({resource_id})},
                     resources_by_pipeline={pipeline_id: frozenset({resource_id})},
                     resource_dependencies_by_dependent_resource={},

@@ -522,10 +522,12 @@ class TestUnit:
             )
             assert result.success
             assert result.orchestration_id is not None
-            minion = gru._minions_by_orchestration_id[result.orchestration_id]
-            minion_instance_id = minion._mn_minion_instance_id
 
             snapshot = gru.runtime_state_snapshot()
+            minion_instance_id = snapshot.minion_instance_for_orchestration(
+                result.orchestration_id
+            )
+            assert minion_instance_id is not None
             assert snapshot.minion_instances == {minion_instance_id}
             assert snapshot.orchestrations == {result.orchestration_id}
             assert snapshot.minion_tasks == {minion_instance_id}
@@ -536,8 +538,8 @@ class TestUnit:
             assert snapshot.minion_instance_by_orchestration == {
                 result.orchestration_id: minion_instance_id
             }
-            assert snapshot.pipeline_by_minion_instance == {
-                minion_instance_id: identified_pipeline_id
+            assert snapshot.pipeline_by_orchestration == {
+                result.orchestration_id: identified_pipeline_id
             }
             assert snapshot.resources_by_minion_instance == {
                 minion_instance_id: frozenset({identified_resource_id})
@@ -549,7 +551,10 @@ class TestUnit:
             assert snapshot.minion_instance_for_orchestration(
                 result.orchestration_id
             ) == minion_instance_id
-            assert snapshot.pipeline_for_minion(minion_instance_id) == identified_pipeline_id
+            assert (
+                snapshot.pipeline_for_orchestration(result.orchestration_id)
+                == identified_pipeline_id
+            )
             assert snapshot.resources_for_minion(minion_instance_id) == frozenset(
                 {identified_resource_id}
             )
@@ -560,15 +565,29 @@ class TestUnit:
             assert snapshot.resource_refcount("missing") == 0
 
             with pytest.raises(TypeError):
-                snapshot.pipeline_by_minion_instance["other"] = "pipeline"  # type: ignore[index]
+                snapshot.pipeline_by_orchestration["other"] = "pipeline"  # type: ignore[index]
 
-            # Mutating Gru after capture must not change the point-in-time snapshot.
-            snapshot_pipeline_map = dict(snapshot.pipeline_by_minion_instance)
-            gru._minion_pipeline_map["other"] = "pipeline"
-            try:
-                assert snapshot.pipeline_by_minion_instance == snapshot_pipeline_map
-            finally:
-                gru._minion_pipeline_map.pop("other")
+            # A later valid lifecycle transition must not change the point-in-time snapshot.
+            snapshot_pipeline_map = dict(snapshot.pipeline_by_orchestration)
+            second = await gru.start_orchestration(
+                "tests.assets.pipelines.emit_one.counter.default",
+                "tests.assets.minions.two_steps.counter.default",
+            )
+            assert second.success
+            assert second.orchestration_id is not None
+
+            current_snapshot = gru.runtime_state_snapshot()
+            assert current_snapshot.orchestrations == {
+                result.orchestration_id,
+                second.orchestration_id,
+            }
+            assert snapshot.pipeline_by_orchestration == snapshot_pipeline_map
+
+            first_stop = await gru.stop_orchestration(result.orchestration_id)
+            second_stop = await gru.stop_orchestration(second.orchestration_id)
+            assert first_stop.success
+            assert second_stop.success
+            assert_runtime_empty(gru)
 
     @pytest.mark.asyncio
     async def test_shutdown_reports_task_cancel_errors_and_clears_runtime_state(

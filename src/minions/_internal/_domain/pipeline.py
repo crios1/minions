@@ -231,6 +231,10 @@ class Pipeline(AsyncService, Generic[T_Event]):
         async with self._mn_subs_lock:
             self._mn_subs.discard(minion)
 
+    async def _mn_has_subscribers(self) -> bool:
+        async with self._mn_subs_lock:
+            return bool(self._mn_subs)
+
     @abstractmethod
     async def produce_event(self) -> T_Event:
         """override to create your own Pipeline"""

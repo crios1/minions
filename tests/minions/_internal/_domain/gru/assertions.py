@@ -92,19 +92,18 @@ def assert_pipeline_singleton(
     gru: Gru,
     *,
     pipeline_id: str,
-    minion_instance_ids: Set[str],
+    orchestration_ids: Set[str],
 ) -> None:
     snapshot = gru.runtime_state_snapshot()
 
     assert_runtime_component_maps_consistent(gru)
     assert snapshot.pipelines == {pipeline_id}
     assert snapshot.pipeline_tasks == {pipeline_id}
-    assert snapshot.pipeline_by_minion_instance == {
-        minion_instance_id: pipeline_id
-        for minion_instance_id in minion_instance_ids
+    assert snapshot.pipeline_by_orchestration == {
+        orchestration_id: pipeline_id for orchestration_id in orchestration_ids
     }
-    for minion_instance_id in minion_instance_ids:
-        assert snapshot.pipeline_for_minion(minion_instance_id) == pipeline_id
+    for orchestration_id in orchestration_ids:
+        assert snapshot.pipeline_for_orchestration(orchestration_id) == pipeline_id
 
 
 def assert_runtime_resource_maps_consistent(gru: Gru) -> None:

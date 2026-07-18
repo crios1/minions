@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 from collections.abc import Callable
 from typing import Any
@@ -21,32 +22,39 @@ FIXED_RESOURCE_ID = "tests.assets.resources.fixed.default.AssetResource"
 
 
 @pytest.mark.asyncio
-async def test_stop_committed_minion_shutdown_failure_discards_runtime_state_when_cleanup_helper_fails(  # noqa: E501
+async def test_shutdown_failure_removes_target_without_affecting_other_runtime_state(
     managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    shared_pipeline = "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
+
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        result = await gru.start_orchestration(
-            HEALTHY_PIPELINE, "tests.assets.crash.minions.counter.boom_shutdown"
+        healthy_start = await gru.start_orchestration(shared_pipeline, HEALTHY_MINION)
+        assert healthy_start.success
+        assert healthy_start.orchestration_id is not None
+        healthy_runtime_state = gru.runtime_state_snapshot()
+
+        fail_on_shutdown_start = await gru.start_orchestration(
+            shared_pipeline,
+            "tests.assets.crash.minions.counter.boom_shutdown",
         )
-        assert result.success
+        assert fail_on_shutdown_start.success
+        assert fail_on_shutdown_start.orchestration_id is not None
 
-        async def failing_stop_orchestration_best_effort(_minion: Minion[Any, Any]) -> None:
-            raise RuntimeError("cleanup helper boom")
+        failed_stop = await gru.stop_orchestration(fail_on_shutdown_start.orchestration_id)
 
-        monkeypatch.setattr(
-            gru, "_stop_orchestration_best_effort", failing_stop_orchestration_best_effort
-        )
-        stop = await gru.stop_orchestration(result.orchestration_id or "")
-
-        assert not stop.success
-        assert stop.reason == (
+        assert not failed_stop.success
+        assert failed_stop.reason == (
             "tests.assets.crash.minions.counter.boom_shutdown."
             "AssetMinion.shutdown failed"
         )
+        assert gru.runtime_state_snapshot() == healthy_runtime_state
+        assert_orchestration_running(gru, healthy_start.orchestration_id)
+
+        healthy_stop = await gru.stop_orchestration(healthy_start.orchestration_id)
+        assert healthy_stop.success
         assert_runtime_empty(gru)
 
 
@@ -62,12 +70,11 @@ async def test_stop_unsubscribe_failure_discards_runtime_state_after_subscriptio
         result = await gru.start_orchestration(HEALTHY_PIPELINE, HEALTHY_MINION)
         assert result.success
         assert result.orchestration_id is not None
-        minion = gru._minions_by_orchestration_id[result.orchestration_id]
         pipeline = gru._pipelines[HEALTHY_PIPELINE]
+        original_unsubscribe = pipeline._mn_unsubscribe
 
         async def failing_unsubscribe(detached_minion: Minion[Any, Any]) -> None:
-            async with pipeline._mn_subs_lock:
-                pipeline._mn_subs.discard(detached_minion)
+            await original_unsubscribe(detached_minion)
             raise RuntimeError("unsubscribe boom")
 
         monkeypatch.setattr(pipeline, "_mn_unsubscribe", failing_unsubscribe)
@@ -75,7 +82,133 @@ async def test_stop_unsubscribe_failure_discards_runtime_state_after_subscriptio
 
         assert not stop.success
         assert stop.reason == "unsubscribe boom"
-        assert minion not in pipeline._mn_subs
+        assert not await pipeline._mn_has_subscribers()
+        assert_runtime_empty(gru)
+
+
+@pytest.mark.asyncio
+async def test_failed_start_discards_pipeline_resources_when_pipeline_stop_fails(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pipeline_ref = "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
+
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
+        async def failing_stop_pipeline_if_unused(_pipeline_id: str) -> None:
+            raise RuntimeError("pipeline stop boom")
+
+        monkeypatch.setattr(
+            gru,
+            "_stop_pipeline_if_unused",
+            failing_stop_pipeline_if_unused,
+        )
+
+        failed_start = await gru.start_orchestration(
+            pipeline_ref,
+            "tests.assets.crash.minions.counter.boom_startup",
+        )
+
+        assert not failed_start.success
+        assert_runtime_empty(gru)
+
+
+@pytest.mark.asyncio
+async def test_pipeline_resource_binding_failure_restores_previous_runtime_state(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> None:
+    from tests.assets.events.counter import CounterEvent
+    from tests.assets.minions.two_steps.counter.default import (
+        AssetMinion as UnresourcedCounterMinion,
+    )
+    from tests.assets.resources.fixed.default import AssetResource as FixedResource
+    from tests.assets.resources.simple.default import AssetResource as SimpleResource
+    from tests.assets.support.pipeline_subscriber_ready_fixed_events import (
+        SubscriberReadyFixedEventsPipeline,
+    )
+
+    class PipelineWithFailingResourceSetattr(
+        SubscriberReadyFixedEventsPipeline[CounterEvent]
+    ):
+        fixed_resource: FixedResource
+        rejected_resource: SimpleResource
+
+        def __setattr__(self, name: str, value: object) -> None:
+            if name == "rejected_resource":
+                raise RuntimeError("pipeline resource injection boom")
+            super().__setattr__(name, value)
+
+        async def produce_event(self) -> CounterEvent:
+            return CounterEvent(seq=await self.fixed_resource.get_value())
+
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
+        runtime_state_before = gru.runtime_state_snapshot()
+
+        failed_start = await gru.start_orchestration(
+            PipelineWithFailingResourceSetattr,
+            UnresourcedCounterMinion,
+        )
+
+        assert not failed_start.success
+        assert failed_start.reason == "pipeline resource injection boom"
+        assert gru.runtime_state_snapshot() == runtime_state_before
+
+
+@pytest.mark.asyncio
+async def test_cancelled_start_rolls_back_runtime_state(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pipeline_ref = "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
+
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
+        original_acquire = gru._acquire_pipeline_resources
+
+        async def cancel_after_acquiring_pipeline_resources(pipeline: Any) -> None:
+            await original_acquire(pipeline)
+            raise asyncio.CancelledError
+
+        monkeypatch.setattr(
+            gru,
+            "_acquire_pipeline_resources",
+            cancel_after_acquiring_pipeline_resources,
+        )
+
+        with pytest.raises(asyncio.CancelledError):
+            await gru.start_orchestration(pipeline_ref, HEALTHY_MINION)
+
+        assert_runtime_empty(gru)
+
+
+@pytest.mark.asyncio
+async def test_cancelled_stop_finalizes_runtime_state(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
+        result = await gru.start_orchestration(HEALTHY_PIPELINE, HEALTHY_MINION)
+        assert result.success
+        assert result.orchestration_id is not None
+
+        async def cancelled_minion_stop(_minion: Minion[Any, Any]) -> None:
+            raise asyncio.CancelledError
+
+        monkeypatch.setattr(gru, "_stop_minion", cancelled_minion_stop)
+
+        with pytest.raises(asyncio.CancelledError):
+            await gru.stop_orchestration(result.orchestration_id)
+
         assert_runtime_empty(gru)
 
 

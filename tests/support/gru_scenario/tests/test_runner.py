@@ -338,7 +338,7 @@ async def test_runner_tracks_durable_minion_pipeline_and_resources(
     assert minion_instance_id is not None
     assert pipeline_id in snapshot.pipelines
     assert resource_id in snapshot.resources
-    assert snapshot.pipeline_for_minion(minion_instance_id) == pipeline_id
+    assert snapshot.pipeline_for_orchestration(receipt.orchestration_id) == pipeline_id
     assert snapshot.resources_for_minion(minion_instance_id) == {resource_id}
 
     assert result.spies is not None
@@ -616,7 +616,7 @@ async def test_runner_records_lifecycle_observations_after_start_stop_and_shutdo
         resources=frozenset(),
         resource_tasks=frozenset(),
         minion_instance_by_orchestration={},
-        pipeline_by_minion_instance={},
+        pipeline_by_orchestration={},
         resources_by_minion_instance={},
         resources_by_pipeline={},
         resource_dependencies_by_dependent_resource={},

@@ -16,8 +16,8 @@ from minions._internal._domain.gru_shell import GruShell
 class FakeGru:
     def __init__(self, start_result: StartResult | None = None) -> None:
         self._loop = asyncio.new_event_loop()
-        self._minions_by_instance_id = {}
-        self._minions_by_orchestration_id = {}
+        self._minions_by_instance_id: dict[str, object] = {}
+        self._orchestrations: dict[str, object] = {}
         self.start_calls: list[tuple[str, str, str | None]] = []
         self._start_result = start_result or StartResult(
             success=True,
@@ -36,6 +36,33 @@ class FakeGru:
 
     def close(self) -> None:
         self._loop.close()
+
+
+@pytest.mark.skip("GruShell deprecated")
+def test_running_state_uses_orchestration_identity() -> None:
+    gru = FakeGru()
+    gru._orchestrations["orchestration-1"] = object()
+    gru._minions_by_instance_id["minion-instance-1"] = object()
+    shell = GruShell(gru)  # type: ignore[arg-type]
+
+    assert shell._compute_state("orchestration-1") == "running"
+    assert shell._compute_state("minion-instance-1") == "unknown"
+    gru.close()
+
+
+@pytest.mark.skip("GruShell deprecated")
+def test_summary_counts_live_orchestrations_instead_of_minion_instances() -> None:
+    gru = FakeGru()
+    gru._orchestrations["orchestration-1"] = object()
+    gru._minions_by_instance_id["minion-instance-1"] = object()
+    shell = GruShell(gru)  # type: ignore[arg-type]
+
+    out = io.StringIO()
+    with redirect_stdout(out):
+        shell._print_summary()
+
+    assert out.getvalue().strip() == "running=1"
+    gru.close()
 
 
 @pytest.mark.skip("GruShell deprecated")

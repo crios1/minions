@@ -300,7 +300,7 @@ class TestValidUsage:
             orchestration_id = start_result.orchestration_id
             assert len(orchestration_id) == 44
             assert_orchestration_running(gru, orchestration_id)
-            minion = cast(_ConfigurableMinion, gru._minions_by_orchestration_id[orchestration_id])
+            minion = cast(_ConfigurableMinion, gru._orchestrations[orchestration_id].minion)
             assert minion.config.name == "alpha"
             assert logger.has_log(
                 "Orchestration started",
@@ -659,7 +659,7 @@ class TestValidUsage:
                 timeout=5.0
             )
 
-            minion = gru._minions_by_orchestration_id[result.orchestration_id]
+            minion = gru._orchestrations[result.orchestration_id].minion
             assert isinstance(minion, FileConfigMinion)
             assert isinstance(minion.config, AssetMinionConfig)
             assert minion.config.name == "alpha"
@@ -706,7 +706,7 @@ class TestValidUsage:
             assert result.success
             assert result.orchestration_id is not None
 
-            minion = gru._minions_by_orchestration_id[result.orchestration_id]
+            minion = gru._orchestrations[result.orchestration_id].minion
             assert isinstance(minion, InlineConfigMinion)
             assert minion.config is inline_config
 

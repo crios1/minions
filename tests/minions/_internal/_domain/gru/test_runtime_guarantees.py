@@ -3,6 +3,7 @@ import contextlib
 import importlib
 from collections import Counter, defaultdict
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 
@@ -266,6 +267,50 @@ async def test_gru_serializes_concurrent_start_and_stop_for_same_orchestration(
 
 
 @pytest.mark.asyncio
+async def test_gru_stop_waits_for_in_progress_start_of_same_orchestration(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    monkeypatch: pytest.MonkeyPatch,
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> None:
+    async with managed_gru_context(
+        logger=logger,
+        metrics=metrics,
+        state_store=state_store,
+    ) as gru:
+        pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
+        minion_ref = "tests.assets.minions.two_steps.simple.default"
+        orchestration_id = Gru._make_orchestration_id(
+            pipeline_id=gru._get_pipeline_identity_from_module_path(pipeline_ref),
+            minion_id=gru._get_minion_identity_from_module_path(minion_ref),
+            minion_config_id="",
+        )
+        gated_start_minion = GatedAsyncCallable[None]()
+        monkeypatch.setattr(gru, "_start_minion", gated_start_minion)
+
+        start_task = asyncio.create_task(
+            gru.start_orchestration(
+                pipeline=pipeline_ref,
+                minion=minion_ref,
+            )
+        )
+        await asyncio.wait_for(gated_start_minion.entered.wait(), timeout=1.0)
+
+        stop_task = asyncio.create_task(gru.stop_orchestration(orchestration_id))
+        await asyncio.sleep(0)
+        stop_completed_while_start_in_progress = stop_task.done()
+
+        gated_start_minion.release.set()
+        start_result, stop_result = await asyncio.gather(start_task, stop_task)
+
+        assert not stop_completed_while_start_in_progress
+        assert start_result.success
+        assert stop_result.success
+        assert_runtime_empty(gru)
+
+
+@pytest.mark.asyncio
 async def test_gru_allows_concurrent_starts_for_different_orchestrations(
     managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
@@ -390,6 +435,14 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
         assert result2.success
         assert fixed_resource_pipeline_module.AssetPipeline.get_call_counts()["_mn_startup"] == 1
         assert fixed_resource_module.AssetResource.get_call_counts()["_mn_startup"] == 1
+        assert sum(log.msg == "Pipeline starting" for log in logger.logs) == 1
+        assert sum(log.msg == "Pipeline started" for log in logger.logs) == 1
+
+        canonical_pipeline = gru._pipelines[pipeline_module_path]
+        assert result1.orchestration_id is not None
+        assert result2.orchestration_id is not None
+        assert gru._orchestrations[result1.orchestration_id].pipeline is canonical_pipeline
+        assert gru._orchestrations[result2.orchestration_id].pipeline is canonical_pipeline
 
         resource_id = gru._get_resource_identity(fixed_resource_module.AssetResource)
         assert_runtime_component_counts_exact(gru, pipelines=1, resources=1)
@@ -469,7 +522,7 @@ async def test_gru_runtime_state_uses_singletons_for_shared_pipeline_and_resourc
         assert_pipeline_singleton(
             gru,
             pipeline_id=pipeline_ref,
-            minion_instance_ids=set(running_orchestrations.values()),
+            orchestration_ids=set(running_orchestrations),
         )
         assert_pipeline_resource_dependency_singletons(
             gru,
@@ -492,7 +545,7 @@ async def test_gru_runtime_state_uses_singletons_for_shared_pipeline_and_resourc
         assert_pipeline_singleton(
             gru,
             pipeline_id=pipeline_ref,
-            minion_instance_ids={second_minion_instance_id},
+            orchestration_ids={second_start.orchestration_id},
         )
         assert_pipeline_resource_dependency_singletons(
             gru,
@@ -506,6 +559,168 @@ async def test_gru_runtime_state_uses_singletons_for_shared_pipeline_and_resourc
         second_stop = await gru.stop_orchestration(second_start.orchestration_id)
 
         assert second_stop.success
+        assert_runtime_empty(gru)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_start_does_not_attach_during_last_subscriber_pipeline_shutdown(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> None:
+    pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
+
+    async with managed_gru_context(
+        logger=logger,
+        metrics=metrics,
+        state_store=state_store,
+    ) as gru:
+        first = await gru.start_orchestration(
+            pipeline_ref,
+            "tests.assets.minions.two_steps.counter.default",
+        )
+        assert first.success
+        assert first.orchestration_id is not None
+
+        pipeline_gate = GatedLock()
+        gru._pipeline_locks[pipeline_ref] = pipeline_gate
+        stop_task = asyncio.create_task(gru.stop_orchestration(first.orchestration_id))
+        await asyncio.wait_for(pipeline_gate.entered.wait(), timeout=1.0)
+
+        start_task = asyncio.create_task(
+            gru.start_orchestration(
+                pipeline_ref,
+                "tests.assets.minions.two_steps.counter.with_file_config",
+                minion_config_path="tests/assets/config/minions/b.toml",
+            )
+        )
+        await asyncio.sleep(0)
+        assert not start_task.done()
+
+        pipeline_gate.release_gate.set()
+        stop_result, start_result = await asyncio.gather(stop_task, start_task)
+
+        assert stop_result.success
+        assert start_result.success
+        assert start_result.orchestration_id is not None
+        snapshot = gru.runtime_state_snapshot()
+        assert snapshot.orchestrations == {start_result.orchestration_id}
+        assert snapshot.pipelines == {pipeline_ref}
+        assert (
+            snapshot.pipeline_for_orchestration(start_result.orchestration_id)
+            == pipeline_ref
+        )
+
+        final_stop = await gru.stop_orchestration(start_result.orchestration_id)
+        assert final_stop.success
+        assert_runtime_empty(gru)
+
+
+@pytest.mark.asyncio
+async def test_failed_start_preserves_existing_gru_runtime_state(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> None:
+    healthy_pipeline = "tests.assets.crash.pipelines.counter.healthy"
+    healthy_minion = "tests.assets.crash.minions.counter.healthy"
+    incompatible_pipeline_module = importlib.import_module(
+        "tests.assets.pipelines.emit_one.record.default"
+    )
+    incompatible_pipeline_module.AssetPipeline.enable_spy()
+    incompatible_pipeline_module.AssetPipeline.reset_spy()
+
+    async with managed_gru_context(
+        logger=logger,
+        metrics=metrics,
+        state_store=state_store,
+    ) as gru:
+        baseline = await gru.start_orchestration(healthy_pipeline, healthy_minion)
+        assert baseline.success
+        assert baseline.orchestration_id is not None
+        expected_runtime_state = gru.runtime_state_snapshot()
+
+        failing_starts = (
+            (
+                "tests.assets.pipelines.emit_one.record.default",
+                "tests.assets.minions.two_steps.counter.default",
+            ),
+            (healthy_pipeline, "tests.assets.crash.minions.counter.boom_startup"),
+            ("tests.assets.crash.pipelines.counter.boom_startup", healthy_minion),
+            (
+                healthy_pipeline,
+                "tests.assets.crash.minions.counter.with_boom_startup_resource",
+            ),
+        )
+
+        for pipeline_ref, minion_ref in failing_starts:
+            failed = await gru.start_orchestration(pipeline_ref, minion_ref)
+            assert not failed.success
+            assert gru.runtime_state_snapshot() == expected_runtime_state
+
+        assert incompatible_pipeline_module.AssetPipeline.get_call_counts().get(
+            "__init__", 0
+        ) == 0
+
+        stopped = await gru.stop_orchestration(baseline.orchestration_id)
+        assert stopped.success
+        assert_runtime_empty(gru)
+
+
+@pytest.mark.asyncio
+async def test_failed_start_does_not_clean_up_resource_created_by_concurrent_start(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    failing_minion = "tests.assets.crash.minions.counter.boom_startup"
+    failing_start_reached_minion = asyncio.Event()
+    allow_failing_minion_start = asyncio.Event()
+
+    async with managed_gru_context(
+        logger=logger,
+        metrics=metrics,
+        state_store=state_store,
+    ) as gru:
+        original_start_minion = gru._start_minion
+
+        async def coordinate_start(minion: Minion[Any, Any]) -> None:
+            if minion._mn_minion_module_path == failing_minion:
+                failing_start_reached_minion.set()
+                await allow_failing_minion_start.wait()
+            await original_start_minion(minion)
+
+        monkeypatch.setattr(gru, "_start_minion", coordinate_start)
+
+        failed_start_task = asyncio.create_task(
+            gru.start_orchestration(
+                "tests.assets.crash.pipelines.counter.healthy",
+                failing_minion,
+            )
+        )
+        await asyncio.wait_for(failing_start_reached_minion.wait(), timeout=1.0)
+
+        healthy_start = await gru.start_orchestration(
+            "tests.assets.pipelines.emit_one.counter.with_fixed_resource",
+            "tests.assets.minions.two_steps.counter.default",
+        )
+        assert healthy_start.success
+        assert healthy_start.orchestration_id is not None
+
+        allow_failing_minion_start.set()
+        failed_start = await failed_start_task
+
+        assert not failed_start.success
+        assert_orchestration_running(gru, healthy_start.orchestration_id)
+        assert_runtime_component_counts_exact(gru, minions=1, pipelines=1, resources=1)
+        assert_runtime_resource_maps_consistent(gru)
+
+        healthy_stop = await gru.stop_orchestration(healthy_start.orchestration_id)
+        assert healthy_stop.success
         assert_runtime_empty(gru)
 
 
@@ -710,7 +925,7 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations_while_s
         assert orchestration1_start_result.success
 
         orchestration1_stop_gate = GatedAsyncCallable[None]()
-        monkeypatch.setattr(gru, "_stop_orchestration_minion", orchestration1_stop_gate)
+        monkeypatch.setattr(gru, "_stop_minion", orchestration1_stop_gate)
 
         orchestration1_stop_task = asyncio.create_task(
             gru.stop_orchestration(orchestration1_start_result.orchestration_id or "")
@@ -790,8 +1005,8 @@ async def test_gru_shutdown_waits_for_in_flight_start_orchestration(
         metrics=metrics,
         state_store=state_store,
     ) as gru:
-        gated_start_orchestration_minion = GatedAsyncCallable[None]()
-        monkeypatch.setattr(gru, "_start_orchestration_minion", gated_start_orchestration_minion)
+        gated_start_minion = GatedAsyncCallable[None]()
+        monkeypatch.setattr(gru, "_start_minion", gated_start_minion)
 
         start_task = asyncio.create_task(
             gru.start_orchestration(
@@ -800,14 +1015,14 @@ async def test_gru_shutdown_waits_for_in_flight_start_orchestration(
             )
         )
 
-        await asyncio.wait_for(gated_start_orchestration_minion.entered.wait(), timeout=1.0)
+        await asyncio.wait_for(gated_start_minion.entered.wait(), timeout=1.0)
 
         assert not gru._is_shutting_down
         shutdown_task = asyncio.create_task(gru.shutdown())
         await asyncio.sleep(0)
         assert not shutdown_task.done()
 
-        gated_start_orchestration_minion.release.set()
+        gated_start_minion.release.set()
         start_result, shutdown_result = await asyncio.gather(start_task, shutdown_task)
 
         assert start_result.success
@@ -838,18 +1053,18 @@ async def test_gru_shutdown_waits_for_in_flight_stop_orchestration(
         )
         assert start_result.success
 
-        gated_stop_orchestration_minion = GatedAsyncCallable[None]()
-        monkeypatch.setattr(gru, "_stop_orchestration_minion", gated_stop_orchestration_minion)
+        gated_stop_minion = GatedAsyncCallable[None]()
+        monkeypatch.setattr(gru, "_stop_minion", gated_stop_minion)
 
         stop_task = asyncio.create_task(gru.stop_orchestration(start_result.orchestration_id or ""))
-        await asyncio.wait_for(gated_stop_orchestration_minion.entered.wait(), timeout=1.0)
+        await asyncio.wait_for(gated_stop_minion.entered.wait(), timeout=1.0)
 
         assert not gru._is_shutting_down
         shutdown_task = asyncio.create_task(gru.shutdown())
         await asyncio.sleep(0)
         assert not shutdown_task.done()
 
-        gated_stop_orchestration_minion.release.set()
+        gated_stop_minion.release.set()
         stop_result, shutdown_result = await asyncio.gather(stop_task, shutdown_task)
 
         assert stop_result.success
@@ -962,8 +1177,8 @@ async def test_gru_shutdown_serializes_concurrent_shutdown_calls(
         metrics=metrics,
         state_store=state_store,
     ) as gru:
-        gated_start_orchestration_minion = GatedAsyncCallable[None]()
-        monkeypatch.setattr(gru, "_start_orchestration_minion", gated_start_orchestration_minion)
+        gated_start_minion = GatedAsyncCallable[None]()
+        monkeypatch.setattr(gru, "_start_minion", gated_start_minion)
 
         start_task = asyncio.create_task(
             gru.start_orchestration(
@@ -972,7 +1187,7 @@ async def test_gru_shutdown_serializes_concurrent_shutdown_calls(
             )
         )
 
-        await asyncio.wait_for(gated_start_orchestration_minion.entered.wait(), timeout=1.0)
+        await asyncio.wait_for(gated_start_minion.entered.wait(), timeout=1.0)
 
         assert not gru._is_shutting_down
         shutdown_task_1 = asyncio.create_task(gru.shutdown())
@@ -984,7 +1199,7 @@ async def test_gru_shutdown_serializes_concurrent_shutdown_calls(
         await asyncio.sleep(0)
         assert not shutdown_task_2.done()
 
-        gated_start_orchestration_minion.release.set()
+        gated_start_minion.release.set()
         start_result, shutdown_result_1, shutdown_result_2 = await asyncio.gather(
             start_task,
             shutdown_task_1,

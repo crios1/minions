@@ -129,10 +129,11 @@ class _PipelineCallExpectationBuilder:
                 if receipt is None:
                     continue
                 if not receipt.success:
-                    if active_by_pipeline_id[receipt.pipeline_id] == 0:
-                        if not self._is_event_type_validation_failure(receipt):
-                            return None
-                        inits_by_pipeline_id[receipt.pipeline_id] += 1
+                    if (
+                        active_by_pipeline_id[receipt.pipeline_id] == 0
+                        and receipt.failure_category != "event_type_mismatch"
+                    ):
+                        return None
                     continue
                 if active_by_pipeline_id[receipt.pipeline_id] == 0:
                     inits_by_pipeline_id[receipt.pipeline_id] += 1
@@ -211,12 +212,6 @@ class _PipelineCallExpectationBuilder:
         if isinstance(total_events, int):
             return total_events
         return expected_events
-
-    def _is_event_type_validation_failure(
-        self,
-        receipt: OrchestrationStartReceipt,
-    ) -> bool:
-        return receipt.failure_category == "event_type_mismatch"
 
     def _plan_has_ambiguous_pipeline_event_timing(
         self,
@@ -550,7 +545,7 @@ class ScenarioVerifier:
                     "pipeline_tasks": frozenset(),
                     "resources": frozenset(),
                     "resource_tasks": frozenset(),
-                    "pipeline_by_minion_instance": {},
+                    "pipeline_by_orchestration": {},
                     "resources_by_minion_instance": {},
                     "resources_by_pipeline": {},
                     "resource_dependencies_by_dependent_resource": {},
@@ -600,10 +595,10 @@ class ScenarioVerifier:
                         resources_with_dependencies.add(dependency_id)
                         pending_resources.append(dependency_id)
                 resources = frozenset(resources_with_dependencies)
-                pipeline_by_minion_instance = {
-                    receipt.instance_id: receipt.pipeline_id
+                pipeline_by_orchestration = {
+                    receipt.orchestration_id: receipt.pipeline_id
                     for receipt in active_receipts
-                    if receipt.instance_id is not None
+                    if receipt.orchestration_id is not None
                 }
                 resources_by_minion_instance = {
                     receipt.instance_id: spies.resources_by_minion_id.get(
@@ -664,7 +659,7 @@ class ScenarioVerifier:
                     "pipeline_tasks": pipelines,
                     "resources": resources,
                     "resource_tasks": resources,
-                    "pipeline_by_minion_instance": pipeline_by_minion_instance,
+                    "pipeline_by_orchestration": pipeline_by_orchestration,
                     "resources_by_minion_instance": (resources_by_minion_instance),
                     "resources_by_pipeline": resources_by_pipeline,
                     "resource_dependencies_by_dependent_resource": (

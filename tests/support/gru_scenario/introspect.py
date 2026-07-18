@@ -57,19 +57,17 @@ class GruIntrospector:
         return self._gru._minions_by_instance_id.get(instance_id)
 
     def get_minion_by_orchestration_id(self, orchestration_id: str) -> Minion[Any, Any] | None:
-        return self._gru._minions_by_orchestration_id.get(orchestration_id)
+        orchestration = self._gru._orchestrations.get(orchestration_id)
+        return orchestration.minion if orchestration is not None else None
 
     def get_pipeline_instance(self, pipeline_id: str) -> object | None:
         return self._gru._pipelines.get(pipeline_id)
 
     def get_pipeline_module_path_for_minion(self, instance_id: str) -> str | None:
-        pipeline_id = self._gru._minion_pipeline_map.get(instance_id)
-        if not pipeline_id:
-            return None
-        pipeline_inst = self._gru._pipelines.get(pipeline_id)
-        if pipeline_inst is None:
-            return None
-        return getattr(pipeline_inst, "_mn_pipeline_module_path", None)
+        for orchestration in self._gru._orchestrations.values():
+            if orchestration.minion._mn_minion_instance_id == instance_id:
+                return orchestration.pipeline._mn_pipeline_module_path
+        return None
 
     def resource_ids_for(self, *, minion_instance_id: str | None, pipeline_id: str) -> set[str]:
         resource_ids: set[str] = set()

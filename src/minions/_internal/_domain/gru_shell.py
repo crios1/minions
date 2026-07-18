@@ -3,11 +3,17 @@ import cmd
 import concurrent.futures as cf
 import os
 import shlex
+from collections.abc import Coroutine
 from pprint import pprint
-from typing import Literal, Optional
+from typing import Any, Literal, Optional, TypeAlias, TypeVar, cast
 
 from .gru import Gru
-from .gru_result_types import GruResult, StartResult
+from .gru_result_types import GruResult, StartResult, StopResult
+
+T_Result = TypeVar("T_Result")
+T_GruResult = TypeVar("T_GruResult", bound=GruResult)
+_Future: TypeAlias = asyncio.Future[T_Result] | cf.Future[T_Result]
+_OperationFuture: TypeAlias = _Future[StartResult] | _Future[StopResult]
 
 State = Literal[
     "starting",
@@ -53,9 +59,9 @@ class GruShell(cmd.Cmd):
         super().__init__()
         self._gru = gru
         self._loop = gru._loop
-        self._shutdown_done = self._loop.create_future()
-        self._start_ops: dict[str, cf.Future] = {}  # id_or_pending -> future
-        self._stop_ops: dict[str, cf.Future] = {}  # id -> future
+        self._shutdown_done: asyncio.Future[bool] = self._loop.create_future()
+        self._start_ops: dict[str, _Future[StartResult]] = {}  # id_or_pending -> future
+        self._stop_ops: dict[str, _Future[StopResult]] = {}  # id -> future
         self._last_targets: list[str] = []
 
     # -------- helpers --------
@@ -64,27 +70,27 @@ class GruShell(cmd.Cmd):
         return shlex.split(line)
 
     def _get_orchestration_ids(self) -> list[str]:
-        return list(self._gru._minions_by_orchestration_id)
+        return list(self._gru._orchestrations)
 
-    def _submit(self, coro) -> cf.Future:
+    def _submit(self, coro: Coroutine[Any, Any, T_Result]) -> _Future[T_Result]:
         if self._loop.is_running():
             return asyncio.run_coroutine_threadsafe(coro, self._loop)
         return self._loop.create_task(coro)
 
-    def _future_exception(self, f) -> BaseException | None:
+    def _future_exception(self, f: _Future[T_Result]) -> BaseException | None:
         try:
             return f.exception()
         except (asyncio.InvalidStateError, cf.InvalidStateError):
             return None
 
-    def _future_result(self, f, timeout: float | None = None):
+    def _future_result(self, f: _Future[T_Result], timeout: float | None = None) -> T_Result:
         if isinstance(f, cf.Future):
             return f.result(timeout=timeout)
         if timeout is not None and not f.done():
             raise TimeoutError()
         return f.result()
 
-    def _operation_failed(self, f) -> bool:
+    def _operation_failed(self, f: _Future[T_GruResult]) -> bool:
         if not f.done():
             return False
         if self._future_exception(f):
@@ -92,7 +98,18 @@ class GruShell(cmd.Cmd):
         result = self._future_result(f)
         return isinstance(result, GruResult) and not result.success
 
-    def _wait_on_future_if_any(self, target: str):
+    def _operation_result(
+        self,
+        f: _OperationFuture,
+        timeout: float | None = None,
+    ) -> GruResult:
+        if isinstance(f, cf.Future):
+            return f.result(timeout=timeout)
+        if timeout is not None and not f.done():
+            raise TimeoutError()
+        return f.result()
+
+    def _wait_on_future_if_any(self, target: str) -> _OperationFuture | None:
         state = self._compute_state(target)
         if target.startswith("pending:") or state == "starting":
             return self._start_ops.get(target)
@@ -135,13 +152,13 @@ class GruShell(cmd.Cmd):
                 return "aborted"
             except Exception:
                 return "failed"
-        if key in self._gru._minions_by_instance_id:  # running if present
+        if key in self._gru._orchestrations:
             return "running"
         return "unknown"
 
     def _print_summary(self):
         counts: dict[State, int] = {}
-        keys = set(self._start_ops) | set(self._stop_ops) | set(self._gru._minions_by_instance_id)
+        keys = set(self._start_ops) | set(self._stop_ops) | set(self._gru._orchestrations)
         for k in keys:
             s = self._compute_state(k)
             counts[s] = counts.get(s, 0) + 1
@@ -180,7 +197,7 @@ class GruShell(cmd.Cmd):
         self._last_targets = [pending_id]
         print("start queued")
 
-        def _cb(f):
+        def _cb(f: _Future[StartResult]) -> None:
             try:
                 result = self._future_result(f)
             except Exception:
@@ -257,10 +274,10 @@ class GruShell(cmd.Cmd):
             try:
                 if timeout is None:
                     for f in futs:
-                        self._future_result(f)
+                        self._operation_result(f)
                 else:
                     for f in futs:
-                        self._future_result(f, timeout=timeout)
+                        self._operation_result(f, timeout=timeout)
             except Exception as e:
                 print(f"status/await error: {e}")
 
@@ -268,7 +285,7 @@ class GruShell(cmd.Cmd):
             print(f"{t} {self._compute_state(t)}")
 
     def complete_status(self, text: str, line: str, begidx: int, endidx: int):
-        return self._get_minion_ids_and_names() + [
+        return self._get_orchestration_ids() + [
             k for k in self._start_ops if k.startswith("pending:")
         ]
 
@@ -289,7 +306,14 @@ class GruShell(cmd.Cmd):
 
         try:
             if futs:
-                cf.wait(futs, timeout=timeout)
+                cf.wait(
+                    [
+                        cast(cf.Future[Any], future)
+                        for future in futs
+                        if isinstance(future, cf.Future)
+                    ],
+                    timeout=timeout,
+                )
         except KeyboardInterrupt:
             print("wait interrupted by user")
 
