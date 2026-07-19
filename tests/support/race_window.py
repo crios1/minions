@@ -10,15 +10,15 @@ class GatedLock(asyncio.Lock):
 
     def __init__(self) -> None:
         super().__init__()
-        self.entered = asyncio.Event()
-        self.release_gate = asyncio.Event()
+        self._held = asyncio.Event()
+        self._allow_progress = asyncio.Event()
         self.enter_count = 0
 
     async def __aenter__(self) -> None:
         await self.acquire()
         self.enter_count += 1
-        self.entered.set()
-        await self.release_gate.wait()
+        self._held.set()
+        await self._allow_progress.wait()
 
     async def __aexit__(
         self,
@@ -27,6 +27,14 @@ class GatedLock(asyncio.Lock):
         tb: TracebackType | None,
     ) -> None:
         self.release()
+
+    async def wait_until_held(self, timeout: float = 1.0) -> None:
+        """Wait until production code holds the lock at the test gate."""
+        await asyncio.wait_for(self._held.wait(), timeout=timeout)
+
+    def allow_progress(self) -> None:
+        """Release the test gate so the lock holder can continue."""
+        self._allow_progress.set()
 
 
 class GatedAsyncCallable(Generic[T_Result]):

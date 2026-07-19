@@ -117,8 +117,8 @@ async def test_gru_serializes_concurrent_starts_for_same_orchestration(
             ),
             minion_config_id="",
         )
-        orchestration_gated_lock = gru._orchestration_locks[expected_orchestration_id]
-        assert isinstance(orchestration_gated_lock, GatedLock)
+        orchestration_lock = gru._orchestration_locks[expected_orchestration_id]
+        assert isinstance(orchestration_lock, GatedLock)
 
         task1 = asyncio.create_task(
             gru.start_orchestration(
@@ -133,12 +133,12 @@ async def test_gru_serializes_concurrent_starts_for_same_orchestration(
             )
         )
 
-        await asyncio.wait_for(orchestration_gated_lock.entered.wait(), timeout=1.0)
+        await orchestration_lock.wait_until_held()
         await asyncio.sleep(0)
-        assert orchestration_gated_lock.enter_count == 1
+        assert orchestration_lock.enter_count == 1
         assert not task2.done()
 
-        orchestration_gated_lock.release_gate.set()
+        orchestration_lock.allow_progress()
         result1, result2 = await asyncio.gather(task1, task2)
 
         successes = [result for result in (result1, result2) if result.success]
@@ -182,8 +182,8 @@ async def test_gru_serializes_concurrent_stops_for_same_orchestration(
             ),
             minion_config_id="",
         )
-        orchestration_gated_lock = gru._orchestration_locks[expected_orchestration_id]
-        assert isinstance(orchestration_gated_lock, GatedLock)
+        orchestration_lock = gru._orchestration_locks[expected_orchestration_id]
+        assert isinstance(orchestration_lock, GatedLock)
 
         stop_task_1 = asyncio.create_task(
             gru.stop_orchestration(start_result.orchestration_id or "")
@@ -192,12 +192,12 @@ async def test_gru_serializes_concurrent_stops_for_same_orchestration(
             gru.stop_orchestration(start_result.orchestration_id or "")
         )
 
-        await asyncio.wait_for(orchestration_gated_lock.entered.wait(), timeout=1.0)
+        await orchestration_lock.wait_until_held()
         await asyncio.sleep(0)
-        assert orchestration_gated_lock.enter_count == 1
+        assert orchestration_lock.enter_count == 1
         assert not stop_task_2.done()
 
-        orchestration_gated_lock.release_gate.set()
+        orchestration_lock.allow_progress()
         stop_result_1, stop_result_2 = await asyncio.gather(stop_task_1, stop_task_2)
 
         successes = [result for result in (stop_result_1, stop_result_2) if result.success]
@@ -241,11 +241,11 @@ async def test_gru_serializes_concurrent_start_and_stop_for_same_orchestration(
             ),
             minion_config_id="",
         )
-        orchestration_gated_lock = gru._orchestration_locks[expected_orchestration_id]
-        assert isinstance(orchestration_gated_lock, GatedLock)
+        orchestration_lock = gru._orchestration_locks[expected_orchestration_id]
+        assert isinstance(orchestration_lock, GatedLock)
 
         stop_task = asyncio.create_task(gru.stop_orchestration(start_result.orchestration_id or ""))
-        await asyncio.wait_for(orchestration_gated_lock.entered.wait(), timeout=1.0)
+        await orchestration_lock.wait_until_held()
 
         start_task = asyncio.create_task(
             gru.start_orchestration(
@@ -255,10 +255,10 @@ async def test_gru_serializes_concurrent_start_and_stop_for_same_orchestration(
         )
 
         await asyncio.sleep(0)
-        assert orchestration_gated_lock.enter_count == 1
+        assert orchestration_lock.enter_count == 1
         assert not start_task.done()
 
-        orchestration_gated_lock.release_gate.set()
+        orchestration_lock.allow_progress()
         stop_result, restart_result = await asyncio.gather(stop_task, start_task)
 
         assert stop_result.success
@@ -345,10 +345,10 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations(
             minion_id=basic_minion_id,
             minion_config_id="",
         )
-        gate1 = gru._orchestration_locks[orchestration_id_1]
-        gate2 = gru._orchestration_locks[orchestration_id_2]
-        assert isinstance(gate1, GatedLock)
-        assert isinstance(gate2, GatedLock)
+        orchestration_lock_1 = gru._orchestration_locks[orchestration_id_1]
+        orchestration_lock_2 = gru._orchestration_locks[orchestration_id_2]
+        assert isinstance(orchestration_lock_1, GatedLock)
+        assert isinstance(orchestration_lock_2, GatedLock)
 
         task1 = asyncio.create_task(
             gru.start_orchestration(
@@ -363,16 +363,16 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations(
             )
         )
 
-        await asyncio.wait_for(
-            asyncio.gather(gate1.entered.wait(), gate2.entered.wait()),
-            timeout=1.0
+        await asyncio.gather(
+            orchestration_lock_1.wait_until_held(),
+            orchestration_lock_2.wait_until_held(),
         )
         await asyncio.sleep(0)
-        assert gate1.enter_count == 1
-        assert gate2.enter_count == 1
+        assert orchestration_lock_1.enter_count == 1
+        assert orchestration_lock_2.enter_count == 1
 
-        gate1.release_gate.set()
-        gate2.release_gate.set()
+        orchestration_lock_1.allow_progress()
+        orchestration_lock_2.allow_progress()
         result1, result2 = await asyncio.gather(task1, task2)
 
         assert result1.success
@@ -406,8 +406,8 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
         state_store=state_store,
     ) as gru:
         gru._pipeline_locks = defaultdict(GatedLock)
-        pipeline_gate = gru._pipeline_locks[pipeline_module_path]
-        assert isinstance(pipeline_gate, GatedLock)
+        pipeline_lock = gru._pipeline_locks[pipeline_module_path]
+        assert isinstance(pipeline_lock, GatedLock)
 
         task1 = asyncio.create_task(
             gru.start_orchestration(
@@ -423,12 +423,12 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
             )
         )
 
-        await asyncio.wait_for(pipeline_gate.entered.wait(), timeout=1.0)
+        await pipeline_lock.wait_until_held()
         await asyncio.sleep(0)
-        assert pipeline_gate.enter_count == 1
+        assert pipeline_lock.enter_count == 1
         assert not task2.done()
 
-        pipeline_gate.release_gate.set()
+        pipeline_lock.allow_progress()
         result1, result2 = await asyncio.gather(task1, task2)
 
         assert result1.success
@@ -583,10 +583,10 @@ async def test_concurrent_start_does_not_attach_during_last_subscriber_pipeline_
         assert first.success
         assert first.orchestration_id is not None
 
-        pipeline_gate = GatedLock()
-        gru._pipeline_locks[pipeline_ref] = pipeline_gate
+        pipeline_lock = GatedLock()
+        gru._pipeline_locks[pipeline_ref] = pipeline_lock
         stop_task = asyncio.create_task(gru.stop_orchestration(first.orchestration_id))
-        await asyncio.wait_for(pipeline_gate.entered.wait(), timeout=1.0)
+        await pipeline_lock.wait_until_held()
 
         start_task = asyncio.create_task(
             gru.start_orchestration(
@@ -598,7 +598,7 @@ async def test_concurrent_start_does_not_attach_during_last_subscriber_pipeline_
         await asyncio.sleep(0)
         assert not start_task.done()
 
-        pipeline_gate.release_gate.set()
+        pipeline_lock.allow_progress()
         stop_result, start_result = await asyncio.gather(stop_task, start_task)
 
         assert stop_result.success
