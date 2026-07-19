@@ -295,13 +295,13 @@ async def test_gru_stop_waits_for_in_progress_start_of_same_orchestration(
                 minion=minion_ref,
             )
         )
-        await asyncio.wait_for(gated_start_minion.entered.wait(), timeout=1.0)
+        await gated_start_minion.wait_until_called()
 
         stop_task = asyncio.create_task(gru.stop_orchestration(orchestration_id))
         await asyncio.sleep(0)
         stop_completed_while_start_in_progress = stop_task.done()
 
-        gated_start_minion.release.set()
+        gated_start_minion.allow_return()
         start_result, stop_result = await asyncio.gather(start_task, stop_task)
 
         assert not stop_completed_while_start_in_progress
@@ -924,13 +924,13 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations_while_s
         )
         assert orchestration1_start_result.success
 
-        orchestration1_stop_gate = GatedAsyncCallable[None]()
-        monkeypatch.setattr(gru, "_stop_minion", orchestration1_stop_gate)
+        gated_orchestration1_stop = GatedAsyncCallable[None]()
+        monkeypatch.setattr(gru, "_stop_minion", gated_orchestration1_stop)
 
         orchestration1_stop_task = asyncio.create_task(
             gru.stop_orchestration(orchestration1_start_result.orchestration_id or "")
         )
-        await asyncio.wait_for(orchestration1_stop_gate.entered.wait(), timeout=1.0)
+        await gated_orchestration1_stop.wait_until_called()
 
         orchestration2_start_task = asyncio.create_task(
             gru.start_orchestration(
@@ -957,7 +957,7 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations_while_s
         assert_orchestration_running(gru, orchestration1_start_result.orchestration_id)
         assert_runtime_component_counts_exact(gru, minions=2)
 
-        orchestration1_stop_gate.release.set()
+        gated_orchestration1_stop.allow_return()
         orchestration1_stop_result = await orchestration1_stop_task
 
         assert orchestration1_stop_result.success
@@ -1015,14 +1015,14 @@ async def test_gru_shutdown_waits_for_in_flight_start_orchestration(
             )
         )
 
-        await asyncio.wait_for(gated_start_minion.entered.wait(), timeout=1.0)
+        await gated_start_minion.wait_until_called()
 
         assert not gru._is_shutting_down
         shutdown_task = asyncio.create_task(gru.shutdown())
         await asyncio.sleep(0)
         assert not shutdown_task.done()
 
-        gated_start_minion.release.set()
+        gated_start_minion.allow_return()
         start_result, shutdown_result = await asyncio.gather(start_task, shutdown_task)
 
         assert start_result.success
@@ -1057,14 +1057,14 @@ async def test_gru_shutdown_waits_for_in_flight_stop_orchestration(
         monkeypatch.setattr(gru, "_stop_minion", gated_stop_minion)
 
         stop_task = asyncio.create_task(gru.stop_orchestration(start_result.orchestration_id or ""))
-        await asyncio.wait_for(gated_stop_minion.entered.wait(), timeout=1.0)
+        await gated_stop_minion.wait_until_called()
 
         assert not gru._is_shutting_down
         shutdown_task = asyncio.create_task(gru.shutdown())
         await asyncio.sleep(0)
         assert not shutdown_task.done()
 
-        gated_stop_minion.release.set()
+        gated_stop_minion.allow_return()
         stop_result, shutdown_result = await asyncio.gather(stop_task, shutdown_task)
 
         assert stop_result.success
@@ -1135,12 +1135,12 @@ async def test_gru_shutdown_rejects_new_lifecycle_work_during_shutdown_in_progre
         )
         assert start_result.success
 
-        gated__shutdown_async_component = GatedAsyncCallable[None]()
-        monkeypatch.setattr(gru, "_shutdown_async_component", gated__shutdown_async_component)
+        gated_shutdown_async_component = GatedAsyncCallable[None]()
+        monkeypatch.setattr(gru, "_shutdown_async_component", gated_shutdown_async_component)
 
         assert not gru._is_shutting_down
         shutdown_task = asyncio.create_task(gru.shutdown())
-        await asyncio.wait_for(gated__shutdown_async_component.entered.wait(), timeout=1.0)
+        await gated_shutdown_async_component.wait_until_called()
 
         new_start_task = asyncio.create_task(
             gru.start_orchestration(
@@ -1158,7 +1158,7 @@ async def test_gru_shutdown_rejects_new_lifecycle_work_during_shutdown_in_progre
         assert not stop_result2.success
         assert stop_result2.reason == "Gru is shutting down."
 
-        gated__shutdown_async_component.release.set()
+        gated_shutdown_async_component.allow_return()
         shutdown_result = await shutdown_task
         assert shutdown_result.success
 
@@ -1187,7 +1187,7 @@ async def test_gru_shutdown_serializes_concurrent_shutdown_calls(
             )
         )
 
-        await asyncio.wait_for(gated_start_minion.entered.wait(), timeout=1.0)
+        await gated_start_minion.wait_until_called()
 
         assert not gru._is_shutting_down
         shutdown_task_1 = asyncio.create_task(gru.shutdown())
@@ -1199,7 +1199,7 @@ async def test_gru_shutdown_serializes_concurrent_shutdown_calls(
         await asyncio.sleep(0)
         assert not shutdown_task_2.done()
 
-        gated_start_minion.release.set()
+        gated_start_minion.allow_return()
         start_result, shutdown_result_1, shutdown_result_2 = await asyncio.gather(
             start_task,
             shutdown_task_1,
