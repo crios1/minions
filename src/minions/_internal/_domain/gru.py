@@ -1521,61 +1521,64 @@ class Gru:
             if isinstance(val, (dict, set)):
                 val.clear()
 
-    def runtime_state_snapshot(self) -> GruRuntimeStateSnapshot:
+    async def runtime_state_snapshot(self) -> GruRuntimeStateSnapshot:
         """Return a read-only diagnostic snapshot of Gru's live runtime graph."""
         # Registries of live components/tasks snapshot only their identity keys because
         # MappingProxyType would not make their mutable values immutable; relationship
         # maps preserve copied values as immutable point-in-time state.
-        return GruRuntimeStateSnapshot(
-            minion_instances=frozenset(self._minions_by_instance_id),
-            orchestrations=frozenset(self._orchestrations),
-            minion_tasks=frozenset(self._minion_tasks),
-            pipelines=frozenset(self._pipelines),
-            pipeline_tasks=frozenset(self._pipeline_tasks),
-            resources=frozenset(self._resources),
-            resource_tasks=frozenset(self._resource_tasks),
-            minion_instance_by_orchestration=MappingProxyType(
-                {
-                    orchestration_id: orchestration.minion._mn_minion_instance_id
-                    for orchestration_id, orchestration in self._orchestrations.items()
-                }
-            ),
-            pipeline_by_orchestration=MappingProxyType(
-                {
-                    orchestration_id: orchestration.pipeline._mn_pipeline_id
-                    for orchestration_id, orchestration in self._orchestrations.items()
-                }
-            ),
-            resources_by_minion_instance=MappingProxyType(
-                {
-                    minion_instance_id: frozenset(resource_ids)
-                    for minion_instance_id, resource_ids in self._minion_resource_map.items()
-                }
-            ),
-            resources_by_pipeline=MappingProxyType(
-                {
-                    pipeline_id: frozenset(resource_ids)
-                    for pipeline_id, resource_ids in self._pipeline_resource_map.items()
-                }
-            ),
-            resource_dependencies_by_dependent_resource=MappingProxyType(
-                {
-                    dependent_resource_id: frozenset(dependency_resource_ids)
-                    for dependent_resource_id, dependency_resource_ids in (
-                        self._resource_dependencies.items()
-                    )
-                }
-            ),
-            resource_dependents_by_dependency_resource=MappingProxyType(
-                {
-                    dependency_resource_id: frozenset(dependent_resource_ids)
-                    for dependency_resource_id, dependent_resource_ids in (
-                        self._resource_dependents.items()
-                    )
-                }
-            ),
-            resource_reference_counts=MappingProxyType(dict(self._resource_reference_counts)),
-        )
+        async with self._runtime_state_lock:
+            return GruRuntimeStateSnapshot(
+                minion_instances=frozenset(self._minions_by_instance_id),
+                orchestrations=frozenset(self._orchestrations),
+                minion_tasks=frozenset(self._minion_tasks),
+                pipelines=frozenset(self._pipelines),
+                pipeline_tasks=frozenset(self._pipeline_tasks),
+                resources=frozenset(self._resources),
+                resource_tasks=frozenset(self._resource_tasks),
+                minion_instance_by_orchestration=MappingProxyType(
+                    {
+                        orchestration_id: orchestration.minion._mn_minion_instance_id
+                        for orchestration_id, orchestration in self._orchestrations.items()
+                    }
+                ),
+                pipeline_by_orchestration=MappingProxyType(
+                    {
+                        orchestration_id: orchestration.pipeline._mn_pipeline_id
+                        for orchestration_id, orchestration in self._orchestrations.items()
+                    }
+                ),
+                resources_by_minion_instance=MappingProxyType(
+                    {
+                        minion_instance_id: frozenset(resource_ids)
+                        for minion_instance_id, resource_ids in self._minion_resource_map.items()
+                    }
+                ),
+                resources_by_pipeline=MappingProxyType(
+                    {
+                        pipeline_id: frozenset(resource_ids)
+                        for pipeline_id, resource_ids in self._pipeline_resource_map.items()
+                    }
+                ),
+                resource_dependencies_by_dependent_resource=MappingProxyType(
+                    {
+                        dependent_resource_id: frozenset(dependency_resource_ids)
+                        for dependent_resource_id, dependency_resource_ids in (
+                            self._resource_dependencies.items()
+                        )
+                    }
+                ),
+                resource_dependents_by_dependency_resource=MappingProxyType(
+                    {
+                        dependency_resource_id: frozenset(dependent_resource_ids)
+                        for dependency_resource_id, dependent_resource_ids in (
+                            self._resource_dependents.items()
+                        )
+                    }
+                ),
+                resource_reference_counts=MappingProxyType(
+                    dict(self._resource_reference_counts)
+                ),
+            )
 
     def _runtime_tasks_snapshot(self) -> list[asyncio.Task[None]]:
         return [

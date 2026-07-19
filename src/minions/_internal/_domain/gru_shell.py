@@ -7,7 +7,7 @@ from collections.abc import Coroutine
 from pprint import pprint
 from typing import Any, Literal, Optional, TypeAlias, TypeVar, cast
 
-from .gru import Gru
+from .gru import Gru, GruRuntimeStateSnapshot
 from .gru_result_types import GruResult, StartResult, StopResult
 
 T_Result = TypeVar("T_Result")
@@ -41,9 +41,6 @@ State = Literal[
 #   while still giving users an explicit way to wait on their
 #   submitted orchestration to resolve.
 
-# TODO: add 'list' command to GruShell (make a Gru.list_orchestrations method)
-# that lists all live orchestrations Gru is running
-
 # TODO: add 'deps' command to GruShell (make a Gru.get_dependencies method)
 # gru> deps (prints a dependency graph)
 # gru> deps minion MID_OR_MNAME
@@ -70,7 +67,13 @@ class GruShell(cmd.Cmd):
         return shlex.split(line)
 
     def _get_orchestration_ids(self) -> list[str]:
-        return list(self._gru._orchestrations)
+        return list(self._runtime_state_snapshot().orchestrations)
+
+    def _runtime_state_snapshot(self) -> GruRuntimeStateSnapshot:
+        return asyncio.run_coroutine_threadsafe(
+            self._gru.runtime_state_snapshot(),
+            self._loop,
+        ).result()
 
     def _submit(self, coro: Coroutine[Any, Any, T_Result]) -> _Future[T_Result]:
         if self._loop.is_running():
@@ -152,13 +155,17 @@ class GruShell(cmd.Cmd):
                 return "aborted"
             except Exception:
                 return "failed"
-        if key in self._gru._orchestrations:
+        if key in self._runtime_state_snapshot().orchestrations:
             return "running"
         return "unknown"
 
     def _print_summary(self):
         counts: dict[State, int] = {}
-        keys = set(self._start_ops) | set(self._stop_ops) | set(self._gru._orchestrations)
+        keys = (
+            set(self._start_ops)
+            | set(self._stop_ops)
+            | set(self._runtime_state_snapshot().orchestrations)
+        )
         for k in keys:
             s = self._compute_state(k)
             counts[s] = counts.get(s, 0) + 1

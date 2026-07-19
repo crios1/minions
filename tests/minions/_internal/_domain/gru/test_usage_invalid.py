@@ -206,7 +206,7 @@ class TestInvalidUsage:
 
             assert result1.success
             assert result1.orchestration_id is not None
-            assert_orchestration_running(gru, result1.orchestration_id)
+            await assert_orchestration_running(gru, result1.orchestration_id)
 
             result2 = await gru.start_orchestration(
                 pipeline=pipeline_module_path,

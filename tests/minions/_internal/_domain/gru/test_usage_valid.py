@@ -136,7 +136,7 @@ class TestValidUsage:
 
             assert result.success
             assert result.orchestration_id is not None
-            assert_orchestration_running(gru, result.orchestration_id)
+            await assert_orchestration_running(gru, result.orchestration_id)
 
             await AssetMinion.wait_for_calls(
                 expected={"step_1": 1, "step_2": 1},
@@ -169,7 +169,7 @@ class TestValidUsage:
 
             assert start_result.success
             assert start_result.orchestration_id is not None
-            assert_orchestration_running(gru, start_result.orchestration_id)
+            await assert_orchestration_running(gru, start_result.orchestration_id)
 
             stop_result = await gru.stop_orchestration(start_result.orchestration_id)
             assert stop_result.success
@@ -205,8 +205,8 @@ class TestValidUsage:
             assert start_result.success
             assert start_result.orchestration_id is not None
             assert len(start_result.orchestration_id) == 44
-            assert_orchestration_running(gru, start_result.orchestration_id)
-            assert PIPELINE_COMPONENT_ID in gru.runtime_state_snapshot().pipelines
+            await assert_orchestration_running(gru, start_result.orchestration_id)
+            assert PIPELINE_COMPONENT_ID in (await gru.runtime_state_snapshot()).pipelines
             assert logger.has_log(
                 "Orchestration started",
                 log_kwargs={
@@ -299,7 +299,7 @@ class TestValidUsage:
             assert start_result.orchestration_id is not None
             orchestration_id = start_result.orchestration_id
             assert len(orchestration_id) == 44
-            assert_orchestration_running(gru, orchestration_id)
+            await assert_orchestration_running(gru, orchestration_id)
             minion = cast(_ConfigurableMinion, gru._orchestrations[orchestration_id].minion)
             assert minion.config.name == "alpha"
             assert logger.has_log(
@@ -491,10 +491,10 @@ class TestValidUsage:
             assert r1.success and r2.success and r3.success
 
             # Expect three distinct pipeline IDs
-            assert_runtime_component_counts_at_least(gru, pipelines=3)
+            await assert_runtime_component_counts_at_least(gru, pipelines=3)
 
             # Expect three distinct resource classes started
-            assert_runtime_component_counts_at_least(gru, resources=3)
+            await assert_runtime_component_counts_at_least(gru, resources=3)
 
             await Simple1ResourceMinion.wait_for_calls(
                 expected={"step_1": 1, "step_2": 1}, timeout=5.0
@@ -579,10 +579,10 @@ class TestValidUsage:
             assert r1.success and r2.success and r3.success
 
             # pipeline should be shared (single id)
-            assert_runtime_component_counts_exact(gru, pipelines=1)
+            await assert_runtime_component_counts_exact(gru, pipelines=1)
 
             # resource should be shared across minions
-            assert_runtime_component_counts_exact(gru, resources=1)
+            await assert_runtime_component_counts_exact(gru, resources=1)
 
             await Simple1ResourceMinion.wait_for_calls(
                 expected={"step_1": 3, "step_2": 3},
@@ -592,15 +592,15 @@ class TestValidUsage:
             # stop minions and assert cleanup
             assert r1.orchestration_id is not None
             await gru.stop_orchestration(r1.orchestration_id)
-            assert_runtime_component_counts_exact(gru, pipelines=1)
+            await assert_runtime_component_counts_exact(gru, pipelines=1)
             assert r2.orchestration_id is not None
             await gru.stop_orchestration(r2.orchestration_id)
-            assert_runtime_component_counts_exact(gru, pipelines=1)
+            await assert_runtime_component_counts_exact(gru, pipelines=1)
             assert r3.orchestration_id is not None
             await gru.stop_orchestration(r3.orchestration_id)
 
             # after all stopped, pipeline and resources cleaned
-            assert_runtime_component_counts_exact(gru, pipelines=0, resources=0)
+            await assert_runtime_component_counts_exact(gru, pipelines=0, resources=0)
 
     @pytest.mark.asyncio
     async def test_gru_start_orchestration_shutdown_without_stop(
@@ -619,7 +619,7 @@ class TestValidUsage:
 
             assert result.success
             assert result.orchestration_id is not None
-            assert_orchestration_running(gru, result.orchestration_id)
+            await assert_orchestration_running(gru, result.orchestration_id)
 
     @pytest.mark.asyncio
     async def test_gru_binds_file_config_to_minion(
@@ -737,12 +737,12 @@ class TestValidUsage:
 
             assert r1.success
 
-            assert_runtime_component_counts_exact(gru, pipelines=1, resources=1)
+            await assert_runtime_component_counts_exact(gru, pipelines=1, resources=1)
 
             assert isinstance(r1.orchestration_id, str)
             await gru.stop_orchestration(r1.orchestration_id)
 
-            assert_runtime_component_counts_exact(gru, pipelines=0, resources=0)
+            await assert_runtime_component_counts_exact(gru, pipelines=0, resources=0)
 
     # TODO: I need tests for gru's default usages to ensure i stay version 1.x.x compliant
 

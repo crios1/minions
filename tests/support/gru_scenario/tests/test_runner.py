@@ -332,8 +332,8 @@ async def test_runner_tracks_durable_minion_pipeline_and_resources(
     assert receipt.minion_id == minion_id
     assert receipt.pipeline_id == pipeline_id
     assert receipt.orchestration_id is not None
-    assert_orchestration_running(gru, receipt.orchestration_id)
-    snapshot = gru.runtime_state_snapshot()
+    await assert_orchestration_running(gru, receipt.orchestration_id)
+    snapshot = await gru.runtime_state_snapshot()
     minion_instance_id = snapshot.minion_instance_for_orchestration(receipt.orchestration_id)
     assert minion_instance_id is not None
     assert pipeline_id in snapshot.pipelines

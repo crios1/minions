@@ -79,5 +79,5 @@ class GruIntrospector:
     def get_resource_instance(self, rid: str) -> object | None:
         return self._gru._resources.get(rid)
 
-    def runtime_state_snapshot(self) -> GruRuntimeStateSnapshot:
-        return self._gru.runtime_state_snapshot()
+    async def runtime_state_snapshot(self) -> GruRuntimeStateSnapshot:
+        return await self._gru.runtime_state_snapshot()

@@ -81,7 +81,7 @@ class TestMinionFile:
             )
 
             assert result.success
-            assert_runtime_component_counts_exact(gru, pipelines=1, resources=2)
+            await assert_runtime_component_counts_exact(gru, pipelines=1, resources=2)
             assert result.orchestration_id is not None
 
 

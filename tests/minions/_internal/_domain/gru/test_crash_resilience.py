@@ -57,7 +57,7 @@ async def assert_gru_can_start_and_stop_known_good_orchestration(gru: Gru) -> No
     assert await gru._logger.wait_for_log("Workflow succeeded", timeout=1.0)
     stop = await gru.stop_orchestration(result.orchestration_id)
     assert stop.success
-    assert_runtime_empty(gru)
+    await assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio
@@ -91,7 +91,7 @@ async def test_start_orchestration_contains_state_store_resume_read_failure(
                 "cause_error_message": BOOM_MESSAGE,
             },
         )
-        assert_runtime_empty(gru)
+        await assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio
@@ -145,7 +145,7 @@ async def test_start_orchestration_fails_closed_on_persisted_workflow_decode_mis
             },
         )
         assert logger.has_log("Failed to start orchestration")
-        assert_runtime_empty(gru)
+        await assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio
@@ -196,7 +196,7 @@ async def test_start_orchestration_contains_user_code_startup_failures(
                 "cause_error_message": BOOM_MESSAGE,
             },
         )
-        assert_runtime_empty(gru)
+        await assert_runtime_empty(gru)
         await assert_gru_can_start_and_stop_known_good_orchestration(gru)
 
 
@@ -250,7 +250,7 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
         ) >= 1
         stop = await gru.stop_orchestration(result.orchestration_id or "")
         assert stop.success
-        assert_runtime_empty(gru)
+        await assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio
@@ -337,7 +337,7 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
         ) >= 1
         stop = await gru.stop_orchestration(result.orchestration_id or "")
         assert stop.success
-        assert_runtime_empty(gru)
+        await assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio
@@ -378,7 +378,7 @@ async def test_shutdown_failures_are_reported_and_singleton_is_released(
             assert stop.success
             assert logger.has_log("shutdown failed during startup error recovery")
     
-        assert_runtime_empty(gru)
+        await assert_runtime_empty(gru)
 
     # The factory shutdown must release the global singleton even after a failed stop path.
     async with managed_gru_context(

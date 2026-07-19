@@ -240,7 +240,7 @@ class ScenarioRunner:
         for d in self._plan.directives:
             await self._execute(d)
             if self._contains_lifecycle_command(d):
-                self._record_lifecycle_observation(d)
+                await self._record_lifecycle_observation(d)
         return self._result
 
     # should probably make the idea of "lifecycle directive" official
@@ -677,7 +677,7 @@ class ScenarioRunner:
         )
         result.checkpoints.append(checkpoint)
 
-    def _record_lifecycle_observation(self, directive: Directive) -> None:
+    async def _record_lifecycle_observation(self, directive: Directive) -> None:
         result = self._require_result()
         result.lifecycle_observations.append(
             LifecycleObservation(
@@ -687,7 +687,7 @@ class ScenarioRunner:
                     self._active_orchestration_start_indexes
                 ),
                 seen_shutdown=result.seen_shutdown,
-                gru_runtime_state=self._insp.runtime_state_snapshot(),
+                gru_runtime_state=await self._insp.runtime_state_snapshot(),
             )
         )
 
