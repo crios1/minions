@@ -205,7 +205,7 @@ async def test_gru_serializes_concurrent_stops_for_same_orchestration(
 
         assert len(successes) == 1
         assert len(failures) == 1
-        assert failures[0].reason == "Minion is no longer running."
+        assert failures[0].reason == "Orchestration is no longer running."
         await assert_runtime_empty(gru)
 
 

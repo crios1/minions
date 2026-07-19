@@ -1933,7 +1933,7 @@ class Gru:
 
                 if orchestration is None:
                     reason = (
-                        "Minion is no longer running."
+                        "Orchestration is no longer running."
                         if orchestration_existed_at_request
                         else "No orchestration found with the given ID."
                     )
