@@ -371,12 +371,8 @@ async def test_shutdown_failures_are_reported_and_singleton_is_released(
         assert result.success
         stop = await gru.stop_orchestration(result.orchestration_id or "")
 
-        if minion_module_path.endswith(".boom_shutdown"):
-            assert not stop.success
-            assert logger.has_log("Failed to stop orchestration")
-        else:
-            assert stop.success
-            assert logger.has_log("shutdown failed during startup error recovery")
+        assert not stop.success
+        assert logger.has_log("Failed to stop orchestration")
     
         await assert_runtime_empty(gru)
 

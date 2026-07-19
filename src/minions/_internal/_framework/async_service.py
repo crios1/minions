@@ -15,6 +15,7 @@ class AsyncService(AsyncComponent):
         super().__init__(logger)
         self._mn_started = asyncio.Event()
         self._mn_start_error: BaseException | None = None
+        self._mn_shutdown_error: Exception | None = None
         self._mn_service_tasks: set[asyncio.Task[None]] = (
             set()
         )  # canonical task registry for this service; subclasses may keep
@@ -85,12 +86,19 @@ class AsyncService(AsyncComponent):
             try:
                 await self._mn_shutdown()
             except Exception as shutdown_err:
+                self._mn_shutdown_error = shutdown_err
                 await self._mn_logger._mn_log_exception(
                     ERROR,
                     f"{type(self).__name__} shutdown failed during startup error recovery",
                     shutdown_err,
                 )
-            raise e
+            raise
+
+    def _mn_take_shutdown_error(self) -> Exception | None:
+        """Return and clear the shutdown error captured by the service task."""
+        error = self._mn_shutdown_error
+        self._mn_shutdown_error = None
+        return error
 
     async def _mn_shutdown(
         self,

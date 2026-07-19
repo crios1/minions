@@ -105,6 +105,51 @@
   - non-goal:
     - retention must not silently mean automatic retry on orchestration restart
 
+- considering: structured stop disposition and cleanup errors
+  - status:
+    - this is a design consideration, not committed roadmap work
+    - keep the current `StopResult.success` contract until the replacement
+      semantics are fully mapped
+  - problem:
+    - `success=False` does not tell a caller whether an orchestration remains
+      active or whether Gru removed it from routing but encountered cleanup
+      errors
+    - `reason` is useful for humans, but callers should not parse prose to
+      determine the final orchestration state
+  - likely direction:
+    - retain `success` as a convenience summary
+    - add a semantic disposition such as:
+      - `stopped`
+      - `stopped_with_cleanup_errors`
+      - `not_stopped`
+      - `not_running`
+      - `rejected`
+    - add structured cleanup errors carrying phase, component kind and identity,
+      error type, and error message
+    - keep `reason` as a concise human summary and `suggestion` as operator
+      guidance
+  - semantic requirements:
+    - `stopped_with_cleanup_errors` means active routing was removed and Gru
+      failed closed, but user-owned process cleanup is incomplete or uncertain
+    - a required Pipeline or Resource shutdown-hook failure must not be reported
+      as a clean successful stop
+    - shared components that correctly remain active for another owner are not
+      cleanup failures
+    - public results should express user-relevant lifecycle outcomes rather than
+      expose internal registries, reference counts, or cleanup mechanics
+  - design work required before implementation:
+    - map every current `stop_orchestration(...)` return and exception path to
+      exactly one disposition
+    - decide whether `success` is stored or derived from the disposition
+    - define how primary stop errors and secondary cleanup errors are preserved
+    - validate one representative caller and CLI rendering before finalizing
+      names
+    - add exhaustive result-contract tests for clean stop, partial cleanup,
+      unknown target, rejected request, and a target that remains active
+  - possible later follow-up:
+    - consider sharing a lifecycle cleanup error type with `ShutdownResult`
+      only after the StopResult model is proven useful
+
 - todo: decide whether resource method metrics should use method names or stable method identities
   - problem:
     - `resource_method` currently uses method names, so renaming a method creates a new Prometheus series even when the logical operation did not change

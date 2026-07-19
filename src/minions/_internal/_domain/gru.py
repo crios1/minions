@@ -703,6 +703,8 @@ class Gru:
             task = self._minion_tasks.pop(instance_id, None)
         if task:
             await safe_cancel_task(task=task, logger=self._logger)
+            if shutdown_error := minion._mn_take_shutdown_error():
+                raise shutdown_error
         if not minion._mn_shutting_down:
             await minion._mn_shutdown()
 
@@ -969,6 +971,8 @@ class Gru:
                 self._resources.pop(resource_id, None)
                 task = self._resource_tasks.pop(resource_id)
             await safe_cancel_task(task=task, logger=self._logger)
+            if shutdown_error := resource._mn_take_shutdown_error():
+                raise shutdown_error
 
             await self._logger._mn_log(DEBUG, "Resource stopped", **log_kwargs)
 
@@ -1130,6 +1134,8 @@ class Gru:
                 self._pipelines.pop(pipeline_id)
                 task = self._pipeline_tasks.pop(pipeline_id)
             await safe_cancel_task(task=task, logger=self._logger)
+            if shutdown_error := pipeline._mn_take_shutdown_error():
+                raise shutdown_error
 
             # manage resource lifecycle for resources owned by this pipeline
             resource_ids = await self._release_pipeline_resource_ownership(pipeline_id)
@@ -1984,11 +1990,15 @@ class Gru:
                     return StopResult(success=True)
 
                 except Exception as e:
+                    orchestration_log_kwargs = {
+                        **minion._mn_orchestration_log_kwargs(),
+                        **orchestration.pipeline._mn_identity_log_kwargs(),
+                    }
                     await self._logger._mn_log_exception(
                         ERROR,
                         "Failed to stop orchestration",
                         e,
-                        **minion._mn_orchestration_log_kwargs(),
+                        **orchestration_log_kwargs,
                     )
                     return StopResult(
                         success=False,
