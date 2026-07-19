@@ -9,14 +9,16 @@ from minions._internal._framework.logger_noop import NoOpLogger
 
 
 class NoOpService(AsyncService):
-    async def run(self):
+    def __init__(self) -> None:
+        super().__init__(NoOpLogger())
+
+    async def run(self) -> None:
         pass
 
 
 @pytest.mark.asyncio
 async def test_wait_until_started_sets_and_waits():
-    logger = NoOpLogger()
-    service = NoOpService(logger)
+    service = NoOpService()
 
     # Start _mn_wait_until_started in the background
     wait_task = asyncio.create_task(service._mn_wait_until_started())
@@ -31,8 +33,7 @@ async def test_wait_until_started_sets_and_waits():
 
 @pytest.mark.asyncio
 async def test_wait_until_started_raises_on_start_error():
-    logger = NoOpLogger()
-    service = NoOpService(logger)
+    service = NoOpService()
     service._mn_start_error = RuntimeError("start failed")
     service._mn_started.set()
     with pytest.raises(RuntimeError, match="start failed"):
@@ -41,8 +42,7 @@ async def test_wait_until_started_raises_on_start_error():
 
 @pytest.mark.asyncio
 async def test_safe_create_task_invokes_service_task_failure_hook():
-    logger = NoOpLogger()
-    service = NoOpService(logger)
+    service = NoOpService()
     service._mn_on_service_task_failure = AsyncMock()  # type: ignore[method-assign]
 
     async def faulty():
@@ -59,8 +59,7 @@ async def test_safe_create_task_invokes_service_task_failure_hook():
 
 @pytest.mark.asyncio
 async def test_shutdown_drains_tracked_task_scheduled_next_tick():
-    logger = NoOpLogger()
-    service = NoOpService(logger)
+    service = NoOpService()
 
     loop = asyncio.get_running_loop()
 
@@ -77,7 +76,7 @@ async def test_shutdown_drains_tracked_task_scheduled_next_tick():
 async def test_ensure_shutdown_starts_once_and_all_callers_wait_for_completion():
     class GatedShutdownService(NoOpService):
         def __init__(self) -> None:
-            super().__init__(NoOpLogger())
+            super().__init__()
             self.shutdown_calls = 0
             self.shutdown_entered = asyncio.Event()
             self.allow_shutdown = asyncio.Event()
@@ -106,7 +105,7 @@ async def test_ensure_shutdown_starts_once_and_all_callers_wait_for_completion()
 async def test_ensure_shutdown_replays_same_failure_without_retrying():
     class FailingShutdownService(NoOpService):
         def __init__(self) -> None:
-            super().__init__(NoOpLogger())
+            super().__init__()
             self.shutdown_calls = 0
 
         async def shutdown(self) -> None:
