@@ -712,13 +712,13 @@ class Gru:
 
     def _get_direct_resource_dependencies(
         self, cls: type[Minion[Any, Any] | Pipeline[Any] | Resource]
-    ) -> list[type[Resource]]:
+    ) -> tuple[type[Resource], ...]:
         classes: list[type[Resource]] = []
-        for _attr, hint in get_type_hints(cls).items():
-            r_cls = get_type_from_hint(hint)
-            if r_cls is not None and issubclass(r_cls, Resource):
-                classes.append(r_cls)
-        return classes
+        for hint in get_type_hints(cls).values():
+            resource_cls = get_type_from_hint(hint)
+            if resource_cls is not None and issubclass(resource_cls, Resource):
+                classes.append(resource_cls)
+        return tuple(classes)
 
     async def _acquire_resources_for_owner(
         self,
