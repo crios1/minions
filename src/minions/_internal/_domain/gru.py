@@ -6,7 +6,7 @@ import importlib
 import json
 import uuid
 from collections import defaultdict, deque
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
@@ -1593,8 +1593,8 @@ class Gru:
                 ),
             )
 
-    def _runtime_tasks_snapshot(self) -> list[asyncio.Task[None]]:
-        return [
+    def _runtime_tasks_snapshot(self) -> tuple[asyncio.Task[None], ...]:
+        return tuple(
             task
             for task in (
                 *self._minion_tasks.values(),
@@ -1603,7 +1603,7 @@ class Gru:
                 getattr(self, "_resource_monitor_task", None),
             )
             if task is not None
-        ]
+        )
 
     async def _cancel_runtime_tasks_best_effort(self, tasks: Iterable[asyncio.Task[None]]) -> None:
         for task in tasks:
@@ -2027,26 +2027,26 @@ class Gru:
             await self._lifecycle_ops_drained.wait_for(lambda: self._lifecycle_ops_active == 0)
 
         runtime_tasks_snapshot = self._runtime_tasks_snapshot()
-        domain_component_snapshot = [
-            *[
+        domain_component_snapshot = (
+            *(
                 (f"minion:{instance_id}", minion)
                 for instance_id, minion in self._minions_by_instance_id.items()
-            ],
-            *[
+            ),
+            *(
                 (f"pipeline:{pipeline_id}", pipeline)
                 for pipeline_id, pipeline in self._pipelines.items()
-            ],
-            *[
+            ),
+            *(
                 (f"resource:{resource_id}", resource)
                 for resource_id, resource in self._resources.items()
-            ],
-        ]
+            ),
+        )
         try:
             await self._logger._mn_log(INFO, "Gru shutting down...")
             shutdown_errors: list[ShutdownError] = []
 
             async def _collect_phase_errors(
-                phase: str, targets: list[tuple[str, Any]]
+                phase: str, targets: Sequence[tuple[str, Any]]
             ) -> list[ShutdownError]:
                 results = await asyncio.gather(
                     *[op for _, op in targets],
@@ -2063,14 +2063,14 @@ class Gru:
                     if isinstance(result, Exception)
                 ]
 
-            runtime_task_cancel_targets = [
+            runtime_task_cancel_targets = tuple(
                 (
                     t.get_name() if hasattr(t, "get_name") else "task",
                     safe_cancel_task(task=t, logger=self._logger),
                 )
                 for t in runtime_tasks_snapshot
                 if t
-            ]
+            )
             shutdown_errors.extend(
                 await _collect_phase_errors(
                     "cancel_task",
@@ -2078,10 +2078,10 @@ class Gru:
                 )
             )
 
-            domain_component_shutdown_targets = [
+            domain_component_shutdown_targets = tuple(
                 (component_name, component._mn_ensure_shutdown())
                 for component_name, component in domain_component_snapshot
-            ]
+            )
             shutdown_errors.extend(
                 await _collect_phase_errors(
                     "shutdown_component",
@@ -2089,10 +2089,10 @@ class Gru:
                 )
             )
 
-            framework_component_shutdown_targets = [
+            framework_component_shutdown_targets = (
                 ("state_store", self._shutdown_async_component(self._state_store)),
                 ("metrics", self._shutdown_async_component(self._metrics)),
-            ]
+            )
             shutdown_errors.extend(
                 await _collect_phase_errors(
                     "shutdown_component",
