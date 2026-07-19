@@ -703,10 +703,7 @@ class Gru:
             task = self._minion_tasks.pop(instance_id, None)
         if task:
             await safe_cancel_task(task=task, logger=self._logger)
-            if shutdown_error := minion._mn_take_shutdown_error():
-                raise shutdown_error
-        if not minion._mn_shutting_down:
-            await minion._mn_shutdown()
+        await minion._mn_ensure_shutdown()
 
     # Resource Topology, Ownership, and Lifecycle
 
@@ -971,8 +968,7 @@ class Gru:
                 self._resources.pop(resource_id, None)
                 task = self._resource_tasks.pop(resource_id)
             await safe_cancel_task(task=task, logger=self._logger)
-            if shutdown_error := resource._mn_take_shutdown_error():
-                raise shutdown_error
+            await resource._mn_ensure_shutdown()
 
             await self._logger._mn_log(DEBUG, "Resource stopped", **log_kwargs)
 
@@ -1134,8 +1130,7 @@ class Gru:
                 self._pipelines.pop(pipeline_id)
                 task = self._pipeline_tasks.pop(pipeline_id)
             await safe_cancel_task(task=task, logger=self._logger)
-            if shutdown_error := pipeline._mn_take_shutdown_error():
-                raise shutdown_error
+            await pipeline._mn_ensure_shutdown()
 
             # manage resource lifecycle for resources owned by this pipeline
             resource_ids = await self._release_pipeline_resource_ownership(pipeline_id)
@@ -2031,7 +2026,21 @@ class Gru:
         async with self._lifecycle_ops_state_lock:
             await self._lifecycle_ops_drained.wait_for(lambda: self._lifecycle_ops_active == 0)
 
-        all_tasks = self._runtime_tasks_snapshot()
+        runtime_tasks_snapshot = self._runtime_tasks_snapshot()
+        domain_component_snapshot = [
+            *[
+                (f"minion:{instance_id}", minion)
+                for instance_id, minion in self._minions_by_instance_id.items()
+            ],
+            *[
+                (f"pipeline:{pipeline_id}", pipeline)
+                for pipeline_id, pipeline in self._pipelines.items()
+            ],
+            *[
+                (f"resource:{resource_id}", resource)
+                for resource_id, resource in self._resources.items()
+            ],
+        ]
         try:
             await self._logger._mn_log(INFO, "Gru shutting down...")
             shutdown_errors: list[ShutdownError] = []
@@ -2054,22 +2063,41 @@ class Gru:
                     if isinstance(result, Exception)
                 ]
 
-            cancel_targets = [
+            runtime_task_cancel_targets = [
                 (
                     t.get_name() if hasattr(t, "get_name") else "task",
                     safe_cancel_task(task=t, logger=self._logger),
                 )
-                for t in all_tasks
+                for t in runtime_tasks_snapshot
                 if t
             ]
-            shutdown_errors.extend(await _collect_phase_errors("cancel_task", cancel_targets))
+            shutdown_errors.extend(
+                await _collect_phase_errors(
+                    "cancel_task",
+                    runtime_task_cancel_targets,
+                )
+            )
 
-            component_targets = [
+            domain_component_shutdown_targets = [
+                (component_name, component._mn_ensure_shutdown())
+                for component_name, component in domain_component_snapshot
+            ]
+            shutdown_errors.extend(
+                await _collect_phase_errors(
+                    "shutdown_component",
+                    domain_component_shutdown_targets,
+                )
+            )
+
+            framework_component_shutdown_targets = [
                 ("state_store", self._shutdown_async_component(self._state_store)),
                 ("metrics", self._shutdown_async_component(self._metrics)),
             ]
             shutdown_errors.extend(
-                await _collect_phase_errors("shutdown_component", component_targets)
+                await _collect_phase_errors(
+                    "shutdown_component",
+                    framework_component_shutdown_targets,
+                )
             )
 
             if shutdown_errors:
@@ -2105,7 +2133,7 @@ class Gru:
                 ],
             )
         finally:
-            await self._cancel_runtime_tasks_best_effort(all_tasks)
+            await self._cancel_runtime_tasks_best_effort(runtime_tasks_snapshot)
             self._clear_runtime_state()
             async with self._lifecycle_ops_state_lock:
                 self._is_started = False

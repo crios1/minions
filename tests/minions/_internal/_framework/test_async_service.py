@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from minions._internal._domain.exceptions import MinionsError
 from minions._internal._framework.async_service import AsyncService
 from minions._internal._framework.logger_noop import NoOpLogger
 
@@ -70,3 +71,54 @@ async def test_shutdown_drains_tracked_task_scheduled_next_tick():
 
     async with service._mn_tasks_gate:
         assert not service._mn_service_tasks
+
+
+@pytest.mark.asyncio
+async def test_ensure_shutdown_starts_once_and_all_callers_wait_for_completion():
+    class GatedShutdownService(NoOpService):
+        def __init__(self) -> None:
+            super().__init__(NoOpLogger())
+            self.shutdown_calls = 0
+            self.shutdown_entered = asyncio.Event()
+            self.allow_shutdown = asyncio.Event()
+
+        async def shutdown(self) -> None:
+            self.shutdown_calls += 1
+            self.shutdown_entered.set()
+            await self.allow_shutdown.wait()
+
+    service = GatedShutdownService()
+    first = asyncio.create_task(service._mn_ensure_shutdown())
+    second = asyncio.create_task(service._mn_ensure_shutdown())
+
+    await service.shutdown_entered.wait()
+    await asyncio.sleep(0)
+    assert not first.done()
+    assert not second.done()
+
+    service.allow_shutdown.set()
+    await asyncio.gather(first, second)
+
+    assert service.shutdown_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_ensure_shutdown_replays_same_failure_without_retrying():
+    class FailingShutdownService(NoOpService):
+        def __init__(self) -> None:
+            super().__init__(NoOpLogger())
+            self.shutdown_calls = 0
+
+        async def shutdown(self) -> None:
+            self.shutdown_calls += 1
+            raise RuntimeError("shutdown boom")
+
+    service = FailingShutdownService()
+
+    with pytest.raises(MinionsError, match="FailingShutdownService.shutdown failed") as first:
+        await service._mn_ensure_shutdown()
+    with pytest.raises(MinionsError, match="FailingShutdownService.shutdown failed") as second:
+        await service._mn_ensure_shutdown()
+
+    assert service.shutdown_calls == 1
+    assert first.value is second.value

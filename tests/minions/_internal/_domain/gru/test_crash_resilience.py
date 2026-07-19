@@ -383,3 +383,49 @@ async def test_shutdown_failures_are_reported_and_singleton_is_released(
         state_store=state_store,
     ) as fresh_gru:
         await assert_gru_can_start_and_stop_known_good_orchestration(fresh_gru)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("pipeline_module_path", "minion_module_path", "failed_component_kind"),
+    [
+        (
+            "tests.assets.pipelines.emit_one.counter.default",
+            "tests.assets.crash.minions.counter.boom_shutdown",
+            "minion",
+        ),
+        (
+            "tests.assets.crash.pipelines.counter.blocking_boom_shutdown",
+            "tests.assets.minions.one_step.counter.default",
+            "pipeline",
+        ),
+        (
+            "tests.assets.pipelines.emit_one.counter.default",
+            "tests.assets.crash.minions.counter.with_boom_shutdown_resource",
+            "resource",
+        ),
+    ],
+)
+async def test_gru_shutdown_reports_active_domain_component_shutdown_failures(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    pipeline_module_path: str,
+    minion_module_path: str,
+    failed_component_kind: str,
+) -> None:
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
+        start = await gru.start_orchestration(pipeline_module_path, minion_module_path)
+        assert start.success
+
+        shutdown = await gru.shutdown()
+
+        assert not shutdown.success
+        assert len(shutdown.errors) == 1
+        error = shutdown.errors[0]
+        assert error.phase == "shutdown_component"
+        assert error.component.startswith(f"{failed_component_kind}:")
+        assert error.error_type == "MinionsError"
+        assert error.error_message.endswith("shutdown failed")
+        await assert_runtime_empty(gru)

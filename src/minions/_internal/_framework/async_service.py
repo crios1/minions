@@ -15,7 +15,7 @@ class AsyncService(AsyncComponent):
         super().__init__(logger)
         self._mn_started = asyncio.Event()
         self._mn_start_error: BaseException | None = None
-        self._mn_shutdown_error: Exception | None = None
+        self._mn_shutdown_task: asyncio.Task[None] | None = None
         self._mn_service_tasks: set[asyncio.Task[None]] = (
             set()
         )  # canonical task registry for this service; subclasses may keep
@@ -84,9 +84,8 @@ class AsyncService(AsyncComponent):
             self._mn_start_error = e
             self._mn_started.set()
             try:
-                await self._mn_shutdown()
+                await self._mn_ensure_shutdown()
             except Exception as shutdown_err:
-                self._mn_shutdown_error = shutdown_err
                 await self._mn_logger._mn_log_exception(
                     ERROR,
                     f"{type(self).__name__} shutdown failed during startup error recovery",
@@ -94,11 +93,14 @@ class AsyncService(AsyncComponent):
                 )
             raise
 
-    def _mn_take_shutdown_error(self) -> Exception | None:
-        """Return and clear the shutdown error captured by the service task."""
-        error = self._mn_shutdown_error
-        self._mn_shutdown_error = None
-        return error
+    async def _mn_ensure_shutdown(self) -> None:
+        """Start shutdown once, or wait for the existing attempt to finish."""
+        if self._mn_shutdown_task is None:
+            self._mn_shutdown_task = asyncio.create_task(
+                self._mn_shutdown(),
+                name=f"{type(self).__name__}:shutdown",
+            )
+        await asyncio.shield(self._mn_shutdown_task)
 
     async def _mn_shutdown(
         self,
@@ -109,6 +111,7 @@ class AsyncService(AsyncComponent):
         post: LifecycleCallback | None = None,
         post_args: list[object] | None = None,
     ) -> None:
+        """Implement one shutdown attempt; lifecycle callers must use `_mn_ensure_shutdown()`."""
         async def _post() -> None:
             if post:
                 post_args_list = post_args or []
