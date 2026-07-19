@@ -99,6 +99,19 @@ class TestInvalidUsage:
             )
 
     @pytest.mark.asyncio
+    async def test_gru_raises_on_invalid_workflow_failure_policy(self) -> None:
+        with pytest.raises(
+            ValueError,
+            match="workflow_failure_policy must be 'delete'",
+        ):
+            await Gru.create(
+                logger=NoOpLogger(),
+                metrics=NoOpMetrics(),
+                state_store=NoOpStateStore(),
+                workflow_failure_policy=cast(Any, "invalid"),
+            )
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("kwarg", "value", "match"),
         [

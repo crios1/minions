@@ -12,9 +12,12 @@ Minions treats workflow context as durable. Before each step executes, Gru saves
 
 - Context and events must be dataclasses or `msgspec.Struct` types with serializable fields.
 - Map-like event/context fields must use string keys when annotated explicitly (`dict[str, V]` or `Mapping[str, V]`).
-- Context is saved **before** each step runs; failures keep the last saved state for debugging/resume.
-- Success deletes the context at the end; aborts log and clean up.
-- Runtime cancellation is treated as an interruption, not an intentional abort. Interrupted workflows keep their persisted context so they can be replayed later; raise `AbortWorkflow` from a step when the workflow should stop as an intentional terminal outcome.
+- Context is saved **before** each step runs.
+- An ordinary user-step exception is terminal. The current
+  `workflow_failure_policy="delete"` behavior durably deletes its checkpoint.
+- Runtime cancellation is an interruption and retains the last checkpoint for
+  replay; raise `AbortWorkflow` for an intentional terminal outcome.
+- Successful and aborted workflows resolve by durably deleting their checkpoints.
 - Gru logs workflow/step transitions and surfaces errors with user file/line when available.
 
 ## Durable component identity
@@ -115,6 +118,12 @@ the `StateStore` interface.
 
 ## Persistence failure policy
 
+- Configure `workflow_failure_policy` on {py:meth}`minions.Gru.create` to
+  control what happens after ordinary user workflow code fails.
+- `"delete"` is currently the only supported workflow failure policy and is the
+  default. It treats the failure as terminal and durably deletes the workflow
+  checkpoint. A future quarantined/manual-recovery policy is under
+  consideration but is not currently supported.
 - Configure `workflow_persistence_failure_policy` on {py:meth}`minions.Gru.create`.
 - `continue-on-failure` is the default. Persistence failures are logged, the workflow keeps running, and the runtime retries persistence at the next workflow checkpoint.
 - `idle-until-persisted` pauses workflow advancement after a failed persistence attempt and resumes only after persistence succeeds. Use it when durable checkpoint storage must succeed before the next step is allowed to run.
@@ -125,6 +134,10 @@ the `StateStore` interface.
 - Idle retry backoff starts at `workflow_persistence_retry_delay_seconds` (default `1.0`), multiplies by `workflow_persistence_retry_backoff_multiplier` (default `2.0`), is capped by `workflow_persistence_retry_max_delay_seconds` (default `60.0`), and applies `workflow_persistence_retry_jitter_ratio` jitter (default `0.1`) to avoid synchronized retries.
 - Sustained idle retries log repeated warnings every `workflow_persistence_retry_warning_interval_seconds` (default `30.0`) and escalate to error logs after `workflow_persistence_retry_error_after_seconds` (default `60.0`; pass `None` to disable escalation).
 - Persistence failure logs include the workflow checkpoint, persistence operation (`save` or `delete`), retry attempt, elapsed retry time, failure stage, state store, event/context types, minion identity, and exception details when available.
+
+`workflow_failure_policy` and `workflow_persistence_failure_policy` govern
+different failures. The former handles exceptions from workflow code; the
+latter handles failures while saving or deleting workflow checkpoints.
 
 ## SQLite batching semantics
 

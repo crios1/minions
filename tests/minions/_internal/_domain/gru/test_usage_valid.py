@@ -10,7 +10,10 @@ import pytest
 
 from minions import Minion, Pipeline, minion_id, minion_step, pipeline_id
 from minions._internal._domain.gru import Gru
-from minions._internal._domain.minion import WorkflowPersistenceFailurePolicy
+from minions._internal._domain.minion import (
+    WorkflowFailurePolicy,
+    WorkflowPersistenceFailurePolicy,
+)
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.logger_console import ConsoleLogger
 from minions._internal._framework.logger_noop import NoOpLogger
@@ -70,6 +73,20 @@ class TestValidUsage:
             state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()
         ):
             pass
+
+    @pytest.mark.asyncio
+    async def test_gru_accepts_workflow_failure_policy(
+        self,
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    ) -> None:
+        policy: WorkflowFailurePolicy = "delete"
+        async with managed_gru_context(
+            state_store=NoOpStateStore(),
+            logger=NoOpLogger(),
+            metrics=NoOpMetrics(),
+            workflow_failure_policy=policy,
+        ) as gru:
+            assert gru._workflow_failure_policy == "delete"
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(

@@ -72,7 +72,7 @@ async def test_workflow_aborted_increments_aborted_counter(
 
 
 @pytest.mark.asyncio
-async def test_workflow_failed_increments_failed_counter(
+async def test_workflow_failure_is_terminal_deletes_checkpoint_and_increments_failed_counter(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -93,12 +93,14 @@ async def test_workflow_failed_increments_failed_counter(
         minion_id="dummy-minion-id",
         minion_config_id="",
         pipeline_id="dummy-pipeline-id",
+        workflow_failure_policy="delete",
     )
     m._mn_started.set()
     await m._mn_handle_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
 
     await state_store.wait_for_call("delete_context", count=1, timeout=2)
+    assert await state_store.get_all_contexts() == []
 
     counters = metrics.snapshot().get("counter", {})
     failed_total = sum(s.get("value", 0) for s in counters.get(MINION_WORKFLOW_FAILED_TOTAL, []))

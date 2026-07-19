@@ -79,6 +79,32 @@
 
 
 ### Features:
+- considering: quarantined failed workflows and manual recovery
+  - status:
+    - this is a design consideration, not committed roadmap work
+    - the current explicit `workflow_failure_policy="delete"` behavior treats
+      ordinary user-step failures as terminal and durably deletes their
+      checkpoints
+  - user need:
+    - some operators may need to retain a failed workflow for diagnosis, deploy
+      a remedy, and then explicitly resume or discard that workflow
+  - required semantic model:
+    - do not implement this as a simple "retain" switch because every stored
+      workflow is currently eligible for automatic startup replay
+    - a future policy should likely be named `"quarantine"` and persist an
+      explicit failed state that startup replay excludes
+    - manual resume should deliberately rerun the failed step from its stored
+      `next_step_index`
+  - design work required before implementation:
+    - define persisted failed-state and failure-diagnostic fields
+    - decide workflow-context schema compatibility and migration behavior
+    - design one representative list -> inspect -> resume/discard operator API
+    - serialize resume/discard against orchestration stop and Gru shutdown
+    - define behavior when code, step layout, or event/context schemas changed
+    - add metrics, logs, deterministic lifecycle tests, and process-death tests
+  - non-goal:
+    - retention must not silently mean automatic retry on orchestration restart
+
 - todo: decide whether resource method metrics should use method names or stable method identities
   - problem:
     - `resource_method` currently uses method names, so renaming a method creates a new Prometheus series even when the logical operation did not change

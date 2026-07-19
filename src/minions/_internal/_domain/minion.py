@@ -71,6 +71,10 @@ from .resource import Resource
 from .types import T_Ctx, T_Event
 
 ExecutionStatus = Literal["undefined", "interrupted", "aborted", "failed", "succeeded"]
+
+WorkflowFailurePolicy = Literal["delete"]
+_ALLOWED_WORKFLOW_FAILURE_POLICIES: tuple[WorkflowFailurePolicy, ...] = ("delete",)
+
 WorkflowPersistenceFailurePolicy = Literal[
     "continue-on-failure",
     "idle-until-persisted",
@@ -311,6 +315,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         minion_config_id: str,
         pipeline_id: str,
         inline_config: object | None = None,
+        workflow_failure_policy: WorkflowFailurePolicy = "delete",
         workflow_persistence_failure_policy: WorkflowPersistenceFailurePolicy = (
             "continue-on-failure"
         ),
@@ -340,6 +345,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         self._mn_metrics = metrics
         self._mn_workflow_persistence_blocked_counts: dict[tuple[tuple[str, str], ...], int] = {}
         self._mn_workflow_persistence_blocked_counts_lock = asyncio.Lock()
+        self._mn_workflow_failure_policy = self._mn_validate_workflow_failure_policy(
+            workflow_failure_policy,
+        )
         self._mn_workflow_persistence_failure_policy = (
             self._mn_validate_workflow_persistence_failure_policy(
                 workflow_persistence_failure_policy,
@@ -424,6 +432,17 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             LABEL_ORCHESTRATION_ID: self._mn_orchestration_id,
             LABEL_MINION: self._mn_minion_id,
         }
+
+    @staticmethod
+    def _mn_validate_workflow_failure_policy(
+        policy: str,
+    ) -> WorkflowFailurePolicy:
+        if policy not in _ALLOWED_WORKFLOW_FAILURE_POLICIES:
+            policies = " or ".join(
+                f"'{value}'" for value in _ALLOWED_WORKFLOW_FAILURE_POLICIES
+            )
+            raise ValueError(f"workflow_failure_policy must be {policies}")
+        return policy
 
     @staticmethod
     def _mn_validate_workflow_persistence_failure_policy(
@@ -1136,6 +1155,10 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 workflow_status: ExecutionStatus = "failed"
                 if isinstance(e, WorkflowPersistenceNonRetryableError):
                     delete_persisted_context_on_exit = False
+                else:
+                    delete_persisted_context_on_exit = (
+                        self._mn_workflow_failure_policy == "delete"
+                    )
                 terminal_workflow_log_level = ERROR
                 terminal_workflow_log_message = "Workflow failed"
                 terminal_workflow_error = e

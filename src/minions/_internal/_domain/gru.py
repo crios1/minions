@@ -48,7 +48,7 @@ from .gru_result_types import (
     StartResult,
     StopResult,
 )
-from .minion import Minion, WorkflowPersistenceFailurePolicy
+from .minion import Minion, WorkflowFailurePolicy, WorkflowPersistenceFailurePolicy
 from .pipeline import Pipeline
 from .resource import Resource
 from .types import T_Ctx, T_Event
@@ -210,6 +210,7 @@ class Gru:
         logger: Logger | None | _UnsetType = _UNSET,
         metrics: Metrics | None | _UnsetType = _UNSET,
         metrics_port: int = 8081,
+        workflow_failure_policy: WorkflowFailurePolicy = "delete",
         workflow_persistence_failure_policy: WorkflowPersistenceFailurePolicy = (
             "continue-on-failure"
         ),
@@ -232,6 +233,9 @@ class Gru:
                 on the given port. Pass None to disable metrics collection.
             metrics_port: The port to expose Prometheus metrics on (only used if the
                 default metrics backend is enabled).
+            workflow_failure_policy: Behavior after ordinary user workflow code
+                    fails. The current supported policy, `"delete"`, treats the
+                    failure as terminal and durably deletes its checkpoint.
             workflow_persistence_failure_policy: Behavior to use when a workflow checkpoint
                     cannot be persisted. `"continue-on-failure"` keeps the workflow running
                     and retries at the next checkpoint. `"idle-until-persisted"` pauses
@@ -267,6 +271,11 @@ class Gru:
         self._is_shutdown = False
         self._is_shutting_down = False
 
+        self._workflow_failure_policy: WorkflowFailurePolicy = (
+            Minion._mn_validate_workflow_failure_policy(
+                workflow_failure_policy,
+            )
+        )
         self._workflow_persistence_failure_policy: WorkflowPersistenceFailurePolicy = (
             Minion._mn_validate_workflow_persistence_failure_policy(
                 workflow_persistence_failure_policy,
@@ -402,6 +411,7 @@ class Gru:
         logger: Logger | None | _UnsetType = _UNSET,
         metrics: Metrics | None | _UnsetType = _UNSET,
         metrics_port: int = 8081,
+        workflow_failure_policy: WorkflowFailurePolicy = "delete",
         workflow_persistence_failure_policy: WorkflowPersistenceFailurePolicy = (
             "continue-on-failure"
         ),
@@ -420,6 +430,7 @@ class Gru:
                 logger=logger,
                 metrics=metrics,
                 metrics_port=metrics_port,
+                workflow_failure_policy=workflow_failure_policy,
                 workflow_persistence_failure_policy=workflow_persistence_failure_policy,
                 workflow_persistence_retry_delay_seconds=workflow_persistence_retry_delay_seconds,
                 workflow_persistence_retry_max_delay_seconds=workflow_persistence_retry_max_delay_seconds,
@@ -657,6 +668,7 @@ class Gru:
             state_store=self._state_store,
             metrics=self._metrics,
             logger=self._logger,
+            workflow_failure_policy=self._workflow_failure_policy,
             workflow_persistence_failure_policy=self._workflow_persistence_failure_policy,
             workflow_persistence_retry_delay_seconds=self._workflow_persistence_retry_delay_seconds,
             workflow_persistence_retry_max_delay_seconds=self._workflow_persistence_retry_max_delay_seconds,
