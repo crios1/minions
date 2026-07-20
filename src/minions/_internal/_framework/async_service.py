@@ -71,8 +71,8 @@ class AsyncService(AsyncComponent):
         )
 
     async def run(self) -> None:
-        "Long-running loop or wait, override in user facing classes (Minion, Pipeline, Resource)"
-        # self._raise_not_implemented("run", type(self))
+        """Remain passively active until the service is cancelled."""
+        await asyncio.Event().wait()
 
     async def _mn_start(self):
         "Is launched as an asyncio.Task and cancelled accordingly."

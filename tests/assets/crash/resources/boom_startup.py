@@ -6,8 +6,4 @@ class AssetResource(SpiedResource):
     async def startup(self) -> None:
         boom()
 
-    async def run(self) -> None:
-        return
-
-
 resource = AssetResource

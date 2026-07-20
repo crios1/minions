@@ -12,8 +12,18 @@ class NoOpService(AsyncService):
     def __init__(self) -> None:
         super().__init__(NoOpLogger())
 
-    async def run(self) -> None:
-        pass
+
+@pytest.mark.asyncio
+async def test_default_run_remains_active_until_cancelled():
+    service = NoOpService()
+    run_task = asyncio.create_task(service.run())
+    await asyncio.sleep(0)
+
+    assert not run_task.done()
+
+    run_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(run_task, timeout=1.0)
 
 
 @pytest.mark.asyncio
