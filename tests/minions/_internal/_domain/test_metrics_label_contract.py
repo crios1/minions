@@ -189,7 +189,7 @@ async def test_minion_runtime_metric_labels_match_contract(
         minion_config_id="",
         pipeline_id="dummy-pipeline-id",
     )
-    success_minion._mn_started.set()
+    success_minion._mn_mark_running()
     await success_minion._mn_handle_event(EmptyEvent())
 
     failure_minion = FailureMinion(
@@ -204,7 +204,7 @@ async def test_minion_runtime_metric_labels_match_contract(
         minion_config_id="",
         pipeline_id="dummy-pipeline-id",
     )
-    failure_minion._mn_started.set()
+    failure_minion._mn_mark_running()
     await failure_minion._mn_handle_event(EmptyEvent())
 
     metrics.assert_recorded_labels_match_contract()

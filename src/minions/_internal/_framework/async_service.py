@@ -1,8 +1,10 @@
 import asyncio
 import inspect
 from collections.abc import Coroutine
+from enum import Enum, auto
 from typing import Any
 
+from .._domain.exceptions import MinionsError
 from .._utils.safe_cancel_task import safe_cancel_task
 from .._utils.safe_create_task import safe_create_task
 from .async_component import AsyncComponent
@@ -10,11 +12,44 @@ from .async_lifecycle import LifecycleCallback
 from .logger import ERROR, Logger
 
 
+class _AsyncServiceState(Enum):
+    """Valid lifecycle flows:
+
+    - CREATED → STARTING → RUNNING → STOPPING → STOPPED
+    - CREATED → STARTING → STOPPING → STOPPED
+    """
+
+    CREATED = auto()
+    STARTING = auto()
+    RUNNING = auto()
+    STOPPING = auto()
+    STOPPED = auto()
+
+
 class AsyncService(AsyncComponent):
+    """Provide a service managed through a retained asyncio task.
+
+    Lifecycle managers use the private protocol:
+
+        service_task = asyncio.create_task(service._mn_start())
+        await service._mn_wait_until_started()
+
+        # Later, when stopping:
+        service_task.cancel()
+        try:
+            await service_task
+        except asyncio.CancelledError:
+            pass
+        await service._mn_ensure_shutdown()
+
+    The protocol remains private to avoid expanding the user-facing service API.
+    """
+
     def __init__(self, logger: Logger):
         super().__init__(logger)
-        self._mn_started = asyncio.Event()
-        self._mn_start_error: BaseException | None = None
+        self._mn_state = _AsyncServiceState.CREATED
+        self._mn_start_resolved = asyncio.Event()
+        self._mn_stop_reason: BaseException | None = None
         self._mn_shutdown_task: asyncio.Task[None] | None = None
         self._mn_service_tasks: set[asyncio.Task[None]] = (
             set()
@@ -38,10 +73,30 @@ class AsyncService(AsyncComponent):
             task_name=task_name,
         )
 
-    async def _mn_wait_until_started(self):
-        await self._mn_started.wait()
-        if self._mn_start_error:
-            raise self._mn_start_error
+    def _mn_mark_starting(self) -> None:
+        self._mn_state = _AsyncServiceState.STARTING
+
+    def _mn_mark_running(self) -> None:
+        self._mn_state = _AsyncServiceState.RUNNING
+        self._mn_start_resolved.set()
+
+    def _mn_mark_stopping(self, reason: BaseException) -> None:
+        self._mn_state = _AsyncServiceState.STOPPING
+        self._mn_stop_reason = reason
+        self._mn_start_resolved.set()
+
+    def _mn_mark_stopped(self) -> None:
+        self._mn_state = _AsyncServiceState.STOPPED
+
+    async def _mn_wait_until_started(self) -> None:
+        await self._mn_start_resolved.wait()
+        if self._mn_state is _AsyncServiceState.RUNNING:
+            return
+        if self._mn_stop_reason is None:
+            raise RuntimeError(
+                f"{type(self).__name__} reached {self._mn_state.name} without a stop reason"
+            )
+        raise self._mn_stop_reason
 
     async def _mn_run(
         self,
@@ -60,6 +115,7 @@ class AsyncService(AsyncComponent):
                 result = pre(*pre_args)
                 if inspect.isawaitable(result):
                     await result
+            self._mn_mark_running()
 
         await self._mn_run_lifecycle_phase(
             name="run",
@@ -76,28 +132,62 @@ class AsyncService(AsyncComponent):
 
     async def _mn_start(self):
         "Is launched as an asyncio.Task and cancelled accordingly."
-        try:
-            await self._mn_startup()
-            self._mn_started.set()
-            await self._mn_run()
-        except BaseException as e:
-            self._mn_start_error = e
-            self._mn_started.set()
+        self._mn_mark_starting()
+
+        async def _ensure_shutdown_without_masking_stop_reason(
+            phase: str,
+        ) -> None:
             try:
                 await self._mn_ensure_shutdown()
-            except Exception as shutdown_err:
+            except Exception as shutdown_error:
                 await self._mn_logger._mn_log_exception(
                     ERROR,
-                    f"{type(self).__name__} shutdown failed during startup error recovery",
-                    shutdown_err,
+                    f"{type(self).__name__} shutdown failed after {phase} termination",
+                    shutdown_error,
                 )
+
+        try:
+            await self._mn_startup()
+        except BaseException as startup_error:
+            self._mn_mark_stopping(startup_error)
+            await _ensure_shutdown_without_masking_stop_reason("startup")
             raise
 
+        try:
+            await self._mn_run()
+        except BaseException as run_error:
+            self._mn_mark_stopping(run_error)
+            await _ensure_shutdown_without_masking_stop_reason("run")
+            raise
+
+        stop_reason = MinionsError(
+            f"{type(self).__module__}.{type(self).__qualname__}.run returned unexpectedly"
+        )
+        self._mn_mark_stopping(stop_reason)
+        await _ensure_shutdown_without_masking_stop_reason("run")
+        raise stop_reason
+
     async def _mn_ensure_shutdown(self) -> None:
-        """Start shutdown once, or wait for the existing attempt to finish."""
+        """Start cleanup once, or wait for it; this does not cancel the service task."""
+        if self._mn_state is _AsyncServiceState.CREATED:
+            return
+
         if self._mn_shutdown_task is None:
+            if self._mn_state is not _AsyncServiceState.STOPPING:
+                self._mn_mark_stopping(
+                    MinionsError(
+                        f"{type(self).__module__}.{type(self).__qualname__} stopped"
+                    )
+                )
+
+            async def _shutdown_and_mark_stopped() -> None:
+                try:
+                    await self._mn_shutdown()
+                finally:
+                    self._mn_mark_stopped()
+
             self._mn_shutdown_task = asyncio.create_task(
-                self._mn_shutdown(),
+                _shutdown_and_mark_stopped(),
                 name=f"{type(self).__name__}:shutdown",
             )
         await asyncio.shield(self._mn_shutdown_task)

@@ -43,7 +43,7 @@ async def test_workflow_aborted_increments_aborted_counter(
         async def step_1(self):
             raise AbortWorkflow()
 
-    # start the minion by calling _mn_handle_event directly with a dummy event
+    # Exercise workflow handling directly without startup replay or a service task.
     m = AbortMinion(
         "dummy-minion-instance-id",
         "dummy-orchestration-id",
@@ -56,7 +56,7 @@ async def test_workflow_aborted_increments_aborted_counter(
         minion_config_id="",
         pipeline_id="dummy-pipeline-id",
     )
-    m._mn_started.set()
+    m._mn_mark_running()
     await m._mn_handle_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
 
@@ -95,7 +95,7 @@ async def test_workflow_failure_is_terminal_deletes_checkpoint_and_increments_fa
         pipeline_id="dummy-pipeline-id",
         workflow_failure_policy="delete",
     )
-    m._mn_started.set()
+    m._mn_mark_running()
     await m._mn_handle_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
 
@@ -155,7 +155,7 @@ async def test_workflow_cancellation_records_interrupted_duration_status_and_kee
         minion_config_id="",
         pipeline_id="dummy-pipeline-id",
     )
-    m._mn_started.set()
+    m._mn_mark_running()
     await m._mn_handle_event(EmptyEvent())
     await asyncio.wait_for(step_started.wait(), timeout=1.0)
     async with m._mn_tasks_gate:
@@ -216,7 +216,7 @@ async def test_runtime_guard_rejects_nested_step_invocation_via_indirect_call(
         pipeline_id="dummy-pipeline-id",
     )
 
-    m._mn_started.set()
+    m._mn_mark_running()
     await m._mn_handle_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
     await state_store.wait_for_call("delete_context", count=1, timeout=2)
@@ -268,7 +268,7 @@ async def test_minion_steps_can_access_event_and_context_across_workflow_steps(
         minion_config_id="",
         pipeline_id="dummy-pipeline-id",
     )
-    m._mn_started.set()
+    m._mn_mark_running()
     await m._mn_handle_event(IntValueEvent(value=10))
     await m._mn_wait_until_workflows_idle(timeout=2)
     await state_store.wait_for_call("delete_context", count=1, timeout=2)
@@ -301,7 +301,7 @@ class TestMinionWorkflowHandle:
             minion_config_id="",
             pipeline_id="dummy-pipeline-id",
         )
-        m._mn_started.set()
+        m._mn_mark_running()
 
         await m._mn_handle_event(EmptyEvent())
         await m._mn_wait_until_tasks_idle(timeout=1.0, timeout_msg="workflow did not finish")
@@ -338,7 +338,7 @@ class TestMinionWorkflowHandle:
             minion_config_id="",
             pipeline_id="dummy-pipeline-id",
         )
-        m._mn_started.set()
+        m._mn_mark_running()
 
         await m._mn_handle_event(EmptyEvent())
         await m._mn_wait_until_tasks_idle(timeout=1.0, timeout_msg="workflow did not finish")

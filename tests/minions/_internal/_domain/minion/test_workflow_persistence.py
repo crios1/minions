@@ -85,7 +85,7 @@ async def test_workflow_persistence_continue_on_failure_advances_and_retries_at_
         workflow_persistence_retry_delay_seconds=0.01,
     )
 
-    m._mn_started.set()
+    m._mn_mark_running()
     await m._mn_handle_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
 
@@ -153,7 +153,7 @@ async def test_workflow_persistence_idle_until_persisted_blocks_next_step_until_
         workflow_persistence_retry_delay_seconds=0.01,
     )
 
-    m._mn_started.set()
+    m._mn_mark_running()
     await m._mn_handle_event(EmptyEvent())
     await asyncio.wait_for(step_1_done.wait(), timeout=1.0)
     await store.save_failures.wait_for(2)
@@ -228,7 +228,7 @@ async def test_workflow_persistence_blocked_gauge_counts_concurrent_workflows_fo
         workflow_persistence_retry_jitter_ratio=0.0,
     )
 
-    m._mn_started.set()
+    m._mn_mark_running()
     await asyncio.gather(
         m._mn_handle_event(EmptyEvent()),
         m._mn_handle_event(EmptyEvent()),
@@ -303,7 +303,7 @@ async def test_workflow_persistence_idle_until_persisted_relogs_and_escalates_su
         workflow_persistence_retry_error_after_seconds=0.03,
     )
 
-    m._mn_started.set()
+    m._mn_mark_running()
     await m._mn_handle_event(EmptyEvent())
     await asyncio.wait_for(step_1_done.wait(), timeout=1.0)
     assert not step_2_started.is_set()
@@ -366,7 +366,7 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds(
         workflow_persistence_retry_error_after_seconds=None,
     )
 
-    m._mn_started.set()
+    m._mn_mark_running()
     await m._mn_handle_event(EmptyEvent())
     await asyncio.wait_for(step_1_done.wait(), timeout=1.0)
     await store.delete_failures.wait_for(2)
@@ -451,7 +451,7 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
         workflow_persistence_retry_delay_seconds=0.01,
     )
 
-    m._mn_started.set()
+    m._mn_mark_running()
     await m._mn_handle_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
 
