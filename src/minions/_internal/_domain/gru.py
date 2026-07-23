@@ -16,6 +16,7 @@ from typing import Any, Iterable, TypeGuard, cast, get_type_hints, overload
 import psutil
 
 from .._framework.async_component import AsyncComponent
+from .._framework.async_service import AsyncService
 from .._framework.logger import CRITICAL, DEBUG, ERROR, INFO, WARNING, Logger
 from .._framework.logger_file import FileLogger
 from .._framework.logger_noop import NoOpLogger
@@ -701,9 +702,7 @@ class Gru:
             self._minions_by_instance_id.pop(instance_id, None)
 
             task = self._minion_tasks.pop(instance_id, None)
-        if task:
-            await safe_cancel_task(task=task, logger=self._logger)
-        await minion._mn_ensure_shutdown()
+        await self._stop_async_service(minion, task)
 
     # Resource Topology, Ownership, and Lifecycle
 
@@ -967,8 +966,7 @@ class Gru:
             async with self._runtime_state_lock:
                 self._resources.pop(resource_id, None)
                 task = self._resource_tasks.pop(resource_id)
-            await safe_cancel_task(task=task, logger=self._logger)
-            await resource._mn_ensure_shutdown()
+            await self._stop_async_service(resource, task)
 
             await self._logger._mn_log(DEBUG, "Resource stopped", **log_kwargs)
 
@@ -1125,12 +1123,11 @@ class Gru:
                 **pipeline._mn_identity_log_kwargs(),
             )
 
-            # remove pipeline from active map and cancel its task
+            # remove the pipeline from active state before stopping it.
             async with self._runtime_state_lock:
                 self._pipelines.pop(pipeline_id)
                 task = self._pipeline_tasks.pop(pipeline_id)
-            await safe_cancel_task(task=task, logger=self._logger)
-            await pipeline._mn_ensure_shutdown()
+            await self._stop_async_service(pipeline, task)
 
             # manage resource lifecycle for resources owned by this pipeline
             resource_ids = await self._release_pipeline_resource_ownership(pipeline_id)
@@ -1614,6 +1611,15 @@ class Gru:
 
 
     # Lifecycle Admission and Utilities
+
+    async def _stop_async_service(
+        self,
+        service: AsyncService,
+        service_task: asyncio.Task[None] | None,
+    ) -> None:
+        if service_task is not None:
+            await safe_cancel_task(task=service_task, logger=self._logger)
+        await service._mn_ensure_shutdown()
 
     def _make_task_failure_hook(self, component: str, identifier: str | None = None):
         async def _hook(exception: BaseException, task_name: str | None) -> None:

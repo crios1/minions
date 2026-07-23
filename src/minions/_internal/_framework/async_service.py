@@ -42,7 +42,9 @@ class AsyncService(AsyncComponent):
             pass
         await service._mn_ensure_shutdown()
 
-    The protocol remains private to avoid expanding the user-facing service API.
+    Awaiting the service task waits for cleanup to finish. The final
+    `_mn_ensure_shutdown()` is required to propagate any cleanup failure suppressed
+    by `_mn_serve()` to preserve the primary stop reason.
     """
 
     def __init__(self, logger: Logger):
