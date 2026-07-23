@@ -53,12 +53,11 @@ class PriceOracle(Resource):
         await self.ws.conn.send_json({"pair": pair})
         return await read_price(self.ws.conn)
 
-class NewEventPipeline(Pipeline):
+class NewEventPipeline(Pipeline[TickEvent]):
     ws: WSClient
 
-    async def run(self):
-        async for event in self.ws.conn.iter_events("ticks"):
-            yield event  # pipelines emit; they don’t enrich
+    async def produce_event(self) -> TickEvent:
+        return await self.ws.conn.next_event("ticks")
 
 class PriceWatcher(Minion):
     prices: PriceOracle

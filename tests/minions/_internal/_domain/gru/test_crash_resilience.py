@@ -11,14 +11,12 @@ from minions._internal._framework.metrics_constants import (
     LABEL_MINION,
     LABEL_MINION_WORKFLOW_STEP,
     LABEL_ORCHESTRATION_ID,
-    LABEL_PIPELINE,
     LABEL_RESOURCE,
     LABEL_RESOURCE_CALLER,
     LABEL_RESOURCE_CALLER_KIND,
     LABEL_RESOURCE_METHOD,
     MINION_WORKFLOW_FAILED_TOTAL,
     MINION_WORKFLOW_STEP_FAILED_TOTAL,
-    PIPELINE_ERROR_TOTAL,
     RESOURCE_ERROR_TOTAL,
 )
 from minions._internal._framework.minion_workflow_context_codec import (
@@ -251,40 +249,6 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
         stop = await gru.stop_orchestration(result.orchestration_id or "")
         assert stop.success
         await assert_runtime_empty(gru)
-
-
-@pytest.mark.asyncio
-async def test_pipeline_produce_event_failure_is_logged_measured_and_shutdown_is_clean(
-    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
-) -> None:
-    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        boom_produce_event_pipeline_id = gru._get_pipeline_identity_from_module_path(
-            "tests.assets.crash.pipelines.counter.boom_produce_event",
-        )
-
-        result = await gru.start_orchestration(
-            "tests.assets.crash.pipelines.counter.boom_produce_event",
-            "tests.assets.minions.one_step.counter.default",
-        )
-        assert result.success
-
-        assert await logger.wait_for_log(
-            "Gru runtime task failure observed",
-            log_kwargs={"component": "pipeline"},
-            timeout=1.0,
-        )
-        assert metrics.snapshot_counter_value(
-            PIPELINE_ERROR_TOTAL,
-            {
-                LABEL_PIPELINE: boom_produce_event_pipeline_id,
-                LABEL_ERROR_TYPE: "BoomError",
-            },
-        ) >= 1
-        shutdown = await gru.shutdown()
-        assert shutdown.success
 
 
 @pytest.mark.asyncio

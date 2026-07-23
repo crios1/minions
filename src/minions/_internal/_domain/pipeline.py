@@ -4,7 +4,7 @@ from typing import Any, ClassVar, Generic, get_args, get_origin
 
 from .._framework.async_lifecycle import LifecycleCallback
 from .._framework.async_service import AsyncService
-from .._framework.logger import DEBUG, Logger
+from .._framework.logger import DEBUG, ERROR, Logger
 from .._framework.metrics import Metrics
 from .._framework.metrics_constants import (
     LABEL_ERROR_TYPE,
@@ -39,6 +39,12 @@ class Pipeline(AsyncService, Generic[T_Event]):
 
         if defer_pipeline_setup:
             return
+
+        if "run" in cls.__dict__:
+            raise TypeError(
+                f"{cls.__name__} cannot override run(). "
+                "Implement produce_event() to define event production."
+            )
 
         subclassing_ex = "(e.g. class MyPipeline(Pipeline[MyEvent]): ...)"
 
@@ -180,39 +186,6 @@ class Pipeline(AsyncService, Generic[T_Event]):
                 caller=self._mn_pipeline_id,
             ):
                 event = await self.produce_event()
-            await self._mn_logger._mn_log(
-                DEBUG,
-                "Pipeline produced event",
-                **self._mn_identity_log_kwargs(),
-                event=repr(event),
-            )
-            await self._mn_metrics._mn_inc(
-                metric_name=PIPELINE_EVENT_PRODUCED_TOTAL,
-                labels={LABEL_PIPELINE: self._mn_pipeline_id},
-            )
-            async with self._mn_subs_lock:
-                subs = tuple(self._mn_subs)
-                for minion in subs:
-                    # Track event-handling tasks on the minion itself for clean shutdown.
-                    minion.safe_create_task(minion._mn_handle_event(event))
-                    await self._mn_metrics._mn_inc(
-                        metric_name=PIPELINE_EVENT_FANOUT_TOTAL,
-                        labels={
-                            LABEL_PIPELINE: self._mn_pipeline_id,
-                            LABEL_ORCHESTRATION_ID: minion._mn_orchestration_id,
-                        },
-                    )
-                await asyncio.gather(
-                    *[
-                        self._mn_logger._mn_log(
-                            DEBUG,
-                            "Pipeline Fanout: dispatched event to minion",
-                            **self._mn_fanout_log_kwargs(minion),
-                        )
-                        for minion in subs
-                    ],
-                    return_exceptions=True,
-                )
         except Exception as e:
             await self._mn_metrics._mn_inc(
                 metric_name=PIPELINE_ERROR_TOTAL,
@@ -221,7 +194,47 @@ class Pipeline(AsyncService, Generic[T_Event]):
                     LABEL_ERROR_TYPE: type(e).__name__,
                 },
             )
-            raise
+            await self._mn_logger._mn_log_exception(
+                ERROR,
+                "Pipeline failed to produce event",
+                e,
+                **self._mn_identity_log_kwargs(),
+            )
+            return
+
+        await self._mn_logger._mn_log(
+            DEBUG,
+            "Pipeline produced event",
+            **self._mn_identity_log_kwargs(),
+            event=repr(event),
+        )
+        await self._mn_metrics._mn_inc(
+            metric_name=PIPELINE_EVENT_PRODUCED_TOTAL,
+            labels={LABEL_PIPELINE: self._mn_pipeline_id},
+        )
+        async with self._mn_subs_lock:
+            subs = tuple(self._mn_subs)
+            for minion in subs:
+                # Track event-handling tasks on the minion itself for clean shutdown.
+                minion.safe_create_task(minion._mn_handle_event(event))
+                await self._mn_metrics._mn_inc(
+                    metric_name=PIPELINE_EVENT_FANOUT_TOTAL,
+                    labels={
+                        LABEL_PIPELINE: self._mn_pipeline_id,
+                        LABEL_ORCHESTRATION_ID: minion._mn_orchestration_id,
+                    },
+                )
+            await asyncio.gather(
+                *[
+                    self._mn_logger._mn_log(
+                        DEBUG,
+                        "Pipeline Fanout: dispatched event to minion",
+                        **self._mn_fanout_log_kwargs(minion),
+                    )
+                    for minion in subs
+                ],
+                return_exceptions=True,
+            )
 
     async def _mn_subscribe(self, minion: Minion[T_Event, Any]) -> None:
         async with self._mn_subs_lock:

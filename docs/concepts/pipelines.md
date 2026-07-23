@@ -20,8 +20,8 @@ Guidelines from the runtime:
 
 - Declare the **event type** via generics; it must be a dataclass or `msgspec.Struct` type with serializable fields.
 - Prefer explicit event schemas for durable systems.
-- Implement `produce_event`, an infinite (or very long-lived) async producer.
-- Optionally implement `startup`, `run`, and `shutdown` hooks inherited from `AsyncService`.
+- Implement `produce_event`; each call should produce and return one event.
+- Optionally implement `startup` and `shutdown` hooks for setup and cleanup.
 - Define a single `Pipeline` subclass in the module so Gru can resolve it from the module path you pass to `start_orchestration`.
 - If a module contains multiple local pipeline classes, set a module-level `pipeline` variable to identify the entrypoint class.
 
@@ -32,3 +32,15 @@ Pipelines can declare resource dependencies via type hints just like minions. Gr
 Events are shared fanout inputs: fanout delivers the same event object to each subscribed minion, prefer immutable event types (like frozen dataclasses) and store mutable per-workflow state in context.
 
 Each produced event increments `PIPELINE_EVENT_PRODUCED_TOTAL`. Fanout to minions increments `PIPELINE_EVENT_FANOUT_TOTAL` and is logged in debug mode for traceability.
+
+## Production failures
+
+Gru repeatedly calls `produce_event()` while the pipeline is active. If one
+call raises an ordinary exception, Minions logs and measures that failed
+production attempt, emits no event for it, and continues by calling
+`produce_event()` again.
+
+Minions does not retry the failed call, reconstruct a lost event, or otherwise
+recover user production logic. If repeated failures can occur immediately,
+`produce_event()` should provide appropriate pacing so that it does not create a
+tight error loop.

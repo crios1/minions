@@ -97,8 +97,7 @@ async def test_pipeline_runtime_metric_labels_match_contract(
         metrics,
         logger,
     )
-    with pytest.raises(RuntimeError):
-        await error_pipeline._mn_produce_and_handle_event()
+    await error_pipeline._mn_produce_and_handle_event()
 
     metrics.assert_recorded_labels_match_contract()
     # Resource metrics preserve the immediate caller: pipeline -> resource -> transitive resource.
