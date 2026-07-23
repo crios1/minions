@@ -687,13 +687,13 @@ class Gru:
             self._minions_by_instance_id[instance_id] = minion
 
             self._minion_tasks[instance_id] = safe_create_task(
-                minion._mn_start(),
+                minion._mn_serve(),
                 self._logger,
                 name=f"minion:{instance_id}",
                 on_failure=self._make_task_failure_hook("minion", instance_id),
             )
 
-        await minion._mn_wait_until_started()
+        await minion._mn_wait_until_running()
 
     async def _stop_minion(self, minion: Minion[Any, Any]) -> None:
         instance_id = minion._mn_minion_instance_id
@@ -936,7 +936,7 @@ class Gru:
                     inject_resource_dependencies(resource)
                     self._resources[resource_id] = resource
                     self._resource_tasks[resource_id] = safe_create_task(
-                        resource._mn_start(),
+                        resource._mn_serve(),
                         self._logger,
                         name=f"resource:{resource_id}",
                         on_failure=self._make_task_failure_hook("resource", resource_id),
@@ -947,7 +947,7 @@ class Gru:
                     "Resource starting",
                     **resource._mn_identity_log_kwargs(),
                 )
-            await resource._mn_wait_until_started()
+            await resource._mn_wait_until_running()
             await self._logger._mn_log(
                 DEBUG,
                 "Resource started",
@@ -1053,7 +1053,7 @@ class Gru:
                 created = True
                 self._pipelines[pipeline_id] = pipeline
                 self._pipeline_tasks[pipeline_id] = safe_create_task(
-                    pipeline._mn_start(),
+                    pipeline._mn_serve(),
                     self._logger,
                     name=f"pipeline:{pipeline_id}",
                     on_failure=self._make_task_failure_hook("pipeline", pipeline_id),
@@ -1064,7 +1064,7 @@ class Gru:
                 "Pipeline starting",
                 **pipeline._mn_identity_log_kwargs(),
             )
-        await pipeline._mn_wait_until_started()
+        await pipeline._mn_wait_until_running()
         if created:
             await self._logger._mn_log(
                 DEBUG,

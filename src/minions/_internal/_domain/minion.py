@@ -1324,7 +1324,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     async def _mn_handle_event(self, t_event: T_Event):
         # Live events must wait for startup replay to finish; otherwise an event
         # can be persisted before startup completes and then replayed immediately.
-        await self._mn_wait_until_started()
+        await self._mn_wait_until_running()
 
         workflow_id = uuid.uuid4().hex
 

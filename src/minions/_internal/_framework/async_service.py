@@ -31,8 +31,8 @@ class AsyncService(AsyncComponent):
 
     Lifecycle managers use the private protocol:
 
-        service_task = asyncio.create_task(service._mn_start())
-        await service._mn_wait_until_started()
+        service_task = asyncio.create_task(service._mn_serve())
+        await service._mn_wait_until_running()
 
         # Later, when stopping:
         service_task.cancel()
@@ -48,7 +48,7 @@ class AsyncService(AsyncComponent):
     def __init__(self, logger: Logger):
         super().__init__(logger)
         self._mn_state = _AsyncServiceState.CREATED
-        self._mn_start_resolved = asyncio.Event()
+        self._mn_start_done = asyncio.Event()
         self._mn_stop_reason: BaseException | None = None
         self._mn_shutdown_task: asyncio.Task[None] | None = None
         self._mn_service_tasks: set[asyncio.Task[None]] = (
@@ -78,18 +78,18 @@ class AsyncService(AsyncComponent):
 
     def _mn_mark_running(self) -> None:
         self._mn_state = _AsyncServiceState.RUNNING
-        self._mn_start_resolved.set()
+        self._mn_start_done.set()
 
     def _mn_mark_stopping(self, reason: BaseException) -> None:
         self._mn_state = _AsyncServiceState.STOPPING
         self._mn_stop_reason = reason
-        self._mn_start_resolved.set()
+        self._mn_start_done.set()
 
     def _mn_mark_stopped(self) -> None:
         self._mn_state = _AsyncServiceState.STOPPED
 
-    async def _mn_wait_until_started(self) -> None:
-        await self._mn_start_resolved.wait()
+    async def _mn_wait_until_running(self) -> None:
+        await self._mn_start_done.wait()
         if self._mn_state is _AsyncServiceState.RUNNING:
             return
         if self._mn_stop_reason is None:
@@ -130,8 +130,8 @@ class AsyncService(AsyncComponent):
         """Remain passively active until the service is cancelled."""
         await asyncio.Event().wait()
 
-    async def _mn_start(self):
-        "Is launched as an asyncio.Task and cancelled accordingly."
+    async def _mn_serve(self):
+        """Run the service lifecycle until termination."""
         self._mn_mark_starting()
 
         async def _ensure_shutdown_without_masking_stop_reason(

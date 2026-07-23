@@ -41,8 +41,8 @@ async def test_default_run_remains_active_until_cancelled():
 @pytest.mark.asyncio
 async def test_successful_lifecycle_follows_valid_state_flow():
     service = StateTrackingService()
-    service_task = asyncio.create_task(service._mn_start())
-    await asyncio.wait_for(service._mn_wait_until_started(), timeout=1.0)
+    service_task = asyncio.create_task(service._mn_serve())
+    await asyncio.wait_for(service._mn_wait_until_running(), timeout=1.0)
 
     service_task.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -60,12 +60,12 @@ async def test_successful_lifecycle_follows_valid_state_flow():
 @pytest.mark.asyncio
 async def test_startup_failure_follows_valid_state_flow():
     service = StateTrackingService()
-    service._mn_startup = AsyncMock(  # type: ignore[method-assign]
+    service._mn_startup = AsyncMock(
         side_effect=RuntimeError("startup failed")
     )
 
     with pytest.raises(RuntimeError, match="startup failed"):
-        await asyncio.wait_for(service._mn_start(), timeout=1.0)
+        await asyncio.wait_for(service._mn_serve(), timeout=1.0)
 
     assert service.state_history == [
         _AsyncServiceState.CREATED,
@@ -76,11 +76,11 @@ async def test_startup_failure_follows_valid_state_flow():
 
 
 @pytest.mark.asyncio
-async def test_wait_until_started_waits_for_active_run_handoff():
+async def test_wait_until_running_waits_for_active_run_handoff():
     service = NoOpService()
-    service_task = asyncio.create_task(service._mn_start())
+    service_task = asyncio.create_task(service._mn_serve())
 
-    await asyncio.wait_for(service._mn_wait_until_started(), timeout=1.0)
+    await asyncio.wait_for(service._mn_wait_until_running(), timeout=1.0)
     assert service._mn_state is _AsyncServiceState.RUNNING
     assert not service_task.done()
 
@@ -89,47 +89,47 @@ async def test_wait_until_started_waits_for_active_run_handoff():
         await asyncio.wait_for(service_task, timeout=1.0)
     assert service._mn_state is _AsyncServiceState.STOPPED
     with pytest.raises(asyncio.CancelledError):
-        await asyncio.wait_for(service._mn_wait_until_started(), timeout=1.0)
+        await asyncio.wait_for(service._mn_wait_until_running(), timeout=1.0)
 
 
 @pytest.mark.asyncio
-async def test_wait_until_started_raises_startup_failure():
+async def test_wait_until_running_raises_startup_failure():
     service = NoOpService()
-    service._mn_startup = AsyncMock(side_effect=RuntimeError("startup failed"))  # type: ignore[method-assign]
-    service_task = asyncio.create_task(service._mn_start())
+    service._mn_startup = AsyncMock(side_effect=RuntimeError("startup failed"))
+    service_task = asyncio.create_task(service._mn_serve())
 
     with pytest.raises(RuntimeError, match="startup failed"):
-        await asyncio.wait_for(service._mn_wait_until_started(), timeout=1.0)
+        await asyncio.wait_for(service._mn_wait_until_running(), timeout=1.0)
     with pytest.raises(RuntimeError, match="startup failed"):
         await asyncio.wait_for(service_task, timeout=1.0)
 
 
 @pytest.mark.asyncio
-async def test_wait_until_started_raises_if_run_returns_during_handoff():
+async def test_wait_until_running_raises_if_run_returns_during_handoff():
     service = NoOpService()
     service._mn_run = AsyncMock(return_value=None)
-    service_task = asyncio.create_task(service._mn_start())
+    service_task = asyncio.create_task(service._mn_serve())
 
     with pytest.raises(MinionsError, match=r"NoOpService\.run returned unexpectedly"):
-        await asyncio.wait_for(service._mn_wait_until_started(), timeout=1.0)
+        await asyncio.wait_for(service._mn_wait_until_running(), timeout=1.0)
     with pytest.raises(MinionsError, match=r"NoOpService\.run returned unexpectedly"):
         await asyncio.wait_for(service_task, timeout=1.0)
 
 
 @pytest.mark.asyncio
-async def test_wait_until_started_raises_if_run_fails_during_handoff():
+async def test_wait_until_running_raises_if_run_fails_during_handoff():
     service = NoOpService()
     service._mn_run = AsyncMock(side_effect=RuntimeError("run failed"))
-    service_task = asyncio.create_task(service._mn_start())
+    service_task = asyncio.create_task(service._mn_serve())
 
     with pytest.raises(RuntimeError, match="run failed"):
-        await asyncio.wait_for(service._mn_wait_until_started(), timeout=1.0)
+        await asyncio.wait_for(service._mn_wait_until_running(), timeout=1.0)
     with pytest.raises(RuntimeError, match="run failed"):
         await asyncio.wait_for(service_task, timeout=1.0)
 
 
 @pytest.mark.asyncio
-async def test_wait_until_started_raises_after_run_fails():
+async def test_wait_until_running_raises_after_run_fails():
     class GatedFailingRunService(NoOpService):
         def __init__(self) -> None:
             super().__init__()
@@ -142,19 +142,19 @@ async def test_wait_until_started_raises_after_run_fails():
             raise RuntimeError("run failed")
 
     service = GatedFailingRunService()
-    service_task = asyncio.create_task(service._mn_start())
+    service_task = asyncio.create_task(service._mn_serve())
 
-    await asyncio.wait_for(service._mn_wait_until_started(), timeout=1.0)
+    await asyncio.wait_for(service._mn_wait_until_running(), timeout=1.0)
     assert service.run_started.is_set()
     service.fail_run.set()
     with pytest.raises(MinionsError, match=r"GatedFailingRunService\.run failed"):
         await asyncio.wait_for(service_task, timeout=1.0)
     with pytest.raises(MinionsError, match=r"GatedFailingRunService\.run failed"):
-        await asyncio.wait_for(service._mn_wait_until_started(), timeout=1.0)
+        await asyncio.wait_for(service._mn_wait_until_running(), timeout=1.0)
 
 
 @pytest.mark.asyncio
-async def test_wait_until_started_raises_after_run_returns():
+async def test_wait_until_running_raises_after_run_returns():
     class GatedReturningRunService(NoOpService):
         def __init__(self) -> None:
             super().__init__()
@@ -164,9 +164,9 @@ async def test_wait_until_started_raises_after_run_returns():
             await self.finish_run.wait()
 
     service = GatedReturningRunService()
-    service_task = asyncio.create_task(service._mn_start())
+    service_task = asyncio.create_task(service._mn_serve())
 
-    await asyncio.wait_for(service._mn_wait_until_started(), timeout=1.0)
+    await asyncio.wait_for(service._mn_wait_until_running(), timeout=1.0)
     service.finish_run.set()
     with pytest.raises(
         MinionsError, match=r"GatedReturningRunService\.run returned unexpectedly"
@@ -175,13 +175,13 @@ async def test_wait_until_started_raises_after_run_returns():
     with pytest.raises(
         MinionsError, match=r"GatedReturningRunService\.run returned unexpectedly"
     ):
-        await asyncio.wait_for(service._mn_wait_until_started(), timeout=1.0)
+        await asyncio.wait_for(service._mn_wait_until_running(), timeout=1.0)
 
 
 @pytest.mark.asyncio
 async def test_cancelling_readiness_wait_does_not_affect_service_lifecycle():
     service = NoOpService()
-    wait_task = asyncio.create_task(service._mn_wait_until_started())
+    wait_task = asyncio.create_task(service._mn_wait_until_running())
     await asyncio.sleep(0)
 
     wait_task.cancel()
@@ -189,10 +189,10 @@ async def test_cancelling_readiness_wait_does_not_affect_service_lifecycle():
         await asyncio.wait_for(wait_task, timeout=1.0)
 
     assert service._mn_state is _AsyncServiceState.CREATED
-    assert not service._mn_start_resolved.is_set()
+    assert not service._mn_start_done.is_set()
 
-    service_task = asyncio.create_task(service._mn_start())
-    await asyncio.wait_for(service._mn_wait_until_started(), timeout=1.0)
+    service_task = asyncio.create_task(service._mn_serve())
+    await asyncio.wait_for(service._mn_wait_until_running(), timeout=1.0)
 
     service_task.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -202,7 +202,7 @@ async def test_cancelling_readiness_wait_does_not_affect_service_lifecycle():
 @pytest.mark.asyncio
 async def test_safe_create_task_invokes_service_task_failure_hook():
     service = NoOpService()
-    service._mn_on_service_task_failure = AsyncMock()  # type: ignore[method-assign]
+    service._mn_on_service_task_failure = AsyncMock()
 
     async def faulty():
         raise ValueError("boom")
@@ -210,7 +210,7 @@ async def test_safe_create_task_invokes_service_task_failure_hook():
     task = service.safe_create_task(faulty(), name="faulty")
     await task
 
-    service._mn_on_service_task_failure.assert_awaited_once()  # type: ignore[attr-defined]
+    service._mn_on_service_task_failure.assert_awaited_once()
     err, task_name = service._mn_on_service_task_failure.await_args.args  # type: ignore[attr-defined]
     assert isinstance(err, ValueError)
     assert task_name == "faulty"
@@ -258,8 +258,8 @@ async def test_ensure_shutdown_starts_once_and_all_callers_wait_for_completion()
             await self.allow_shutdown.wait()
 
     service = GatedShutdownService()
-    service_task = asyncio.create_task(service._mn_start())
-    await asyncio.wait_for(service._mn_wait_until_started(), timeout=1.0)
+    service_task = asyncio.create_task(service._mn_serve())
+    await asyncio.wait_for(service._mn_wait_until_running(), timeout=1.0)
 
     service_task.cancel()
     await asyncio.wait_for(service.shutdown_entered.wait(), timeout=1.0)
@@ -280,7 +280,7 @@ async def test_ensure_shutdown_starts_once_and_all_callers_wait_for_completion()
     assert service._mn_state is _AsyncServiceState.STOPPED
     assert service.shutdown_calls == 1
     with pytest.raises(asyncio.CancelledError):
-        await asyncio.wait_for(service._mn_wait_until_started(), timeout=1.0)
+        await asyncio.wait_for(service._mn_wait_until_running(), timeout=1.0)
 
 
 @pytest.mark.asyncio
@@ -295,8 +295,8 @@ async def test_ensure_shutdown_replays_same_failure_without_retrying():
             raise RuntimeError("shutdown boom")
 
     service = FailingShutdownService()
-    service_task = asyncio.create_task(service._mn_start())
-    await asyncio.wait_for(service._mn_wait_until_started(), timeout=1.0)
+    service_task = asyncio.create_task(service._mn_serve())
+    await asyncio.wait_for(service._mn_wait_until_running(), timeout=1.0)
 
     service_task.cancel()
     with pytest.raises(asyncio.CancelledError):
