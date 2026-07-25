@@ -101,6 +101,8 @@ class Resource(AsyncService):
         for attr_name in dir(self):
             if attr_name.startswith("_"):
                 continue
+            if _is_async_callable(getattr(AsyncService, attr_name, None)):
+                continue
             method = getattr(self, attr_name)
             if not _is_async_callable(method):
                 continue

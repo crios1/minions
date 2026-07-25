@@ -8,6 +8,35 @@ import pytest
 
 from minions import Resource
 from minions._internal._domain.exceptions import UnsupportedUserCode
+from tests.assets.support.logger_inmemory import InMemoryLogger
+from tests.assets.support.metrics_inmemory import InMemoryMetrics
+
+
+def test_lifecycle_hooks_are_not_wrapped_as_resource_methods(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+):
+    class MyResource(Resource):
+        async def startup(self) -> None:
+            pass
+
+        async def run(self) -> None:
+            pass
+
+        async def shutdown(self) -> None:
+            pass
+
+        async def request(self) -> None:
+            pass
+
+    resource = MyResource(logger, metrics, "dummy-path", "dummy-id")
+
+    resource._mn_validate_and_wrap_public_async_methods()
+
+    assert "startup" not in vars(resource)
+    assert "run" not in vars(resource)
+    assert "shutdown" not in vars(resource)
+    assert "request" in vars(resource)
 
 
 def test_subclass_rejects_reserved_class_variable_name():
