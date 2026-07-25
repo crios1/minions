@@ -43,6 +43,7 @@ from .._utils.serialization import (
 )
 from .component_identity import get_component_id
 from .config_identity import get_config_id
+from .exceptions import TaskCancellationError
 from .gru_result_types import (
     ShutdownError,
     ShutdownResult,
@@ -2305,6 +2306,12 @@ class Gru:
                     return StopResult(
                         success=False,
                         reason=str(e),
+                        suggestion=(
+                            "Consider restarting the process to establish a hard cleanup boundary; "
+                            "user code may still be running."
+                            if isinstance(e, TaskCancellationError)
+                            else None
+                        ),
                     )
 
     async def stop(self, orchestration_id: str) -> StopResult:

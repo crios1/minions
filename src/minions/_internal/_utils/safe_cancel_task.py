@@ -4,6 +4,7 @@ import traceback
 import types
 from typing import Any
 
+from .._domain.exceptions import TaskCancellationTimeoutError
 from .._framework.logger import ERROR, Logger
 
 
@@ -15,27 +16,31 @@ def _format_task_stack(task: asyncio.Task[Any]) -> str:
 
 async def safe_cancel_task(
     task: asyncio.Task[Any],
-    label: str = "task",
+    label: str | None = None,
     timeout: float = 60.0,
     logger: Logger | None = None,
 ) -> None:
     if not task:
         return
     task.cancel()
-    try:
-        await asyncio.wait_for(task, timeout=timeout)
-    except asyncio.CancelledError:
-        pass
-    except asyncio.TimeoutError as e:
-        msg = (
-            f"Timeout while cancelling task '{label}'"
-            if label != "task"
-            else "Timeout while cancelling task"
-        )
+    _done, pending = await asyncio.wait({task}, timeout=timeout)
+    if pending:
+        error = TaskCancellationTimeoutError(label or task.get_name(), timeout)
         task_stack = _format_task_stack(task)
 
         if logger:
-            await logger._mn_log_exception(ERROR, msg, e, task_stack=task_stack)
+            await logger._mn_log_exception(
+                ERROR,
+                str(error),
+                error,
+                task_stack=task_stack,
+            )
         else:
-            print(msg, file=sys.stderr)
+            print(error, file=sys.stderr)
             print(task_stack, file=sys.stderr)
+        raise error
+
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        pass

@@ -5,6 +5,8 @@ from typing import Any
 
 import pytest
 
+import minions._internal._domain.gru as gru_module
+from minions._internal._domain.exceptions import TaskCancellationTimeoutError
 from minions._internal._domain.gru import Gru
 from minions._internal._domain.minion import Minion
 from tests.assets.support.logger_inmemory import InMemoryLogger
@@ -55,6 +57,49 @@ async def test_shutdown_failure_removes_target_without_affecting_other_runtime_s
 
         healthy_stop = await gru.stop_orchestration(healthy_start.orchestration_id)
         assert healthy_stop.success
+        await assert_runtime_empty(gru)
+
+
+@pytest.mark.asyncio
+async def test_cancellation_timeout_fails_closed_and_recommends_process_restart(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with managed_gru_context(
+        logger=logger,
+        metrics=metrics,
+        state_store=state_store,
+    ) as gru:
+        started = await gru.start_orchestration(HEALTHY_PIPELINE, HEALTHY_MINION)
+        assert started.success
+        assert started.orchestration_id is not None
+
+        original_safe_cancel_task = gru_module.safe_cancel_task
+
+        async def timed_out_cancel(*args: object, **kwargs: object) -> None:
+            raise TaskCancellationTimeoutError("minion-service", 0.01)
+
+        monkeypatch.setattr(
+            "minions._internal._domain.gru.safe_cancel_task",
+            timed_out_cancel,
+        )
+        stopped = await gru.stop_orchestration(started.orchestration_id)
+        monkeypatch.setattr(
+            "minions._internal._domain.gru.safe_cancel_task",
+            original_safe_cancel_task,
+        )
+
+        assert not stopped.success
+        assert stopped.reason == (
+            "Timeout while cancelling task 'minion-service' after 0.01 seconds"
+        )
+        assert stopped.suggestion == (
+            "Consider restarting the process to establish a hard cleanup boundary; "
+            "user code may still be running."
+        )
         await assert_runtime_empty(gru)
 
 

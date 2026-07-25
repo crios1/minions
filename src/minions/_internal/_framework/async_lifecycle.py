@@ -4,7 +4,11 @@ import textwrap
 from abc import ABC
 from typing import Awaitable, Callable, ClassVar, TypeAlias
 
-from .._domain.exceptions import MinionsError, UnsupportedUserCode
+from .._domain.exceptions import (
+    MinionsError,
+    TaskCancellationError,
+    UnsupportedUserCode,
+)
 
 LifecycleCallback: TypeAlias = Callable[..., object | Awaitable[object]]
 
@@ -285,6 +289,8 @@ class AsyncLifecycle(ABC):
                 result = post(*post_args)
                 if inspect.isawaitable(result):
                     await result
+        except TaskCancellationError:
+            raise
         except Exception as e:
             log_kwargs = log_kwargs or {}
             relative_module_path = type(self).__module__

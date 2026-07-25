@@ -1306,20 +1306,19 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             async with self._mn_tasks_gate:
                 tasks = list(self._mn_workflow_tasks)
             if tasks:
-                _done, pending = await asyncio.wait(
+                await asyncio.wait(
                     tasks,
                     timeout=self._mn_shutdown_grace_seconds,
                 )
-                for task in pending:
-                    task.cancel()
-                await asyncio.gather(*pending, return_exceptions=True)
+
+        try:
+            return await super()._mn_shutdown(
+                log_kwargs=self._mn_identity_log_kwargs(),
+                post=_post,
+            )
+        finally:
             async with self._mn_tasks_gate:
                 self._mn_workflow_tasks.clear()
-
-        return await super()._mn_shutdown(
-            log_kwargs=self._mn_identity_log_kwargs(),
-            post=_post
-        )
 
     async def _mn_handle_event(self, t_event: T_Event):
         # Live events must wait for startup replay to finish; otherwise an event

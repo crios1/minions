@@ -4,7 +4,7 @@ from collections.abc import Coroutine
 from enum import Enum, auto
 from typing import Any, ClassVar, final
 
-from .._domain.exceptions import MinionsError
+from .._domain.exceptions import MinionsError, TaskCancellationErrors
 from .._utils.safe_cancel_task import safe_cancel_task
 from .._utils.safe_create_task import safe_create_task
 from .async_component import AsyncComponent
@@ -215,31 +215,48 @@ class AsyncService(AsyncComponent):
                 if inspect.isawaitable(result):
                     await result
 
-            # Two bounded passes:
-            # 1) cancel tasks currently tracked
-            # 2) catch tasks scheduled on the next loop tick during shutdown
-            for _ in range(2):
+            attempted: set[asyncio.Task[None]] = set()
+            cancellation_errors: list[Exception] = []
+            try:
+                # Two bounded passes:
+                # 1) cancel tasks currently tracked
+                # 2) catch tasks scheduled on the next loop tick during shutdown
+                for _ in range(2):
+                    async with self._mn_tasks_gate:
+                        tasks = [
+                            task
+                            for task in self._mn_service_tasks
+                            if task not in attempted
+                        ]
+                    attempted.update(tasks)
+                    if not tasks:
+                        await asyncio.sleep(0)
+                        continue
+
+                    results = await asyncio.gather(
+                        *[
+                            safe_cancel_task(
+                                task=task,
+                                timeout=self._mn_shutdown_grace_seconds,
+                                logger=self._mn_logger,
+                            )
+                            for task in tasks
+                        ],
+                        return_exceptions=True,
+                    )
+                    cancellation_errors.extend(
+                        result
+                        for result in results
+                        if isinstance(result, Exception)
+                    )
+            finally:
                 async with self._mn_tasks_gate:
-                    tasks = list(self._mn_service_tasks)
-                if not tasks:
-                    await asyncio.sleep(0)
-                    continue
+                    self._mn_service_tasks.clear()
 
-                await asyncio.gather(
-                    *[
-                        safe_cancel_task(
-                            task=task,
-                            label=getattr(task, "get_name", lambda: "task")(),
-                            timeout=self._mn_shutdown_grace_seconds,
-                            logger=self._mn_logger,
-                        )
-                        for task in tasks
-                    ],
-                    return_exceptions=True,
-                )
-
-            async with self._mn_tasks_gate:
-                self._mn_service_tasks.clear()
+            if len(cancellation_errors) == 1:
+                raise cancellation_errors[0]
+            if cancellation_errors:
+                raise TaskCancellationErrors(cancellation_errors)
 
         return await super()._mn_shutdown(
             log_kwargs=log_kwargs,

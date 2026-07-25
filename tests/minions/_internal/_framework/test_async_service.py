@@ -3,9 +3,15 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from minions._internal._domain.exceptions import MinionsError
+from minions._internal._domain.exceptions import (
+    MinionsError,
+    TaskCancellationTimeoutError,
+)
 from minions._internal._framework.async_service import AsyncService, _AsyncServiceState
 from minions._internal._framework.logger_noop import NoOpLogger
+from tests.support.task_with_stalled_cancellation import (
+    task_with_stalled_cancellation,
+)
 
 
 class NoOpService(AsyncService):
@@ -229,6 +235,25 @@ async def test_shutdown_drains_tracked_task_scheduled_next_tick():
 
     async with service._mn_tasks_gate:
         assert not service._mn_service_tasks
+
+
+@pytest.mark.asyncio
+async def test_shutdown_reports_and_forgets_task_that_misses_cancellation_deadline():
+    service = NoOpService()
+    service._mn_shutdown_grace_seconds = 0.02
+
+    async with task_with_stalled_cancellation(
+        name="stubborn-child",
+        task_factory=service.safe_create_task,
+    ) as task:
+        with pytest.raises(
+            TaskCancellationTimeoutError,
+            match="stubborn-child",
+        ):
+            await service._mn_shutdown()
+        async with service._mn_tasks_gate:
+            assert task not in service._mn_service_tasks
+        assert not task.done()
 
 
 @pytest.mark.asyncio

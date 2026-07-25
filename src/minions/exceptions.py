@@ -1,3 +1,11 @@
-from ._internal._domain.exceptions import AbortWorkflow
+from ._internal._domain.exceptions import (
+    AbortWorkflow,
+    TaskCancellationError,
+    TaskCancellationTimeoutError,
+)
 
-__all__ = ["AbortWorkflow"]
+__all__ = [
+    "AbortWorkflow",
+    "TaskCancellationError",
+    "TaskCancellationTimeoutError",
+]
