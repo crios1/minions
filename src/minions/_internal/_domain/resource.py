@@ -18,9 +18,9 @@ from .._framework.metrics_constants import (
     RESOURCE_SERVES_TOTAL,
 )
 from .._framework.metrics_context import (
+    ResourceMetricContext,
     current_resource_metric_caller,
     current_resource_metric_orchestration_id,
-    resource_metric_context,
 )
 
 T = TypeVar("T")
@@ -142,7 +142,7 @@ class Resource(AsyncService):
             LABEL_RESOURCE_CALLER: caller,
             LABEL_ORCHESTRATION_ID: current_resource_metric_orchestration_id(),
         }
-        with resource_metric_context(caller_kind="resource", caller=self._mn_resource_id):
+        with ResourceMetricContext(caller_kind="resource", caller=self._mn_resource_id):
             try:
                 result = await method(*args, **kwargs)
             except Exception as e:

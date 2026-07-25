@@ -57,7 +57,7 @@ from .._framework.metrics_constants import (
     MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
     MINION_WORKFLOW_SUCCEEDED_TOTAL,
 )
-from .._framework.metrics_context import resource_metric_context
+from .._framework.metrics_context import ResourceMetricContext
 from .._framework.state_store import PersistenceOperationResult, StateStore
 from .._utils.get_original_bases import get_original_bases
 from .._utils.get_type_from_hint import get_type_from_hint
@@ -980,7 +980,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             terminal_workflow_error: Exception | None = None
             metric_context = ExitStack()
             metric_context.enter_context(
-                resource_metric_context(
+                ResourceMetricContext(
                     orchestration_id=self._mn_orchestration_id,
                     caller_kind="minion",
                     caller=self._mn_minion_id,

@@ -14,7 +14,7 @@ from .._framework.metrics_constants import (
     PIPELINE_EVENT_FANOUT_TOTAL,
     PIPELINE_EVENT_PRODUCED_TOTAL,
 )
-from .._framework.metrics_context import resource_metric_context
+from .._framework.metrics_context import ResourceMetricContext
 from .._utils.get_original_bases import get_original_bases
 from .._utils.serialization import (
     require_user_declared_type,
@@ -181,7 +181,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
 
     async def _mn_produce_and_handle_event(self) -> None:
         try:
-            with resource_metric_context(
+            with ResourceMetricContext(
                 caller_kind="pipeline",
                 caller=self._mn_pipeline_id,
             ):
