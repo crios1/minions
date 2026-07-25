@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from types import MappingProxyType, ModuleType
-from typing import Any, Iterable, TypeGuard, cast, get_type_hints, overload
+from typing import Any, Iterable, Literal, TypeGuard, cast, get_type_hints, overload
 
 import psutil
 
@@ -36,7 +36,7 @@ from .._framework.state_store_sqlite import SQLiteStateStore
 from .._utils.base62_encode import base62_encode
 from .._utils.get_type_from_hint import get_type_from_hint
 from .._utils.safe_cancel_task import safe_cancel_task
-from .._utils.safe_create_task import safe_create_task
+from .._utils.safe_create_task import TaskFailureHandler, safe_create_task
 from .._utils.serialization import (
     require_user_declared_type,
     serialize,
@@ -180,6 +180,25 @@ class _PipelineStop:
     resource_ids_to_release: set[str] = field(default_factory=lambda: set[str]())
 
 
+_RuntimeComponentKind = Literal["minion", "pipeline", "resource"]
+
+
+@dataclass(frozen=True, slots=True)
+class _RuntimeComponentFailure:
+    component_kind: _RuntimeComponentKind
+    component_id: str
+    component: AsyncService
+    failed_task: asyncio.Task[Any] | None
+
+
+@dataclass(frozen=True, slots=True)
+class _RuntimeFailureImpact:
+    """Orchestrations and resources to deactivate after a runtime component failure."""
+
+    orchestration_ids: tuple[str, ...]
+    resource_ids: frozenset[str] = frozenset()
+
+
 class _OrchestrationStartRejected(Exception):
     def __init__(self, *, reason: str, suggestion: str) -> None:
         super().__init__(reason)
@@ -194,10 +213,12 @@ class Gru:
     custom async applications. Most users should use `run_shell()`
     or higher-level helpers.
 
-    Concurrency contract:
+    Runtime contract:
 
     - Lifecycle operations on different orchestrations may run concurrently.
     - Lifecycle operations for the same orchestration id are serialized.
+    - If a Minion or Resource becomes unavailable, Gru stops every orchestration
+      that depends on it while leaving unrelated orchestrations active.
     - `shutdown()` is terminal: it waits for in-flight lifecycle work to drain
       while rejecting new start/stop work.
     """
@@ -364,6 +385,9 @@ class Gru:
         self._lifecycle_ops_state_lock = asyncio.Lock()
         self._lifecycle_ops_drained = asyncio.Condition(self._lifecycle_ops_state_lock)
         self._lifecycle_ops_active = 0
+        self._runtime_failure_finalization_waiter_count = 0
+        self._runtime_failure_finalizing = False
+        self._runtime_failure_finalizer_tasks: set[asyncio.Task[None]] = set()
 
         # Lifecycle admission locks.
         # Orchestration locks serialize activation/deactivation for one orchestration id.
@@ -402,7 +426,7 @@ class Gru:
         self._resource_monitor_task = safe_create_task(
             self._monitor_process_resources(),
             self._logger,
-            on_failure=self._make_task_failure_hook("resource_monitor", "process"),
+            on_failure=self._on_resource_monitor_failure,
         )
 
     @classmethod
@@ -691,7 +715,11 @@ class Gru:
                 minion._mn_serve(),
                 self._logger,
                 name=f"minion:{instance_id}",
-                on_failure=self._make_task_failure_hook("minion", instance_id),
+                on_failure=self._make_runtime_component_failure_hook(
+                    "minion",
+                    instance_id,
+                    minion,
+                ),
             )
 
         await minion._mn_wait_until_running()
@@ -938,7 +966,11 @@ class Gru:
                         resource._mn_serve(),
                         self._logger,
                         name=f"resource:{resource_id}",
-                        on_failure=self._make_task_failure_hook("resource", resource_id),
+                        on_failure=self._make_runtime_component_failure_hook(
+                            "resource",
+                            resource_id,
+                            resource,
+                        ),
                     )
             if created:
                 await self._logger._mn_log(
@@ -1054,7 +1086,11 @@ class Gru:
                     pipeline._mn_serve(),
                     self._logger,
                     name=f"pipeline:{pipeline_id}",
-                    on_failure=self._make_task_failure_hook("pipeline", pipeline_id),
+                    on_failure=self._make_runtime_component_failure_hook(
+                        "pipeline",
+                        pipeline_id,
+                        pipeline,
+                    ),
                 )
         if created:
             await self._logger._mn_log(
@@ -1597,6 +1633,7 @@ class Gru:
                 *self._minion_tasks.values(),
                 *self._pipeline_tasks.values(),
                 *self._resource_tasks.values(),
+                *self._runtime_failure_finalizer_tasks,
                 getattr(self, "_resource_monitor_task", None),
             )
             if task is not None
@@ -1610,7 +1647,7 @@ class Gru:
                 pass
 
 
-    # Lifecycle Admission and Utilities
+    # Lifecycle Utilities
 
     async def _stop_async_service(
         self,
@@ -1621,8 +1658,54 @@ class Gru:
             await safe_cancel_task(task=service_task, logger=self._logger)
         await service._mn_ensure_shutdown()
 
-    def _make_task_failure_hook(self, component: str, identifier: str | None = None):
+
+    # Runtime Failure Finalization
+
+    def _make_runtime_component_failure_hook(
+        self,
+        component_kind: _RuntimeComponentKind,
+        component_id: str,
+        component: AsyncService,
+    ) -> TaskFailureHandler:
         async def _hook(exception: BaseException, task_name: str | None) -> None:
+            await self._log_runtime_task_failure(
+                exception,
+                task_name,
+                component=component_kind,
+                identifier=component_id,
+            )
+            self._schedule_runtime_failure_finalization(
+                _RuntimeComponentFailure(
+                    component_kind=component_kind,
+                    component_id=component_id,
+                    component=component,
+                    failed_task=asyncio.current_task(),
+                )
+            )
+
+        return _hook
+
+    async def _on_resource_monitor_failure(
+        self,
+        exception: BaseException,
+        task_name: str | None,
+    ) -> None:
+        await self._log_runtime_task_failure(
+            exception,
+            task_name,
+            component="resource_monitor",
+            identifier="process",
+        )
+
+    async def _log_runtime_task_failure(
+        self,
+        exception: BaseException,
+        task_name: str | None,
+        *,
+        component: str,
+        identifier: str | None,
+    ) -> None:
+        try:
             await self._logger._mn_log_exception(
                 ERROR,
                 "Gru runtime task failure observed",
@@ -1631,7 +1714,178 @@ class Gru:
                 identifier=identifier,
                 task_name=task_name,
             )
-        return _hook
+        except Exception:
+            pass
+
+    def _schedule_runtime_failure_finalization(
+        self,
+        failure: _RuntimeComponentFailure,
+    ) -> None:
+        task = safe_create_task(
+            self._finalize_runtime_component_failure(failure),
+            self._logger,
+            name=(
+                "runtime-failure-finalizer:"
+                f"{failure.component_kind}:{failure.component_id}"
+            ),
+        )
+        self._runtime_failure_finalizer_tasks.add(task)
+        task.add_done_callback(self._runtime_failure_finalizer_tasks.discard)
+
+    async def _finalize_runtime_component_failure(
+        self,
+        failure: _RuntimeComponentFailure,
+    ) -> None:
+        async with self._reserve_runtime_failure_finalization() as reserved:
+            if not reserved:
+                return
+
+            if failure.failed_task is not None:
+                try:
+                    await asyncio.shield(failure.failed_task)
+                except BaseException:
+                    pass
+
+            impact = await self._resolve_runtime_failure_impact(failure)
+            await self._deactivate_runtime_failure_orchestrations(
+                failure,
+                impact,
+            )
+            await self._discard_affected_component_runtime_state(
+                failure,
+                impact,
+            )
+            await self._prune_resource_maps()
+
+    async def _resolve_runtime_failure_impact(
+        self,
+        failure: _RuntimeComponentFailure,
+    ) -> _RuntimeFailureImpact:
+        async with self._runtime_state_lock:
+            if failure.component_kind == "minion":
+                if (
+                    self._minions_by_instance_id.get(failure.component_id)
+                    is not failure.component
+                ):
+                    return _RuntimeFailureImpact(())
+                orchestration_ids = tuple(
+                    orchestration_id
+                    for orchestration_id, orchestration in self._orchestrations.items()
+                    if orchestration.minion is failure.component
+                )
+                return _RuntimeFailureImpact(orchestration_ids)
+
+            if failure.component_kind == "pipeline":
+                if self._pipelines.get(failure.component_id) is not failure.component:
+                    return _RuntimeFailureImpact(())
+                orchestration_ids = tuple(
+                    orchestration_id
+                    for orchestration_id, orchestration in self._orchestrations.items()
+                    if orchestration.pipeline is failure.component
+                )
+                return _RuntimeFailureImpact(orchestration_ids)
+
+            if self._resources.get(failure.component_id) is not failure.component:
+                return _RuntimeFailureImpact(())
+
+            affected_resource_ids = {failure.component_id}
+            pending_resource_ids = [failure.component_id]
+            while pending_resource_ids:
+                resource_id = pending_resource_ids.pop()
+                for dependent_id in self._resource_dependents.get(resource_id, ()):
+                    if dependent_id in affected_resource_ids:
+                        continue
+                    affected_resource_ids.add(dependent_id)
+                    pending_resource_ids.append(dependent_id)
+
+            orchestration_ids = tuple(
+                orchestration_id
+                for orchestration_id, orchestration in self._orchestrations.items()
+                if (
+                    self._minion_resource_map.get(
+                        orchestration.minion._mn_minion_instance_id,
+                        set(),
+                    )
+                    | self._pipeline_resource_map.get(
+                        orchestration.pipeline._mn_pipeline_id,
+                        set(),
+                    )
+                )
+                & affected_resource_ids
+            )
+            return _RuntimeFailureImpact(
+                orchestration_ids,
+                frozenset(affected_resource_ids),
+            )
+
+    async def _deactivate_runtime_failure_orchestrations(
+        self,
+        failure: _RuntimeComponentFailure,
+        impact: _RuntimeFailureImpact,
+    ) -> None:
+        for orchestration_id in impact.orchestration_ids:
+            async with self._orchestration_locks[orchestration_id]:
+                async with self._runtime_state_lock:
+                    orchestration = self._orchestrations.get(orchestration_id)
+                if orchestration is None:
+                    continue
+                try:
+                    await self._deactivate_orchestration(
+                        orchestration=orchestration,
+                    )
+                except Exception as cleanup_error:
+                    try:
+                        await self._logger._mn_log_exception(
+                            ERROR,
+                            "Runtime failure orchestration cleanup failed",
+                            cleanup_error,
+                            component=failure.component_kind,
+                            identifier=failure.component_id,
+                            orchestration_id=orchestration_id,
+                        )
+                    except Exception:
+                        pass
+
+    async def _discard_affected_component_runtime_state(
+        self,
+        failure: _RuntimeComponentFailure,
+        impact: _RuntimeFailureImpact,
+    ) -> None:
+        if failure.component_kind == "minion":
+            async with self._runtime_state_lock:
+                is_current = (
+                    self._minions_by_instance_id.get(failure.component_id)
+                    is failure.component
+                )
+            if is_current:
+                await self._discard_minion_runtime_state(
+                    cast(Minion[Any, Any], failure.component)
+                )
+            return
+
+        if failure.component_kind == "pipeline":
+            async with self._runtime_state_lock:
+                is_current = (
+                    self._pipelines.get(failure.component_id) is failure.component
+                )
+            if is_current:
+                await self._discard_pipeline_runtime_state(failure.component_id)
+            return
+
+        for resource_id in impact.resource_ids:
+            async with self._runtime_state_lock:
+                resource = self._resources.get(resource_id)
+            if resource is None:
+                continue
+            if (
+                resource_id == failure.component_id
+                and resource is not failure.component
+            ):
+                continue
+            await self._discard_resource_runtime_state(resource_id)
+
+
+    # Lifecycle Admission and Utilities
 
     def _ensure_started(self):
         if self._is_shutdown:
@@ -1668,6 +1922,14 @@ class Gru:
                     ...
         """
         async with self._lifecycle_ops_state_lock:
+            await self._lifecycle_ops_drained.wait_for(
+                lambda: (
+                    self._runtime_failure_finalization_waiter_count == 0
+                    and not self._runtime_failure_finalizing
+                )
+                or self._is_shutdown
+                or self._is_shutting_down
+            )
             if self._is_shutdown or self._is_shutting_down:
                 yield False
                 return
@@ -1679,6 +1941,45 @@ class Gru:
                 self._lifecycle_ops_active -= 1
                 if self._lifecycle_ops_active == 0:
                     self._lifecycle_ops_drained.notify_all()
+
+    @asynccontextmanager
+    async def _reserve_runtime_failure_finalization(self):
+        """Reserve exclusive access to the lifecycle graph for failure finalization.
+
+        Use as:
+            async with self._reserve_runtime_failure_finalization() as reserved:
+                if not reserved:
+                    ...
+        """
+        reserved = False
+        async with self._lifecycle_ops_state_lock:
+            self._runtime_failure_finalization_waiter_count += 1
+            try:
+                await self._lifecycle_ops_drained.wait_for(
+                    lambda: (
+                        self._lifecycle_ops_active == 0
+                        and not self._runtime_failure_finalizing
+                    )
+                    or self._is_shutdown
+                    or self._is_shutting_down
+                )
+                if not self._is_shutdown and not self._is_shutting_down:
+                    self._runtime_failure_finalizing = True
+                    reserved = True
+            finally:
+                self._runtime_failure_finalization_waiter_count -= 1
+                self._lifecycle_ops_drained.notify_all()
+
+        if not reserved:
+            yield False
+            return
+
+        try:
+            yield True
+        finally:
+            async with self._lifecycle_ops_state_lock:
+                self._runtime_failure_finalizing = False
+                self._lifecycle_ops_drained.notify_all()
 
 
     # Public API
@@ -2030,7 +2331,12 @@ class Gru:
         self._is_shutting_down = True
 
         async with self._lifecycle_ops_state_lock:
-            await self._lifecycle_ops_drained.wait_for(lambda: self._lifecycle_ops_active == 0)
+            await self._lifecycle_ops_drained.wait_for(
+                lambda: (
+                    self._lifecycle_ops_active == 0
+                    and not self._runtime_failure_finalizing
+                )
+            )
 
         runtime_tasks_snapshot = self._runtime_tasks_snapshot()
         domain_component_snapshot = (

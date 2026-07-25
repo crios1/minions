@@ -53,6 +53,23 @@ The right model is fail-closed:
 
 The operator should not be expected to manage orphaned internal components as a normal workflow. If cleanup fails, the useful operator actions are to inspect logs, continue if acceptable, retry broader shutdown, or restart the Gru process for a hard cleanup boundary.
 
+## Unexpected Runtime Failure Semantics
+
+If a minion or resource becomes unavailable after its orchestration has
+started, Gru stops every orchestration that depends on it:
+
+- a minion failure deactivates its orchestration;
+- a resource failure deactivates every orchestration using that resource or one
+  of its transitive dependents;
+- unrelated orchestrations remain active.
+
+Gru removes the affected orchestrations and components from active runtime state
+and attempts their normal cleanup. It does not automatically restart failed
+components or replay live events that may have been lost.
+
+If a component becomes unavailable while its orchestration is starting, Gru
+treats the start as failed and rolls it back instead.
+
 ## Shutdown Failure Semantics
 
 `Gru.shutdown()` is the final in-process cleanup boundary. It should attempt to cancel all known runtime tasks and shut down framework-owned components. It should clear Gru's active runtime state even if some cleanup steps fail.
@@ -149,5 +166,8 @@ Gru should guarantee cleanup of Gru-owned orchestration state, not arbitrary Pyt
 Failed start should be treated as a rolled-back orchestration attempt, with the process possibly polluted if user startup code left side effects.
 
 Failed stop should be treated as a fail-closed orchestration removal, with Gru remaining internally healthy and the process possibly polluted if user shutdown code failed.
+
+Unexpected Minion or Resource runtime failure should deactivate the affected
+dependency closure while leaving unrelated orchestrations active.
 
 Failed shutdown should release Gru's active runtime state and report cleanup errors honestly; process restart is the only hard boundary for arbitrary user-owned leftovers.

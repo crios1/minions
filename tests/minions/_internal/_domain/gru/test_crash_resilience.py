@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 from collections.abc import Callable
 from pathlib import Path
@@ -33,7 +34,12 @@ from tests.assets.events.simple import SimpleEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
-from tests.minions._internal._domain.gru.assertions import assert_runtime_empty
+from tests.minions._internal._domain.gru.assertions import (
+    assert_orchestration_running,
+    assert_runtime_component_counts_exact,
+    assert_runtime_empty,
+    assert_runtime_resource_maps_consistent,
+)
 
 
 def orchestration_id(pipeline_module_path: str, minion_module_path: str, config: str = "") -> str:
@@ -42,6 +48,19 @@ def orchestration_id(pipeline_module_path: str, minion_module_path: str, config:
         minion_id=minion_module_path,
         minion_config_id=config,
     )
+
+
+async def wait_for_orchestration_removed(
+    gru: Gru,
+    orchestration_id: str,
+    *,
+    timeout: float = 1.0,
+) -> None:
+    async def _wait() -> None:
+        while orchestration_id in (await gru.runtime_state_snapshot()).orchestrations:
+            await asyncio.sleep(0.01)
+
+    await asyncio.wait_for(_wait(), timeout=timeout)
 
 
 async def assert_gru_can_start_and_stop_known_good_orchestration(gru: Gru) -> None:
@@ -247,6 +266,119 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
             },
         ) >= 1
         stop = await gru.stop_orchestration(result.orchestration_id or "")
+        assert stop.success
+        await assert_runtime_empty(gru)
+
+
+@pytest.mark.asyncio
+async def test_minion_runtime_failure_deactivates_only_its_orchestration(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> None:
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
+        healthy = await gru.start_orchestration(
+            "tests.assets.pipelines.emit_one.counter.default",
+            "tests.assets.minions.one_step.counter.default",
+        )
+        failing = await gru.start_orchestration(
+            "tests.assets.pipelines.emit_one.counter.default",
+            "tests.assets.crash.minions.counter.gated_boom_run",
+        )
+        assert healthy.success
+        assert healthy.orchestration_id is not None
+        assert failing.success
+        assert failing.orchestration_id is not None
+
+        snapshot = await gru.runtime_state_snapshot()
+        failing_minion_instance_id = snapshot.minion_instance_for_orchestration(
+            failing.orchestration_id
+        )
+        assert failing_minion_instance_id is not None
+        failing_minion = gru._minions_by_instance_id[failing_minion_instance_id]
+        release_run_failure = vars(type(failing_minion)).get("release_run_failure")
+        assert isinstance(release_run_failure, asyncio.Event)
+        release_run_failure.set()
+
+        assert await logger.wait_for_log(
+            "Gru runtime task failure observed",
+            log_kwargs={"component": "minion"},
+            timeout=1.0,
+        )
+        await wait_for_orchestration_removed(gru, failing.orchestration_id)
+
+        await assert_orchestration_running(gru, healthy.orchestration_id)
+        await assert_runtime_component_counts_exact(gru, minions=1, pipelines=1)
+
+        stop = await gru.stop_orchestration(healthy.orchestration_id)
+        assert stop.success
+        await assert_runtime_empty(gru)
+
+
+@pytest.mark.asyncio
+async def test_resource_runtime_failure_deactivates_only_dependent_orchestration(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> None:
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
+        healthy = await gru.start_orchestration(
+            "tests.assets.pipelines.emit_one.counter.default_b",
+            "tests.assets.minions.one_step.counter.default",
+        )
+        failing = await gru.start_orchestration(
+            "tests.assets.pipelines.emit_one.counter.default",
+            "tests.assets.crash.minions.counter.with_resource_depending_on_boom_run",
+        )
+        assert healthy.success
+        assert healthy.orchestration_id is not None
+        assert failing.success
+        assert failing.orchestration_id is not None
+
+        await assert_runtime_component_counts_exact(
+            gru,
+            minions=2,
+            pipelines=2,
+            resources=2,
+        )
+
+        snapshot = await gru.runtime_state_snapshot()
+        failing_minion_instance_id = snapshot.minion_instance_for_orchestration(
+            failing.orchestration_id
+        )
+        assert failing_minion_instance_id is not None
+        resource_ids = snapshot.resources_for_minion(failing_minion_instance_id)
+        assert len(resource_ids) == 1
+        dependent_resource_id = next(iter(resource_ids))
+        dependency_ids = (
+            snapshot.resource_dependencies_by_dependent_resource[dependent_resource_id]
+        )
+        assert len(dependency_ids) == 1
+        boom_run_resource_id = next(iter(dependency_ids))
+        failing_resource = gru._resources[boom_run_resource_id]
+        fail_run = vars(type(failing_resource)).get("fail_run")
+        assert isinstance(fail_run, asyncio.Event)
+        fail_run.set()
+
+        assert await logger.wait_for_log(
+            "Gru runtime task failure observed",
+            log_kwargs={"component": "resource"},
+            timeout=1.0,
+        )
+        await wait_for_orchestration_removed(gru, failing.orchestration_id)
+
+        await assert_orchestration_running(gru, healthy.orchestration_id)
+        await assert_runtime_component_counts_exact(
+            gru,
+            minions=1,
+            pipelines=1,
+            resources=0,
+        )
+        await assert_runtime_resource_maps_consistent(gru)
+
+        stop = await gru.stop_orchestration(healthy.orchestration_id)
         assert stop.success
         await assert_runtime_empty(gru)
 

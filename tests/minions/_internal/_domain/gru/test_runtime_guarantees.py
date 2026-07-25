@@ -1164,6 +1164,82 @@ async def test_gru_shutdown_rejects_new_lifecycle_work_during_shutdown_in_progre
 
 
 @pytest.mark.asyncio
+async def test_pending_failure_finalization_waits_for_first_and_blocks_second_lifecycle_operation(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> None:
+    first_lifecycle_reservation_acquired = asyncio.Event()
+    first_lifecycle_reservation_release = asyncio.Event()
+
+    failure_finalization_reservation_requested = asyncio.Event()
+    failure_finalization_reservation_acquired = asyncio.Event()
+    failure_finalization_reservation_release = asyncio.Event()
+
+    second_lifecycle_reservation_requested = asyncio.Event()
+    second_lifecycle_reservation_acquired = asyncio.Event()
+
+    async with managed_gru_context(
+        logger=logger,
+        metrics=metrics,
+        state_store=state_store,
+    ) as gru:
+        async def hold_first_lifecycle_reservation() -> None:
+            async with gru._reserve_lifecycle_op() as reserved:
+                assert reserved
+                first_lifecycle_reservation_acquired.set()
+                await first_lifecycle_reservation_release.wait()
+
+        async def hold_failure_finalization_reservation() -> None:
+            failure_finalization_reservation_requested.set()
+            async with gru._reserve_runtime_failure_finalization() as reserved:
+                assert reserved
+                failure_finalization_reservation_acquired.set()
+                await failure_finalization_reservation_release.wait()
+
+        async def acquire_second_lifecycle_reservation() -> None:
+            second_lifecycle_reservation_requested.set()
+            async with gru._reserve_lifecycle_op() as reserved:
+                assert reserved
+                second_lifecycle_reservation_acquired.set()
+
+        async with asyncio.TaskGroup() as task_group:
+            task_group.create_task(hold_first_lifecycle_reservation())
+            await asyncio.wait_for(
+                first_lifecycle_reservation_acquired.wait(),
+                timeout=1.0,
+            )
+
+            task_group.create_task(hold_failure_finalization_reservation())
+            await asyncio.wait_for(
+                failure_finalization_reservation_requested.wait(),
+                timeout=1.0,
+            )
+            assert gru._runtime_failure_finalization_waiter_count == 1
+
+            task_group.create_task(acquire_second_lifecycle_reservation())
+            await asyncio.wait_for(
+                second_lifecycle_reservation_requested.wait(),
+                timeout=1.0,
+            )
+            assert not second_lifecycle_reservation_acquired.is_set()
+
+            first_lifecycle_reservation_release.set()
+            await asyncio.wait_for(
+                failure_finalization_reservation_acquired.wait(),
+                timeout=1.0,
+            )
+            assert not second_lifecycle_reservation_acquired.is_set()
+
+            failure_finalization_reservation_release.set()
+            await asyncio.wait_for(
+                second_lifecycle_reservation_acquired.wait(),
+                timeout=1.0,
+            )
+
+
+@pytest.mark.asyncio
 async def test_gru_shutdown_serializes_concurrent_shutdown_calls(
     managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     monkeypatch: pytest.MonkeyPatch,
