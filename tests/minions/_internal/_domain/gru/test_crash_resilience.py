@@ -5,7 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from minions._internal._domain.gru import Gru
+from minions._internal._domain.gru import (
+    Gru,
+    _RuntimeComponentFailure,
+    _RuntimeFailureImpact,
+)
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.metrics_constants import (
     LABEL_ERROR_TYPE,
@@ -323,6 +327,134 @@ async def test_minion_runtime_failure_deactivates_only_its_orchestration(
         stop = await gru.stop_orchestration(healthy.orchestration_id)
         assert stop.success
         await assert_runtime_empty(gru)
+
+
+@pytest.mark.asyncio
+async def test_stop_waits_for_runtime_failure_finalization(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests.assets.crash.minions.counter.gated_boom_run import (
+        AssetMinion as FailingMinion,
+    )
+    from tests.assets.pipelines.emit_one.counter.default import (
+        AssetPipeline as Pipeline,
+    )
+
+    finalizer_entered = asyncio.Event()
+    finalizer_resume_gate = asyncio.Event()
+
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
+        failing = await gru.start_orchestration(
+            Pipeline,
+            FailingMinion,
+        )
+        assert failing.success
+        assert failing.orchestration_id is not None
+        snapshot = await gru.runtime_state_snapshot()
+        failing_minion_instance_id = snapshot.minion_instance_for_orchestration(
+            failing.orchestration_id
+        )
+        assert failing_minion_instance_id is not None
+        failing_minion = gru._minions_by_instance_id[failing_minion_instance_id]
+        assert isinstance(failing_minion, FailingMinion)
+
+        deactivate = gru._deactivate_runtime_failure_orchestrations
+
+        async def gated_deactivate(
+            failure: _RuntimeComponentFailure,
+            impact: _RuntimeFailureImpact,
+        ) -> None:
+            finalizer_entered.set()
+            await finalizer_resume_gate.wait()
+            await deactivate(failure, impact)
+
+        monkeypatch.setattr(
+            gru,
+            "_deactivate_runtime_failure_orchestrations",
+            gated_deactivate,
+        )
+
+        failing_minion.trigger_run_failure()
+        await asyncio.wait_for(finalizer_entered.wait(), timeout=1.0)
+
+        stop_task = asyncio.create_task(
+            gru.stop_orchestration(failing.orchestration_id)
+        )
+        await asyncio.sleep(0)
+        assert not stop_task.done()
+
+        finalizer_resume_gate.set()
+        stop = await asyncio.wait_for(stop_task, timeout=1.0)
+
+        assert not stop.success
+        assert stop.reason == "Orchestration is no longer running."
+        await assert_runtime_empty(gru)
+        assert not gru._runtime_failure_finalizer_tasks
+
+
+@pytest.mark.asyncio
+async def test_shutdown_waits_for_runtime_failure_finalization(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests.assets.crash.minions.counter.gated_boom_run import (
+        AssetMinion as FailingMinion,
+    )
+
+    finalizer_entered = asyncio.Event()
+    finalizer_resume_gate = asyncio.Event()
+
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
+        failing = await gru.start_orchestration(
+            "tests.assets.pipelines.emit_one.counter.default",
+            "tests.assets.crash.minions.counter.gated_boom_run",
+        )
+        assert failing.success
+        assert failing.orchestration_id is not None
+        snapshot = await gru.runtime_state_snapshot()
+        failing_minion_instance_id = snapshot.minion_instance_for_orchestration(
+            failing.orchestration_id
+        )
+        assert failing_minion_instance_id is not None
+        failing_minion = gru._minions_by_instance_id[failing_minion_instance_id]
+        assert isinstance(failing_minion, FailingMinion)
+
+        deactivate = gru._deactivate_runtime_failure_orchestrations
+
+        async def gated_deactivate(
+            failure: _RuntimeComponentFailure,
+            impact: _RuntimeFailureImpact,
+        ) -> None:
+            finalizer_entered.set()
+            await finalizer_resume_gate.wait()
+            await deactivate(failure, impact)
+
+        monkeypatch.setattr(
+            gru,
+            "_deactivate_runtime_failure_orchestrations",
+            gated_deactivate,
+        )
+
+        failing_minion.trigger_run_failure()
+        await asyncio.wait_for(finalizer_entered.wait(), timeout=1.0)
+
+        shutdown_task = asyncio.create_task(gru.shutdown())
+        await asyncio.sleep(0)
+        assert not shutdown_task.done()
+
+        finalizer_resume_gate.set()
+        shutdown = await asyncio.wait_for(shutdown_task, timeout=1.0)
+
+        assert shutdown.success
+        await assert_runtime_empty(gru)
+        assert not gru._runtime_failure_finalizer_tasks
 
 
 @pytest.mark.asyncio

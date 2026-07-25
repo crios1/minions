@@ -2235,17 +2235,17 @@ class Gru:
 
     async def stop_orchestration(self, orchestration_id: str) -> StopResult:
         self._ensure_started()
+        orchestration_id = orchestration_id.strip()
+
+        async with self._runtime_state_lock:
+            orchestration_existed_at_request = orchestration_id in self._orchestrations
+
         async with self._reserve_lifecycle_op() as reserved:
             if not reserved:
                 return StopResult(
                     success=False,
                     reason="Gru is shutting down.",
                 )
-
-            orchestration_id = orchestration_id.strip()
-
-            async with self._runtime_state_lock:
-                orchestration_existed_at_request = orchestration_id in self._orchestrations
 
             async with self._orchestration_locks[orchestration_id]:
                 async with self._runtime_state_lock:
