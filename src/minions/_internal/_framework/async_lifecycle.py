@@ -2,7 +2,7 @@ import ast
 import inspect
 import textwrap
 from abc import ABC
-from typing import Awaitable, Callable, TypeAlias
+from typing import Awaitable, Callable, ClassVar, TypeAlias
 
 from .._domain.exceptions import MinionsError, UnsupportedUserCode
 
@@ -18,6 +18,7 @@ class AsyncLifecycle(ABC):
     """
 
     _mn_user_facing = False
+    _mn_non_overridable_public_names: ClassVar[frozenset[str]] = frozenset()
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
@@ -28,6 +29,7 @@ class AsyncLifecycle(ABC):
         if not any(getattr(base, "_mn_user_facing", False) for base in cls.__mro__[1:]):
             return
         cls._mn_ensure_attrspace()
+        cls._mn_ensure_public_operations_not_overridden()
         cls._mn_validate_class_user_code()
 
     @classmethod
@@ -48,6 +50,21 @@ class AsyncLifecycle(ABC):
             raise UnsupportedUserCode(
                 f"Invalid attribute assignment: {names} in `{module_path}`. "
                 "Attributes starting with `_mn_` are reserved for internal Minions runtime use."
+            )
+
+    @classmethod
+    def _mn_ensure_public_operations_not_overridden(cls) -> None:
+        names = {**cls.__dict__, **getattr(cls, "__annotations__", {})}
+        non_overridable = cls._mn_non_overridable_public_names.intersection(names)
+        if non_overridable:
+            module_path = f"{cls.__module__}.{cls.__qualname__}"
+            formatted_names = ", ".join(
+                f"`{cls.__name__}.{name}`" for name in sorted(non_overridable)
+            )
+            raise UnsupportedUserCode(
+                f"Invalid attribute assignment: {formatted_names} in `{module_path}`. "
+                "These public operations are provided by the Minions runtime and "
+                "cannot be overridden."
             )
 
     @classmethod

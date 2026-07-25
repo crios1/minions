@@ -2,7 +2,7 @@ import asyncio
 import inspect
 from collections.abc import Coroutine
 from enum import Enum, auto
-from typing import Any
+from typing import Any, ClassVar, final
 
 from .._domain.exceptions import MinionsError
 from .._utils.safe_cancel_task import safe_cancel_task
@@ -46,6 +46,10 @@ class AsyncService(AsyncComponent):
     `_mn_ensure_shutdown()` is required to propagate any cleanup failure suppressed
     by `_mn_serve()` to preserve the primary stop reason.
     """
+
+    _mn_non_overridable_public_names: ClassVar[frozenset[str]] = frozenset(
+        {"safe_create_task"}
+    )
 
     def __init__(self, logger: Logger):
         super().__init__(logger)
@@ -244,6 +248,7 @@ class AsyncService(AsyncComponent):
             post=_post,
         )
 
+    @final
     def safe_create_task(
         self,
         coro: Coroutine[Any, Any, object],

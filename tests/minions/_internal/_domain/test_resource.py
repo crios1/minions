@@ -52,6 +52,16 @@ def test_subclass_rejects_reserved_method_name():
                 ...
 
 
+def test_subclass_rejects_safe_create_task_override():
+    with pytest.raises(
+        UnsupportedUserCode,
+        match=r"`MyResource\.safe_create_task`.*cannot be overridden",
+    ):
+        class MyResource(Resource):
+            def safe_create_task(self):  # pyright: ignore[reportIncompatibleMethodOverride]
+                ...
+
+
 def test_untracked_decorator_rejects_sync_method():
     with pytest.raises(
         TypeError,
