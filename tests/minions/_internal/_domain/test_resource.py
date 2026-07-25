@@ -8,14 +8,11 @@ import pytest
 
 from minions import Resource
 from minions._internal._domain.exceptions import UnsupportedUserCode
-from tests.assets.support.logger_inmemory import InMemoryLogger
-from tests.assets.support.metrics_inmemory import InMemoryMetrics
+from minions._internal._framework.logger_noop import NoOpLogger
+from minions._internal._framework.metrics_noop import NoOpMetrics
 
 
-def test_lifecycle_hooks_are_not_wrapped_as_resource_methods(
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-):
+def test_lifecycle_hooks_are_not_wrapped_as_resource_methods():
     class MyResource(Resource):
         async def startup(self) -> None:
             pass
@@ -29,7 +26,7 @@ def test_lifecycle_hooks_are_not_wrapped_as_resource_methods(
         async def request(self) -> None:
             pass
 
-    resource = MyResource(logger, metrics, "dummy-path", "dummy-id")
+    resource = MyResource(NoOpLogger(), NoOpMetrics(), "dummy-path", "dummy-id")
 
     resource._mn_validate_and_wrap_public_async_methods()
 
