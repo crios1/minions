@@ -8,12 +8,16 @@ Minions are async workers that react to pipeline events. Each event spawns a **w
 from dataclasses import dataclass
 from minions import Minion, minion_step
 
+@dataclass(frozen=True)
+class OrderEvent:
+    user_id: str
+
 @dataclass
 class WorkflowCtx:
-    user_id: str
+    user_id: str = ""
     retries: int = 0
 
-class OrderMinion(Minion[dict, WorkflowCtx]):
+class OrderMinion(Minion[OrderEvent, WorkflowCtx]):
     @minion_step
     async def reserve_inventory(self):
         ...
@@ -26,6 +30,8 @@ class OrderMinion(Minion[dict, WorkflowCtx]):
 Rules from the runtime:
 
 - Declare **event** and **workflow context** types via generics. Both must be dataclasses or `msgspec.Struct` types with serializable fields.
+- Workflow context types must be constructible without arguments. Minions
+  creates one for each live event, so required context fields need defaults.
 - For durable workflow state, prefer explicit schemas such as dataclasses or `msgspec.Struct` types.
 - Steps must be instance methods decorated with `{py:func}``@minion_step``. They run in source order.
 - Use `self.event` to access the current pipeline event; the event is contextvar-bound per workflow.

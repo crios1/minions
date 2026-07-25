@@ -14,19 +14,22 @@ The library itself is still pre-alpha; expect churn while APIs settle.
 
 Pick structured event and workflow context types. Minions supports dataclasses
 and `msgspec.Struct` models for these domain boundaries.
-Use immutable event types when possible (for example, frozen dataclasses) and keep mutable state in `WorkflowCtx`.
+Use immutable event types when possible (for example, frozen dataclasses) and
+keep mutable state in `WorkflowCtx`. Workflow context types must be
+constructible without arguments because Minions creates a fresh context for
+each live event; give every required field a meaningful default.
 
 ```python
 # my_app/types.py
 from dataclasses import dataclass
 
-@dataclass
+@dataclass(frozen=True)
 class Heartbeat:
     timestamp: float
 
 @dataclass
 class WorkflowCtx:
-    user_id: str
+    user_id: str = "heartbeat-worker"
     retries: int = 0
 ```
 
