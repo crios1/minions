@@ -396,6 +396,144 @@ async def test_resource_runtime_failure_deactivates_only_dependent_orchestration
 
 
 @pytest.mark.asyncio
+async def test_pipeline_runtime_failure_deactivates_all_subscribers_only(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> None:
+    from tests.assets.pipelines.emit_one.counter.default import (  # noqa: I001
+        AssetPipeline as HealthyPipeline,
+    )
+    from tests.assets.crash.pipelines.counter.gated_boom_run import (
+        AssetPipeline as FailingPipeline,
+    )
+    from tests.assets.minions.one_step.counter.default import (
+        AssetMinion as OneStepMinion,
+    )
+    from tests.assets.minions.two_steps.counter.default import (
+        AssetMinion as TwoStepMinion,
+    )
+
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
+        healthy = await gru.start_orchestration(
+            HealthyPipeline,
+            OneStepMinion,
+        )
+        failing_a = await gru.start_orchestration(
+            FailingPipeline,
+            OneStepMinion,
+        )
+        failing_b = await gru.start_orchestration(
+            FailingPipeline,
+            TwoStepMinion,
+        )
+        assert healthy.success
+        assert healthy.orchestration_id is not None
+        assert failing_a.success
+        assert failing_a.orchestration_id is not None
+        assert failing_b.success
+        assert failing_b.orchestration_id is not None
+
+        snapshot = await gru.runtime_state_snapshot()
+        failing_pipeline_id = snapshot.pipeline_for_orchestration(
+            failing_a.orchestration_id
+        )
+        assert failing_pipeline_id is not None
+        assert (
+            snapshot.pipeline_for_orchestration(failing_b.orchestration_id)
+            == failing_pipeline_id
+        )
+        failing_pipeline = gru._pipelines[failing_pipeline_id]
+        assert isinstance(failing_pipeline, FailingPipeline)
+        failing_pipeline.trigger_run_failure()
+
+        assert await logger.wait_for_log(
+            "Gru runtime task failure observed",
+            log_kwargs={"component": "pipeline"},
+            timeout=1.0,
+        )
+        await asyncio.gather(
+            wait_for_orchestration_removed(gru, failing_a.orchestration_id),
+            wait_for_orchestration_removed(gru, failing_b.orchestration_id),
+        )
+
+        await assert_orchestration_running(gru, healthy.orchestration_id)
+        await assert_runtime_component_counts_exact(gru, minions=1, pipelines=1)
+        await assert_runtime_resource_maps_consistent(gru)
+
+        stop = await gru.stop_orchestration(healthy.orchestration_id)
+        assert stop.success
+        await assert_runtime_empty(gru)
+
+
+@pytest.mark.asyncio
+async def test_shared_transitive_resource_failure_deactivates_all_dependent_orchestrations(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> None:
+    from tests.assets.crash.resources.gated_boom_run import (
+        AssetResource as GatedBoomRunResource,
+    )
+
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
+        healthy = await gru.start_orchestration(
+            "tests.assets.pipelines.emit_one.counter.default",
+            "tests.assets.minions.one_step.counter.default",
+        )
+        failing_a = await gru.start_orchestration(
+            "tests.assets.pipelines.emit_one.counter.default",
+            "tests.assets.crash.minions.counter.with_resource_depending_on_gated_boom_run"
+        )
+        failing_b = await gru.start_orchestration(
+            "tests.assets.pipelines.emit_one.counter.default",
+            "tests.assets.crash.minions.counter.with_resource_depending_on_gated_boom_run_b"
+        )
+        assert healthy.success
+        assert healthy.orchestration_id is not None
+        assert failing_a.success
+        assert failing_a.orchestration_id is not None
+        assert failing_b.success
+        assert failing_b.orchestration_id is not None
+
+        snapshot = await gru.runtime_state_snapshot()
+        assert len(snapshot.resources) == 2
+        boom_resource_id = next(
+            resource_id
+            for resource_id in snapshot.resources
+            if not snapshot.dependencies_for_resource(resource_id)
+        )
+        failing_resource = gru._resources[boom_resource_id]
+        assert isinstance(failing_resource, GatedBoomRunResource)
+        failing_resource.trigger_run_failure()
+
+        assert await logger.wait_for_log(
+            "Gru runtime task failure observed",
+            log_kwargs={"component": "resource"},
+            timeout=1.0,
+        )
+        await asyncio.gather(
+            wait_for_orchestration_removed(gru, failing_a.orchestration_id),
+            wait_for_orchestration_removed(gru, failing_b.orchestration_id),
+        )
+
+        await assert_orchestration_running(gru, healthy.orchestration_id)
+        await assert_runtime_component_counts_exact(
+            gru,
+            minions=1,
+            pipelines=1,
+            resources=0,
+        )
+        await assert_runtime_resource_maps_consistent(gru)
+
+        stop = await gru.stop_orchestration(healthy.orchestration_id)
+        assert stop.success
+        await assert_runtime_empty(gru)
+
+
+@pytest.mark.asyncio
 async def test_resource_method_failure_is_logged_measured_and_contained(
     managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
