@@ -59,7 +59,7 @@ class SubscriberReadyFixedEventsPipeline(
     async def run(self):
         for _ in range(type(self).total_events):
             await self.wait_for_expected_subscribers()
-            await self._mn_produce_and_handle_event()
+            await self._mn_produce_and_fan_out_event()
 
         while True:
             await asyncio.sleep(sys.maxsize)

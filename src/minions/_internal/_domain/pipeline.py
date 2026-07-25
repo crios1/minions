@@ -177,9 +177,9 @@ class Pipeline(AsyncService, Generic[T_Event]):
 
     async def run(self) -> None:
         while True:
-            await self._mn_produce_and_handle_event()
+            await self._mn_produce_and_fan_out_event()
 
-    async def _mn_produce_and_handle_event(self) -> None:
+    async def _mn_produce_and_fan_out_event(self) -> None:
         try:
             with ResourceMetricContext(
                 caller_kind="pipeline",

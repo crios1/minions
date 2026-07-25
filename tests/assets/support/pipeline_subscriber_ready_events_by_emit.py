@@ -55,7 +55,7 @@ class SubscriberReadyEventsByEmitPipeline(
     async def run(self) -> NoReturn:
         for _ in range(type(self).total_events):
             await self.wait_for_expected_subscribers()
-            await self._mn_produce_and_handle_event()
+            await self._mn_produce_and_fan_out_event()
             self._emit_index += 1
 
         while True:

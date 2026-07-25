@@ -148,7 +148,7 @@ async def test_produce_event_failure_is_logged_and_measured(
 
     pipeline = ErrorPipeline()
 
-    await pipeline._mn_produce_and_handle_event()
+    await pipeline._mn_produce_and_fan_out_event()
 
     value = metrics.snapshot_counter_value(
         PIPELINE_ERROR_TOTAL,

@@ -88,7 +88,7 @@ async def test_pipeline_runtime_metric_labels_match_contract(
     fake_minion = FakeMinion()
     success_pipeline._mn_subs.add(fake_minion)  # type: ignore[arg-type]
 
-    await success_pipeline._mn_produce_and_handle_event()
+    await success_pipeline._mn_produce_and_fan_out_event()
     await asyncio.gather(*fake_minion.tasks)
 
     error_pipeline = ErrorPipeline(
@@ -97,7 +97,7 @@ async def test_pipeline_runtime_metric_labels_match_contract(
         metrics,
         logger,
     )
-    await error_pipeline._mn_produce_and_handle_event()
+    await error_pipeline._mn_produce_and_fan_out_event()
 
     metrics.assert_recorded_labels_match_contract()
     # Resource metrics preserve the immediate caller: pipeline -> resource -> transitive resource.
