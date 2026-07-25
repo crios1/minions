@@ -277,14 +277,24 @@ async def test_minion_runtime_failure_deactivates_only_its_orchestration(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
+    from tests.assets.crash.minions.counter.gated_boom_run import (
+        AssetMinion as FailingMinion,
+    )
+    from tests.assets.minions.one_step.counter.default import (
+        AssetMinion as HealthyMinion,
+    )
+    from tests.assets.pipelines.emit_one.counter.default import (
+        AssetPipeline as SharedPipeline,
+    )
+
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         healthy = await gru.start_orchestration(
-            "tests.assets.pipelines.emit_one.counter.default",
-            "tests.assets.minions.one_step.counter.default",
+            SharedPipeline,
+            HealthyMinion,
         )
         failing = await gru.start_orchestration(
-            "tests.assets.pipelines.emit_one.counter.default",
-            "tests.assets.crash.minions.counter.gated_boom_run",
+            SharedPipeline,
+            FailingMinion,
         )
         assert healthy.success
         assert healthy.orchestration_id is not None
@@ -297,9 +307,8 @@ async def test_minion_runtime_failure_deactivates_only_its_orchestration(
         )
         assert failing_minion_instance_id is not None
         failing_minion = gru._minions_by_instance_id[failing_minion_instance_id]
-        release_run_failure = vars(type(failing_minion)).get("release_run_failure")
-        assert isinstance(release_run_failure, asyncio.Event)
-        release_run_failure.set()
+        assert isinstance(failing_minion, FailingMinion)
+        failing_minion.trigger_run_failure()
 
         assert await logger.wait_for_log(
             "Gru runtime task failure observed",
@@ -323,6 +332,10 @@ async def test_resource_runtime_failure_deactivates_only_dependent_orchestration
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
+    from tests.assets.crash.resources.gated_boom_run import (
+        AssetResource as GatedBoomRunResource,
+    )
+
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         healthy = await gru.start_orchestration(
             "tests.assets.pipelines.emit_one.counter.default_b",
@@ -330,7 +343,7 @@ async def test_resource_runtime_failure_deactivates_only_dependent_orchestration
         )
         failing = await gru.start_orchestration(
             "tests.assets.pipelines.emit_one.counter.default",
-            "tests.assets.crash.minions.counter.with_resource_depending_on_boom_run",
+            "tests.assets.crash.minions.counter.with_resource_depending_on_gated_boom_run"
         )
         assert healthy.success
         assert healthy.orchestration_id is not None
@@ -356,11 +369,10 @@ async def test_resource_runtime_failure_deactivates_only_dependent_orchestration
             snapshot.resource_dependencies_by_dependent_resource[dependent_resource_id]
         )
         assert len(dependency_ids) == 1
-        boom_run_resource_id = next(iter(dependency_ids))
-        failing_resource = gru._resources[boom_run_resource_id]
-        fail_run = vars(type(failing_resource)).get("fail_run")
-        assert isinstance(fail_run, asyncio.Event)
-        fail_run.set()
+        gated_boom_run_resource_id = next(iter(dependency_ids))
+        failing_resource = gru._resources[gated_boom_run_resource_id]
+        assert isinstance(failing_resource, GatedBoomRunResource)
+        failing_resource.trigger_run_failure()
 
         assert await logger.wait_for_log(
             "Gru runtime task failure observed",
