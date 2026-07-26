@@ -78,6 +78,11 @@ This suite is intentionally layered. Each layer has a different purpose and conf
 - Keep focused contract coverage for both string-based and class-based `Gru.start_orchestration(...)` invocation forms.
 - Do not convert scenario tests from string paths to class references solely for uniformity; choose the representation that best communicates the behavior under test.
 
+## Test Value Naming Policy
+
+- Prefix required placeholder values with `dummy-` when their identity has no semantic relevance to the test.
+- Use intention-revealing values instead when a value distinguishes actors, state, ordering, or an asserted scenario outcome.
+
 ## Contributor Placement Guide
 
 1. Orchestration semantics changed:
