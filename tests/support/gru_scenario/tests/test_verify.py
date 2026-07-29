@@ -35,6 +35,7 @@ from tests.support.gru_scenario.directives import (
     OrchestrationStop,
     RuntimeExpectSpec,
 )
+from tests.support.gru_scenario.introspect import ComponentTaskRegistrySnapshot
 from tests.support.gru_scenario.plan import ScenarioPlan
 from tests.support.gru_scenario.runner import (
     LifecycleObservation,
@@ -2107,11 +2108,8 @@ def test_assert_lifecycle_tracking_reports_untracked_successful_start(
                 gru_runtime_state=GruRuntimeStateSnapshot(
                     minion_instances=frozenset({"minion-instance-1"}),
                     orchestrations=frozenset(),
-                    minion_tasks=frozenset({"minion-instance-1"}),
                     pipelines=frozenset({"tests.assets.pipelines.emit_one.counter.default"}),
-                    pipeline_tasks=frozenset({"tests.assets.pipelines.emit_one.counter.default"}),
                     resources=frozenset(),
-                    resource_tasks=frozenset(),
                     minion_instance_by_orchestration={},
                     pipeline_by_orchestration={},
                     resources_by_minion_instance={},
@@ -2119,6 +2117,18 @@ def test_assert_lifecycle_tracking_reports_untracked_successful_start(
                     resource_dependencies_by_dependent_resource={},
                     resource_dependents_by_dependency_resource={},
                     resource_reference_counts={},
+                ),
+                component_task_registries=ComponentTaskRegistrySnapshot(
+                    minion_component_ids=frozenset({"minion-instance-1"}),
+                    minion_task_owner_ids=frozenset({"minion-instance-1"}),
+                    pipeline_component_ids=frozenset(
+                        {"tests.assets.pipelines.emit_one.counter.default"}
+                    ),
+                    pipeline_task_owner_ids=frozenset(
+                        {"tests.assets.pipelines.emit_one.counter.default"}
+                    ),
+                    resource_component_ids=frozenset(),
+                    resource_task_owner_ids=frozenset(),
                 ),
             ),
         ],
@@ -2131,6 +2141,51 @@ def test_assert_lifecycle_tracking_reports_untracked_successful_start(
             "directive=OrchestrationStart, observation_index=0, "
             "state=orchestrations"
         ),
+    ):
+        verifier_factory(plan, result)._assert_lifecycle_tracking()
+
+
+def test_assert_lifecycle_tracking_reports_component_task_registry_mismatch(
+    verifier_factory: VerifierFactory,
+):
+    shutdown = GruShutdown(expect_success=True)
+    plan = ScenarioPlan([shutdown], pipeline_event_counts={})
+    result = ScenarioRunResult(
+        spies=SpyRegistry(),
+        lifecycle_observations=[
+            LifecycleObservation(
+                directive_type=GruShutdown,
+                receipt_count=0,
+                active_orchestration_start_indexes=frozenset(),
+                seen_shutdown=True,
+                gru_runtime_state=GruRuntimeStateSnapshot(
+                    minion_instances=frozenset(),
+                    orchestrations=frozenset(),
+                    pipelines=frozenset(),
+                    resources=frozenset(),
+                    minion_instance_by_orchestration={},
+                    pipeline_by_orchestration={},
+                    resources_by_minion_instance={},
+                    resources_by_pipeline={},
+                    resource_dependencies_by_dependent_resource={},
+                    resource_dependents_by_dependency_resource={},
+                    resource_reference_counts={},
+                ),
+                component_task_registries=ComponentTaskRegistrySnapshot(
+                    minion_component_ids=frozenset(),
+                    minion_task_owner_ids=frozenset({"orphan-minion-task"}),
+                    pipeline_component_ids=frozenset(),
+                    pipeline_task_owner_ids=frozenset(),
+                    resource_component_ids=frozenset(),
+                    resource_task_owner_ids=frozenset(),
+                ),
+            )
+        ],
+    )
+
+    with pytest.raises(
+        pytest.fail.Exception,
+        match="state=minion_component_task_registry",
     ):
         verifier_factory(plan, result)._assert_lifecycle_tracking()
 
@@ -2174,11 +2229,8 @@ def test_assert_lifecycle_tracking_reports_resource_refcount_mismatch(
                 gru_runtime_state=GruRuntimeStateSnapshot(
                     minion_instances=frozenset({"minion-instance-1"}),
                     orchestrations=frozenset({"orchestration-1"}),
-                    minion_tasks=frozenset({"minion-instance-1"}),
                     pipelines=frozenset({pipeline_id}),
-                    pipeline_tasks=frozenset({pipeline_id}),
                     resources=frozenset({resource_id}),
-                    resource_tasks=frozenset({resource_id}),
                     minion_instance_by_orchestration={"orchestration-1": "minion-instance-1"},
                     pipeline_by_orchestration={"orchestration-1": pipeline_id},
                     resources_by_minion_instance={"minion-instance-1": frozenset({resource_id})},
@@ -2186,6 +2238,14 @@ def test_assert_lifecycle_tracking_reports_resource_refcount_mismatch(
                     resource_dependencies_by_dependent_resource={},
                     resource_dependents_by_dependency_resource={},
                     resource_reference_counts={resource_id: 3},
+                ),
+                component_task_registries=ComponentTaskRegistrySnapshot(
+                    minion_component_ids=frozenset({"minion-instance-1"}),
+                    minion_task_owner_ids=frozenset({"minion-instance-1"}),
+                    pipeline_component_ids=frozenset({pipeline_id}),
+                    pipeline_task_owner_ids=frozenset({pipeline_id}),
+                    resource_component_ids=frozenset({resource_id}),
+                    resource_task_owner_ids=frozenset({resource_id}),
                 ),
             ),
         ],

@@ -1,9 +1,22 @@
+from dataclasses import dataclass
 from typing import Any
 
 from minions._internal._domain.gru import Gru, GruRuntimeStateSnapshot
 from minions._internal._domain.minion import Minion
 from minions._internal._domain.pipeline import Pipeline
 from minions._internal._domain.resource import Resource
+
+
+@dataclass(frozen=True)
+class ComponentTaskRegistrySnapshot:
+    """Private Gru registry evidence captured by the test-only scenario DSL."""
+
+    minion_component_ids: frozenset[str]
+    minion_task_owner_ids: frozenset[str]
+    pipeline_component_ids: frozenset[str]
+    pipeline_task_owner_ids: frozenset[str]
+    resource_component_ids: frozenset[str]
+    resource_task_owner_ids: frozenset[str]
 
 
 class GruIntrospector:
@@ -81,3 +94,14 @@ class GruIntrospector:
 
     async def runtime_state_snapshot(self) -> GruRuntimeStateSnapshot:
         return await self._gru.runtime_state_snapshot()
+
+    async def component_task_registry_snapshot(self) -> ComponentTaskRegistrySnapshot:
+        async with self._gru._runtime_state_lock:
+            return ComponentTaskRegistrySnapshot(
+                minion_component_ids=frozenset(self._gru._minions_by_instance_id),
+                minion_task_owner_ids=frozenset(self._gru._minion_tasks),
+                pipeline_component_ids=frozenset(self._gru._pipelines),
+                pipeline_task_owner_ids=frozenset(self._gru._pipeline_tasks),
+                resource_component_ids=frozenset(self._gru._resources),
+                resource_task_owner_ids=frozenset(self._gru._resource_tasks),
+            )

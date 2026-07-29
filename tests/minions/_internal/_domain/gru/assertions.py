@@ -1,4 +1,4 @@
-"""Test expectations over Gru's public runtime snapshot API."""
+"""Test expectations over Gru's public runtime state and private health invariants."""
 
 from collections.abc import Mapping, Set
 
@@ -6,15 +6,15 @@ from minions._internal._domain.gru import Gru
 
 
 async def assert_runtime_empty(gru: Gru) -> None:
+    await assert_runtime_component_maps_consistent(gru)
     assert (await gru.runtime_state_snapshot()).is_empty
 
 
 async def assert_runtime_component_maps_consistent(gru: Gru) -> None:
-    snapshot = await gru.runtime_state_snapshot()
-
-    assert snapshot.minion_instances == snapshot.minion_tasks
-    assert snapshot.pipelines == snapshot.pipeline_tasks
-    assert snapshot.resources == snapshot.resource_tasks
+    async with gru._runtime_state_lock:
+        assert set(gru._minions_by_instance_id) == set(gru._minion_tasks)
+        assert set(gru._pipelines) == set(gru._pipeline_tasks)
+        assert set(gru._resources) == set(gru._resource_tasks)
 
 
 async def assert_orchestration_running(gru: Gru, orchestration_id: str) -> None:
@@ -24,7 +24,7 @@ async def assert_orchestration_running(gru: Gru, orchestration_id: str) -> None:
     await assert_runtime_component_maps_consistent(gru)
     assert minion_instance_id is not None
     assert orchestration_id in snapshot.orchestrations
-    assert minion_instance_id in snapshot.minion_tasks
+    assert minion_instance_id in snapshot.minion_instances
 
 
 async def assert_runtime_component_counts_exact(
@@ -41,13 +41,10 @@ async def assert_runtime_component_counts_exact(
     if minions is not None:
         assert len(snapshot.orchestrations) == minions
         assert len(snapshot.minion_instances) == minions
-        assert len(snapshot.minion_tasks) == minions
     if pipelines is not None:
         assert len(snapshot.pipelines) == pipelines
-        assert len(snapshot.pipeline_tasks) == pipelines
     if resources is not None:
         assert len(snapshot.resources) == resources
-        assert len(snapshot.resource_tasks) == resources
 
 
 async def assert_runtime_component_counts_at_least(
@@ -64,13 +61,10 @@ async def assert_runtime_component_counts_at_least(
     if minions is not None:
         assert len(snapshot.orchestrations) >= minions
         assert len(snapshot.minion_instances) >= minions
-        assert len(snapshot.minion_tasks) >= minions
     if pipelines is not None:
         assert len(snapshot.pipelines) >= pipelines
-        assert len(snapshot.pipeline_tasks) >= pipelines
     if resources is not None:
         assert len(snapshot.resources) >= resources
-        assert len(snapshot.resource_tasks) >= resources
 
 
 async def assert_running_minions(
@@ -85,7 +79,6 @@ async def assert_running_minions(
     assert snapshot.minion_instance_by_orchestration == dict(orchestration_to_minion_instance)
     assert snapshot.orchestrations == set(orchestration_to_minion_instance)
     assert snapshot.minion_instances == minion_instance_ids
-    assert snapshot.minion_tasks == minion_instance_ids
 
 
 async def assert_pipeline_singleton(
@@ -98,7 +91,6 @@ async def assert_pipeline_singleton(
 
     await assert_runtime_component_maps_consistent(gru)
     assert snapshot.pipelines == {pipeline_id}
-    assert snapshot.pipeline_tasks == {pipeline_id}
     assert snapshot.pipeline_by_orchestration == {
         orchestration_id: pipeline_id for orchestration_id in orchestration_ids
     }
@@ -146,7 +138,6 @@ async def assert_pipeline_resource_dependency_singletons(
 
     await assert_runtime_component_maps_consistent(gru)
     assert snapshot.resources == {owner_resource_id, dependency_resource_id}
-    assert snapshot.resource_tasks == {owner_resource_id, dependency_resource_id}
     assert snapshot.resources_for_pipeline(pipeline_id) == {owner_resource_id}
     assert snapshot.dependencies_for_resource(owner_resource_id) == {dependency_resource_id}
     assert snapshot.dependents_for_resource(dependency_resource_id) == {owner_resource_id}

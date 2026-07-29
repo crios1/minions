@@ -535,16 +535,41 @@ class ScenarioVerifier:
         for observation_index, observation in enumerate(
             self._result.lifecycle_observations
         ):
+            registry_pairs = (
+                (
+                    "minion_component_task_registry",
+                    observation.component_task_registries.minion_component_ids,
+                    observation.component_task_registries.minion_task_owner_ids,
+                ),
+                (
+                    "pipeline_component_task_registry",
+                    observation.component_task_registries.pipeline_component_ids,
+                    observation.component_task_registries.pipeline_task_owner_ids,
+                ),
+                (
+                    "resource_component_task_registry",
+                    observation.component_task_registries.resource_component_ids,
+                    observation.component_task_registries.resource_task_owner_ids,
+                ),
+            )
+            for state_name, component_ids, task_owner_ids in registry_pairs:
+                if component_ids != task_owner_ids:
+                    pytest.fail(
+                        "Gru lifecycle tracking mismatch: "
+                        f"directive={observation.directive_type.__name__}, "
+                        f"observation_index={observation_index}, "
+                        f"state={state_name}, "
+                        f"component_ids={component_ids!r}, "
+                        f"task_owner_ids={task_owner_ids!r}."
+                    )
+
             expected_by_state: dict[str, object]
             if observation.seen_shutdown:
                 expected_by_state = {
                     "minion_instances": frozenset(),
                     "orchestrations": frozenset(),
-                    "minion_tasks": frozenset(),
                     "pipelines": frozenset(),
-                    "pipeline_tasks": frozenset(),
                     "resources": frozenset(),
-                    "resource_tasks": frozenset(),
                     "pipeline_by_orchestration": {},
                     "resources_by_minion_instance": {},
                     "resources_by_pipeline": {},
@@ -654,11 +679,8 @@ class ScenarioVerifier:
                 expected_by_state = {
                     "minion_instances": instance_ids,
                     "orchestrations": orchestrations,
-                    "minion_tasks": instance_ids,
                     "pipelines": pipelines,
-                    "pipeline_tasks": pipelines,
                     "resources": resources,
-                    "resource_tasks": resources,
                     "pipeline_by_orchestration": pipeline_by_orchestration,
                     "resources_by_minion_instance": (resources_by_minion_instance),
                     "resources_by_pipeline": resources_by_pipeline,

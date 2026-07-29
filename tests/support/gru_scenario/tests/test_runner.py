@@ -610,11 +610,8 @@ async def test_runner_records_lifecycle_observations_after_start_stop_and_shutdo
     empty_runtime = GruRuntimeStateSnapshot(
         minion_instances=frozenset(),
         orchestrations=frozenset(),
-        minion_tasks=frozenset(),
         pipelines=frozenset(),
-        pipeline_tasks=frozenset(),
         resources=frozenset(),
-        resource_tasks=frozenset(),
         minion_instance_by_orchestration={},
         pipeline_by_orchestration={},
         resources_by_minion_instance={},

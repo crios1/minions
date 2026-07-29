@@ -27,7 +27,10 @@ from tests.assets.contexts.simple import SimpleContext
 from tests.assets.events.simple import SimpleEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
-from tests.minions._internal._domain.gru.assertions import assert_runtime_empty
+from tests.minions._internal._domain.gru.assertions import (
+    assert_runtime_component_maps_consistent,
+    assert_runtime_empty,
+)
 
 
 class _ResourceMonitorHarness:
@@ -536,11 +539,9 @@ class TestUnit:
             assert minion_instance_id is not None
             assert snapshot.minion_instances == {minion_instance_id}
             assert snapshot.orchestrations == {result.orchestration_id}
-            assert snapshot.minion_tasks == {minion_instance_id}
             assert snapshot.pipelines == {identified_pipeline_id}
-            assert snapshot.pipeline_tasks == {identified_pipeline_id}
             assert snapshot.resources == {identified_resource_id}
-            assert snapshot.resource_tasks == {identified_resource_id}
+            await assert_runtime_component_maps_consistent(gru)
             assert snapshot.minion_instance_by_orchestration == {
                 result.orchestration_id: minion_instance_id
             }

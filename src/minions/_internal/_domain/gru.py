@@ -73,11 +73,8 @@ class GruRuntimeStateSnapshot:
 
     minion_instances: frozenset[str]
     orchestrations: frozenset[str]
-    minion_tasks: frozenset[str]
     pipelines: frozenset[str]
-    pipeline_tasks: frozenset[str]
     resources: frozenset[str]
-    resource_tasks: frozenset[str]
     minion_instance_by_orchestration: Mapping[str, str]
     pipeline_by_orchestration: Mapping[str, str]
     resources_by_minion_instance: Mapping[str, frozenset[str]]
@@ -1570,18 +1567,16 @@ class Gru:
 
     async def runtime_state_snapshot(self) -> GruRuntimeStateSnapshot:
         """Return a read-only diagnostic snapshot of Gru's live runtime graph."""
-        # Registries of live components/tasks snapshot only their identity keys because
-        # MappingProxyType would not make their mutable values immutable; relationship
-        # maps preserve copied values as immutable point-in-time state.
+        # Component registries snapshot only their identity keys because MappingProxyType
+        # would not make their mutable values immutable; relationship maps preserve copied
+        # values as immutable point-in-time state. Private task registries are intentionally
+        # excluded from this public domain-level view.
         async with self._runtime_state_lock:
             return GruRuntimeStateSnapshot(
                 minion_instances=frozenset(self._minions_by_instance_id),
                 orchestrations=frozenset(self._orchestrations),
-                minion_tasks=frozenset(self._minion_tasks),
                 pipelines=frozenset(self._pipelines),
-                pipeline_tasks=frozenset(self._pipeline_tasks),
                 resources=frozenset(self._resources),
-                resource_tasks=frozenset(self._resource_tasks),
                 minion_instance_by_orchestration=MappingProxyType(
                     {
                         orchestration_id: orchestration.minion._mn_minion_instance_id

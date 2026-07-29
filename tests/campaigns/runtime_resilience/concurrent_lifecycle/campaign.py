@@ -152,7 +152,6 @@ async def _assert_runtime_matches(
     assert set(snapshot.minion_instance_by_orchestration) == expected_active_ids, context
     assert set(snapshot.pipeline_by_orchestration) == expected_active_ids, context
     assert len(snapshot.minion_instances) == len(expected_active_ids), context
-    assert len(snapshot.minion_tasks) == len(expected_active_ids), context
     await assert_runtime_component_maps_consistent(gru)
     await assert_runtime_resource_maps_consistent(gru)
 

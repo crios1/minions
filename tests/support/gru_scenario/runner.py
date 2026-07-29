@@ -31,7 +31,7 @@ from .directives import (
     WaitWorkflowCompletions,
     iter_directives_flat,
 )
-from .introspect import GruIntrospector
+from .introspect import ComponentTaskRegistrySnapshot, GruIntrospector
 from .plan import ScenarioPlan
 
 
@@ -150,6 +150,7 @@ class LifecycleObservation:
     active_orchestration_start_indexes: frozenset[int]
     seen_shutdown: bool
     gru_runtime_state: GruRuntimeStateSnapshot
+    component_task_registries: ComponentTaskRegistrySnapshot
 
 
 @dataclass
@@ -688,6 +689,9 @@ class ScenarioRunner:
                 ),
                 seen_shutdown=result.seen_shutdown,
                 gru_runtime_state=await self._insp.runtime_state_snapshot(),
+                component_task_registries=(
+                    await self._insp.component_task_registry_snapshot()
+                ),
             )
         )
 
