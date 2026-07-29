@@ -18,6 +18,7 @@ from minions._internal._framework.metrics_constants import (
     MINION_WORKFLOW_STARTED_TOTAL,
     MINION_WORKFLOW_STEP_DURATION_SECONDS,
     MINION_WORKFLOW_STEP_FAILED_TOTAL,
+    MINION_WORKFLOW_STEP_INFLIGHT_GAUGE,
 )
 from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_noop import NoOpStateStore
@@ -69,6 +70,17 @@ async def test_workflow_aborted_increments_aborted_counter(
     # workflow started should be incremented and aborted counter incremented
     assert counters.get(MINION_WORKFLOW_STARTED_TOTAL)
     assert aborted_total == 1
+    assert (
+        metrics.snapshot_gauge_value(
+            MINION_WORKFLOW_STEP_INFLIGHT_GAUGE,
+            {
+                LABEL_ORCHESTRATION_ID: m._mn_orchestration_id,
+                LABEL_MINION: m._mn_minion_id,
+                LABEL_MINION_WORKFLOW_STEP: "step_1",
+            },
+        )
+        == 0
+    )
 
 
 @pytest.mark.asyncio
@@ -126,6 +138,17 @@ async def test_workflow_failure_is_terminal_deletes_checkpoint_and_increments_fa
     )
     assert workflow_duration_count == 1
     assert step_duration_count == 1
+    assert (
+        metrics.snapshot_gauge_value(
+            MINION_WORKFLOW_STEP_INFLIGHT_GAUGE,
+            {
+                LABEL_ORCHESTRATION_ID: m._mn_orchestration_id,
+                LABEL_MINION: m._mn_minion_id,
+                LABEL_MINION_WORKFLOW_STEP: "step_1",
+            },
+        )
+        == 0
+    )
 
 
 @pytest.mark.asyncio
@@ -185,6 +208,150 @@ async def test_workflow_cancellation_records_interrupted_duration_status_and_kee
     assert workflow_duration_count == 1
     assert step_duration_count == 1
     assert len(await state_store.get_all_contexts()) == 1
+    assert (
+        metrics.snapshot_gauge_value(
+            MINION_WORKFLOW_STEP_INFLIGHT_GAUGE,
+            {
+                LABEL_ORCHESTRATION_ID: m._mn_orchestration_id,
+                LABEL_MINION: m._mn_minion_id,
+                LABEL_MINION_WORKFLOW_STEP: "step_1",
+            },
+        )
+        == 0
+    )
+
+
+@pytest.mark.asyncio
+async def test_workflow_step_inflight_gauge_tracks_concurrent_step_executions(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+):
+    both_steps_started = asyncio.Event()
+    steps_can_finish = asyncio.Event()
+    started_count = 0
+
+    class MyMinion(Minion[EmptyEvent, EmptyContext]):
+        @minion_step
+        async def step_1(self):
+            nonlocal started_count
+            started_count += 1
+            if started_count == 2:
+                both_steps_started.set()
+            await steps_can_finish.wait()
+
+    m = MyMinion(
+        "dummy-minion-instance-id",
+        "dummy-orchestration-id",
+        "dummy-minion-module-path",
+        "dummy-config-path",
+        state_store,
+        metrics,
+        logger,
+        minion_id="dummy-minion-id",
+        minion_config_id="",
+        pipeline_id="dummy-pipeline-id",
+    )
+    m._mn_mark_running()
+    await m._mn_handle_event(EmptyEvent())
+    await m._mn_handle_event(EmptyEvent())
+    await asyncio.wait_for(both_steps_started.wait(), timeout=1.0)
+
+    labels = {
+        LABEL_ORCHESTRATION_ID: m._mn_orchestration_id,
+        LABEL_MINION: m._mn_minion_id,
+        LABEL_MINION_WORKFLOW_STEP: "step_1",
+    }
+    assert metrics.snapshot_gauge_value(MINION_WORKFLOW_STEP_INFLIGHT_GAUGE, labels) == 2
+
+    steps_can_finish.set()
+    await m._mn_wait_until_workflows_idle(timeout=2)
+
+    assert metrics.snapshot_gauge_value(MINION_WORKFLOW_STEP_INFLIGHT_GAUGE, labels) == 0
+
+
+@pytest.mark.asyncio
+async def test_workflow_step_inflight_gauge_tracks_each_step_independently(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+):
+    first_workflow_at_step_1 = asyncio.Event()
+    first_workflow_can_finish_step_1 = asyncio.Event()
+    second_workflow_at_step_2 = asyncio.Event()
+    workflows_can_finish_step_2 = asyncio.Event()
+    step_1_arrivals = 0
+
+    class MyMinion(Minion[EmptyEvent, EmptyContext]):
+        @minion_step
+        async def step_1(self):
+            nonlocal step_1_arrivals
+            step_1_arrivals += 1
+            if step_1_arrivals == 1:
+                first_workflow_at_step_1.set()
+                await first_workflow_can_finish_step_1.wait()
+
+        @minion_step
+        async def step_2(self):
+            second_workflow_at_step_2.set()
+            await workflows_can_finish_step_2.wait()
+
+    m = MyMinion(
+        "dummy-minion-instance-id",
+        "dummy-orchestration-id",
+        "dummy-minion-module-path",
+        "dummy-config-path",
+        state_store,
+        metrics,
+        logger,
+        minion_id="dummy-minion-id",
+        minion_config_id="",
+        pipeline_id="dummy-pipeline-id",
+    )
+    m._mn_mark_running()
+    await m._mn_handle_event(EmptyEvent())
+    await asyncio.wait_for(first_workflow_at_step_1.wait(), timeout=1.0)
+
+    await m._mn_handle_event(EmptyEvent())
+    await asyncio.wait_for(second_workflow_at_step_2.wait(), timeout=1.0)
+
+    base_labels = {
+        LABEL_ORCHESTRATION_ID: m._mn_orchestration_id,
+        LABEL_MINION: m._mn_minion_id,
+    }
+    assert (
+        metrics.snapshot_gauge_value(
+            MINION_WORKFLOW_STEP_INFLIGHT_GAUGE,
+            {**base_labels, LABEL_MINION_WORKFLOW_STEP: "step_1"},
+        )
+        == 1
+    )
+    assert (
+        metrics.snapshot_gauge_value(
+            MINION_WORKFLOW_STEP_INFLIGHT_GAUGE,
+            {**base_labels, LABEL_MINION_WORKFLOW_STEP: "step_2"},
+        )
+        == 1
+    )
+
+    first_workflow_can_finish_step_1.set()
+    workflows_can_finish_step_2.set()
+    await m._mn_wait_until_workflows_idle(timeout=2)
+
+    assert (
+        metrics.snapshot_gauge_value(
+            MINION_WORKFLOW_STEP_INFLIGHT_GAUGE,
+            {**base_labels, LABEL_MINION_WORKFLOW_STEP: "step_1"},
+        )
+        == 0
+    )
+    assert (
+        metrics.snapshot_gauge_value(
+            MINION_WORKFLOW_STEP_INFLIGHT_GAUGE,
+            {**base_labels, LABEL_MINION_WORKFLOW_STEP: "step_2"},
+        )
+        == 0
+    )
 
 
 @pytest.mark.asyncio

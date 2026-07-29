@@ -295,10 +295,6 @@
       - alert on `minion_workflow_persistence_*` for workflow durability impact
       - inspect `state_store_*` for backend health and root cause
 
-- todo: wire `MINION_WORKFLOW_STEP_INFLIGHT_GAUGE` into `minion.py`
-  - keep the step-level gauge as a live execution-state complement to step duration and outcome counters
-  - update the gauge in the step start/finally paths once the wiring is ready
-
 - todo: add family-level metrics exposure controls
   - goal:
     - let operators disable or exclude whole metric families when they do not want Prometheus to ingest that runtime surface

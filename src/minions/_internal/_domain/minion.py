@@ -53,6 +53,7 @@ from .._framework.metrics_constants import (
     MINION_WORKFLOW_STEP_ABORTED_TOTAL,
     MINION_WORKFLOW_STEP_DURATION_SECONDS,
     MINION_WORKFLOW_STEP_FAILED_TOTAL,
+    MINION_WORKFLOW_STEP_INFLIGHT_GAUGE,
     MINION_WORKFLOW_STEP_STARTED_TOTAL,
     MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
     MINION_WORKFLOW_SUCCEEDED_TOTAL,
@@ -345,6 +346,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         self._mn_metrics = metrics
         self._mn_workflow_persistence_blocked_counts: dict[tuple[tuple[str, str], ...], int] = {}
         self._mn_workflow_persistence_blocked_counts_lock = asyncio.Lock()
+        self._mn_workflow_step_inflight_counts: dict[str, int] = {}
+        self._mn_workflow_step_inflight_counts_lock = asyncio.Lock()
         self._mn_workflow_failure_policy = self._mn_validate_workflow_failure_policy(
             workflow_failure_policy,
         )
@@ -915,6 +918,54 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             labels=labels,
         )
 
+    async def _mn_register_workflow_step_inflight(
+        self,
+        *,
+        step_name: str,
+    ) -> None:
+        labels = {
+            **self._mn_workflow_base_metric_labels(),
+            LABEL_MINION_WORKFLOW_STEP: step_name,
+        }
+        async with self._mn_workflow_step_inflight_counts_lock:
+            value = self._mn_workflow_step_inflight_counts.get(step_name, 0) + 1
+            self._mn_workflow_step_inflight_counts[step_name] = value
+            try:
+                await self._mn_metrics._mn_set(
+                    metric_name=MINION_WORKFLOW_STEP_INFLIGHT_GAUGE,
+                    value=value,
+                    labels=labels,
+                )
+            except BaseException:
+                previous_value = value - 1
+                if previous_value:
+                    self._mn_workflow_step_inflight_counts[step_name] = previous_value
+                else:
+                    self._mn_workflow_step_inflight_counts.pop(step_name, None)
+                raise
+
+    async def _mn_unregister_workflow_step_inflight(
+        self,
+        *,
+        step_name: str,
+    ) -> None:
+        labels = {
+            **self._mn_workflow_base_metric_labels(),
+            LABEL_MINION_WORKFLOW_STEP: step_name,
+        }
+        async with self._mn_workflow_step_inflight_counts_lock:
+            current_value = self._mn_workflow_step_inflight_counts[step_name]
+            value = current_value - 1
+            if value:
+                self._mn_workflow_step_inflight_counts[step_name] = value
+            else:
+                self._mn_workflow_step_inflight_counts.pop(step_name, None)
+            await self._mn_metrics._mn_set(
+                metric_name=MINION_WORKFLOW_STEP_INFLIGHT_GAUGE,
+                value=value,
+                labels=labels,
+            )
+
     async def _mn_record_workflow_persistence_attempt_metrics(
         self,
         *,
@@ -1041,6 +1092,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             ),
                         ]
                     )
+                    await self._mn_register_workflow_step_inflight(
+                        step_name=step_name,
+                    )
 
                     try:  # run step / store context
                         await self._mn_run_workflow_persistence_checkpoint(
@@ -1135,14 +1189,19 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                             # Using duration=-1.0 to identify when a loaded context
                             # doesn't have its started_at time when it should.
                             duration = -1.0
-                        await self._mn_metrics._mn_observe(
-                            metric_name=MINION_WORKFLOW_STEP_DURATION_SECONDS,
-                            value=duration,
-                            labels={
-                                **self._mn_workflow_base_metric_labels(),
-                                LABEL_MINION_WORKFLOW_STEP: step_name,
-                                LABEL_STATUS: step_status,
-                            },
+                        await _shielded_gather(
+                            self._mn_metrics._mn_observe(
+                                metric_name=MINION_WORKFLOW_STEP_DURATION_SECONDS,
+                                value=duration,
+                                labels={
+                                    **self._mn_workflow_base_metric_labels(),
+                                    LABEL_MINION_WORKFLOW_STEP: step_name,
+                                    LABEL_STATUS: step_status,
+                                },
+                            ),
+                            self._mn_unregister_workflow_step_inflight(
+                                step_name=step_name,
+                            ),
                         )
             except asyncio.CancelledError:
                 workflow_status: ExecutionStatus = "interrupted"
@@ -1376,6 +1435,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 raise TimeoutError(timeout_msg)
 
     async def _mn_wait_until_workflows_idle(self, timeout: float = 2.0) -> None:
+        """Wait until this Minion has no live workflow tasks."""
         await self._mn_wait_until_tasks_idle(
             timeout,
             timeout_msg=(
