@@ -38,12 +38,17 @@
   - only keep non-default backends in a test when the backend-specific choice is intentional and clearly justified
   - document this test suite design in a test suite design doc
 
-- todo: harden test_gru.py:
+- todo: complete the Gru scenario DSL migration for orchestration tests
+  - status:
+    - `tests.support.gru_scenario` is the canonical deterministic orchestration-test DSL
+    - explicit step-boundary stop/resume and deterministic replay coverage are implemented
   - steps:
-    - complete the robust reusable Gru testing routine
-    - rewrite Gru tests to use the routine
-    - integrate Gru tests from other files:
-      - workflow outcome/metrics coverage in `tests/minions/_internal/_domain/minion/test_workflow_execution.py` should use the reusable Gru testing routine where it is exercising orchestration-level behavior
+    - migrate remaining orchestration-level tests to the DSL when they exercise lifecycle sequencing, waits, stop/shutdown behavior, concurrency, or shared-resource runtime behavior
+    - keep direct Gru tests for unit behavior, composition/loading validation, and focused internal invariant coverage
+    - migrate workflow outcome/metrics coverage in `tests/minions/_internal/_domain/minion/test_workflow_execution.py` where it is exercising orchestration-level behavior
+    - remove obsolete test helpers only after all representative call sites have moved and their deterministic evidence is preserved
+  - why it matters:
+    - using one deterministic scenario model for orchestration behavior reduces timing-sensitive duplicate test machinery without obscuring direct unit and composition intent
 
 - todo: ensure immediate user-facing domain objects (minion, pipeline, resource) and non-immediate user-facing domain objects (like StateStore, logger, metrics)...
   - 1: validate composition at class definition time and raise user friendly exception msg (good onboarding DX)
@@ -51,6 +56,23 @@
   - 2: validate usage at orchestration time (like in test_gru.py or one of its subdirectories if it got reorganized)
     - ex: tests/minions/_internal/_domain/test_gru.py::TestValidUsage.test_gru_accepts_none_logger_metrics_state_store
   - note: for non-immediate user-facing domain objects, validating composition at class definition time may not always be possible, so it's fine to only validate at orchestration time if that's the case
+
+- todo: simplify generic AsyncLifecycle callback plumbing while preserving framework lifecycle semantics
+  - problem:
+    - `_mn_startup(...)`, `_mn_shutdown(...)`, and `_mn_run(...)` expose generic `pre`, `pre_args`, `post`, and `post_args` parameters across the internal component hierarchy
+    - production subclasses use those callbacks for specific framework-owned responsibilities such as validation, config loading, workflow replay, and bounded task cleanup
+    - most overriding signatures accept callback parameters they ignore, obscuring which phase behavior each component actually owns
+  - goal:
+    - keep the lifecycle envelope and its exception normalization
+    - express each framework-owned before/after responsibility directly at its semantic owner instead of threading a generic hook protocol through every lifecycle signature
+    - keep user extension on the documented `startup()` / `shutdown()` methods rather than exposing runtime callback injection as a component contract
+  - design constraints:
+    - preserve the exact ordering and failure semantics of Minion replay, Resource method wrapping, Pipeline validation, and AsyncService task cleanup
+    - preserve the late-task shutdown test's intent without retaining a production callback API solely as a test seam
+    - do not remove runtime validation merely because definition-time validation exists; first identify dynamic or instance-time user-code paths that definition-time inspection does not cover
+    - validate one representative Minion and AsyncService call path before finalizing the replacement shape
+  - why it matters:
+    - intention-revealing lifecycle composition would reduce signature noise without losing the semantic guarantees currently carried by the generic callbacks
 
 - todo: add "crash testing" to test suite to ensure the Minions runtime preserves its crash guarantees
   - status:
@@ -72,6 +94,9 @@
       - failures are routed through the safe user-code wrapper path
       - no call site bypasses the wrapper by reaching private implementation methods directly
       - runtime behavior is deterministic and preserves crash guarantees / error reporting
+      - user-raised `KeyboardInterrupt` is treated as a contained user-task failure; OS-level Ctrl-C remains a runtime-controller concern with separately defined shutdown semantics
+      - `safe_create_task(...)` fulfills its documented guarantee that logger and failure-hook failures cannot escape, including deliberate `BaseException` cases rather than only ordinary `Exception` subclasses
+      - failure containment still emits the strongest available structured failure signal without allowing a secondary reporting failure to replace the original task outcome
     - example bug to guard against:
       - accidentally calling `self._mn_state_store._save_context(ctx)` instead of the safe wrapper like `self._mn_state_store.save_context(ctx)`
     - implementation note:
@@ -499,10 +524,46 @@
     - `docs/concepts/gru-lifecycle-failure-management.md` captures the current cleanup model and the boundary between Gru-owned framework state and user-owned process state
     - the current implementation hardens failed start, stop, and shutdown cleanup, but the API/result surface and long-term diagnostics still need deliberate design
   - implementation order:
+    - split public runtime introspection from internal runtime-health assertions
+    - add Gru runtime-state invariant validation at settled lifecycle boundaries
     - formalize Gru stop commit/fail-closed semantics
     - refine lifecycle result contracts
     - design lifecycle leak-check tooling and cookbook
     - add optional lifecycle diagnostics
+
+  - todo: split public Gru runtime introspection from internal runtime-health assertions
+    - problem:
+      - `Gru.runtime_state_snapshot()` serves a legitimate embeddable-Gru need to inspect high-level runtime state, but it also exposes internal task-registry bookkeeping
+      - fields such as `minion_tasks`, `pipeline_tasks`, and `resource_tasks` contain component ids with associated task entries rather than task objects or task ids
+      - tests currently use those public fields to assert private component/task-map consistency
+    - decision:
+      - keep `runtime_state_snapshot()` as the public high-level Gru introspection API
+      - keep it focused on domain/runtime relationships that an embedder or CLI would plausibly use
+      - keep task-registry consistency checks as internal runtime-health assertions rather than part of the public snapshot contract
+    - implementation steps:
+      - remove `minion_tasks`, `pipeline_tasks`, and `resource_tasks` from `GruRuntimeStateSnapshot`
+      - retain the public orchestration, component, relationship, dependency, and reference-count fields
+      - update public snapshot assertions to cover only public runtime state
+      - preserve internal cleanup and task-registry coverage through private test helpers or a clearly private debug surface
+    - why it matters:
+      - this keeps the embeddable Gru API understandable without exposing private registry conventions
+      - it preserves cleanup and leak assertions while giving them the correct internal semantic role
+
+  - todo: add Gru runtime-state invariant validation at settled lifecycle boundaries
+    - problem:
+      - each live minion, pipeline, and resource should have exactly one task entry, and each task entry should correspond to a live component
+      - this is a Gru runtime correctness invariant, but it is currently checked only where individual tests assert component/task-map parity
+    - goal:
+      - centralize component/task-map parity validation in Gru runtime-health logic
+      - validate settled state after public lifecycle operations, especially `start_orchestration(...)`, `stop_orchestration(...)`, and `shutdown()`
+      - keep transient in-flight lifecycle state out of scope unless the internal state model is explicitly designed to remain consistent between mutations
+    - implementation steps:
+      - add a private Gru runtime-state consistency validator
+      - decide how validation is enabled without introducing a test-specific Gru subclass
+      - invoke it only at lifecycle boundaries where runtime state has settled
+      - add focused tests that intentionally corrupt component/task maps and prove mismatches are detected
+    - why it matters:
+      - lifecycle APIs should not return successfully while Gru's internal component/task bookkeeping is inconsistent
 
   - todo: formalize Gru stop commit/fail-closed semantics
     - define the point where `stop_orchestration(...)` becomes committed and cannot be rolled back to a running orchestration
@@ -510,6 +571,32 @@
     - document which failures are primary operation failures versus secondary cleanup/finalization failures
     - why it matters:
       - stop is not transactional once detachment begins, so the code and tests need explicit fail-closed semantics
+
+  - todo: enforce cooperative cancellation for supported user code
+    - goal:
+      - make cooperative cancellation the normal Minions user-code contract while retaining cancellation timeout and process restart as the final hard-cleanup fallback
+    - validation to evaluate:
+      - reject user code that catches or suppresses `asyncio.CancelledError`
+      - reject bare `except`, `except BaseException`, and calls to `Task.uncancel()` where they can defeat runtime cancellation
+      - account for aliases and supported wrapper/decorator forms without claiming to prove arbitrary dependency or dynamically generated code safe
+    - runtime behavior to evaluate:
+      - reissue cancellation when a task remains pending after the initial request and reaches another cancellation point
+      - detect and report apparent cancellation suppression with actionable component, workflow, and task identity
+      - preserve the bounded cancellation deadline and fail-closed framework-state cleanup
+    - boundaries:
+      - do not rely on AST rewriting or monkey-patching as an absolute safety boundary
+      - blocking synchronous code, native extensions, dynamically invoked dependencies, and deliberately non-cooperative code may remain outside enforceable in-process guarantees
+      - retain process restart as the only general guarantee that unresolved in-process user code has stopped
+    - tests:
+      - reject each clearly unsupported cancellation-suppression pattern
+      - prove compliant cleanup code can catch cancellation temporarily, finish bounded cleanup, and re-raise it
+      - prove repeated cancellation handles a task that suppresses the first request but cooperates with the next
+      - preserve timeout, degraded-stop result, fail-closed state removal, and subprocess cleanup-boundary coverage
+    - docs:
+      - distinguish the supported cooperative-cancellation contract from the absolute process-isolation boundary
+      - explain that process restart is an exceptional fallback rather than the primary cancellation mechanism
+    - why it matters:
+      - strong validation and runtime enforcement make accidental cancellation suppression rare while preserving an honest fallback for behavior Python cannot safely terminate in-process
 
   - todo: refine lifecycle result contracts
     - distinguish operation failure from framework cleanup status and possible user-owned process pollution
@@ -932,22 +1019,28 @@
 - todo: add cloud cost comparison against equivalent minions workload
   - estimate monthly cost for equivalent sustained throughput/latency
   - include assumptions:
+    - pricing source and retrieval date
+    - purchase model (on-demand, reserved/committed, or spot)
     - instance type
     - region
     - uptime model
     - storage/network estimates
+  - report measured CPU, peak/steady RSS, and throughput/latency requirements before translating them into instance choices and monthly cost
+  - do not extrapolate from a universal per-process Python memory estimate; measure the selected workload and dependency/import set
   - include a simple break-even table
   - related chat: https://chatgpt.com/c/69fe1264-d0e0-83ea-bf1f-daf66098f551
 
 - todo: benchmark an equivalent microservices baseline (narrow scope)
   - pick one representative workflow shape
   - implement minimal equivalent using queue + worker services
+  - hold workflow behavior, durability expectations, observability, and sustained throughput/latency targets constant
   - compare:
     - throughput
     - p95/p99 latency
-    - memory
+    - idle and loaded memory, including duplicated interpreters, imports, clients, and service infrastructure
     - operational complexity
     - monthly cost
+  - report resource-density gains separately from the isolation, independent scaling, and deployment properties purchased by the process-per-service baseline
 
 - todo: publish a benchmark methodology doc
   - workloads
@@ -963,6 +1056,43 @@
 
 ### Docs:
 - todo: autogenerate API tree for the minions module using Sphinx autodoc/autosummary/intersphinx
+
+- todo: consolidate the Minions Core single-event-loop execution and deployment-topology contract
+  - goal:
+    - state plainly that one Core runtime uses one process and one asyncio event loop for orchestration, while blocking I/O and CPU-heavy work must be offloaded
+    - frame Minions as an orchestration runtime rather than a general-purpose compute runtime
+    - explain that workflow/component design does not have to equal deployment shape: users may colocate campaigns for shared-resource efficiency or split them across runtimes for isolation
+  - content to consolidate:
+    - work suited to the loop: async network I/O, timers, scheduling, and small coordination logic
+    - work suited to threads: blocking I/O that cannot use an async client
+    - work suited to processes/sidecars: CPU-heavy work, risky libraries, or workloads needing a stronger failure boundary
+    - practical reasons to split runtimes: CPU or memory pressure, tail-latency requirements, fault/deployment isolation, independent scaling, external durable buffering, or availability boundaries
+    - link the model to existing concurrency/backpressure, sidecar-resource, scale-out, lifecycle-failure, and execution-ladder documentation rather than duplicating their detailed guidance
+  - evidence constraint:
+    - do not publish specific coroutine/socket capacity claims until the benchmark harness establishes reproducible workload definitions and measured limits
+  - why it matters:
+    - users need one clear mental model for both the efficiency benefit and the isolation/compute limits of Core before choosing a deployment topology
+
+- todo: document how operators should choose a SQLite persistence tuning profile
+  - decision model:
+    - peak burst write rate the store must absorb
+    - end-to-end persistence latency budget under isolated, steady, and burst conditions
+    - workload shape, including whether writes are sparse, steady, or bursty
+    - runtime persistence failure policy: continue optimistically and retry at later checkpoints, or idle until persistence recovers
+  - profile guidance:
+    - `immediate`: favor isolated-write latency when its measured burst capacity is sufficient
+    - `batched_balanced`: trade some low-pressure latency for mixed-workload burst absorption
+    - `batched_max_throughput`: accept a larger low/mid-pressure latency cost when measured peak throughput is the overriding constraint
+    - explain that the tuner reports recommendations but never changes runtime configuration automatically
+  - failure-semantics clarification:
+    - keep runtime persistence policy as the primary operator-facing concept
+    - explain that every StateStore write still returns only after its transaction commits, including batched writes
+    - describe shared transaction rollback as a backend characteristic that can correlate failures across several pending workflow checkpoints, not as weaker per-call durability or an operator-managed recovery mechanism
+    - connect correlated batch failures to workflow persistence telemetry and retry/idling behavior
+  - evidence constraint:
+    - use measured tuner output for the current host/workload rather than publishing universal SQLite or Postgres throughput, latency, CPU, or memory claims
+  - why it matters:
+    - operators should choose a tuning profile from workload and durability requirements rather than infer semantics from profile names alone
 
 - todo: update my docs and readme with positioning surfaced in this thread (https://chatgpt.com/c/693b751c-bb18-8329-b2d5-b6ece864000b)
   - ctrl+f to read from the following text to end of thread:
@@ -999,6 +1129,13 @@
     - runtime logs should read as event statements with structured details in kwargs
     - operator/user-facing runtime logs should put the operator/user concern first unless the log is specifically a developer/runtime error
     - common structured kwargs should be present consistently across applicable logs, so monitoring, alerts, dashboards, and support workflows can depend on them
+  - ownership decision to resolve before finalizing the structured-field contract:
+    - orchestration relationship context is currently constructed on Minion even though Gru owns orchestration lifecycle and the relationships among minions, pipelines, and orchestrations
+    - decide whether Gru should pass an immutable orchestration context into Minion, whether the logger should provide scoped context, or whether the current Minion-owned construction is semantically clearer
+    - keep component identity helpers limited to intrinsic component identity; do not silently mix relationship context into them
+    - validate the decision against Minion workflow logs, which currently carry `pipeline_id` without a full first-class pipeline reference contract
+    - why it matters:
+      - field ownership should match the runtime ownership model before log kwargs become a compatibility surface
   - automated contract checks:
     - collect emitted logs from representative Gru scenario runs instead of relying only on manual review
     - assert event-message formatting mechanically:
