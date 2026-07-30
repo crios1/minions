@@ -73,7 +73,7 @@ async def _start_subscribers(
     return orchestration_ids
 
 
-async def _run_interruption_and_replay(
+async def _run_interruption_and_resume(
     *,
     action: Literal["stop", "shutdown"],
     subscribers: int,
@@ -163,8 +163,8 @@ async def _run_interruption_and_replay(
 
 
 @pytest.mark.asyncio
-async def test_stop_interrupts_and_replays_high_fanout_workflows() -> None:
-    await _run_interruption_and_replay(
+async def test_stop_interrupts_and_resumes_high_fanout_workflows() -> None:
+    await _run_interruption_and_resume(
         action="stop",
         subscribers=32,
         events=16,
@@ -172,8 +172,8 @@ async def test_stop_interrupts_and_replays_high_fanout_workflows() -> None:
 
 
 @pytest.mark.asyncio
-async def test_shutdown_interrupts_and_replays_high_fanout_workflows() -> None:
-    await _run_interruption_and_replay(
+async def test_shutdown_interrupts_and_resumes_high_fanout_workflows() -> None:
+    await _run_interruption_and_resume(
         action="shutdown",
         subscribers=16,
         events=16,

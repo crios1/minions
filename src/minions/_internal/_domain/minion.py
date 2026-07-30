@@ -1399,12 +1399,12 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             )
         finally:
             # A stopped Minion owns no active workflow tasks. Persisted unresolved
-            # contexts remain represented by the state store for future replay.
+            # contexts remain represented by the state store for future resumption.
             await self._mn_clear_workflow_tasks_and_publish_inflight_gauge()
 
     async def _mn_handle_event(self, t_event: T_Event):
-        # Live events must wait for startup replay to finish; otherwise an event
-        # can be persisted before startup completes and then replayed immediately.
+        # Live events must wait for startup workflow resume to finish; otherwise
+        # an event can be persisted before startup completes and then resumed.
         await self._mn_wait_until_running()
 
         workflow_id = uuid.uuid4().hex

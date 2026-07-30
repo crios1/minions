@@ -20,18 +20,18 @@ from tests.assets.support.state_store_inmemory import InMemoryStateStore
 
 
 @pytest.mark.asyncio
-async def test_minion_startup_replays_only_own_contexts(
+async def test_minion_startup_resumes_only_own_contexts(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ):
-    class ReplayMinion(Minion[EmptyEvent, EmptyContext]):
+    class ResumeMinion(Minion[EmptyEvent, EmptyContext]):
         @minion_step
         async def step_1(self):
             return
 
     own_orchestration_id = "dummy-own-orchestration-id"
-    m = ReplayMinion(
+    m = ResumeMinion(
         "dummy-minion-instance-id",
         own_orchestration_id,
         "dummy-minion-module-path",
@@ -61,20 +61,20 @@ async def test_minion_startup_replays_only_own_contexts(
         )
     )
 
-    replayed_ids: list[str] = []
+    resumed_ids: list[str] = []
 
     async def _capture(ctx: MinionWorkflowContext[EmptyEvent, EmptyContext]) -> None:
-        replayed_ids.append(ctx.workflow_id)
+        resumed_ids.append(ctx.workflow_id)
 
     m._mn_run_workflow = _capture  # type: ignore[method-assign]
 
     await m._mn_startup()
 
-    assert replayed_ids == ["dummy-own-workflow-id"]
+    assert resumed_ids == ["dummy-own-workflow-id"]
 
 
 @pytest.mark.asyncio
-async def test_minion_startup_replays_typed_msgspec_event_and_context(
+async def test_minion_startup_resumes_typed_msgspec_event_and_context(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -134,7 +134,7 @@ async def test_resumed_workflow_step_can_access_event_and_context_from_state_sto
     class MyMinion(Minion[IntValueEvent, IntValueContext]):
         @minion_step
         async def step_1(self):
-            pytest.fail("step_1 should not execute when replay resumes at next_step_index=1")
+            pytest.fail("step_1 should not execute when workflow resumes at next_step_index=1")
 
         @minion_step
         async def step_2(self):
@@ -173,20 +173,20 @@ async def test_resumed_workflow_step_can_access_event_and_context_from_state_sto
 
 
 @pytest.mark.asyncio
-async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_valid_context(
+async def test_minion_startup_resume_skips_irrecoverable_context_and_resumes_valid_context(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ):
     observed: list[int] = []
 
-    class ReplayWithInvalidContextMinion(Minion[IntValueEvent, EmptyContext]):
+    class ResumeWithInvalidContextMinion(Minion[IntValueEvent, EmptyContext]):
         @minion_step
         async def step_1(self):
             observed.append(self.event.value)
 
     orchestration_id = "dummy-orchestration-id"
-    m = ReplayWithInvalidContextMinion(
+    m = ResumeWithInvalidContextMinion(
         "dummy-minion-instance-id",
         orchestration_id,
         "dummy-minion-module-path",
@@ -251,7 +251,7 @@ async def test_minion_startup_replay_skips_irrecoverable_context_and_replays_val
 
 
 @pytest.mark.asyncio
-async def test_minion_startup_replay_fails_closed_on_context_type_mismatch(
+async def test_minion_startup_resume_fails_closed_on_context_type_mismatch(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -261,13 +261,13 @@ async def test_minion_startup_replay_fails_closed_on_context_type_mismatch(
     class StringValueEvent(msgspec.Struct):
         value: str
 
-    class ReplayWithMismatchedContextMinion(Minion[IntValueEvent, EmptyContext]):
+    class ResumeWithMismatchedContextMinion(Minion[IntValueEvent, EmptyContext]):
         @minion_step
         async def step_1(self):
             observed.append(self.event.value)
 
     orchestration_id = "dummy-orchestration-id"
-    m = ReplayWithMismatchedContextMinion(
+    m = ResumeWithMismatchedContextMinion(
         "dummy-minion-instance-id",
         orchestration_id,
         "dummy-minion-module-path",

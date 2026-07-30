@@ -38,7 +38,7 @@ Rules from the runtime:
 - Use `self.context` to read and update the current workflow context; steps do not receive it as an argument.
 - Use `self.workflow_handle` when business code needs optional diagnostic correlation data for logs or audit records. The read-only handle exposes `orchestration_id` and `workflow_id`, matching the stable identity fields used by framework diagnostics and persisted workflow state.
 - Raise `{py:class}``minions._internal._domain.exceptions.AbortWorkflow`` to stop a workflow gracefully without treating it as a failure.
-- Do not raise `asyncio.CancelledError` to intentionally stop a workflow. The runtime treats cancellation as an interruption, keeps the persisted workflow context, and may replay the workflow later. Use `AbortWorkflow` when the workflow should stop as an intentional terminal outcome.
+- Do not raise `asyncio.CancelledError` to intentionally stop a workflow. The runtime treats cancellation as an interruption, keeps the persisted workflow context, and may resume the workflow later. Use `AbortWorkflow` when the workflow should stop as an intentional terminal outcome.
 
 ### Workflow handle
 

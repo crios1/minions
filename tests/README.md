@@ -36,7 +36,7 @@ This suite is intentionally layered. Each layer has a different purpose and conf
 ## 4) Resumability Layer (state/restart semantics)
 - Purpose: prove interrupted/in-flight work resumes correctly and safely.
 - This is explicit coverage, not incidental behavior hidden inside broad orchestration tests.
-- Includes replay scoping, resume ordering, and persistence interaction guarantees.
+- Includes orchestration-scoped resume, ordering, and persistence interaction guarantees.
 
 ## 5) Workload / Blackbox Layer (predictable business outcome)
 - Purpose: prove end-to-end “runtime gets work done” with predictable workloads.

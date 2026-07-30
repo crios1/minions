@@ -20,13 +20,13 @@
       - orchestration index
       - blob batching
       - orchestration-scoped reads
-    - `minions/_internal/_domain/minion.py`: review startup replay integration
+    - `minions/_internal/_domain/minion.py`: review startup resume integration
       - `_get_contexts_for_orchestration(...)` replaces the old minion-scoped helper path
     - `minions/_internal/_framework/state_store_noop.py`: review the noop contract adaptation
     - `tests/assets/support/state_store_inmemory.py`: review the test-store move to the stored-row/blob model
     - `tests/minions/_internal/_framework/test_state_store_contract.py`: review the end-to-end contract expectations
     - `tests/minions/_internal/_framework/state_store_sqlite/`: review SQLite-specific backend expectations
-    - `tests/minions/_internal/_domain/minion/test_workflow_replay.py`: review the replay test update for the new persisted payload shape
+    - `tests/minions/_internal/_domain/minion/test_workflow_resume.py`: review the resume test update for the new persisted payload shape
     - `tests/support/gru_scenario/verify.py`: review the verifier rename from minion-context lookup to orchestration-context lookup
     - `tests/support/gru_scenario/tests/test_verify.py`: review the matching verifier test updates
     - `benchmarks/minion_workflow_context_persistence.py`: review the canonical blob-path benchmark coverage
@@ -60,14 +60,14 @@
 - todo: simplify generic AsyncLifecycle callback plumbing while preserving framework lifecycle semantics
   - problem:
     - `_mn_startup(...)`, `_mn_shutdown(...)`, and `_mn_run(...)` expose generic `pre`, `pre_args`, `post`, and `post_args` parameters across the internal component hierarchy
-    - production subclasses use those callbacks for specific framework-owned responsibilities such as validation, config loading, workflow replay, and bounded task cleanup
+    - production subclasses use those callbacks for specific framework-owned responsibilities such as validation, config loading, workflow resume, and bounded task cleanup
     - most overriding signatures accept callback parameters they ignore, obscuring which phase behavior each component actually owns
   - goal:
     - keep the lifecycle envelope and its exception normalization
     - express each framework-owned before/after responsibility directly at its semantic owner instead of threading a generic hook protocol through every lifecycle signature
     - keep user extension on the documented `startup()` / `shutdown()` methods rather than exposing runtime callback injection as a component contract
   - design constraints:
-    - preserve the exact ordering and failure semantics of Minion replay, Resource method wrapping, Pipeline validation, and AsyncService task cleanup
+    - preserve the exact ordering and failure semantics of Minion resume, Resource method wrapping, Pipeline validation, and AsyncService task cleanup
     - preserve the late-task shutdown test's intent without retaining a production callback API solely as a test seam
     - do not remove runtime validation merely because definition-time validation exists; first identify dynamic or instance-time user-code paths that definition-time inspection does not cover
     - validate one representative Minion and AsyncService call path before finalizing the replacement shape
@@ -115,9 +115,9 @@
       a remedy, and then explicitly resume or discard that workflow
   - required semantic model:
     - do not implement this as a simple "retain" switch because every stored
-      workflow is currently eligible for automatic startup replay
+      workflow is currently eligible for automatic startup resume
     - a future policy should likely be named `"quarantine"` and persist an
-      explicit failed state that startup replay excludes
+      explicit failed state that startup resume excludes
     - manual resume should deliberately rerun the failed step from its stored
       `next_step_index`
   - design work required before implementation:
@@ -346,8 +346,8 @@
   - todo: decide state-store availability semantics for Gru start/stop commands
     - problem:
       - state-store read failures during resume now correctly fail closed instead of returning an empty resume set
-      - workflow checkpoint write behavior is now explicitly operator-configurable via `WorkflowPersistenceFailurePolicy`, but startup/replay behavior still has fixed semantics
-      - the remaining design gap is to decide whether startup component availability, persisted-context replay reads, and degraded recovery behavior should live under a separate recovery policy or under a broader persistence/durability policy surface
+      - workflow checkpoint write behavior is now explicitly operator-configurable via `WorkflowPersistenceFailurePolicy`, but startup/resume behavior still has fixed semantics
+      - the remaining design gap is to decide whether startup component availability, persisted-context resume reads, and degraded recovery behavior should live under a separate recovery policy or under a broader persistence/durability policy surface
       - this is correct as a safety baseline, but the broader command semantics are not fully designed:
         - should `start_orchestration` fail when persisted resume state cannot be read, or start in a degraded recovery-pending mode?
         - should `stop_orchestration` always remain live-process control, or block/warn/require force when persistence health makes durable recovery unsafe?
@@ -358,7 +358,7 @@
       - distinguish command application from durability/recovery guarantees in user-facing results
     - start_orchestration design questions:
       - current conservative behavior: a resume read failure causes start to fail and Gru cleans up partial runtime state
-      - decide whether state-store startup/bootstrap failure should remain unconditionally fatal, or become part of the same operator-facing durability/recovery policy model as persisted replay reads
+      - decide whether state-store startup/bootstrap failure should remain unconditionally fatal, or become part of the same operator-facing durability/recovery policy model as persisted resume reads
       - possible future behavior: start the orchestration in a degraded state with recovery pending, retry persisted-context reads in the background, and allow new workflows according to `WorkflowPersistenceFailurePolicy`
       - if degraded start is supported, add explicit runtime state such as `recovery_pending` / `state_store_unavailable` / `partial_recovery`
       - decide whether new workflow admission should be allowed before persisted recovery completes, and how to avoid duplicate or out-of-order work if recovery later succeeds
@@ -389,7 +389,7 @@
     - docs:
       - explain the distinction between live-process control and durable recovery guarantees
       - document how `WorkflowPersistenceFailurePolicy` relates to command behavior without overloading it to mean recovery-read policy
-      - document the remaining semantic split clearly until it is unified: checkpoint save/delete policy is configurable, while startup bootstrap and replay currently remain stricter/fixed
+      - document the remaining semantic split clearly until it is unified: checkpoint save/delete policy is configurable, while startup bootstrap and resume currently remain stricter/fixed
 
   - todo: add first-class recovery handling for undecodable persisted workflow contexts
     - problem:
@@ -1147,7 +1147,7 @@
   - lane 1 (fast): run full suite once on every change (`pytest`)
   - lane 2 (flake/stress): run only concurrency/orchestration/lifecycle-sensitive tests in loops (`30x` for risky PRs, `100x` nightly/pre-release)
   - rationale:
-    - recent GRU startup replay bug was only surfaced under repeated stress runs (single-pass was often green)
+    - recent GRU startup resume bug was only surfaced under repeated stress runs (single-pass was often green)
     - looping all tests is too expensive/noisy, but looping high-risk tests gives strong signal for race/timing bugs
     - policy-driven stress runs improve confidence before release while keeping day-to-day feedback fast
   - possible implementation:

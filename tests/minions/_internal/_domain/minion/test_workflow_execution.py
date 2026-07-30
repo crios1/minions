@@ -44,7 +44,7 @@ async def test_workflow_aborted_increments_aborted_counter(
         async def step_1(self):
             raise AbortWorkflow()
 
-    # Exercise workflow handling directly without startup replay or a service task.
+    # Exercise workflow handling directly without startup resume or a service task.
     m = AbortMinion(
         "dummy-minion-instance-id",
         "dummy-orchestration-id",

@@ -16,7 +16,7 @@ Minions treats workflow context as durable. Before each step executes, Gru saves
 - An ordinary user-step exception is terminal. The current
   `workflow_failure_policy="delete"` behavior durably deletes its checkpoint.
 - Runtime cancellation is an interruption and retains the last checkpoint for
-  replay; raise `AbortWorkflow` for an intentional terminal outcome.
+  resume; raise `AbortWorkflow` for an intentional terminal outcome.
 - Successful and aborted workflows resolve by durably deleting their checkpoints.
 - Gru logs workflow/step transitions and surfaces errors with user file/line when available.
 
@@ -128,7 +128,7 @@ the `StateStore` interface.
 - `continue-on-failure` is the default. Persistence failures are logged, the workflow keeps running, and the runtime retries persistence at the next workflow checkpoint.
 - `idle-until-persisted` pauses workflow advancement after a failed persistence attempt and resumes only after persistence succeeds. Use it when durable checkpoint storage must succeed before the next step is allowed to run.
 - Workflow checkpoints are the persistence boundaries before each workflow step begins.
-- Serialization failures are treated as deterministic and non-retryable. The workflow does not advance past the checkpoint, and any prior durable checkpoint is preserved for inspection or replay.
+- Serialization failures are treated as deterministic and non-retryable. The workflow does not advance past the checkpoint, and any prior durable checkpoint is preserved for inspection or resume.
 - StateStore save failures are treated as retryable operational failures. In `idle-until-persisted`, they retry indefinitely with capped exponential backoff.
 - After user code reaches a terminal workflow outcome, Minions still treats checkpoint deletion as part of workflow resolution. If checkpoint deletion fails, the workflow does not become terminal until the delete succeeds.
 - Idle retry backoff starts at `workflow_persistence_retry_delay_seconds` (default `1.0`), multiplies by `workflow_persistence_retry_backoff_multiplier` (default `2.0`), is capped by `workflow_persistence_retry_max_delay_seconds` (default `60.0`), and applies `workflow_persistence_retry_jitter_ratio` jitter (default `0.1`) to avoid synchronized retries.

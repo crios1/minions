@@ -27,17 +27,17 @@ from tests.support.race_window import GatedAsyncCallable, GatedLock
 
 
 @pytest.mark.asyncio
-async def test_gru_does_not_replay_same_workflow_id_during_startup(
+async def test_gru_does_not_resume_same_workflow_id_twice_during_startup(
     managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ) -> None:
-    from tests.assets.minions.race_cases.duplicate_workflow_replay import (
-        AssetMinion as DuplicateWorkflowReplayMinion,
+    from tests.assets.minions.race_cases.duplicate_workflow_resume import (
+        AssetMinion as DuplicateWorkflowResumeMinion,
     )
 
-    DuplicateWorkflowReplayMinion.reset_gates()
+    DuplicateWorkflowResumeMinion.reset_gates()
 
     async with managed_gru_context(
         logger=logger,
@@ -45,11 +45,11 @@ async def test_gru_does_not_replay_same_workflow_id_during_startup(
         state_store=state_store,
     ) as gru:
         result = await gru.start_orchestration(
-            minion="tests.assets.minions.race_cases.duplicate_workflow_replay",
+            minion="tests.assets.minions.race_cases.duplicate_workflow_resume",
             pipeline="tests.assets.pipelines.emit_one.counter.default",
         )
         assert result.success
-        assert DuplicateWorkflowReplayMinion._gate("_startup_entered").is_set()
+        assert DuplicateWorkflowResumeMinion._gate("_startup_entered").is_set()
 
         def _get_step_1_workflow_ids() -> list[str]:
             return [
@@ -58,7 +58,7 @@ async def test_gru_does_not_replay_same_workflow_id_during_startup(
                 if log.msg == "Workflow Step started"
                 and log.kwargs.get("minion_id") == (
                     gru._get_minion_identity_from_module_path(
-                        "tests.assets.minions.race_cases.duplicate_workflow_replay"
+                        "tests.assets.minions.race_cases.duplicate_workflow_resume"
                     )
                 )
                 and log.kwargs.get("step_name") == "step_1"
@@ -66,14 +66,14 @@ async def test_gru_does_not_replay_same_workflow_id_during_startup(
 
         try:
             await asyncio.wait_for(
-                DuplicateWorkflowReplayMinion._gate("_step_1_started").wait(),
+                DuplicateWorkflowResumeMinion._gate("_step_1_started").wait(),
                 timeout=1.0,
             )
             await asyncio.sleep(0)
 
             step_1_workflow_ids = _get_step_1_workflow_ids()
             assert step_1_workflow_ids, (
-                "Expected startup-replay-race-minion to start step_1."
+                "Expected startup-resume-race-minion to start step_1."
             )
 
             counts = Counter(step_1_workflow_ids)
@@ -88,7 +88,7 @@ async def test_gru_does_not_replay_same_workflow_id_during_startup(
                 f"{duplicate_step_1_workflow_ids}"
             )
         finally:
-            DuplicateWorkflowReplayMinion._gate("_allow_step_1_finish").set()
+            DuplicateWorkflowResumeMinion._gate("_allow_step_1_finish").set()
 
 
 @pytest.mark.asyncio

@@ -6,8 +6,8 @@ This module has two related but distinct shapes:
   normalized, self-describing dict adapter shape used by codec tests and schema
   normalization. Untyped hydration imports the persisted `context_type_path`.
 * `serialize_persisted_workflow_context` / `deserialize_workflow_context_blob`
-  operate on the canonical bytes stored by `StateStore` implementations. Typed
-  replay uses the current Minion's declared context class as authoritative.
+  operate on the canonical bytes stored by `StateStore` implementations. During
+  typed resume, the current Minion's declared context class is authoritative.
 """
 
 import importlib
@@ -44,7 +44,7 @@ class PersistedMinionWorkflowContext(msgspec.Struct, forbid_unknown_fields=True)
     """Versioned StateStore payload for one runtime MinionWorkflowContext.
 
     ``context_type_path`` is importable metadata for untyped hydration, not a
-    runtime class object and not the authoritative schema during typed replay.
+    runtime class object and not the authoritative schema when resuming with types.
     """
 
     orchestration_id: str
@@ -307,7 +307,7 @@ def decode_persisted_workflow_context_typed(
             f"{CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION}."
         )
 
-    # Typed replay uses the current Minion schema. The persisted type path is
+    # Resume with the current Minion schema. The persisted type path is
     # informational and may be stale after the context class moves.
     return MinionWorkflowContext(
         orchestration_id=persisted.orchestration_id,

@@ -214,7 +214,7 @@ class AsyncLifecycle(ABC):
                         f"Unsupported use of `raise {raised_name}` in "
                         f"`{func.__name__}` ({module_path}). The runtime treats "
                         "asyncio cancellation as workflow interruption and may "
-                        "replay the workflow. If you want to intentionally stop an "
+                        "resume the workflow. If you want to intentionally stop an "
                         "in-flight workflow, raise AbortWorkflow instead."
                     )
 

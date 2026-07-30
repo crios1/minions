@@ -1,4 +1,4 @@
-# Cancellation-pressure and replay campaign
+# Cancellation-pressure and resume campaign
 
 This campaign stops or shuts down Gru while hundreds of workflows are blocked
 inside one shared `Resource`.
@@ -7,7 +7,7 @@ The runtime contract treats cancellation as an interruption:
 
 - the in-progress step and workflow are measured with status `interrupted`;
 - the last pre-step checkpoint remains in the StateStore; and
-- restarting the orchestration replays the retained workflow from that
+- restarting the orchestration resumes the retained workflow from that
   checkpoint.
 
 The campaign verifies that contract end to end for:
@@ -20,8 +20,8 @@ The campaign verifies that contract end to end for:
 After cancellation, every expected checkpoint must exist exactly once. The
 shared Resource is then released, the same orchestration identities are
 restarted, all retained workflows must succeed, and all checkpoints must be
-deleted. Pipeline production is disabled during restart so replay counts cannot
-be confused with newly generated live events.
+deleted. Pipeline production is disabled during restart so resumed-workflow
+counts cannot be confused with newly generated live events.
 
 The campaign uses `InMemoryStateStore`, `InMemoryMetrics`, and `NoOpLogger`. It
 performs no SQLite or filesystem I/O.

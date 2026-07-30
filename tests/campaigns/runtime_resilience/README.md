@@ -1,7 +1,7 @@
 # Runtime resilience verification
 
 These campaigns exercise recovery, lifecycle coordination, resource ownership,
-fanout pressure, cancellation/replay, and process/resource cleanup beyond the
+fanout pressure, cancellation/resume, and process/resource cleanup beyond the
 default unit-test suite.
 
 Run every campaign once, sequentially:
@@ -52,4 +52,4 @@ campaign invocation, so `--repeat N` has a conservative upper bound below
 - `high-fanout-resource`: fanout, burst, slow Resource, and metric cardinality.
 - `concurrent-lifecycle`: linearizability and shutdown admission races.
 - `resource-failure-storm`: repeated shared dependency failure containment.
-- `cancellation-pressure`: mass interruption, retained checkpoints, and replay.
+- `cancellation-pressure`: mass interruption, retained checkpoints, and resume.
