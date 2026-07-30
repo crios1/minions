@@ -576,6 +576,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     *(self._mn_run_workflow(ctx) for ctx in contexts),
                     return_exceptions=True
                 )
+            async with self._mn_tasks_gate:
+                await self._mn_publish_workflow_inflight_gauge()
 
         return await super()._mn_startup(
             log_kwargs=self._mn_identity_log_kwargs(),
@@ -966,6 +968,35 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 labels=labels,
             )
 
+    async def _mn_register_workflow_task_and_publish_inflight_gauge(
+        self,
+        task: asyncio.Task[None],
+    ) -> None:
+        async with self._mn_tasks_gate:
+            self._mn_workflow_tasks.add(task)
+            await self._mn_publish_workflow_inflight_gauge()
+
+    async def _mn_unregister_workflow_task_and_publish_inflight_gauge(
+        self,
+        task: asyncio.Task[None],
+    ) -> None:
+        async with self._mn_tasks_gate:
+            self._mn_workflow_tasks.discard(task)
+            await self._mn_publish_workflow_inflight_gauge()
+
+    async def _mn_clear_workflow_tasks_and_publish_inflight_gauge(self) -> None:
+        async with self._mn_tasks_gate:
+            self._mn_workflow_tasks.clear()
+            await self._mn_publish_workflow_inflight_gauge()
+
+    async def _mn_publish_workflow_inflight_gauge(self) -> None:
+        """Publish the task registry size while the caller holds `_mn_tasks_gate`."""
+        await self._mn_metrics._mn_set(
+            metric_name=MINION_WORKFLOW_INFLIGHT_GAUGE,
+            value=len(self._mn_workflow_tasks),
+            labels=self._mn_workflow_base_metric_labels(),
+        )
+
     async def _mn_record_workflow_persistence_attempt_metrics(
         self,
         *,
@@ -1315,15 +1346,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 await metric_obs
                 task = asyncio.current_task()
                 if task is not None:
-                    async with self._mn_tasks_gate:
-                        self._mn_workflow_tasks.discard(task)
-                        inflight = len(self._mn_workflow_tasks)
-                    if not self._mn_shutting_down:
-                        await self._mn_metrics._mn_set(
-                            metric_name=MINION_WORKFLOW_INFLIGHT_GAUGE,
-                            value=inflight,
-                            labels=self._mn_workflow_base_metric_labels(),
-                        )
+                    await self._mn_unregister_workflow_task_and_publish_inflight_gauge(task)
                 self._mn_event_var.reset(event_token)
                 self._mn_context_var.reset(context_token)
                 metric_context.close()
@@ -1347,8 +1370,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             return None
 
         task = self.safe_create_task(run())
-        async with self._mn_tasks_gate:
-            self._mn_workflow_tasks.add(task)
+        await self._mn_register_workflow_task_and_publish_inflight_gauge(task)
 
     async def _mn_shutdown(
         self,
@@ -1376,8 +1398,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 post=_post,
             )
         finally:
-            async with self._mn_tasks_gate:
-                self._mn_workflow_tasks.clear()
+            # A stopped Minion owns no active workflow tasks. Persisted unresolved
+            # contexts remain represented by the state store for future replay.
+            await self._mn_clear_workflow_tasks_and_publish_inflight_gauge()
 
     async def _mn_handle_event(self, t_event: T_Event):
         # Live events must wait for startup replay to finish; otherwise an event
@@ -1398,14 +1421,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             checkpoint="workflow_start",
         )
         await self._mn_run_workflow(ctx)
-
-        async with self._mn_tasks_gate:
-            inflight = len(self._mn_workflow_tasks)
-        await self._mn_metrics._mn_set(
-            metric_name=MINION_WORKFLOW_INFLIGHT_GAUGE,
-            value=inflight,
-            labels=self._mn_workflow_base_metric_labels(),
-        )
 
     async def _mn_wait_until_tasks_idle(
         self,
