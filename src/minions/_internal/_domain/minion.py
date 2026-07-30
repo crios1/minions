@@ -1039,12 +1039,13 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             ),
         )
 
+    @staticmethod
+    async def _mn_shielded_gather(*aws: Awaitable[object]) -> list[object]:
+        return await asyncio.shield(asyncio.gather(*aws))
+
     async def _mn_run_workflow(self, ctx: MinionWorkflowContext[T_Event, T_Ctx]) -> None:
         if self._mn_shutting_down:
             return
-
-        async def _shielded_gather(*aws: Awaitable[object]) -> list[object]:
-            return await asyncio.shield(asyncio.gather(*aws))
 
         async def run() -> None:
             event_token = self._mn_event_var.set(ctx.event)
@@ -1055,11 +1056,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     workflow_id=ctx.workflow_id,
                 )
             )
-            workflow_status: ExecutionStatus = "undefined"
-            delete_persisted_context_on_exit = True
-            terminal_workflow_log_level: int | None = None
-            terminal_workflow_log_message: str | None = None
-            terminal_workflow_error: Exception | None = None
+
             metric_context = ExitStack()
             metric_context.enter_context(
                 ResourceMetricContext(
@@ -1068,9 +1065,16 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     caller=self._mn_minion_id,
                 )
             )
-            try:  # run workflow (step by step)
+
+            workflow_status: ExecutionStatus = "undefined"
+            delete_persisted_context_on_exit = True
+            terminal_workflow_log_level: int | None = None
+            terminal_workflow_log_message: str | None = None
+            terminal_workflow_error: Exception | None = None
+
+            try:
                 if ctx.next_step_index == 0:
-                    await _shielded_gather(
+                    await self._mn_shielded_gather(
                         *[
                             self._mn_logger._mn_log(
                                 INFO,
@@ -1092,156 +1096,22 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         **self._mn_orchestration_log_kwargs(),
                     )
 
-                workflow = self._mn_workflow
-
-                for i in range(ctx.next_step_index, len(workflow)):
+                for i in range(ctx.next_step_index, len(self._mn_workflow)):
                     if i == 0:
                         ctx.started_at = time.time()
                     ctx.next_step_index = i
-
-                    step = workflow[i]
-                    step_name = step.__name__
-                    step_start = ctx.started_at if i == 0 else time.time()
-                    step_status: ExecutionStatus = "undefined"
-
-                    await _shielded_gather(
-                        *[
-                            self._mn_logger._mn_log(
-                                DEBUG,
-                                "Workflow Step started",
-                                workflow_id=ctx.workflow_id,
-                                step_name=step_name,
-                                step_index=i,
-                                **self._mn_orchestration_log_kwargs(),
-                            ),
-                            self._mn_metrics._mn_inc(
-                                metric_name=MINION_WORKFLOW_STEP_STARTED_TOTAL,
-                                labels={
-                                    **self._mn_workflow_base_metric_labels(),
-                                    LABEL_MINION_WORKFLOW_STEP: step_name,
-                                },
-                            ),
-                        ]
+                    await self._mn_execute_workflow_step(
+                        ctx,
+                        step_index=i,
                     )
-                    await self._mn_register_workflow_step_inflight(
-                        step_name=step_name,
-                    )
-
-                    try:  # run step / store context
-                        await self._mn_run_workflow_persistence_checkpoint(
-                            ctx,
-                            checkpoint=f"before_step:{step_name}",
-                        )
-                        await step()
-                    except asyncio.CancelledError:
-                        step_status: ExecutionStatus = "interrupted"
-                        raise
-                    except AbortWorkflow:  # log / measure step aborted
-                        step_status: ExecutionStatus = "aborted"
-                        await _shielded_gather(
-                            *[
-                                self._mn_logger._mn_log(
-                                    INFO,
-                                    "Workflow Step aborted",
-                                    workflow_id=ctx.workflow_id,
-                                    step_name=step_name,
-                                    step_index=i,
-                                    **self._mn_orchestration_log_kwargs(),
-                                ),
-                                self._mn_metrics._mn_inc(
-                                    metric_name=MINION_WORKFLOW_STEP_ABORTED_TOTAL,
-                                    labels={
-                                        **self._mn_workflow_base_metric_labels(),
-                                        LABEL_MINION_WORKFLOW_STEP: step_name,
-                                    },
-                                ),
-                            ]
-                        )
-                        raise
-                    except Exception as e:  # log / measure step failure
-                        step_status: ExecutionStatus = "failed"
-                        log_kwargs: dict[str, object] = {
-                            "workflow_id": ctx.workflow_id,
-                            "step_name": step_name,
-                            "step_index": i,
-                            **self._mn_orchestration_log_kwargs(),
-                        }
-                        tb = sys.exc_info()[2]
-                        err_loc = get_user_error_location(tb)
-                        if err_loc:
-                            log_kwargs.update(
-                                {
-                                    "filepath": err_loc["filepath"],
-                                    "lineno": err_loc["lineno"],
-                                    "line": err_loc["line"],
-                                }
-                            )
-                        await _shielded_gather(
-                            self._mn_logger._mn_log_exception(
-                                ERROR, "Workflow Step failed", e, **log_kwargs
-                            ),
-                            self._mn_metrics._mn_inc(
-                                metric_name=MINION_WORKFLOW_STEP_FAILED_TOTAL,
-                                labels={
-                                    **self._mn_workflow_base_metric_labels(),
-                                    LABEL_MINION_WORKFLOW_STEP: step_name,
-                                    LABEL_ERROR_TYPE: type(e).__name__,
-                                },
-                            ),
-                        )
-                        raise
-                    else:  # log / measure step success & update
-                        step_status: ExecutionStatus = "succeeded"
-                        await _shielded_gather(
-                            *[
-                                self._mn_logger._mn_log(
-                                    DEBUG,
-                                    "Workflow Step succeeded",
-                                    workflow_id=ctx.workflow_id,
-                                    step_name=step_name,
-                                    step_index=i,
-                                    **self._mn_orchestration_log_kwargs(),
-                                ),
-                                self._mn_metrics._mn_inc(
-                                    metric_name=MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
-                                    labels={
-                                        **self._mn_workflow_base_metric_labels(),
-                                        LABEL_MINION_WORKFLOW_STEP: step_name,
-                                    },
-                                ),
-                            ]
-                        )
-                    finally:  # measure step duration & update inflight gauge (if aborted or failed)
-                        if step_start:
-                            duration = time.time() - step_start
-                        else:
-                            # StateStore contexts are persisted with thier started_at time
-                            # but it's possible that a context is manipulated then loaded.
-                            # Using duration=-1.0 to identify when a loaded context
-                            # doesn't have its started_at time when it should.
-                            duration = -1.0
-                        await _shielded_gather(
-                            self._mn_metrics._mn_observe(
-                                metric_name=MINION_WORKFLOW_STEP_DURATION_SECONDS,
-                                value=duration,
-                                labels={
-                                    **self._mn_workflow_base_metric_labels(),
-                                    LABEL_MINION_WORKFLOW_STEP: step_name,
-                                    LABEL_STATUS: step_status,
-                                },
-                            ),
-                            self._mn_unregister_workflow_step_inflight(
-                                step_name=step_name,
-                            ),
-                        )
             except asyncio.CancelledError:
                 workflow_status: ExecutionStatus = "interrupted"
                 raise
-            except AbortWorkflow:  # log / measure workflow aborted
+            except AbortWorkflow:
                 workflow_status: ExecutionStatus = "aborted"
                 terminal_workflow_log_level = INFO
                 terminal_workflow_log_message = "Workflow aborted"
-            except Exception as e:  # log / measure workflow failure
+            except Exception as e:
                 workflow_status: ExecutionStatus = "failed"
                 if isinstance(e, WorkflowPersistenceNonRetryableError):
                     delete_persisted_context_on_exit = False
@@ -1252,11 +1122,12 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 terminal_workflow_log_level = ERROR
                 terminal_workflow_log_message = "Workflow failed"
                 terminal_workflow_error = e
-            else:  # log / measure workflow success
+            else:
                 workflow_status: ExecutionStatus = "succeeded"
                 terminal_workflow_log_level = INFO
                 terminal_workflow_log_message = "Workflow succeeded"
-            finally:  # measure workflow duration, update inflight gauge, remove context from statestore  # noqa: E501
+            finally:
+                # remove resolved workflow context from the state store
                 if (
                     workflow_status in ("succeeded", "failed", "aborted")
                     and delete_persisted_context_on_exit
@@ -1275,8 +1146,10 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         terminal_workflow_error = None
                         raise
 
+                # log and measure terminal workflow outcome
+
                 if workflow_status == "aborted" and terminal_workflow_log_message is not None:
-                    await _shielded_gather(
+                    await self._mn_shielded_gather(
                         *[
                             self._mn_logger._mn_log(
                                 terminal_workflow_log_level or INFO,
@@ -1294,7 +1167,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     failure_error = terminal_workflow_error
                     if failure_error is None:
                         failure_error = RuntimeError("workflow failed")
-                    await _shielded_gather(
+                    await self._mn_shielded_gather(
                         *[
                             self._mn_logger._mn_log_exception(
                                 terminal_workflow_log_level or ERROR,
@@ -1313,7 +1186,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         ]
                     )
                 elif workflow_status == "succeeded" and terminal_workflow_log_message is not None:
-                    await _shielded_gather(
+                    await self._mn_shielded_gather(
                         *[
                             self._mn_logger._mn_log(
                                 terminal_workflow_log_level or INFO,
@@ -1328,11 +1201,13 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         ]
                     )
 
+                # measure workflow duration
+
                 started_at = ctx.started_at
                 if started_at is not None:
                     duration = time.time() - started_at
                 else:
-                    # Cancellation can happen before step 0 sets started_at.
+                    # use sentinel since cancellation can happen before step 0 sets started_at
                     duration = -1.0
 
                 metric_obs = self._mn_metrics._mn_observe(
@@ -1344,33 +1219,172 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     },
                 )
                 await metric_obs
+
+                # clean up
+
                 task = asyncio.current_task()
                 if task is not None:
                     await self._mn_unregister_workflow_task_and_publish_inflight_gauge(task)
+
                 self._mn_event_var.reset(event_token)
                 self._mn_context_var.reset(context_token)
-                metric_context.close()
                 self._mn_workflow_handle_var.reset(workflow_handle_token)
 
-        def get_user_error_location(tb: TracebackType | None) -> dict[str, object] | None:
-            if not tb:
-                return None
-            cwd = Path.cwd()
-            for frame in reversed(traceback.extract_tb(tb)):
-                try:
-                    rel_path = Path(frame.filename).resolve().relative_to(cwd)
-                except ValueError:
-                    continue  # skip frames not under cwd
-                if str(rel_path).startswith(str(self._mn_minion_module_path)):
-                    return {
-                        "filepath": str(rel_path),
-                        "lineno": frame.lineno,
-                        "line": frame.line,
-                    }
-            return None
+                metric_context.close()
 
         task = self.safe_create_task(run())
         await self._mn_register_workflow_task_and_publish_inflight_gauge(task)
+
+    async def _mn_execute_workflow_step(
+        self,
+        ctx: MinionWorkflowContext[T_Event, T_Ctx],
+        *,
+        step_index: int,
+    ) -> None:
+        step = self._mn_workflow[step_index]
+        step_name = step.__name__
+        step_start = ctx.started_at if step_index == 0 else time.time()
+        step_status: ExecutionStatus = "undefined"
+
+        await self._mn_shielded_gather(
+            self._mn_logger._mn_log(
+                DEBUG,
+                "Workflow Step started",
+                workflow_id=ctx.workflow_id,
+                step_name=step_name,
+                step_index=step_index,
+                **self._mn_orchestration_log_kwargs(),
+            ),
+            self._mn_metrics._mn_inc(
+                metric_name=MINION_WORKFLOW_STEP_STARTED_TOTAL,
+                labels={
+                    **self._mn_workflow_base_metric_labels(),
+                    LABEL_MINION_WORKFLOW_STEP: step_name,
+                },
+            ),
+        )
+        await self._mn_register_workflow_step_inflight(step_name=step_name)
+
+        try:
+            await self._mn_run_workflow_persistence_checkpoint(
+                ctx,
+                checkpoint=f"before_step:{step_name}",
+            )
+            await step()
+        except asyncio.CancelledError:
+            step_status = "interrupted"
+            raise
+        except AbortWorkflow:
+            step_status = "aborted"
+            await self._mn_shielded_gather(
+                self._mn_logger._mn_log(
+                    INFO,
+                    "Workflow Step aborted",
+                    workflow_id=ctx.workflow_id,
+                    step_name=step_name,
+                    step_index=step_index,
+                    **self._mn_orchestration_log_kwargs(),
+                ),
+                self._mn_metrics._mn_inc(
+                    metric_name=MINION_WORKFLOW_STEP_ABORTED_TOTAL,
+                    labels={
+                        **self._mn_workflow_base_metric_labels(),
+                        LABEL_MINION_WORKFLOW_STEP: step_name,
+                    },
+                ),
+            )
+            raise
+        except Exception as e:
+            step_status = "failed"
+            log_kwargs: dict[str, object] = {
+                "workflow_id": ctx.workflow_id,
+                "step_name": step_name,
+                "step_index": step_index,
+                **self._mn_orchestration_log_kwargs(),
+            }
+            err_loc = self._mn_get_user_error_location(sys.exc_info()[2])
+            if err_loc:
+                log_kwargs.update(
+                    {
+                        "filepath": err_loc["filepath"],
+                        "lineno": err_loc["lineno"],
+                        "line": err_loc["line"],
+                    }
+                )
+            await self._mn_shielded_gather(
+                self._mn_logger._mn_log_exception(
+                    ERROR,
+                    "Workflow Step failed",
+                    e,
+                    **log_kwargs,
+                ),
+                self._mn_metrics._mn_inc(
+                    metric_name=MINION_WORKFLOW_STEP_FAILED_TOTAL,
+                    labels={
+                        **self._mn_workflow_base_metric_labels(),
+                        LABEL_MINION_WORKFLOW_STEP: step_name,
+                        LABEL_ERROR_TYPE: type(e).__name__,
+                    },
+                ),
+            )
+            raise
+        else:
+            step_status = "succeeded"
+            await self._mn_shielded_gather(
+                self._mn_logger._mn_log(
+                    DEBUG,
+                    "Workflow Step succeeded",
+                    workflow_id=ctx.workflow_id,
+                    step_name=step_name,
+                    step_index=step_index,
+                    **self._mn_orchestration_log_kwargs(),
+                ),
+                self._mn_metrics._mn_inc(
+                    metric_name=MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
+                    labels={
+                        **self._mn_workflow_base_metric_labels(),
+                        LABEL_MINION_WORKFLOW_STEP: step_name,
+                    },
+                ),
+            )
+        finally:
+            if step_start:
+                duration = time.time() - step_start
+            else:
+                # use sentinel if loaded context is missing started_at (e.g. external modification)
+                duration = -1.0
+            await self._mn_shielded_gather(
+                self._mn_metrics._mn_observe(
+                    metric_name=MINION_WORKFLOW_STEP_DURATION_SECONDS,
+                    value=duration,
+                    labels={
+                        **self._mn_workflow_base_metric_labels(),
+                        LABEL_MINION_WORKFLOW_STEP: step_name,
+                        LABEL_STATUS: step_status,
+                    },
+                ),
+                self._mn_unregister_workflow_step_inflight(step_name=step_name),
+            )
+
+    def _mn_get_user_error_location(
+        self,
+        tb: TracebackType | None,
+    ) -> dict[str, object] | None:
+        if not tb:
+            return None
+        cwd = Path.cwd()
+        for frame in reversed(traceback.extract_tb(tb)):
+            try:
+                rel_path = Path(frame.filename).resolve().relative_to(cwd)
+            except ValueError:
+                continue  # skip frames not under cwd
+            if str(rel_path).startswith(str(self._mn_minion_module_path)):
+                return {
+                    "filepath": str(rel_path),
+                    "lineno": frame.lineno,
+                    "line": frame.line,
+                }
+        return None
 
     async def _mn_shutdown(
         self,
