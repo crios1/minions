@@ -65,7 +65,7 @@ class GatedResourceMinion(Minion[CounterEvent, CounterContext]):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        setattr(self, "_mn_shutdown_grace_seconds", 0.01)
+        setattr(self, "_mn_shutdown_grace_seconds", 0.05)
 
     @minion_step
     async def handle(self) -> None:
