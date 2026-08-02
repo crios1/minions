@@ -15,6 +15,7 @@ from tests.assets.events.empty import EmptyEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
+from tests.support.race_window import GatedLock
 
 
 def _workflow_inflight_gauge_value(
@@ -63,6 +64,53 @@ def _make_minion(
         minion_config_id="dummy-minion-config-id",
         pipeline_id="dummy-pipeline-id",
     )
+
+
+@pytest.mark.asyncio
+async def test_cancellation_before_workflow_registration_does_not_create_task(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+) -> None:
+    workflow_created = False
+
+    class MyMinion(Minion[EmptyEvent, EmptyContext]):
+        @minion_step
+        async def step_1(self) -> None:
+            pass
+
+    minion = _make_minion(
+        MyMinion,
+        logger=logger,
+        metrics=metrics,
+        state_store=state_store,
+    )
+    tasks_gate = GatedLock()
+    minion._mn_tasks_gate = tasks_gate
+
+    async def workflow() -> None:
+        nonlocal workflow_created
+        workflow_created = True
+
+    launch_task = asyncio.create_task(
+        minion._mn_create_and_register_workflow_task_and_publish_inflight_gauge(
+            workflow
+        )
+    )
+    await tasks_gate.wait_until_held()
+
+    assert not workflow_created
+    assert not minion._mn_workflow_tasks
+    assert not minion._mn_service_tasks
+
+    launch_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await launch_task
+
+    assert not tasks_gate.locked()
+    assert not workflow_created
+    assert not minion._mn_workflow_tasks
+    assert not minion._mn_service_tasks
 
 
 @pytest.mark.asyncio

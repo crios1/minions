@@ -278,9 +278,13 @@ class AsyncService(AsyncComponent):
         service-wide task registry and cancelled during final shutdown.
 
         A subclass may also track the returned task in a narrower semantic registry
-        when it needs domain-specific waiting, metrics, or shutdown ordering. Add the
-        task to that registry immediately, before yielding control. The narrower
-        registry supplements rather than replaces the service-wide lifecycle registry.
+        when it needs domain-specific waiting, metrics, or shutdown ordering. Create
+        the task and add it to the narrower registry without awaiting between those
+        operations. If the registry may only be modified while holding an asynchronous
+        lock, acquire the lock first, then create and register the task while the lock
+        remains held. This prevents cancellation from leaving a task in the
+        service-wide registry but not the narrower one. The narrower registry
+        supplements rather than replaces the service-wide lifecycle registry.
         """
         task = safe_create_task(
             coro,

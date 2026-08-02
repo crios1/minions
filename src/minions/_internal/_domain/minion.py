@@ -8,7 +8,7 @@ import textwrap
 import time
 import traceback
 import uuid
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Coroutine
 from contextlib import ExitStack
 from pathlib import Path
 from types import TracebackType
@@ -968,13 +968,15 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 labels=labels,
             )
 
-    async def _mn_register_workflow_task_and_publish_inflight_gauge(
+    async def _mn_create_and_register_workflow_task_and_publish_inflight_gauge(
         self,
-        task: asyncio.Task[None],
-    ) -> None:
+        workflow_runner: Callable[[], Coroutine[Any, Any, None]],
+    ) -> asyncio.Task[None]:
         async with self._mn_tasks_gate:
+            task = self.safe_create_task(workflow_runner())
             self._mn_workflow_tasks.add(task)
             await self._mn_publish_workflow_inflight_gauge()
+            return task
 
     async def _mn_unregister_workflow_task_and_publish_inflight_gauge(
         self,
@@ -1047,7 +1049,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         if self._mn_shutting_down:
             return
 
-        async def run() -> None:
+        async def run_workflow() -> None:
             event_token = self._mn_event_var.set(ctx.event)
             context_token = self._mn_context_var.set(ctx.context)
             workflow_handle_token = self._mn_workflow_handle_var.set(
@@ -1232,8 +1234,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
 
                 metric_context.close()
 
-        task = self.safe_create_task(run())
-        await self._mn_register_workflow_task_and_publish_inflight_gauge(task)
+        await self._mn_create_and_register_workflow_task_and_publish_inflight_gauge(
+            run_workflow
+        )
 
     async def _mn_execute_workflow_step(
         self,
