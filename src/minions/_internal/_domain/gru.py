@@ -387,6 +387,8 @@ class Gru:
         self._runtime_failure_finalization_waiter_count = 0
         self._runtime_failure_finalizing = False
         self._runtime_failure_finalizer_tasks: set[asyncio.Task[None]] = set()
+        self._runtime_integrity_failure: BaseException | None = None
+        self._runtime_integrity_shutdown_task: asyncio.Task[None] | None = None
 
         # Lifecycle admission locks.
         # Orchestration locks serialize activation/deactivation for one orchestration id.
@@ -1716,14 +1718,58 @@ class Gru:
     ) -> None:
         task = safe_create_task(
             self._finalize_runtime_component_failure(failure),
-            on_failure=self._logger._mn_log_task_failure,
+            on_failure=lambda exception, task_name: (
+                self._on_runtime_failure_finalizer_failure(
+                    failure,
+                    exception,
+                    task_name,
+                )
+            ),
             name=(
                 "runtime-failure-finalizer:"
                 f"{failure.component_kind}:{failure.component_id}"
             ),
         )
         self._runtime_failure_finalizer_tasks.add(task)
-        task.add_done_callback(self._runtime_failure_finalizer_tasks.discard)
+        task.add_done_callback(self._on_runtime_failure_finalizer_done)
+
+    async def _on_runtime_failure_finalizer_failure(
+        self,
+        failure: _RuntimeComponentFailure,
+        exception: BaseException,
+        task_name: str | None,
+    ) -> None:
+        async with self._lifecycle_ops_state_lock:
+            if self._runtime_integrity_failure is None:
+                self._runtime_integrity_failure = exception
+            self._lifecycle_ops_drained.notify_all()
+
+        await self._logger._mn_log_exception(
+            CRITICAL,
+            (
+                "Gru runtime failure finalization failed; "
+                "runtime state consistency is not guaranteed"
+            ),
+            exception,
+            component=failure.component_kind,
+            identifier=failure.component_id,
+            task_name=task_name,
+            action="Gru will shut down; create a new instance or restart the process.",
+        )
+
+    def _on_runtime_failure_finalizer_done(self, task: asyncio.Task[None]) -> None:
+        self._runtime_failure_finalizer_tasks.discard(task)
+        if (
+            self._runtime_integrity_failure is None
+            or self._is_shutdown
+            or self._runtime_integrity_shutdown_task is not None
+        ):
+            return
+        self._runtime_integrity_shutdown_task = safe_create_task(
+            self.shutdown(),
+            on_failure=self._logger._mn_log_task_failure,
+            name="gru-runtime-integrity-shutdown",
+        )
 
     async def _finalize_runtime_component_failure(
         self,
@@ -1922,8 +1968,13 @@ class Gru:
                 )
                 or self._is_shutdown
                 or self._is_shutting_down
+                or self._runtime_integrity_failure is not None
             )
-            if self._is_shutdown or self._is_shutting_down:
+            if (
+                self._is_shutdown
+                or self._is_shutting_down
+                or self._runtime_integrity_failure is not None
+            ):
                 yield False
                 return
             self._lifecycle_ops_active += 1
@@ -1955,8 +2006,13 @@ class Gru:
                     )
                     or self._is_shutdown
                     or self._is_shutting_down
+                    or self._runtime_integrity_failure is not None
                 )
-                if not self._is_shutdown and not self._is_shutting_down:
+                if (
+                    not self._is_shutdown
+                    and not self._is_shutting_down
+                    and self._runtime_integrity_failure is None
+                ):
                     self._runtime_failure_finalizing = True
                     reserved = True
             finally:
@@ -1967,10 +2023,21 @@ class Gru:
             yield False
             return
 
+        finalization_error: BaseException | None = None
         try:
             yield True
+        except asyncio.CancelledError:
+            raise
+        except BaseException as error:
+            finalization_error = error
+            raise
         finally:
             async with self._lifecycle_ops_state_lock:
+                if (
+                    finalization_error is not None
+                    and self._runtime_integrity_failure is None
+                ):
+                    self._runtime_integrity_failure = finalization_error
                 self._runtime_failure_finalizing = False
                 self._lifecycle_ops_drained.notify_all()
 

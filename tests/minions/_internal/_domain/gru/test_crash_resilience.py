@@ -11,6 +11,7 @@ from minions._internal._domain.gru import (
     _RuntimeFailureImpact,
 )
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
+from minions._internal._framework.logger import CRITICAL
 from minions._internal._framework.metrics_constants import (
     LABEL_ERROR_TYPE,
     LABEL_MINION,
@@ -62,6 +63,14 @@ async def wait_for_orchestration_removed(
 ) -> None:
     async def _wait() -> None:
         while orchestration_id in (await gru.runtime_state_snapshot()).orchestrations:
+            await asyncio.sleep(0.01)
+
+    await asyncio.wait_for(_wait(), timeout=timeout)
+
+
+async def wait_for_gru_shutdown(gru: Gru, *, timeout: float = 1.0) -> None:
+    async def _wait() -> None:
+        while not gru._is_shutdown:
             await asyncio.sleep(0.01)
 
     await asyncio.wait_for(_wait(), timeout=timeout)
@@ -455,6 +464,129 @@ async def test_shutdown_waits_for_runtime_failure_finalization(
         assert shutdown.success
         await assert_runtime_empty(gru)
         assert not gru._runtime_failure_finalizer_tasks
+
+
+@pytest.mark.asyncio
+async def test_runtime_failure_finalizer_failure_shuts_down_gru(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
+        start = await gru.start_orchestration(
+            "tests.assets.pipelines.emit_one.counter.default",
+            "tests.assets.minions.one_step.counter.default",
+        )
+        assert start.success
+        assert start.orchestration_id is not None
+
+        snapshot = await gru.runtime_state_snapshot()
+        minion_instance_id = snapshot.minion_instance_for_orchestration(
+            start.orchestration_id
+        )
+        assert minion_instance_id is not None
+        minion = gru._minions_by_instance_id[minion_instance_id]
+        finalizer_error = RuntimeError("finalizer invariant violated")
+
+        async def fail_finalization(failure: _RuntimeComponentFailure) -> None:
+            raise finalizer_error
+
+        monkeypatch.setattr(gru, "_finalize_runtime_component_failure", fail_finalization)
+
+        gru._schedule_runtime_failure_finalization(
+            _RuntimeComponentFailure(
+                component_kind="minion",
+                component_id=minion_instance_id,
+                component=minion,
+                failed_task=None,
+            )
+        )
+
+        assert await logger.wait_for_log(
+            "runtime state consistency is not guaranteed",
+            min_level=CRITICAL,
+            log_kwargs={
+                "component": "minion",
+                "identifier": minion_instance_id,
+                "error_type": "RuntimeError",
+                "error_message": "finalizer invariant violated",
+                "action": (
+                    "Gru will shut down; create a new instance or restart the process."
+                ),
+            },
+            timeout=1.0,
+        )
+        assert gru._runtime_integrity_failure is finalizer_error
+
+        await wait_for_gru_shutdown(gru)
+
+        assert not gru._runtime_failure_finalizer_tasks
+        await assert_runtime_empty(gru)
+
+
+@pytest.mark.asyncio
+async def test_runtime_failure_finalizer_failure_does_not_reopen_lifecycle_admission(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
+        start = await gru.start_orchestration(
+            "tests.assets.pipelines.emit_one.counter.default",
+            "tests.assets.minions.one_step.counter.default",
+        )
+        assert start.success
+        assert start.orchestration_id is not None
+
+        snapshot = await gru.runtime_state_snapshot()
+        minion_instance_id = snapshot.minion_instance_for_orchestration(
+            start.orchestration_id
+        )
+        assert minion_instance_id is not None
+        minion = gru._minions_by_instance_id[minion_instance_id]
+        finalizer_error = RuntimeError("finalizer invariant violated")
+        finalizer_entered = asyncio.Event()
+        allow_finalizer_to_fail = asyncio.Event()
+        lifecycle_admission = asyncio.get_running_loop().create_future()
+
+        async def fail_impact_resolution(
+            failure: _RuntimeComponentFailure,
+        ) -> _RuntimeFailureImpact:
+            finalizer_entered.set()
+            await allow_finalizer_to_fail.wait()
+            raise finalizer_error
+
+        monkeypatch.setattr(gru, "_resolve_runtime_failure_impact", fail_impact_resolution)
+
+        gru._schedule_runtime_failure_finalization(
+            _RuntimeComponentFailure(
+                component_kind="minion",
+                component_id=minion_instance_id,
+                component=minion,
+                failed_task=None,
+            )
+        )
+        await asyncio.wait_for(finalizer_entered.wait(), timeout=1.0)
+
+        async def reserve_lifecycle_operation() -> None:
+            async with gru._reserve_lifecycle_op() as reserved:
+                lifecycle_admission.set_result(reserved)
+
+        lifecycle_operation_task = asyncio.create_task(reserve_lifecycle_operation())
+        await asyncio.sleep(0)
+        assert not lifecycle_admission.done()
+
+        allow_finalizer_to_fail.set()
+
+        assert not await asyncio.wait_for(lifecycle_admission, timeout=1.0)
+        await lifecycle_operation_task
+        assert gru._runtime_integrity_failure is finalizer_error
+
+        await wait_for_gru_shutdown(gru)
 
 
 @pytest.mark.asyncio
