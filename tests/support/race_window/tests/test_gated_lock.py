@@ -31,6 +31,26 @@ async def test_gated_lock_holds_production_code_until_progress_is_allowed() -> N
 
 
 @pytest.mark.asyncio
+async def test_gated_lock_releases_when_lock_holder_is_cancelled() -> None:
+    lock = GatedLock()
+
+    async def use_lock() -> None:
+        async with lock:
+            pytest.fail("cancelled task entered the guarded block")
+
+    task = asyncio.create_task(use_lock())
+    await lock.wait_until_held()
+
+    assert lock.locked()
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert not lock.locked()
+
+
+@pytest.mark.asyncio
 async def test_gated_lock_wait_times_out_before_lock_is_held() -> None:
     lock = GatedLock()
 

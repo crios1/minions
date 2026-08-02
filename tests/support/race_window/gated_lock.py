@@ -15,7 +15,11 @@ class GatedLock(asyncio.Lock):
         await self.acquire()
         self.enter_count += 1
         self._held.set()
-        await self._allow_progress.wait()
+        try:
+            await self._allow_progress.wait()
+        except BaseException:
+            self.release()
+            raise
 
     async def __aexit__(
         self,
