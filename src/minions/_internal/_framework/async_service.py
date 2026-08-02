@@ -271,12 +271,21 @@ class AsyncService(AsyncComponent):
         coro: Coroutine[Any, Any, object],
         name: str | None = None,
     ) -> asyncio.Task[None]:
-        "A safe wrapper around asyncio.create_task that optionally logs exceptions."
+        """Create and track a service-owned background task for failure reporting and shutdown.
+
+        Subclasses should use this method instead of `asyncio.create_task(...)` for
+        background work owned by the service. Every returned task is tracked in the
+        service-wide task registry and cancelled during final shutdown.
+
+        A subclass may also track the returned task in a narrower semantic registry
+        when it needs domain-specific waiting, metrics, or shutdown ordering. Add the
+        task to that registry immediately, before yielding control. The narrower
+        registry supplements rather than replaces the service-wide lifecycle registry.
+        """
         task = safe_create_task(
             coro,
-            self._mn_logger,
-            name,
             on_failure=self._mn_on_service_task_failure,
+            name=name,
         )
         self._mn_service_tasks.add(task)
         task.add_done_callback(lambda t: self._mn_service_tasks.discard(t))

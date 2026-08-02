@@ -36,11 +36,12 @@ from .._framework.state_store_sqlite import SQLiteStateStore
 from .._utils.base62_encode import base62_encode
 from .._utils.get_type_from_hint import get_type_from_hint
 from .._utils.safe_cancel_task import safe_cancel_task
-from .._utils.safe_create_task import TaskFailureHandler, safe_create_task
+from .._utils.safe_create_task import safe_create_task
 from .._utils.serialization import (
     require_user_declared_type,
     serialize,
 )
+from .._utils.task_failure_handler import TaskFailureHandler
 from .component_identity import get_component_id
 from .config_identity import get_config_id
 from .exceptions import TaskCancellationError
@@ -423,7 +424,6 @@ class Gru:
 
         self._resource_monitor_task = safe_create_task(
             self._monitor_process_resources(),
-            self._logger,
             on_failure=self._on_resource_monitor_failure,
         )
 
@@ -711,13 +711,12 @@ class Gru:
 
             self._minion_tasks[instance_id] = safe_create_task(
                 minion._mn_serve(),
-                self._logger,
-                name=f"minion:{instance_id}",
                 on_failure=self._make_runtime_component_failure_hook(
                     "minion",
                     instance_id,
                     minion,
                 ),
+                name=f"minion:{instance_id}",
             )
 
         await minion._mn_wait_until_running()
@@ -962,13 +961,12 @@ class Gru:
                     self._resources[resource_id] = resource
                     self._resource_tasks[resource_id] = safe_create_task(
                         resource._mn_serve(),
-                        self._logger,
-                        name=f"resource:{resource_id}",
                         on_failure=self._make_runtime_component_failure_hook(
                             "resource",
                             resource_id,
                             resource,
                         ),
+                        name=f"resource:{resource_id}",
                     )
             if created:
                 await self._logger._mn_log(
@@ -1082,13 +1080,12 @@ class Gru:
                 self._pipelines[pipeline_id] = pipeline
                 self._pipeline_tasks[pipeline_id] = safe_create_task(
                     pipeline._mn_serve(),
-                    self._logger,
-                    name=f"pipeline:{pipeline_id}",
                     on_failure=self._make_runtime_component_failure_hook(
                         "pipeline",
                         pipeline_id,
                         pipeline,
                     ),
+                    name=f"pipeline:{pipeline_id}",
                 )
         if created:
             await self._logger._mn_log(
@@ -1719,7 +1716,7 @@ class Gru:
     ) -> None:
         task = safe_create_task(
             self._finalize_runtime_component_failure(failure),
-            self._logger,
+            on_failure=self._logger._mn_log_task_failure,
             name=(
                 "runtime-failure-finalizer:"
                 f"{failure.component_kind}:{failure.component_id}"

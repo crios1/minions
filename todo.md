@@ -95,7 +95,6 @@
       - no call site bypasses the wrapper by reaching private implementation methods directly
       - runtime behavior is deterministic and preserves crash guarantees / error reporting
       - user-raised `KeyboardInterrupt` is treated as a contained user-task failure; OS-level Ctrl-C remains a runtime-controller concern with separately defined shutdown semantics
-      - `safe_create_task(...)` fulfills its documented guarantee that logger and failure-hook failures cannot escape, including deliberate `BaseException` cases rather than only ordinary `Exception` subclasses
       - failure containment still emits the strongest available structured failure signal without allowing a secondary reporting failure to replace the original task outcome
     - example bug to guard against:
       - accidentally calling `self._mn_state_store._save_context(ctx)` instead of the safe wrapper like `self._mn_state_store.save_context(ctx)`

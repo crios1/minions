@@ -89,6 +89,18 @@ class Logger(AsyncLifecycle):
             **log_kwargs,
         )
 
+    async def _mn_log_task_failure(
+        self,
+        exception: BaseException,
+        task_name: str | None,
+    ) -> None:
+        await self._mn_log_exception(
+            ERROR,
+            "asyncio task failed",
+            exception,
+            task_name=task_name,
+        )
+
     @abstractmethod
     async def log(self, level: int, msg: str, **kwargs: Any):
         "override to implement your logger, kwargs are for inclusion in structured logs"

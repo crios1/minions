@@ -9,6 +9,7 @@ from typing import Literal
 import aiosqlite
 
 from .._utils.safe_create_task import safe_create_task
+from .._utils.task_failure_handler import report_task_failure_to_stderr
 from .logger import CRITICAL, DEBUG, ERROR, WARNING, Logger
 from .state_store import StateStore, StoredWorkflowContext
 
@@ -781,7 +782,7 @@ class SQLiteStateStore(StateStore):
         self._batch_buffer_flush_deadline = time.monotonic() + (batch_max_flush_delay_ms / 1000.0)
         self._batch_buffer_flush_task = safe_create_task(
             self._flush_soon(),
-            self._mn_logger,
+            on_failure=self._mn_logger._mn_log_task_failure,
             name=f"{type(self).__name__}._flush_soon",
         )
 
@@ -1003,7 +1004,10 @@ class SQLiteStateStore(StateStore):
             "Consider: increase batch caps; confirm WAL + synchronous=NORMAL; "
             "move to a stronger state store if sustained."
         )
-        safe_create_task(self._mn_logger._mn_log(level, msg))
+        safe_create_task(
+            self._mn_logger._mn_log(level, msg),
+            on_failure=report_task_failure_to_stderr,
+        )
 
     def _maybe_warn_large_payload(
         self,
@@ -1038,6 +1042,7 @@ class SQLiteStateStore(StateStore):
                         "Consider externalizing large blobs and storing refs; keep state below "
                         f"configured warning threshold (~{warn_kib}KiB, critical ~{crit_kib}KiB)."
                     ),
-                )
+                ),
+                on_failure=report_task_failure_to_stderr,
             )
             self._warn_size_last_at_by_workflow_id[workflow_id] = now

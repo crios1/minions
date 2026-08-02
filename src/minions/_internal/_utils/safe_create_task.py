@@ -1,28 +1,17 @@
 import asyncio
 import inspect
-from collections.abc import Awaitable, Coroutine
-from typing import Any, Protocol
+import sys
+from collections.abc import Coroutine
+from typing import Any
 
-from .._framework.logger import ERROR, Logger
-
-
-class TaskFailureHandler(Protocol):
-    """Handle a swallowed task failure.
-
-    `task_name` is the `safe_create_task(..., name=...)` value, or the
-    coroutine name when one can be inferred.
-    """
-
-    def __call__(
-        self, exception: BaseException, task_name: str | None
-    ) -> Awaitable[None] | None: ...
+from .task_failure_handler import TaskFailureHandler
 
 
 def safe_create_task(
     coro: Coroutine[Any, Any, object],
-    logger: Logger | None = None,
+    *,
+    on_failure: TaskFailureHandler,
     name: str | None = None,
-    on_failure: TaskFailureHandler | None = None,
 ) -> asyncio.Task[None]:
     """
     Create an asyncio task with a strict runtime-safety boundary for user code.
@@ -31,50 +20,49 @@ def safe_create_task(
     user task failures must not terminate the orchestrator process.
 
     Behavior:
-    - Propagates `asyncio.CancelledError` so normal task cancellation semantics remain intact.
-    - Swallows all other user task exceptions (`SystemExit` included) after logging.
-    - Emits a structured failure signal through `on_failure` so supervisors can react
-      (restart/backoff/alerts) without relying only on logs.
-      The callback receives `(exception, task_name)`.
-    - Never allows logger or failure-hook errors to escape this boundary.
+    - Propagates `asyncio.CancelledError` from the task or its failure handler so
+      lifecycle cancellation semantics remain intact.
+    - Sends every other `BaseException` to the required `on_failure` handler. The
+      handler exclusively owns logging, recovery, and other failure effects.
+    - After a non-cancellation failure is handled, the returned supervision task
+      completes normally.
+    - Contains non-cancellation handler failures and reports them to stderr as a
+      last resort so a secondary failure cannot replace the original task outcome.
     """
     if name is None and hasattr(coro, "__name__"):
         name = coro.__name__
 
-    async def _safe_log_exception(msg: str, exc: BaseException) -> None:
-        if not logger:
-            return
+    def _report_failure_handler_error(
+        task_error: BaseException,
+        handler_error: BaseException,
+    ) -> None:
+        task_label = f" ({name})" if name else ""
         try:
-            await logger._mn_log_exception(ERROR, msg, exc)
-        except Exception:
+            print(
+                f"[safe_create_task failure handler failed]{task_label}: "
+                f"{type(handler_error).__name__}: {handler_error}; "
+                f"original task failure: {type(task_error).__name__}: {task_error}",
+                file=sys.stderr,
+            )
+        except BaseException:
             pass
 
-    async def _safe_call_failure_handler(exception: BaseException) -> None:
-        if not on_failure:
-            return
+    async def _call_failure_handler(exception: BaseException) -> None:
         try:
             maybe_awaitable = on_failure(exception, name)
             if inspect.isawaitable(maybe_awaitable):
                 await maybe_awaitable
-        except Exception as notify_error:
-            fname = f" ({name})" if name else ""
-            await _safe_log_exception(
-                f"[safe_create_task on_failure failed]{fname}: {notify_error}",
-                notify_error,
-            )
+        except asyncio.CancelledError:
+            raise
+        except BaseException as handler_error:
+            _report_failure_handler_error(exception, handler_error)
 
     async def wrapper() -> None:
         try:
             await coro
         except asyncio.CancelledError:
             raise
-        except SystemExit as e:
-            msg = f"[SystemExit in Task]{f' ({name})' if name else ''}: {e}"
-            await _safe_log_exception(msg, e)
-            await _safe_call_failure_handler(e)
         except BaseException as e:
-            msg = f"[Exception in asyncio.Task]{f' ({name})' if name else ''}: {e}"
-            await _safe_log_exception(msg, e)
-            await _safe_call_failure_handler(e)
+            await _call_failure_handler(e)
 
     return asyncio.create_task(wrapper(), name=name)

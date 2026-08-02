@@ -17,6 +17,7 @@ from abc import abstractmethod
 from typing import Literal, TypedDict, overload
 
 from minions._internal._utils.safe_create_task import safe_create_task
+from minions._internal._utils.task_failure_handler import report_task_failure_to_stderr
 
 from .async_component import AsyncComponent
 from .logger import WARNING, Logger
@@ -91,7 +92,8 @@ class Metrics(AsyncComponent):
                 self._mn_logger._mn_log(
                     WARNING,
                     f"metrics: unknown metric '{metric_name}', using no labels",
-                )
+                ),
+                on_failure=report_task_failure_to_stderr,
             )
         return labels
 
