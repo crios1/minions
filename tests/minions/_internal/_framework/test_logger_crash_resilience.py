@@ -1,3 +1,6 @@
+import asyncio
+from unittest.mock import AsyncMock
+
 import pytest
 
 from minions._internal._framework.logger import ERROR, INFO
@@ -6,7 +9,7 @@ from tests.assets.support.logger_inmemory import InMemoryLogger
 
 
 @pytest.mark.asyncio
-async def test_logger_log_failure_is_contained_by_log_wrapper(
+async def test_log_wrapper_falls_back_to_stderr_when_log_raises_exception(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     logger = BoomLogLogger()
@@ -16,6 +19,45 @@ async def test_logger_log_failure_is_contained_by_log_wrapper(
     captured = capsys.readouterr()
     assert "[Logger Error] BoomError: intentional boom" in captured.err
     assert "[Logger Fallback] hello | {'key': 'value'}" in captured.err
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "logger_error",
+    [SystemExit("logger requested exit"), KeyboardInterrupt("logger interrupted")],
+)
+async def test_log_wrapper_falls_back_to_stderr_when_log_raises_system_exit_or_keyboard_interrupt(
+    logger_error: BaseException,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    logger = InMemoryLogger()
+    logger.log = AsyncMock(side_effect=logger_error)  # type: ignore[method-assign]
+
+    await logger._mn_log(INFO, "hello", key="value")
+
+    captured = capsys.readouterr()
+    assert f"[Logger Error] {type(logger_error).__name__}: {logger_error}" in captured.err
+    assert "[Logger Fallback] hello | {'key': 'value'}" in captured.err
+
+
+@pytest.mark.asyncio
+async def test_log_wrapper_can_be_cancelled_while_log_is_blocked() -> None:
+    logger = InMemoryLogger()
+    logging_started = asyncio.Event()
+
+    async def blocking_log(level: int, msg: str, **kwargs: object) -> None:
+        logging_started.set()
+        await asyncio.Event().wait()
+
+    logger.log = blocking_log
+    logging = asyncio.create_task(logger._mn_log(INFO, "hello"))
+    await asyncio.wait_for(logging_started.wait(), timeout=1)
+    logging.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await logging
+
+    assert logging.cancelled()
 
 
 @pytest.mark.asyncio

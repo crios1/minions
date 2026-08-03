@@ -1,3 +1,4 @@
+import asyncio
 import sys
 from abc import abstractmethod
 from collections.abc import Mapping
@@ -46,9 +47,14 @@ class Logger(AsyncLifecycle):
     async def _mn_log(self, level: int, msg: str, **kwargs: Any):
         try:
             return await self.log(level, msg, **kwargs)
-        except Exception as e:
-            print(f"[Logger Error] {type(e).__name__}: {e}", file=sys.stderr)
-            print(f"[Logger Fallback] {msg} | {kwargs}", file=sys.stderr)
+        except asyncio.CancelledError:
+            raise
+        except BaseException as e:
+            try:
+                print(f"[Logger Error] {type(e).__name__}: {e}", file=sys.stderr)
+                print(f"[Logger Fallback] {msg} | {kwargs}", file=sys.stderr)
+            except BaseException:
+                pass
 
     async def _mn_log_exception(
         self,

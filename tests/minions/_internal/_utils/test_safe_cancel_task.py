@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -54,12 +55,8 @@ async def test_logs_on_timeout_with_label_when_using_logger(logger: InMemoryLogg
     assert entry.level == ERROR
     assert "Timeout while cancelling task 'worker'" in entry.msg
     assert "error_type" in entry.kwargs
-    assert isinstance(entry.kwargs.get("traceback"), str) and entry.kwargs.get(
-        "traceback"
-    )
-    assert isinstance(entry.kwargs.get("task_stack"), str) and entry.kwargs.get(
-        "task_stack"
-    )
+    assert isinstance(entry.kwargs.get("traceback"), str) and entry.kwargs.get("traceback")
+    assert isinstance(entry.kwargs.get("task_stack"), str) and entry.kwargs.get("task_stack")
 
 
 @pytest.mark.asyncio
@@ -96,3 +93,49 @@ async def test_timeout_is_respected_when_cancellation_stalls():
             await safe_cancel_task(task, label="stubborn", timeout=0.01)
         assert loop.time() - started < 0.15
         assert not task.done()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "logger_error",
+    [SystemExit("logger requested exit"), KeyboardInterrupt("logger interrupted")],
+)
+async def test_cancellation_timeout_error_is_raised_when_logger_fails(
+    logger: InMemoryLogger,
+    logger_error: BaseException,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    logger.log = AsyncMock(side_effect=logger_error)  # type: ignore[method-assign]
+
+    async with task_with_stalled_cancellation() as task:
+        with pytest.raises(TaskCancellationTimeoutError):
+            await safe_cancel_task(task, label="worker", timeout=0.01, logger=logger)
+
+    stderr = capsys.readouterr().err
+    assert f"[Logger Error] {type(logger_error).__name__}: {logger_error}" in stderr
+    assert "[Logger Fallback] Timeout while cancelling task 'worker'" in stderr
+
+
+@pytest.mark.asyncio
+async def test_safe_cancel_task_can_be_cancelled_during_timeout_reporting(
+    logger: InMemoryLogger,
+) -> None:
+    logging_started = asyncio.Event()
+
+    async def blocking_log(level: int, msg: str, **kwargs: object) -> None:
+        logging_started.set()
+        await asyncio.Event().wait()
+
+    logger.log = blocking_log  # type: ignore[method-assign]
+
+    async with task_with_stalled_cancellation() as task:
+        cancellation = asyncio.create_task(
+            safe_cancel_task(task, label="worker", timeout=0.01, logger=logger)
+        )
+        await asyncio.wait_for(logging_started.wait(), timeout=1)
+        cancellation.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await cancellation
+
+        assert cancellation.cancelled()
