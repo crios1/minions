@@ -285,6 +285,71 @@ async def test_write_arriving_during_scheduled_flush_gets_next_flush_task(
         await commit_gate.release_and_cancel_and_drain_tasks(save1, save2)
 
 
+async def test_subsequent_writes_succeed_after_scheduled_flush_failure_settles_buffered_writes(
+    make_state_store_and_logger: MakeStateStoreAndLogger,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    s, logger = await make_state_store_and_logger(
+        batch_max_queued_writes=100,
+        batch_max_flush_delay_ms=40,
+    )
+    failed_contexts = (
+        mk_ctx(i=603, size=16),
+        mk_ctx(i=604, size=24),
+    )
+    subsequent_context = mk_ctx(i=605, size=32)
+    flush_error = RuntimeError("scheduled flush failed before draining")
+    original_drain_batch_buffer = s._drain_batch_buffer
+
+    async def fail_drain_batch_buffer() -> list[PendingWrite]:
+        raise flush_error
+
+    monkeypatch.setattr(s, "_drain_batch_buffer", fail_drain_batch_buffer)
+
+    failed_write_results = await asyncio.wait_for(
+        asyncio.gather(
+            *(
+                s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx))
+                for ctx in failed_contexts
+            ),
+            return_exceptions=True,
+        ),
+        timeout=1.0,
+    )
+
+    assert all(result is flush_error for result in failed_write_results)
+    assert not s._batch_buffer
+    assert logger.has_log(
+        "scheduled batch flush failed",
+        log_kwargs={
+            "error_type": "RuntimeError",
+            "error_message": "scheduled flush failed before draining",
+            "failed_buffered_write_count": 2,
+        },
+    )
+
+    monkeypatch.setattr(s, "_drain_batch_buffer", original_drain_batch_buffer)
+
+    await asyncio.wait_for(
+        s.save_context(
+            subsequent_context.workflow_id,
+            subsequent_context.orchestration_id,
+            blob_for(subsequent_context),
+        ),
+        timeout=1.0,
+    )
+    rows = await s.get_all_contexts()
+    rows_by_id = {row.workflow_id: row for row in rows}
+
+    assert all(
+        failed_context.workflow_id not in rows_by_id
+        for failed_context in failed_contexts
+    )
+    subsequent_row = rows_by_id[subsequent_context.workflow_id]
+    assert subsequent_row.orchestration_id == subsequent_context.orchestration_id
+    assert deserialize_workflow_context_blob(subsequent_row.context) == subsequent_context
+
+
 async def test_flush_on_batch_cap(make_state_store_and_logger: MakeStateStoreAndLogger):
     s, _ = await make_state_store_and_logger(batch_max_queued_writes=3)
 

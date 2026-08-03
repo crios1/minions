@@ -782,8 +782,33 @@ class SQLiteStateStore(StateStore):
         self._batch_buffer_flush_deadline = time.monotonic() + (batch_max_flush_delay_ms / 1000.0)
         self._batch_buffer_flush_task = safe_create_task(
             self._flush_soon(),
-            on_failure=self._mn_logger._mn_log_task_failure,
+            on_failure=self._on_batch_buffer_flush_failure,
             name=f"{type(self).__name__}._flush_soon",
+        )
+
+    async def _on_batch_buffer_flush_failure(
+        self,
+        exception: BaseException,
+        task_name: str | None,
+    ) -> None:
+        async with self._batch_buffer_lock:
+            items = list(self._batch_buffer)
+            self._batch_buffer.clear()
+            self._batch_buffer_flush_deadline = None
+            self._batch_buffer_last_enqueue_at = None
+            if self._batch_buffer_flush_task is asyncio.current_task():
+                self._batch_buffer_flush_task = None
+
+        for item in items:
+            if not item.completion.done():
+                item.completion.set_exception(exception)
+
+        await self._mn_logger._mn_log_exception(
+            ERROR,
+            f"{type(self).__name__} scheduled batch flush failed",
+            exception,
+            task_name=task_name,
+            failed_buffered_write_count=len(items),
         )
 
     def _next_batch_flush_deadline(self) -> float | None:
@@ -801,6 +826,7 @@ class SQLiteStateStore(StateStore):
         return deadline
 
     async def _flush_soon(self) -> None:
+        should_reschedule_flush = True
         try:
             while True:
                 deadline = self._next_batch_flush_deadline()
@@ -810,12 +836,18 @@ class SQLiteStateStore(StateStore):
                 await asyncio.sleep(delay)
             self._batch_buffer_flush_task_is_flushing = True
             await self._flush()
+        except asyncio.CancelledError:
+            raise
+        except BaseException:
+            should_reschedule_flush = False
+            raise
         finally:
             async with self._batch_buffer_lock:
                 self._batch_buffer_flush_task_is_flushing = False
                 if self._batch_buffer and self._batch_buffer_flush_task is asyncio.current_task():
                     self._batch_buffer_flush_task = None
-                    self._ensure_flush_task_locked()
+                    if should_reschedule_flush:
+                        self._ensure_flush_task_locked()
 
     async def _flush(self) -> None:
         items = await self._drain_batch_buffer()
