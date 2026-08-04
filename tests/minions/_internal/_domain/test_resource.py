@@ -36,29 +36,6 @@ def test_lifecycle_hooks_are_not_wrapped_as_resource_methods():
     assert "request" in vars(resource)
 
 
-def test_subclass_rejects_reserved_class_variable_name():
-    with pytest.raises(UnsupportedUserCode):
-        class MyResource(Resource):
-            _mn_cls_var = 0
-
-
-def test_subclass_rejects_reserved_method_name():
-    with pytest.raises(UnsupportedUserCode):
-        class MyResource(Resource):
-            def _mn_method(self):
-                ...
-
-
-def test_subclass_rejects_safe_create_task_override():
-    with pytest.raises(
-        UnsupportedUserCode,
-        match=r"`MyResource\.safe_create_task`.*cannot be overridden",
-    ):
-        class MyResource(Resource):
-            def safe_create_task(self):  # pyright: ignore[reportIncompatibleMethodOverride]
-                ...
-
-
 def test_untracked_decorator_rejects_sync_method():
     with pytest.raises(
         TypeError,

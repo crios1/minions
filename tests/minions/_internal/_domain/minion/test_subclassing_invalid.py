@@ -14,6 +14,9 @@ from minions._internal._framework.state_store_noop import NoOpStateStore
 from minions._internal._utils.serialization import SERIALIZABLE_PRIMITIVE_TYPES
 from tests.assets.contexts.empty import EmptyContext
 from tests.assets.events.empty import EmptyEvent
+from tests.support.component_subclassing_contract import (
+    assert_mn_attribute_assignment_in_minion_step_is_rejected,
+)
 
 
 def test_missing_event_and_context_types():
@@ -25,6 +28,12 @@ def test_missing_event_and_context_types():
     assert str(excinfo.value) == (
         "MyMinion must declare both event and workflow context types. "
         "Example: class MyMinion(Minion[MyPipelineEvent, MyWorkflowCtx])"
+    )
+
+
+def test_mn_attribute_assignment_in_minion_step_is_rejected() -> None:
+    assert_mn_attribute_assignment_in_minion_step_is_rejected(
+        Minion[EmptyEvent, EmptyContext]
     )
 
 
