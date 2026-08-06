@@ -512,43 +512,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         except LookupError:
             raise RuntimeError("No workflow handle is currently bound to this workflow")
 
-    def _mn_make_workflow(self) -> tuple[Callable[..., Any], ...]:
-        "workflow is defined as the subclass's methods tagged as minion steps, in declaration order"
-        steps: list[tuple[int, str]] = []
-        sources: dict[type, list[str]] = {}
-
-        for typ in reversed(type(self).__mro__):
-            if not self._mn_is_minion_class(typ):
-                continue
-            for name, method in typ.__dict__.items():
-                if getattr(method, "__minion_step__", False):
-                    lineno = inspect.getsourcelines(method)[1]
-                    steps.append((lineno, name))
-                    sources.setdefault(typ, []).append(name)
-
-        if not sources:
-            raise TypeError(
-                f"No @minion_step methods found in {type(self).__name__}. "
-                f"At least one step must be defined to form a workflow."
-            )
-
-        if len(sources) > 1:
-            details = ", ".join(
-                f"{c.__name__}: {', '.join(names)}" for c, names in sources.items()
-            )
-            raise TypeError(
-                f"Invalid Minion composition: @minion_step methods found in "
-                f"multiple classes ({details}). Exactly one subclass may declare steps."
-            )
-
-        steps.sort()
-        workflow = tuple(getattr(self, name) for _, name in steps)
-
-        for step in workflow:
-            self._mn_validate_user_code(step, self._mn_minion_module_path)
-
-        return workflow
-
     async def _mn_startup(
         self,
         *,
