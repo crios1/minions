@@ -114,7 +114,7 @@ async def test_cancellation_before_workflow_registration_does_not_create_task(
 
 
 @pytest.mark.asyncio
-async def test_workflow_inflight_gauge_tracks_concurrent_live_workflows(
+async def test_tracks_concurrent_live_workflows(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -162,7 +162,7 @@ async def test_workflow_inflight_gauge_tracks_concurrent_live_workflows(
 
 
 @pytest.mark.asyncio
-async def test_workflow_inflight_gauge_includes_startup_resumed_workflows(
+async def test_includes_startup_resumed_workflows(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -204,7 +204,7 @@ async def test_workflow_inflight_gauge_includes_startup_resumed_workflows(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("outcome", ["success", "failure", "abort", "cancellation"])
-async def test_workflow_inflight_gauge_tracks_workflow_execution_lifecycle(
+async def test_tracks_workflow_execution_lifecycle(
     outcome: str,
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
@@ -250,7 +250,7 @@ async def test_workflow_inflight_gauge_tracks_workflow_execution_lifecycle(
 
 
 @pytest.mark.asyncio
-async def test_workflow_inflight_gauge_publishes_zero_on_shutdown(
+async def test_publishes_zero_on_shutdown(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,

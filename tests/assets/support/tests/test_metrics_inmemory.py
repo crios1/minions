@@ -255,9 +255,11 @@ class TestInMemoryMetrics:
         ) == 1.0
 
     @pytest.mark.asyncio
-    async def test_metrics_async_healthy(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_async_metric_operations_update_all_metric_types(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """
-        Drive the async facade and verify snapshots reflect the updates.
+        Drive the async metric operations and verify snapshots reflect the updates.
         """
         # Declare expected labels for stable ordering/defaults
         monkeypatch.setitem(METRIC_LABEL_NAMES, "jobs_total", ["queue", "status"])
@@ -305,7 +307,7 @@ class TestInMemoryMetrics:
         )
 
     @pytest.mark.asyncio
-    async def test_metrics_async_label_defaults_and_ordering(
+    async def test_async_metric_operations_apply_label_defaults_and_ordering(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """
@@ -329,7 +331,9 @@ class TestInMemoryMetrics:
         ) == 456.0
 
     @pytest.mark.asyncio
-    async def test_metrics_async_concurrent_updates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_async_metric_operations_preserve_all_concurrent_updates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """
         Ensure counter updates are safe when awaited concurrently across tasks.
         """

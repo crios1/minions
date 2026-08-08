@@ -87,7 +87,7 @@ async def test_save_failures_wait_for_times_out_when_disabled() -> None:
     store = FailableStateStore(InMemoryLogger())
 
     with pytest.raises(TimeoutError):
-        await store.save_failures.wait_for(timeout=0.01)
+        await store.save_failures.wait_for(1, timeout=0.01)
 
 
 @pytest.mark.asyncio

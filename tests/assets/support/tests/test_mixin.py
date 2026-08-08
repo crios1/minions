@@ -3,7 +3,7 @@ import pytest
 from tests.assets.support.mixin import Mixin
 
 
-def test_mixin_itself_cannot_be_instantiated():
+def test_single_mixin_subclass_cannot_be_instantiated():
     class A(Mixin): ...
 
     with pytest.raises(TypeError):
@@ -21,7 +21,7 @@ def test_pure_mixin_stack_cannot_be_instantiated():
         C()
 
 
-def test_mixin_with_nonmixin_base_is_instantiable_either_order():
+def test_mixin_with_non_mixin_base_is_instantiable_in_either_order():
     class Base: ...
 
     class A(Mixin): ...
@@ -35,7 +35,7 @@ def test_mixin_with_nonmixin_base_is_instantiable_either_order():
     RightFirst()
 
 
-def test_mixin_validation_does_not_participate_in_allocation_chain() -> None:
+def test_mixin_new_does_not_delegate_to_non_mixin_new() -> None:
     class NonMixinBase:
         def __new__(cls, required_arg: object) -> object:
             raise AssertionError("NonMixinBase.__new__ should not be called")

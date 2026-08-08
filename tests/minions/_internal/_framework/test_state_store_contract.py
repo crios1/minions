@@ -87,7 +87,7 @@ async def state_store_under_contract(
 # Basic Contract
 
 
-async def test_state_store_starts_empty(
+async def test_starts_empty(
     state_store_under_contract: tuple[StateStore, InMemoryLogger],
 ):
     store, _ = state_store_under_contract
@@ -97,7 +97,7 @@ async def test_state_store_starts_empty(
     assert ctxs == []
 
 
-async def test_state_store_roundtrips_runtime_context(
+async def test_roundtrips_runtime_context(
     state_store_under_contract: tuple[StateStore, InMemoryLogger],
 ):
     store, _ = state_store_under_contract
@@ -116,7 +116,7 @@ async def test_state_store_roundtrips_runtime_context(
     assert actual == expected
 
 
-async def test_state_store_overwrites_existing_workflow_context(
+async def test_overwrites_existing_workflow_context(
     state_store_under_contract: tuple[StateStore, InMemoryLogger],
 ):
     store, _ = state_store_under_contract
@@ -150,7 +150,7 @@ async def test_state_store_overwrites_existing_workflow_context(
     assert actual.error_msg == updated.error_msg
 
 
-async def test_state_store_deletes_existing_workflow_context(
+async def test_deletes_existing_workflow_context(
     state_store_under_contract: tuple[StateStore, InMemoryLogger],
 ):
     store, _ = state_store_under_contract
@@ -169,7 +169,7 @@ async def test_state_store_deletes_existing_workflow_context(
     assert all(ctx.workflow_id != workflow_id for ctx in ctxs)
 
 
-async def test_state_store_delete_missing_workflow_context_is_noop(
+async def test_delete_missing_workflow_context_is_noop(
     state_store_under_contract: tuple[StateStore, InMemoryLogger],
 ):
     store, _ = state_store_under_contract
@@ -183,7 +183,7 @@ async def test_state_store_delete_missing_workflow_context_is_noop(
 # Raw Blob Contract
 
 
-async def test_state_store_get_all_contexts_returns_blob_records(
+async def test_get_all_contexts_returns_blob_records(
     state_store_under_contract: tuple[StateStore, InMemoryLogger],
 ):
     store, _ = state_store_under_contract
@@ -216,7 +216,7 @@ async def test_state_store_get_all_contexts_returns_blob_records(
 # Orchestration Filtering
 
 
-async def test_state_store_get_contexts_for_orchestration_filters_by_identity(
+async def test_get_contexts_for_orchestration_filters_by_identity(
     state_store_under_contract: tuple[StateStore, InMemoryLogger],
 ):
     store, _ = state_store_under_contract
@@ -267,7 +267,7 @@ async def test_state_store_get_contexts_for_orchestration_filters_by_identity(
     ],
     ids=["dataclass", "msgspec-struct"],
 )
-async def test_state_store_get_contexts_for_orchestration_restores_typed_models(
+async def test_get_contexts_for_orchestration_restores_typed_models(
     state_store_under_contract: tuple[StateStore, InMemoryLogger],
     event: Any,
     context: Any,
@@ -299,7 +299,7 @@ async def test_state_store_get_contexts_for_orchestration_restores_typed_models(
 # Decode Failure Handling
 
 
-async def test_state_store_skips_legacy_unversioned_blob(
+async def test_skips_legacy_unversioned_blob(
     state_store_under_contract: tuple[StateStore, InMemoryLogger],
 ):
     store, logger = state_store_under_contract
@@ -325,7 +325,7 @@ async def test_state_store_skips_legacy_unversioned_blob(
     assert logger.has_log("StateStore failed to decode stored workflow context")
 
 
-async def test_state_store_skips_unknown_schema_blob(
+async def test_skips_unknown_schema_blob(
     state_store_under_contract: tuple[StateStore, InMemoryLogger],
 ):
     store, logger = state_store_under_contract

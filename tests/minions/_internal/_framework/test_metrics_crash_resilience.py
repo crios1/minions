@@ -14,7 +14,7 @@ from tests.assets.support.logger_inmemory import InMemoryLogger
 
 
 @pytest.mark.asyncio
-async def test_metrics_create_metric_failure_is_contained(logger: InMemoryLogger):
+async def test_create_metric_failure_is_contained(logger: InMemoryLogger):
     metrics = BoomCreateMetricMetrics(logger=logger)
 
     assert await metrics._mn_inc(MINION_WORKFLOW_STARTED_TOTAL) is None
@@ -23,7 +23,7 @@ async def test_metrics_create_metric_failure_is_contained(logger: InMemoryLogger
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("operation", ["inc", "set", "observe"])
-async def test_metrics_child_operation_failure_is_contained(
+async def test_child_operation_failure_is_contained(
     operation: str,
     logger: InMemoryLogger,
 ):
@@ -43,7 +43,7 @@ async def test_metrics_child_operation_failure_is_contained(
 
 
 @pytest.mark.asyncio
-async def test_metrics_snapshot_failures_are_contained(logger: InMemoryLogger):
+async def test_snapshot_failures_are_contained(logger: InMemoryLogger):
     metrics = BoomSnapshotsMetrics(logger=logger)
 
     assert await metrics._mn_snapshot() == {"counter": {}, "gauge": {}, "histogram": {}}

@@ -117,7 +117,7 @@ async def test_cancellation_timeout_error_is_raised_when_logger_fails(
 
 
 @pytest.mark.asyncio
-async def test_safe_cancel_task_can_be_cancelled_during_timeout_reporting(
+async def test_can_be_cancelled_during_timeout_reporting(
     logger: InMemoryLogger,
 ) -> None:
     logging_started = asyncio.Event()

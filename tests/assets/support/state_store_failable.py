@@ -31,7 +31,7 @@ class FailureControl:
             self._failure_count += 1
             self._failure_observed.notify_all()
 
-    async def wait_for(self, count: int = 1, *, timeout: float = 1.0) -> None:
+    async def wait_for(self, count: int, *, timeout: float = 1.0) -> None:
         if count < 1:
             raise ValueError("failure count must be positive")
 

@@ -166,7 +166,7 @@ async def test_produce_event_failure_is_logged_and_measured(
 
 
 @pytest.mark.asyncio
-async def test_pipeline_continues_after_produce_event_failure(
+async def test_continues_after_produce_event_failure(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
 ):

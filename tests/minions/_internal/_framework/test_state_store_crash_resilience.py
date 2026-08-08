@@ -31,7 +31,7 @@ def make_context() -> MinionWorkflowContext[CounterEvent, dict[str, Any]]:
 
 
 @pytest.mark.asyncio
-async def test_state_store_save_failure_returns_structured_result_and_logs(
+async def test_save_failure_returns_structured_result_and_logs(
     logger: InMemoryLogger,
 ):
     store = BoomSaveContextStateStore(logger=logger)
@@ -49,7 +49,7 @@ async def test_state_store_save_failure_returns_structured_result_and_logs(
 
 
 @pytest.mark.asyncio
-async def test_state_store_delete_failure_returns_structured_result_and_logs(
+async def test_delete_failure_returns_structured_result_and_logs(
     logger: InMemoryLogger,
 ):
     store = BoomDeleteContextStateStore(logger=logger)
@@ -67,7 +67,7 @@ async def test_state_store_delete_failure_returns_structured_result_and_logs(
 
 
 @pytest.mark.asyncio
-async def test_state_store_get_contexts_for_orchestration_failure_raises_and_logs(
+async def test_get_contexts_for_orchestration_failure_raises_and_logs(
     logger: InMemoryLogger,
 ):
     store = BoomGetContextsForOrchestrationStateStore(logger=logger)
@@ -80,7 +80,7 @@ async def test_state_store_get_contexts_for_orchestration_failure_raises_and_log
 
 
 @pytest.mark.asyncio
-async def test_state_store_get_all_contexts_failure_raises_and_logs(
+async def test_get_all_contexts_failure_raises_and_logs(
     logger: InMemoryLogger,
 ):
     store = BoomGetAllContextsStateStore(logger=logger)

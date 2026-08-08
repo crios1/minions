@@ -26,7 +26,7 @@ pytestmark = pytest.mark.asyncio
 # Startup Contract / Schema
 
 
-async def test_startup_creates_table_index_and_collects_measurements_even_in_manual_mode(
+async def test_creates_table_index_and_collects_measurements_even_in_manual_mode(
     make_state_store_and_logger: MakeStateStoreAndLogger,
 ):
     s, logger = await make_state_store_and_logger()
@@ -47,7 +47,7 @@ async def test_startup_creates_table_index_and_collects_measurements_even_in_man
     assert any(row[1] == "idx_workflows_orchestration_id" for row in rows)
 
 
-async def test_startup_scrubs_orphaned_probe_rows(
+async def test_scrubs_orphaned_probe_rows(
     tmp_path: Path,
     logger: InMemoryLogger,
 ):
@@ -88,7 +88,7 @@ async def test_startup_scrubs_orphaned_probe_rows(
 # SQLite PRAGMA Configuration
 
 
-async def test_startup_applies_configured_wal_autocheckpoint(
+async def test_applies_configured_wal_autocheckpoint(
     make_state_store_and_logger: MakeStateStoreAndLogger,
 ):
     configured_pages = 2048
@@ -102,7 +102,7 @@ async def test_startup_applies_configured_wal_autocheckpoint(
     assert int(row[0]) == configured_pages
 
 
-async def test_startup_applies_configured_busy_timeout(
+async def test_applies_configured_busy_timeout(
     make_state_store_and_logger: MakeStateStoreAndLogger,
 ):
     configured_ms = 7500
@@ -116,7 +116,7 @@ async def test_startup_applies_configured_busy_timeout(
     assert int(row[0]) == configured_ms
 
 
-async def test_startup_applies_configured_journal_mode(
+async def test_applies_configured_journal_mode(
     make_state_store_and_logger: MakeStateStoreAndLogger,
 ):
     configured_mode = "DELETE"
@@ -130,7 +130,7 @@ async def test_startup_applies_configured_journal_mode(
     assert str(row[0]).upper() == configured_mode
 
 
-async def test_startup_applies_configured_synchronous(
+async def test_applies_configured_synchronous(
     make_state_store_and_logger: MakeStateStoreAndLogger,
 ):
     s, _ = await make_state_store_and_logger(
@@ -146,7 +146,7 @@ async def test_startup_applies_configured_synchronous(
 # Measurement Fallback Policy
 
 
-async def test_startup_degrades_when_page_size_lookup_fails(
+async def test_degrades_when_page_size_lookup_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     logger: InMemoryLogger,
@@ -180,7 +180,7 @@ async def test_startup_degrades_when_page_size_lookup_fails(
         await logger._mn_shutdown()
 
 
-async def test_startup_degrades_when_page_size_is_unusable(
+async def test_degrades_when_page_size_is_unusable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     logger: InMemoryLogger,
@@ -209,7 +209,7 @@ async def test_startup_degrades_when_page_size_is_unusable(
         await logger._mn_shutdown()
 
 
-async def test_startup_uses_fallback_measurements_when_commit_timing_fails_without_cleanup_failure(
+async def test_uses_fallback_measurements_when_commit_timing_fails_without_cleanup_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     logger: InMemoryLogger,
@@ -307,7 +307,7 @@ async def test_measure_commit_latency_percentiles_raises_when_measurement_and_pr
 # Startup Resource Cleanup
 
 
-async def test_startup_closes_connection_when_startup_phase_fails(
+async def test_closes_connection_when_startup_phase_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     logger: InMemoryLogger,
@@ -340,7 +340,7 @@ async def test_startup_closes_connection_when_startup_phase_fails(
     assert s._db is None
 
 
-async def test_startup_propagates_commit_measurement_probe_cleanup_failure(
+async def test_propagates_commit_measurement_probe_cleanup_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     logger: InMemoryLogger,
@@ -372,7 +372,7 @@ async def test_startup_propagates_commit_measurement_probe_cleanup_failure(
             s._db = None
 
 
-async def test_startup_probe_raises_when_cleanup_delete_fails(
+async def test_probe_raises_when_cleanup_delete_fails(
     monkeypatch: pytest.MonkeyPatch,
     logger: InMemoryLogger,
 ):
@@ -388,7 +388,7 @@ async def test_startup_probe_raises_when_cleanup_delete_fails(
         await s._run_startup_probe()
 
 
-async def test_startup_probe_preserves_primary_failure_when_cleanup_delete_also_fails(
+async def test_probe_preserves_primary_failure_when_cleanup_delete_also_fails(
     monkeypatch: pytest.MonkeyPatch,
     logger: InMemoryLogger,
 ):

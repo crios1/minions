@@ -67,7 +67,7 @@ def _process_group_exists(process_group_id: int) -> bool:
     return True
 
 
-def test_process_termination_stops_user_code_after_cancellation_timeout() -> None:
+def test_stops_user_code_after_cancellation_timeout() -> None:
     process = subprocess.Popen(
         [sys.executable, "-m", _STALLED_WORKFLOW_PROCESS_MODULE],
         stdout=subprocess.PIPE,

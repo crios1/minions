@@ -4,7 +4,7 @@ from typing import Callable
 import pytest
 
 from minions import Minion, minion_step
-from minions._internal._framework.logger import ERROR
+from minions._internal._framework.logger import ERROR, WARNING
 from minions._internal._framework.metrics_constants import (
     LABEL_MINION,
     LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE,
@@ -48,33 +48,33 @@ async def _wait_until(
 
 
 @pytest.mark.asyncio
-async def test_workflow_persistence_continue_on_failure_advances_and_retries_at_next_checkpoint(
+async def test_continue_on_failure_policy_advances_after_save_failure_and_persists_next_checkpoint(  # noqa: E501
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
 ):
     step_calls: list[str] = []
 
-    class ContinueOnFailureMinion(Minion[EmptyEvent, EmptyContext]):
+    class TransientSaveFailureMinion(Minion[EmptyEvent, EmptyContext]):
         @minion_step
-        async def step_1(self):
-            step_calls.append("step_1")
+        async def enable_save_failures(self):
+            step_calls.append("enable_save_failures")
             store.save_failures.enable()
 
         @minion_step
-        async def step_2(self):
-            step_calls.append("step_2")
+        async def disable_save_failures(self):
+            step_calls.append("disable_save_failures")
             store.save_failures.disable()
 
         @minion_step
-        async def step_3(self):
-            step_calls.append("step_3")
+        async def complete_workflow(self):
+            step_calls.append("complete_workflow")
 
     store = FailableStateStore(logger=logger)
-    m = ContinueOnFailureMinion(
+    m = TransientSaveFailureMinion(
         minion_instance_id="dummy-minion-instance-id",
         orchestration_id="dummy-orchestration-id",
         minion_module_path="dummy-minion-module-path",
-        config_path="dummy-config-path",
+        config_path=None,
         state_store=store,
         metrics=metrics,
         logger=logger,
@@ -82,14 +82,17 @@ async def test_workflow_persistence_continue_on_failure_advances_and_retries_at_
         minion_config_id="",
         pipeline_id="dummy-pipeline-id",
         workflow_persistence_failure_policy="continue-on-failure",
-        workflow_persistence_retry_delay_seconds=0.01,
     )
 
     m._mn_mark_running()
     await m._mn_handle_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
 
-    assert step_calls == ["step_1", "step_2", "step_3"]
+    assert step_calls == [
+        "enable_save_failures",
+        "disable_save_failures",
+        "complete_workflow",
+    ]
     assert store.save_failures.count == 1
     assert any(
         deserialize_workflow_context_blob(stored.context).next_step_index == 2
@@ -117,32 +120,30 @@ async def test_workflow_persistence_continue_on_failure_advances_and_retries_at_
 
 
 @pytest.mark.asyncio
-async def test_workflow_persistence_idle_until_persisted_blocks_next_step_until_retry_succeeds(
+async def test_idle_until_persisted_policy_idles_workflow_until_save_retry_succeeds(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
 ):
     step_calls: list[str] = []
-    step_1_done = asyncio.Event()
-    step_2_started = asyncio.Event()
+    workflow_continued = asyncio.Event()
 
-    class IdleUntilPersistedMinion(Minion[EmptyEvent, EmptyContext]):
+    class TransientSaveFailureMinion(Minion[EmptyEvent, EmptyContext]):
         @minion_step
-        async def step_1(self):
-            step_calls.append("step_1")
+        async def enable_save_failures(self):
+            step_calls.append("enable_save_failures")
             store.save_failures.enable()
-            step_1_done.set()
 
         @minion_step
-        async def step_2(self):
-            step_calls.append("step_2")
-            step_2_started.set()
+        async def continue_after_persistence(self):
+            step_calls.append("continue_after_persistence")
+            workflow_continued.set()
 
     store = FailableStateStore(logger=logger)
-    m = IdleUntilPersistedMinion(
+    m = TransientSaveFailureMinion(
         minion_instance_id="dummy-minion-instance-id",
         orchestration_id="dummy-orchestration-id",
         minion_module_path="dummy-minion-module-path",
-        config_path="dummy-config-path",
+        config_path=None,
         state_store=store,
         metrics=metrics,
         logger=logger,
@@ -150,28 +151,28 @@ async def test_workflow_persistence_idle_until_persisted_blocks_next_step_until_
         minion_config_id="",
         pipeline_id="dummy-pipeline-id",
         workflow_persistence_failure_policy="idle-until-persisted",
-        workflow_persistence_retry_delay_seconds=0.01,
+        workflow_persistence_retry_delay_seconds=0.1,
+        workflow_persistence_retry_jitter_ratio=0.0,
     )
 
     m._mn_mark_running()
     await m._mn_handle_event(EmptyEvent())
-    await asyncio.wait_for(step_1_done.wait(), timeout=1.0)
-    await store.save_failures.wait_for(2)
+    await store.save_failures.wait_for(1)
 
-    assert step_calls == ["step_1"]
-    assert not step_2_started.is_set()
+    assert step_calls == ["enable_save_failures"]
+    assert not workflow_continued.is_set()
 
     store.save_failures.disable()
-    await asyncio.wait_for(step_2_started.wait(), timeout=1.0)
+    await asyncio.wait_for(workflow_continued.wait(), timeout=1.0)
     await m._mn_wait_until_workflows_idle(timeout=2)
 
-    assert step_calls == ["step_1", "step_2"]
-    assert store.save_failures.count == 2
+    assert step_calls == ["enable_save_failures", "continue_after_persistence"]
+    assert store.save_failures.count == 1
     assert logger.has_log("Workflow idled waiting for persistence")
     assert logger.has_log("Workflow persistence resumed")
-    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 6
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 5
     assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == 4
-    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL) == 2
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL) == 1
     blocked_value = metrics.snapshot_gauge_value(
         MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
         {
@@ -188,35 +189,35 @@ async def test_workflow_persistence_idle_until_persisted_blocks_next_step_until_
 
 
 @pytest.mark.asyncio
-async def test_workflow_persistence_blocked_gauge_counts_concurrent_workflows_for_same_label_set(
+async def test_persistence_blocked_gauge_tracks_concurrent_workflows_for_same_label_set(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
 ):
     step_calls: list[str] = []
-    step_1_count = 0
-    both_workflows_reached_step_1 = asyncio.Event()
+    synchronized_workflow_count = 0
+    both_workflows_synchronized = asyncio.Event()
 
-    class ConcurrentIdleUntilPersistedMinion(Minion[EmptyEvent, EmptyContext]):
+    class ConcurrentSaveFailureMinion(Minion[EmptyEvent, EmptyContext]):
         @minion_step
-        async def step_1(self):
-            nonlocal step_1_count
-            step_calls.append("step_1")
-            step_1_count += 1
-            if step_1_count == 2:
+        async def synchronize_before_save_failure(self):
+            nonlocal synchronized_workflow_count
+            step_calls.append("synchronize_before_save_failure")
+            synchronized_workflow_count += 1
+            if synchronized_workflow_count == 2:
                 store.save_failures.enable()
-                both_workflows_reached_step_1.set()
-            await both_workflows_reached_step_1.wait()
+                both_workflows_synchronized.set()
+            await both_workflows_synchronized.wait()
 
         @minion_step
-        async def step_2(self):
-            step_calls.append("step_2")
+        async def continue_after_persistence(self):
+            step_calls.append("continue_after_persistence")
 
     store = FailableStateStore(logger=logger)
-    m = ConcurrentIdleUntilPersistedMinion(
+    m = ConcurrentSaveFailureMinion(
         minion_instance_id="dummy-minion-instance-id",
         orchestration_id="dummy-orchestration-id",
         minion_module_path="dummy-minion-module-path",
-        config_path="dummy-config-path",
+        config_path=None,
         state_store=store,
         metrics=metrics,
         logger=logger,
@@ -255,39 +256,42 @@ async def test_workflow_persistence_blocked_gauge_counts_concurrent_workflows_fo
         )
     )
     assert metrics.snapshot_gauge_value(MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE, labels) == 2
-    assert step_calls == ["step_1", "step_1"]
+    assert step_calls == [
+        "synchronize_before_save_failure",
+        "synchronize_before_save_failure",
+    ]
 
     store.save_failures.disable()
     await m._mn_wait_until_workflows_idle(timeout=2)
 
-    assert step_calls.count("step_2") == 2
+    assert step_calls.count("continue_after_persistence") == 2
     assert metrics.snapshot_gauge_value(MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE, labels) == 0
 
 
 @pytest.mark.asyncio
-async def test_workflow_persistence_idle_until_persisted_relogs_and_escalates_sustained_failure(
+async def test_idle_until_persisted_policy_reports_retry_progress_and_escalates_logs_during_sustained_save_failure(  # noqa: E501
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
 ):
-    step_1_done = asyncio.Event()
-    step_2_started = asyncio.Event()
+    save_failures_enabled = asyncio.Event()
+    workflow_continued = asyncio.Event()
 
-    class SustainedIdleMinion(Minion[EmptyEvent, EmptyContext]):
+    class SustainedSaveFailureMinion(Minion[EmptyEvent, EmptyContext]):
         @minion_step
-        async def step_1(self):
+        async def enable_save_failures(self):
             store.save_failures.enable()
-            step_1_done.set()
+            save_failures_enabled.set()
 
         @minion_step
-        async def step_2(self):
-            step_2_started.set()
+        async def continue_after_persistence(self):
+            workflow_continued.set()
 
     store = FailableStateStore(logger=logger)
-    m = SustainedIdleMinion(
+    m = SustainedSaveFailureMinion(
         minion_instance_id="dummy-minion-instance-id",
         orchestration_id="dummy-orchestration-id",
         minion_module_path="dummy-minion-module-path",
-        config_path="dummy-config-path",
+        config_path=None,
         state_store=store,
         metrics=metrics,
         logger=logger,
@@ -305,8 +309,8 @@ async def test_workflow_persistence_idle_until_persisted_relogs_and_escalates_su
 
     m._mn_mark_running()
     await m._mn_handle_event(EmptyEvent())
-    await asyncio.wait_for(step_1_done.wait(), timeout=1.0)
-    assert not step_2_started.is_set()
+    await asyncio.wait_for(save_failures_enabled.wait(), timeout=1.0)
+    assert not workflow_continued.is_set()
 
     await _wait_until(
         lambda: (
@@ -316,19 +320,20 @@ async def test_workflow_persistence_idle_until_persisted_relogs_and_escalates_su
         timeout=1.0,
     )
     idle_logs = [log for log in logger.logs if log.msg == "Workflow idled waiting for persistence"]
-    assert any(log.level == ERROR for log in idle_logs)
+    initial_idle_log = idle_logs[0]
+    latest_idle_log = idle_logs[-1]
+
+    assert initial_idle_log.level == WARNING
+    assert latest_idle_log.level == ERROR
     assert (
-        idle_logs[-1].kwargs["persistence_retry_attempts"]
-        > idle_logs[0].kwargs["persistence_retry_attempts"]
+        latest_idle_log.kwargs["persistence_retry_attempts"]
+        > initial_idle_log.kwargs["persistence_retry_attempts"]
     )
-    assert {log.kwargs["persistence_retry_delay_seconds"] for log in idle_logs} <= {
-        0.01,
-        0.02,
-        0.04,
-    }
+    assert initial_idle_log.kwargs["persistence_retry_delay_seconds"] == 0.01
+    assert latest_idle_log.kwargs["persistence_retry_delay_seconds"] == 0.04
 
     store.save_failures.disable()
-    await asyncio.wait_for(step_2_started.wait(), timeout=1.0)
+    await asyncio.wait_for(workflow_continued.wait(), timeout=1.0)
     await m._mn_wait_until_workflows_idle(timeout=2)
 
 
@@ -416,7 +421,7 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds(
 
 
 @pytest.mark.asyncio
-async def test_workflow_persistence_serialization_failure_is_non_retryable_and_preserves_prior_checkpoint(  # noqa: E501
+async def test_serialization_failure_is_non_retryable_and_preserves_prior_checkpoint(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -426,21 +431,21 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
     class UnserializableValue:
         pass
 
-    class MyMinion(Minion[EmptyEvent, IntValueContext]):
+    class UnserializableContextMinion(Minion[EmptyEvent, IntValueContext]):
         @minion_step
-        async def step_1(self):
-            step_calls.append("step_1")
+        async def make_context_unserializable(self):
+            step_calls.append("make_context_unserializable")
             self.context.value = UnserializableValue()  # pyright: ignore[reportAttributeAccessIssue]
 
         @minion_step
-        async def step_2(self):
-            step_calls.append("step_2")
+        async def continue_workflow(self):
+            step_calls.append("continue_workflow")
 
-    m = MyMinion(
+    m = UnserializableContextMinion(
         minion_instance_id="dummy-minion-instance-id",
         orchestration_id="dummy-orchestration-id",
         minion_module_path="dummy-minion-module-path",
-        config_path="dummy-config-path",
+        config_path=None,
         state_store=state_store,
         metrics=metrics,
         logger=logger,
@@ -448,14 +453,13 @@ async def test_workflow_persistence_serialization_failure_is_non_retryable_and_p
         minion_config_id="",
         pipeline_id="dummy-pipeline-id",
         workflow_persistence_failure_policy="idle-until-persisted",
-        workflow_persistence_retry_delay_seconds=0.01,
     )
 
     m._mn_mark_running()
     await m._mn_handle_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
 
-    assert step_calls == ["step_1"]
+    assert step_calls == ["make_context_unserializable"]
     persisted_contexts = await state_store.get_all_contexts()
     assert len(persisted_contexts) == 1
     decoded = deserialize_workflow_context_blob(persisted_contexts[0].context)

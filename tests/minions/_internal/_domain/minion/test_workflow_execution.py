@@ -33,7 +33,7 @@ from tests.assets.support.state_store_inmemory import InMemoryStateStore
 
 
 @pytest.mark.asyncio
-async def test_workflow_aborted_increments_aborted_counter(
+async def test_abort_increments_aborted_counter(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -84,7 +84,7 @@ async def test_workflow_aborted_increments_aborted_counter(
 
 
 @pytest.mark.asyncio
-async def test_workflow_failure_is_terminal_deletes_checkpoint_and_increments_failed_counter(
+async def test_failure_is_terminal_deletes_checkpoint_and_increments_failed_counter(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -152,7 +152,7 @@ async def test_workflow_failure_is_terminal_deletes_checkpoint_and_increments_fa
 
 
 @pytest.mark.asyncio
-async def test_workflow_cancellation_records_interrupted_duration_status_and_keeps_context(
+async def test_cancellation_records_interrupted_duration_status_and_keeps_context(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -222,7 +222,7 @@ async def test_workflow_cancellation_records_interrupted_duration_status_and_kee
 
 
 @pytest.mark.asyncio
-async def test_workflow_step_inflight_gauge_tracks_concurrent_step_executions(
+async def test_step_inflight_gauge_tracks_concurrent_executions_of_same_step(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -271,7 +271,7 @@ async def test_workflow_step_inflight_gauge_tracks_concurrent_step_executions(
 
 
 @pytest.mark.asyncio
-async def test_workflow_step_inflight_gauge_tracks_each_step_independently(
+async def test_step_inflight_gauge_tracks_each_step_independently(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -404,7 +404,7 @@ async def test_runtime_guard_rejects_nested_step_invocation_via_indirect_call(
 
 
 @pytest.mark.asyncio
-async def test_minion_steps_can_access_event_and_context_across_workflow_steps(
+async def test_different_steps_share_event_and_context(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
@@ -448,7 +448,7 @@ async def test_minion_steps_can_access_event_and_context_across_workflow_steps(
 
 class TestMinionWorkflowHandle:
     @pytest.mark.asyncio
-    async def test_workflow_handle_is_available_during_workflow_steps(self):
+    async def test_is_available_during_workflow_steps(self):
         captured_handles: list[MinionWorkflowHandle] = []
 
         class MyMinion(Minion[EmptyEvent, EmptyContext]):
@@ -479,7 +479,7 @@ class TestMinionWorkflowHandle:
         assert captured_handles[0].workflow_id
 
     @pytest.mark.asyncio
-    async def test_workflow_handle_values_match_framework_log_and_state_identity(
+    async def test_values_match_framework_log_and_state_identity(
         self,
         logger: InMemoryLogger,
         state_store: InMemoryStateStore,
@@ -523,7 +523,7 @@ class TestMinionWorkflowHandle:
         assert workflow_started.kwargs["orchestration_id"] == handle.orchestration_id
         assert workflow_started.kwargs["workflow_id"] == handle.workflow_id
 
-    def test_workflow_handle_is_read_only(self):
+    def test_is_read_only(self):
         handle = MinionWorkflowHandle(
             orchestration_id="dummy-orchestration-id",
             workflow_id="dummy-workflow-id",
@@ -532,7 +532,7 @@ class TestMinionWorkflowHandle:
         with pytest.raises(FrozenInstanceError):
             handle.workflow_id = "workflow-2"  # pyright: ignore[reportAttributeAccessIssue]
 
-    def test_workflow_handle_outside_active_workflow_raises_clear_error(self):
+    def test_outside_active_workflow_raises_clear_error(self):
         class MyMinion(Minion[EmptyEvent, EmptyContext]):
             @minion_step
             async def step_1(self): ...

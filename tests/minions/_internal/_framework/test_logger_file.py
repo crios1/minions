@@ -16,7 +16,7 @@ class Detail(msgspec.Struct):
 
 
 @pytest.mark.asyncio
-async def test_file_logger_writes_valid_jsonl(tmp_path: Path) -> None:
+async def test_writes_valid_jsonl(tmp_path: Path) -> None:
     logger = FileLogger(stdout=False, log_dir=str(tmp_path), log_filename_prefix="test-log")
 
     await logger.log(
@@ -39,7 +39,7 @@ async def test_file_logger_writes_valid_jsonl(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_file_logger_stdout_extras_use_json_text(
+async def test_stdout_formats_structured_log_fields_as_json(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     logger = FileLogger(stdout=True, log_dir=str(tmp_path), log_filename_prefix="stdout-log")

@@ -90,7 +90,7 @@ def verifier_factory(
     return _mk_verifier
 
 
-def test_verifier_require_spies_invariant_message_is_actionable(verifier_factory: VerifierFactory):
+def test_require_spies_invariant_message_is_actionable(verifier_factory: VerifierFactory):
     verifier = verifier_factory(
         ScenarioPlan([], pipeline_event_counts={}),
         ScenarioRunResult(spies=None, receipts=[]),

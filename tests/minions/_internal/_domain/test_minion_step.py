@@ -1,40 +1,31 @@
 import inspect
-from collections.abc import Callable
-from typing import Any
 
 import pytest
 
 from minions._internal._domain.minion_step import minion_step
 
 
-def is_minion_step(fn: Callable[..., Any]) -> bool:
-    attr = getattr(fn, "__minion_step__", None)
-    return isinstance(attr, dict)
-
-
 @pytest.mark.asyncio
-async def test_minion_step_no_parens():
+async def test_can_be_used_as_direct_decorator():
     @minion_step
     async def step1():
         ...
 
     assert inspect.iscoroutinefunction(step1)
-    assert is_minion_step(step1)
-    assert getattr(step1, "__minion_step__")["name"] == "step1"
+    assert getattr(step1, "__minion_step__", None) == {"name": "step1"}
 
 
 @pytest.mark.asyncio
-async def test_minion_step_with_parens():
+async def test_can_be_used_as_decorator_factory():
     @minion_step()
     async def step2():
         ...
 
     assert inspect.iscoroutinefunction(step2)
-    assert is_minion_step(step2)
-    assert getattr(step2, "__minion_step__")["name"] == "step2"
+    assert getattr(step2, "__minion_step__", None) == {"name": "step2"}
 
 
-def test_minion_step_sync_function_raises():
+def test_rejects_sync_function():
     with pytest.raises(TypeError):
         @minion_step  # pyright: ignore[reportArgumentType]
         def not_async() -> None:  # pyright: ignore[reportUnusedFunction]

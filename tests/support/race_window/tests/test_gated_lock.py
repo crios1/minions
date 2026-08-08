@@ -6,7 +6,7 @@ from tests.support.race_window import GatedLock
 
 
 @pytest.mark.asyncio
-async def test_gated_lock_holds_production_code_until_progress_is_allowed() -> None:
+async def test_holds_production_code_until_progress_is_allowed() -> None:
     lock = GatedLock()
     completed = False
 
@@ -31,7 +31,7 @@ async def test_gated_lock_holds_production_code_until_progress_is_allowed() -> N
 
 
 @pytest.mark.asyncio
-async def test_gated_lock_releases_when_lock_holder_is_cancelled() -> None:
+async def test_releases_when_lock_holder_is_cancelled() -> None:
     lock = GatedLock()
 
     async def use_lock() -> None:
@@ -51,7 +51,7 @@ async def test_gated_lock_releases_when_lock_holder_is_cancelled() -> None:
 
 
 @pytest.mark.asyncio
-async def test_gated_lock_wait_times_out_before_lock_is_held() -> None:
+async def test_wait_times_out_before_lock_is_held() -> None:
     lock = GatedLock()
 
     with pytest.raises(TimeoutError):
