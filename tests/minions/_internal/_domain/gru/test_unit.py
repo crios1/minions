@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import hashlib
 import json
+import threading
 import types
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -201,13 +202,20 @@ class TestUnit:
         )
         assert len(key) == 44
 
-    def test_config_id_is_used_for_toml_config_identity(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_config_id_is_used_for_toml_config_identity(
+        self,
+        tmp_path: Path,
+    ) -> None:
         config_path = tmp_path / "renamable.toml"
         config_path.write_text(
             f'_minions_config_id = "{CONFIG_ID}"\n\n[config]\nname = "alpha"\n'
         )
 
-        assert Gru._get_config_identity(str(config_path)) == CONFIG_ID
+        resolved_path, identity = await Gru._resolve_file_config_path_and_identity(str(config_path))
+
+        assert resolved_path == str(config_path.resolve())
+        assert identity == CONFIG_ID
         assert Gru._make_orchestration_id(
             pipeline_id="pipeline-id",
             minion_id="minion-id",
@@ -218,30 +226,88 @@ class TestUnit:
             pipeline_id="pipeline-id",
         )
 
-    def test_config_id_is_used_for_json_config_identity(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_config_id_is_used_for_json_config_identity(
+        self,
+        tmp_path: Path,
+    ) -> None:
         config_path = tmp_path / "renamable.json"
         config_path.write_text(f'{{"_minions_config_id": "{CONFIG_ID}", "name": "alpha"}}')
 
-        assert Gru._get_config_identity(str(config_path)) == CONFIG_ID
+        resolved_path, identity = await Gru._resolve_file_config_path_and_identity(str(config_path))
 
-    def test_config_id_is_used_for_yaml_config_identity(self, tmp_path: Path) -> None:
+        assert resolved_path == str(config_path.resolve())
+        assert identity == CONFIG_ID
+
+    @pytest.mark.asyncio
+    async def test_config_id_is_used_for_yaml_config_identity(
+        self,
+        tmp_path: Path,
+    ) -> None:
         config_path = tmp_path / "renamable.yaml"
         config_path.write_text(f'_minions_config_id: "{CONFIG_ID}"\nname: alpha\n')
 
-        assert Gru._get_config_identity(str(config_path)) == CONFIG_ID
+        resolved_path, identity = await Gru._resolve_file_config_path_and_identity(str(config_path))
 
-    def test_idless_config_keeps_path_fallback_identity(self, tmp_path: Path) -> None:
+        assert resolved_path == str(config_path.resolve())
+        assert identity == CONFIG_ID
+
+    @pytest.mark.asyncio
+    async def test_idless_config_keeps_path_fallback_identity(
+        self,
+        tmp_path: Path,
+    ) -> None:
         config_path = tmp_path / "fallback.toml"
         config_path.write_text('[config]\nname = "alpha"\n')
 
-        assert Gru._get_config_identity(str(config_path)) == config_path.resolve().as_posix()
+        resolved_path, identity = await Gru._resolve_file_config_path_and_identity(str(config_path))
 
-    def test_config_id_must_be_canonical_uuid(self, tmp_path: Path) -> None:
+        assert resolved_path == str(config_path.resolve())
+        assert identity == config_path.resolve().as_posix()
+
+    @pytest.mark.asyncio
+    async def test_config_id_must_be_canonical_uuid(self, tmp_path: Path) -> None:
         config_path = tmp_path / "bad.toml"
         config_path.write_text('_minions_config_id = "not-a-uuid"\n')
 
         with pytest.raises(ValueError, match="config id"):
-            Gru._get_config_identity(str(config_path))
+            await Gru._resolve_file_config_path_and_identity(str(config_path))
+
+    @pytest.mark.asyncio
+    async def test_file_config_path_and_identity_are_resolved_off_event_loop(
+        self,
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        event_loop_thread_id = threading.get_ident()
+        resolution_thread_ids: list[int] = []
+
+        async with managed_gru_context(
+            logger=logger,
+            metrics=metrics,
+            state_store=NoOpStateStore(),
+        ) as gru:
+
+            def get_config_id_and_record_thread_id(_config_path: str) -> str:
+                resolution_thread_ids.append(threading.get_ident())
+                return CONFIG_ID
+
+            monkeypatch.setattr(
+                "minions._internal._domain.gru.get_config_id",
+                get_config_id_and_record_thread_id,
+            )
+
+            result = await gru.start_orchestration(
+                pipeline="missing.pipeline",
+                minion="missing.minion",
+                minion_config_path="config.toml",
+            )
+
+        assert result.success is False
+        assert len(resolution_thread_ids) == 1
+        assert resolution_thread_ids[0] != event_loop_thread_id
 
     @pytest.mark.asyncio
     async def test_start_and_stop_delegate_to_canonical_methods(
@@ -279,9 +345,7 @@ class TestUnit:
 
         assert start_result.success
         assert stop_result.success
-        assert start_calls == [
-            ("dummy-pipeline", "dummy-minion", None, "dummy-minion-config-path")
-        ]
+        assert start_calls == [("dummy-pipeline", "dummy-minion", None, "dummy-minion-config-path")]
         assert stop_calls == ["dummy-orchestration-id"]
 
     def patch_sleep_cancel_after(self, monkeypatch: pytest.MonkeyPatch, n: int) -> None:
@@ -533,9 +597,7 @@ class TestUnit:
                 assert not snapshot_task.done()
 
             snapshot = await snapshot_task
-            minion_instance_id = snapshot.minion_instance_for_orchestration(
-                result.orchestration_id
-            )
+            minion_instance_id = snapshot.minion_instance_for_orchestration(result.orchestration_id)
             assert minion_instance_id is not None
             assert snapshot.minion_instances == {minion_instance_id}
             assert snapshot.orchestrations == {result.orchestration_id}
@@ -555,9 +617,10 @@ class TestUnit:
             assert snapshot.resource_dependencies_by_dependent_resource == {}
             assert snapshot.resource_dependents_by_dependency_resource == {}
             assert snapshot.resource_reference_counts == {identified_resource_id: 1}
-            assert snapshot.minion_instance_for_orchestration(
-                result.orchestration_id
-            ) == minion_instance_id
+            assert (
+                snapshot.minion_instance_for_orchestration(result.orchestration_id)
+                == minion_instance_id
+            )
             assert (
                 snapshot.pipeline_for_orchestration(result.orchestration_id)
                 == identified_pipeline_id

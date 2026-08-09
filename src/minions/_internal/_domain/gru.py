@@ -547,19 +547,22 @@ class Gru:
         return f"<inline:{digest}>"
 
     @staticmethod
-    def _get_config_identity(minion_config_path: str | None) -> str:
-        if not minion_config_path:
-            return ""
-        p = Path(minion_config_path)
-        if minion_config_path.startswith("<inline:"):
-            return minion_config_path
-        config_id = get_config_id(minion_config_path)
-        if config_id is not None:
-            return config_id
-        try:
-            return p.resolve().relative_to(Path.cwd().resolve()).as_posix()
-        except ValueError:
-            return p.resolve().as_posix()
+    async def _resolve_file_config_path_and_identity(
+        minion_config_path: str,
+    ) -> tuple[str, str]:
+        def resolve() -> tuple[str, str]:
+            path = Path(minion_config_path.strip()).resolve()
+            resolved_path = str(path)
+            config_id = get_config_id(resolved_path)
+            if config_id is not None:
+                return resolved_path, config_id
+            try:
+                identity = path.relative_to(Path.cwd().resolve()).as_posix()
+            except ValueError:
+                identity = path.as_posix()
+            return resolved_path, identity
+
+        return await asyncio.to_thread(resolve)
 
     def _prepare_orchestration_start(
         self,
@@ -567,6 +570,7 @@ class Gru:
         minion_module_path: str,
         pipeline_module_path: str,
         minion_config_path: str | None,
+        minion_config_identity: str,
         inline_minion_config: object | None,
         minion_cls: type[Minion[Any, Any]] | None,
         pipeline_cls: type[Pipeline[Any]] | None,
@@ -582,7 +586,6 @@ class Gru:
             if pipeline_cls is not None
             else pipeline_module_path
         )
-        minion_config_identity = self._get_config_identity(minion_config_path)
         orchestration_id = self._make_orchestration_id(
             pipeline_id=pipeline_identity,
             minion_id=minion_identity,
@@ -2078,6 +2081,9 @@ class Gru:
                     reason="Gru is shutting down.",
                 )
 
+            effective_minion_config_path: str | None = None
+            minion_config_identity = ""
+
             # string based start
             if isinstance(minion, str):
                 if not isinstance(pipeline, str):
@@ -2096,11 +2102,13 @@ class Gru:
                     )
                 minion_module_path = minion.strip()
                 pipeline_module_path = pipeline.strip()
-                minion_config_path = (
-                    None
-                    if not minion_config_path
-                    else str(Path(minion_config_path.strip()).resolve())
-                )
+                if minion_config_path:
+                    (
+                        effective_minion_config_path,
+                        minion_config_identity,
+                    ) = await self._resolve_file_config_path_and_identity(
+                        minion_config_path,
+                    )
                 try:
                     minion_cls: type[Minion[Any, Any]] | None = self._get_minion_class(
                         minion_module_path
@@ -2137,11 +2145,11 @@ class Gru:
                 minion_module_path = minion_cls.__module__
                 pipeline_module_path = pipeline_cls.__module__
                 try:
-                    minion_config_path = (
-                        self._make_inline_config_identity(minion_config)
-                        if minion_config is not None
-                        else None
-                    )
+                    if minion_config is not None:
+                        minion_config_identity = self._make_inline_config_identity(
+                            minion_config
+                        )
+                        effective_minion_config_path = minion_config_identity
                 except TypeError as e:
                     return StartResult(
                         success=False,
@@ -2157,7 +2165,8 @@ class Gru:
             spec = self._prepare_orchestration_start(
                 minion_module_path=minion_module_path,
                 pipeline_module_path=pipeline_module_path,
-                minion_config_path=minion_config_path,
+                minion_config_path=effective_minion_config_path,
+                minion_config_identity=minion_config_identity,
                 inline_minion_config=minion_config,
                 minion_cls=minion_cls,
                 pipeline_cls=pipeline_cls,
