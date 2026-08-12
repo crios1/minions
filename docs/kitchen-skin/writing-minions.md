@@ -2,7 +2,7 @@
 
 Minions persist workflow context and step index before every step, then resume from that index after restarts or failures. That gives you durability and ordering, but it **does not make your steps idempotent**—the same step can be invoked again if a run is retried. You own guarding against duplicate work.
 
-This is intentional: the runtime has “at least once” semantics for step execution. A long-running step can be interrupted (process crash, deploy, network blip), so guaranteeing “exactly once” would be fake safety. Many real steps do I/O, HTTP calls, or wait for external state changes—any of those can be cut short. Designing for idempotency keeps your workflow correct even when a step is replayed, like when resuming inflight workflows after a power failure.
+This is intentional: the runtime has “at least once” semantics for step execution. A long-running step can be interrupted (process crash, deploy, network blip), so guaranteeing “exactly once” would be fake safety. Many real steps do I/O, HTTP calls, or wait for external state changes—any of those can be cut short. Designing for idempotency keeps your workflow correct even when a step is replayed, like when continuing unfinished workflows after a power failure.
 
 One easy pattern is to stash completion markers in your context:
 

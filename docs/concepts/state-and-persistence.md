@@ -1,6 +1,6 @@
 # State and Persistence
 
-Minions treats workflow context as durable. Before each step executes, Gru saves context + step index to the configured `StateStore`; when a workflow finishes or aborts, the entry is removed. On startup, Gru reloads any saved contexts and resumes from the stored step index.
+Minions treats workflow context as durable. Before each step executes, Gru saves context + step index to the configured `StateStore`; when a workflow finishes or aborts, the entry is removed. When an orchestration starts, Gru reloads its saved contexts and continues unfinished workflows from their stored step indexes.
 
 ## Defaults
 
@@ -19,6 +19,28 @@ Minions treats workflow context as durable. Before each step executes, Gru saves
   resume; raise `AbortWorkflow` for an intentional terminal outcome.
 - Successful and aborted workflows resolve by durably deleting their checkpoints.
 - Gru logs workflow/step transitions and surfaces errors with user file/line when available.
+
+## Starting and stopping orchestrations
+
+An orchestration is either running or stopped. While running, it receives
+Pipeline events, creates a workflow for each event, and runs any unfinished
+workflows saved under the same Minion, Pipeline, and config identity. Starting
+it again makes it live and continues that work; Gru has no separate resume
+operation.
+
+Workflows that are currently running are **in flight**. Workflows that remain
+persisted while the orchestration is stopped are **saved unfinished
+workflows**. When a workflow finishes, its persisted entry is removed.
+
+Stopping an orchestration stops new workflow creation and gives current
+workflows an opportunity to finish. Workflows that do not finish remain saved
+and continue the next time the same orchestration starts. Because checkpoints
+are written before steps, the step that was running when the orchestration
+stopped may run again.
+
+Events produced while an orchestration is stopped are not delivered to it. If
+its Pipeline is shared, the Pipeline may continue delivering those events to
+other running orchestrations.
 
 ## Durable component identity
 

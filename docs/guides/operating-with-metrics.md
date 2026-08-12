@@ -14,6 +14,18 @@ If you only watch one group of metrics for workflow correctness, watch the workf
 
 These metrics describe what workflows are experiencing, not just whether the backend store itself looks healthy.
 
+## In-flight and saved unfinished workflows
+
+`minion_workflow_inflight_gauge` reports the number of **in-flight workflows**:
+workflows currently running in an active Minion. It does not count **saved
+unfinished workflows** that exist only as persisted checkpoints.
+
+During a normal orchestration stop, Gru publishes an in-flight value of zero.
+Unfinished workflows may still remain in the StateStore and continue when the
+same orchestration starts again. Consequently, an in-flight value of zero does
+not mean that the StateStore contains no unfinished workflows. Minions does not
+currently publish a separate gauge for saved unfinished workflows.
+
 ## Read the important labels first
 
 When investigating persistence behavior, start with these labels:
@@ -33,6 +45,7 @@ Those labels tell you whether you are looking at application data that cannot be
 
 Healthy systems usually show:
 
+- `minion_workflow_inflight_gauge` tracking currently running workflows
 - `attempts_total` and `succeeded_total` increasing together
 - low `duration_seconds` for both `operation="save"` and `operation="delete"`
 - `failures_total` near zero or spiky but brief
