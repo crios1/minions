@@ -33,7 +33,7 @@ class CachedPriceAPI(Resource):
     backend: PriceAPI  # started first, injected automatically
 ```
 
-The same resource instance is shared wherever the type appears, so rate limiting, connection pools, and caches live in one place.
+The same resource instance is shared wherever the type appears, so rate limiting, connection pools, and caches live in one place. Initialize that mutable shared state on `self`, normally in `startup`, so it belongs to the running Resource lifecycle and resets if Gru later creates a replacement instance. Do not use mutable class attributes as Resource storage; see {ref}`component-state-ownership`.
 
 ### Example: shared connection reused by a minion and its pipeline
 

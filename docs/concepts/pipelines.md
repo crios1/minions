@@ -28,6 +28,7 @@ Guidelines from the runtime:
 ## Resources and fanout
 
 Within one `Gru` process, a pipeline identity maps to one running Pipeline instance shared by subscribed orchestrations; see {ref}`runtime-component-sharing` for the full orchestration sharing model.
+Mutable Pipeline state belongs on that shared instance, normally initialized in `startup`, rather than in mutable class attributes. See {ref}`component-state-ownership` for the distinction between class, component, orchestration, and workflow state.
 Pipelines can declare resource dependencies via type hints just like minions. Gru starts those resources first, injects them, and reuses them across subscribers.
 Events are shared fanout inputs: fanout delivers the same event object to each subscribed minion, prefer immutable event types (like frozen dataclasses) and store mutable per-workflow state in context.
 

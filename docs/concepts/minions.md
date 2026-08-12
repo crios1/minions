@@ -36,9 +36,30 @@ Rules from the runtime:
 - Steps must be instance methods decorated with `{py:func}``@minion_step``. They run in source order.
 - Use `self.event` to access the current pipeline event; the event is contextvar-bound per workflow.
 - Use `self.context` to read and update the current workflow context; steps do not receive it as an argument.
+- Keep per-workflow mutable state in `self.context`. Regular Minion instance attributes are shared by that Minion's concurrent workflows; see {ref}`component-state-ownership` for the complete state-scope model.
 - Use `self.workflow_handle` when business code needs optional diagnostic correlation data for logs or audit records. The read-only handle exposes `orchestration_id` and `workflow_id`, matching the stable identity fields used by framework diagnostics and persisted workflow state.
 - Raise `{py:class}``minions._internal._domain.exceptions.AbortWorkflow`` to stop a workflow gracefully without treating it as a failure.
 - Do not raise `asyncio.CancelledError` to intentionally stop a workflow. The runtime treats cancellation as an interruption, keeps the persisted workflow context, and may resume the workflow later. Use `AbortWorkflow` when the workflow should stop as an intentional terminal outcome.
+
+### Async work ownership
+
+Await asynchronous work directly so its result, failure, and cancellation remain
+owned by the current Minion operation. Minions rejects `asyncio.create_task` and
+`asyncio.ensure_future` in user code because those APIs can create detached work
+that outlives its workflow or component and bypasses runtime failure reporting
+and shutdown. When a component intentionally owns background work, use
+`self.safe_create_task(...)` so Minions retains, supervises, and drains it.
+
+Use `await asyncio.to_thread(...)` for short, bounded synchronous I/O that would
+otherwise block the event loop. Exceptions raised in the worker thread are
+re-raised at the `await` point and follow the current operation's normal failure
+path. Do not detach the returned coroutine into a separate task.
+
+Cancelling the awaiting operation does not stop synchronous code that has
+already started in the worker thread. Threaded work must therefore be
+thread-safe and safe to finish after workflow or component cancellation. Use a
+cooperative cancellation mechanism or a separately supervised process for
+long-running or non-idempotent work.
 
 ### Workflow handle
 

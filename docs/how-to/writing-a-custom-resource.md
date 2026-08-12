@@ -18,6 +18,11 @@ class PriceAPI(Resource):
         return await self.client.get_price(symbol)
 ```
 
+`self.client` is instance state. Gru shares that Resource instance among its
+current dependents, then discards the state when the Resource stops. Initialize
+mutable lifecycle state on `self` rather than in mutable class attributes; see
+{ref}`component-state-ownership` for the full state-ownership model.
+
 Public async methods are wrapped automatically:
 
 - Latency recorded in `RESOURCE_LATENCY_SECONDS`.
