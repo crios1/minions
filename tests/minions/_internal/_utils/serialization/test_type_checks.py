@@ -105,29 +105,32 @@ def test_private_require_type_serializable_accepts_serializable_type():
 
 @pytest.mark.parametrize("primitive_type", SERIALIZABLE_PRIMITIVE_TYPES)
 def test_require_user_declared_type_rejects_primitive_contracts(
-    primitive_type: object,
+    primitive_type: type[object],
 ) -> None:
-    with pytest.raises(
-        TypeError,
-        match=(
-            r"MyOwner: event type is not supported\. "
-            r"Supported user-declared types: "
-            r"\(dataclass, msgspec\.Struct\)\."
-        )
-    ):
+    with pytest.raises(TypeError) as excinfo:
         require_user_declared_type(primitive_type, owner="MyOwner", type_label="event")
+    assert str(excinfo.value) == (
+        f"MyOwner: unsupported event type: {primitive_type.__name__}. "
+        "Supported user-declared types: (dataclass, msgspec.Struct)."
+    )
 
 
 def test_require_user_declared_type_rejects_mapping_contracts():
     with pytest.raises(
         TypeError,
-        match=r"MyOwner: event type is not supported\. Supported user-declared types:"
+        match=(
+            r"MyOwner: unsupported event type: dict\[str, int\]\. "
+            r"Supported user-declared types:"
+        ),
     ):
         require_user_declared_type(dict[str, int], owner="MyOwner", type_label="event")
 
 
 def test_require_user_declared_type_rejects_typed_dict_contracts():
-    with pytest.raises(TypeError):
+    with pytest.raises(
+        TypeError,
+        match=r"MyOwner: unsupported event type: MyTD\. Supported user-declared types:",
+    ):
         require_user_declared_type(MyTD, owner="MyOwner", type_label="event")
 
 
@@ -139,7 +142,7 @@ def test_require_user_declared_type_accepts_dataclass_and_msgspec_struct():
 def test_require_user_declared_type_rejects_any_with_contract_message():
     with pytest.raises(
         TypeError,
-        match=r"MyOwner: event type is not supported\. Supported user-declared types:",
+        match=r"MyOwner: unsupported event type: Any\. Supported user-declared types:",
     ):
         require_user_declared_type(Any, owner="MyOwner", type_label="event")
 
@@ -150,7 +153,10 @@ def test_require_user_declared_type_rejects_plain_class_with_contract_message():
 
     with pytest.raises(
         TypeError,
-        match=r"MyOwner: event type is not supported\. Supported user-declared types:",
+        match=(
+            r"MyOwner: unsupported event type: PlainEvent\. "
+            r"Supported user-declared types:"
+        ),
     ):
         require_user_declared_type(
             PlainEvent,
@@ -171,7 +177,7 @@ def test_require_user_declared_type_labels_workflow_context_errors():
     with pytest.raises(
         TypeError,
         match=(
-            r"MyOwner: workflow context type is not supported\. "
+            r"MyOwner: unsupported workflow context type: Any\. "
             r"Supported user-declared types:"
         ),
     ):
@@ -185,7 +191,7 @@ def test_require_user_declared_type_labels_workflow_context_errors():
 def test_require_user_declared_type_labels_config_errors():
     with pytest.raises(
         TypeError,
-        match=r"MyOwner: config type is not supported\. Supported user-declared types:",
+        match=r"MyOwner: unsupported config type: Any\. Supported user-declared types:",
     ):
         require_user_declared_type(Any, owner="MyOwner", type_label="config")
 
@@ -194,7 +200,7 @@ def test_require_user_declared_type_labels_inline_minion_config_errors():
     with pytest.raises(
         TypeError,
         match=(
-            r"MyOwner: minion_config type is not supported\. "
+            r"MyOwner: unsupported minion_config type: Any\. "
             r"Supported user-declared types:"
         ),
     ):

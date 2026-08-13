@@ -81,7 +81,7 @@ class TestPipelineSubclassingInvalid:
                 async def produce_event(self):  # pragma: no cover
                     ...
         assert str(excinfo.value) == (
-            "SomePipeline: event type is not supported. "
+            f"SomePipeline: unsupported event type: {event_type.__name__}. "
             "Supported user-declared types: (dataclass, msgspec.Struct)."
         )
 
@@ -91,7 +91,7 @@ class TestPipelineSubclassingInvalid:
                 async def produce_event(self):  # pragma: no cover
                     ...
         assert str(excinfo.value) == (
-            "SomePipeline: event type is not supported. "
+            "SomePipeline: unsupported event type: Any. "
             "Supported user-declared types: (dataclass, msgspec.Struct)."
         )
 
@@ -101,7 +101,7 @@ class TestPipelineSubclassingInvalid:
                 async def produce_event(self):  # pyright: ignore[reportIncompatibleMethodOverride] # pragma: no cover
                     ...
         assert str(excinfo.value) == (
-            "SomePipeline: event type is not supported. "
+            "SomePipeline: unsupported event type: dict. "
             "Supported user-declared types: (dataclass, msgspec.Struct)."
         )
 
@@ -111,7 +111,7 @@ class TestPipelineSubclassingInvalid:
                 async def produce_event(self):  # pyright: ignore[reportIncompatibleMethodOverride] # pragma: no cover
                     ...
         assert str(excinfo.value) == (
-            "SomePipeline: event type is not supported. "
+            "SomePipeline: unsupported event type: dict[str, int]. "
             "Supported user-declared types: (dataclass, msgspec.Struct)."
         )
 
@@ -124,7 +124,7 @@ class TestPipelineSubclassingInvalid:
                 async def produce_event(self) -> TypedDictEvent:  # pragma: no cover
                     return {"value": 1}
         assert str(excinfo.value) == (
-            "MyPipeline: event type is not supported. "
+            "MyPipeline: unsupported event type: TypedDictEvent. "
             "Supported user-declared types: (dataclass, msgspec.Struct)."
         )
 

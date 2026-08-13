@@ -169,6 +169,14 @@ def _require_type_serializable(tp: Any, *, owner: str, type_label: str) -> None:
     )
 
 
+def _format_rejected_type(tp: Any) -> str:
+    if tp is Any:
+        return "Any"
+    if isinstance(tp, type):
+        return tp.__name__
+    return str(tp).removeprefix("typing.")
+
+
 def _require_supported_user_declared_type_kind(
     tp: Any,
     *,
@@ -178,7 +186,7 @@ def _require_supported_user_declared_type_kind(
     if _is_dataclass_type(tp) or _is_msgspec_struct_type(tp):
         return
     raise TypeError(
-        f"{owner}: {type_label} is not supported. "
+        f"{owner}: unsupported {type_label}: {_format_rejected_type(tp)}. "
         f"{SUPPORTED_USER_DECLARED_TYPES_MSG}"
     )
 

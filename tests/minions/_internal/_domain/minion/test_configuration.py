@@ -160,7 +160,7 @@ async def test_configured_minion_rejects_unsupported_loaded_config_type():
     with pytest.raises(TypeError) as excinfo:
         await m._mn_load_config("dummy-config-path")
     assert str(excinfo.value) == (
-        "MyMinion.load_config: config type is not supported. "
+        "MyMinion.load_config: unsupported config type: dict. "
         "Supported user-declared types: (dataclass, msgspec.Struct)."
     )
 

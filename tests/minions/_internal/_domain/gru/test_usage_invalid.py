@@ -255,7 +255,7 @@ class TestInvalidUsage:
 
             assert not result.success
             assert result.reason == (
-                "Gru.start_orchestration: minion_config type is not supported. "
+                "Gru.start_orchestration: unsupported minion_config type: dict. "
                 "Supported user-declared types: (dataclass, msgspec.Struct)."
             )
 

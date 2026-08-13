@@ -110,7 +110,8 @@ class TestMinionFile:
             assert not result.success
             assert result.reason
             assert (
-                "workflow context type is not supported. Supported user-declared types"
+                "unsupported workflow context type: UnsupportedContextType. "
+                "Supported user-declared types"
                 in result.reason
             )
 
@@ -162,7 +163,11 @@ class TestMinionFile:
 
             assert not result.success
             assert result.reason
-            assert "event type is not supported. Supported user-declared types" in result.reason
+            assert (
+                "unsupported event type: UnsupportedEventType. "
+                "Supported user-declared types"
+                in result.reason
+            )
 
     @pytest.mark.asyncio
     async def test_gru_returns_error_on_minion_event_not_serializable(
@@ -289,7 +294,11 @@ class TestPipelineFile:
 
             assert not result.success
             assert result.reason
-            assert "event type is not supported. Supported user-declared types" in result.reason
+            assert (
+                "unsupported event type: UnsupportedEventType. "
+                "Supported user-declared types"
+                in result.reason
+            )
 
     @pytest.mark.asyncio
     async def test_gru_returns_error_on_pipeline_event_not_serializable(

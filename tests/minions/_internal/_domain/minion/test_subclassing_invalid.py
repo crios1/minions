@@ -44,7 +44,7 @@ def test_reject_primitive_event_type(event_type: type[object]):
         class MyMinion(Minion[event_type, EmptyContext]): ...
 
     assert str(excinfo.value) == (
-        "MyMinion: event type is not supported. "
+        f"MyMinion: unsupported event type: {event_type.__name__}. "
         "Supported user-declared types: (dataclass, msgspec.Struct)."
     )
 
@@ -56,7 +56,7 @@ def test_reject_primitive_context_type(context_type: type[object]):
         class MyMinion(Minion[EmptyEvent, context_type]): ...
 
     assert str(excinfo.value) == (
-        "MyMinion: workflow context type is not supported. "
+        f"MyMinion: unsupported workflow context type: {context_type.__name__}. "
         "Supported user-declared types: (dataclass, msgspec.Struct)."
     )
 
@@ -67,7 +67,7 @@ def test_invalid_event_and_context_types():
         class MyMinion(Minion[int, int]): ...
 
     assert str(excinfo.value) == (
-        "MyMinion: event type is not supported. "
+        "MyMinion: unsupported event type: int. "
         "Supported user-declared types: (dataclass, msgspec.Struct)."
     )
 
@@ -78,7 +78,7 @@ def test_reject_any_event_type():
         class MyMinion(Minion[Any, EmptyContext]): ...
 
     assert str(excinfo.value) == (
-        "MyMinion: event type is not supported. "
+        "MyMinion: unsupported event type: Any. "
         "Supported user-declared types: (dataclass, msgspec.Struct)."
     )
 
@@ -89,7 +89,7 @@ def test_reject_any_context_type():
         class MyMinion(Minion[EmptyEvent, Any]): ...
 
     assert str(excinfo.value) == (
-        "MyMinion: workflow context type is not supported. "
+        "MyMinion: unsupported workflow context type: Any. "
         "Supported user-declared types: (dataclass, msgspec.Struct)."
     )
 
@@ -100,7 +100,7 @@ def test_reject_any_event_and_context_types():
         class MyMinion(Minion[Any, Any]): ...
 
     assert str(excinfo.value) == (
-        "MyMinion: event type is not supported. "
+        "MyMinion: unsupported event type: Any. "
         "Supported user-declared types: (dataclass, msgspec.Struct)."
     )
 
@@ -112,7 +112,7 @@ def test_reject_bare_dict_event_type():
             ...
 
     assert str(excinfo.value) == (
-        "MyMinion: event type is not supported. "
+        "MyMinion: unsupported event type: dict. "
         "Supported user-declared types: (dataclass, msgspec.Struct)."
     )
 
@@ -124,7 +124,7 @@ def test_reject_bare_dict_context_type():
             ...
 
     assert str(excinfo.value) == (
-        "MyMinion: workflow context type is not supported. "
+        "MyMinion: unsupported workflow context type: dict. "
         "Supported user-declared types: (dataclass, msgspec.Struct)."
     )
 
@@ -135,7 +135,7 @@ def test_reject_parameterized_dict_event_type():
         class MyMinion(Minion[dict[str, int], EmptyContext]): ...
 
     assert str(excinfo.value) == (
-        "MyMinion: event type is not supported. "
+        "MyMinion: unsupported event type: dict[str, int]. "
         "Supported user-declared types: (dataclass, msgspec.Struct)."
     )
 
@@ -149,7 +149,7 @@ def test_reject_typed_dict_event_type():
         class MyMinion(Minion[MyTypedDictEvent, EmptyContext]): ...
 
     assert str(excinfo.value) == (
-        "MyMinion: event type is not supported. "
+        "MyMinion: unsupported event type: MyTypedDictEvent. "
         "Supported user-declared types: (dataclass, msgspec.Struct)."
     )
 
