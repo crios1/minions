@@ -26,7 +26,7 @@ def _make_no_op_minion(
         minion_instance_id="dummy-minion-instance-id",
         orchestration_id="dummy-orchestration-id",
         minion_id="dummy-minion-id",
-        minion_config_id="dummy-minion-config-id",
+        minion_config_id="",
         pipeline_id="dummy-pipeline-id",
         minion_module_path="dummy-minion-module-path",
         config_path=None,

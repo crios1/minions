@@ -40,7 +40,7 @@ async def test_minion_startup_resumes_only_own_contexts(
         metrics,
         logger,
         minion_id="dummy-minion-id",
-        minion_config_id="dummy-minion-config-id",
+        minion_config_id="",
         pipeline_id="dummy-pipeline-id",
     )
 
@@ -103,7 +103,7 @@ async def test_minion_startup_resumes_typed_msgspec_event_and_context(
         metrics,
         logger,
         minion_id="dummy-minion-id",
-        minion_config_id="dummy-minion-config-id",
+        minion_config_id="",
         pipeline_id="dummy-pipeline-id",
     )
 
@@ -151,7 +151,7 @@ async def test_resumed_workflow_step_can_access_event_and_context_from_state_sto
         metrics,
         logger,
         minion_id="dummy-minion-id",
-        minion_config_id="dummy-minion-config-id",
+        minion_config_id="",
         pipeline_id="dummy-pipeline-id",
     )
 
@@ -195,7 +195,7 @@ async def test_minion_startup_resume_skips_irrecoverable_context_and_resumes_val
         metrics,
         logger,
         minion_id="dummy-minion-id",
-        minion_config_id="dummy-minion-config-id",
+        minion_config_id="",
         pipeline_id="dummy-pipeline-id",
     )
 
@@ -276,7 +276,7 @@ async def test_minion_startup_resume_fails_closed_on_context_type_mismatch(
         metrics,
         logger,
         minion_id="dummy-minion-id",
-        minion_config_id="dummy-minion-config-id",
+        minion_config_id="",
         pipeline_id="dummy-pipeline-id",
     )
 

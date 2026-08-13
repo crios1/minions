@@ -55,7 +55,7 @@ async def test_configured_minion_exposes_loaded_config_through_config_attribute(
         metrics=NoOpMetrics(),
         logger=NoOpLogger(),
         minion_id="dummy-minion-id",
-        minion_config_id="",
+        minion_config_id="dummy-minion-config-id",
         pipeline_id="dummy-pipeline-id",
     )
 
@@ -85,7 +85,7 @@ async def test_configured_minion_requires_class_level_config_annotation():
         metrics=NoOpMetrics(),
         logger=NoOpLogger(),
         minion_id="dummy-minion-id",
-        minion_config_id="",
+        minion_config_id="dummy-minion-config-id",
         pipeline_id="dummy-pipeline-id",
     )
 
@@ -124,7 +124,7 @@ async def test_configured_minion_rejects_loaded_vs_declared_config_type_mismatch
         metrics=NoOpMetrics(),
         logger=NoOpLogger(),
         minion_id="dummy-minion-id",
-        minion_config_id="",
+        minion_config_id="dummy-minion-config-id",
         pipeline_id="dummy-pipeline-id",
     )
 
@@ -153,7 +153,7 @@ async def test_configured_minion_rejects_unsupported_loaded_config_type():
         metrics=NoOpMetrics(),
         logger=NoOpLogger(),
         minion_id="dummy-minion-id",
-        minion_config_id="",
+        minion_config_id="dummy-minion-config-id",
         pipeline_id="dummy-pipeline-id",
     )
 
@@ -180,7 +180,7 @@ async def test_minion_using_config_path_requires_load_config_override():
         metrics=NoOpMetrics(),
         logger=NoOpLogger(),
         minion_id="dummy-minion-id",
-        minion_config_id="",
+        minion_config_id="dummy-minion-config-id",
         pipeline_id="dummy-pipeline-id",
     )
 

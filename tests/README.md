@@ -82,6 +82,11 @@ This suite is intentionally layered. Each layer has a different purpose and conf
 
 - Prefix required placeholder values with `dummy-` when their identity has no semantic relevance to the test.
 - Use intention-revealing values instead when a value distinguishes actors, state, ordering, or an asserted scenario outcome.
+- Use the API-defined absence sentinel, such as `None` or `""`, when the value is
+  absent. A `dummy-` value means the value is present but its identity is irrelevant.
+- Keep related values semantically consistent. An unconfigured Minion uses
+  `config_path=None` and `minion_config_id=""`; configured test setup uses
+  non-empty values appropriate to its configuration form.
 
 ## Contributor Placement Guide
 

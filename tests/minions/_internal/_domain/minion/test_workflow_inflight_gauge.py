@@ -61,7 +61,7 @@ def _make_minion(
         metrics=metrics,
         logger=logger,
         minion_id="dummy-minion-id",
-        minion_config_id="dummy-minion-config-id",
+        minion_config_id="",
         pipeline_id="dummy-pipeline-id",
     )
 

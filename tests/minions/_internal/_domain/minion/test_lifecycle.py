@@ -29,7 +29,7 @@ async def test_startup_failure_context_includes_minion_identity(
         metrics=NoOpMetrics(),
         logger=logger,
         minion_id="dummy-minion-id",
-        minion_config_id="dummy-minion-config-id",
+        minion_config_id="",
         pipeline_id="dummy-pipeline-id",
     )
 
@@ -38,5 +38,5 @@ async def test_startup_failure_context_includes_minion_identity(
 
     assert exc_info.value.context["minion_id"] == "dummy-minion-id"
     assert exc_info.value.context["minion_instance_id"] == "dummy-minion-instance-id"
-    assert exc_info.value.context["minion_config_id"] == "dummy-minion-config-id"
+    assert exc_info.value.context["minion_config_id"] == ""
     assert exc_info.value.context["minion_module_path"] == "dummy-minion-module-path"

@@ -355,7 +355,7 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds(
         minion_instance_id="dummy-minion-instance-id",
         orchestration_id="dummy-orchestration-id",
         minion_module_path="dummy-minion-module-path",
-        config_path="dummy-config-path",
+        config_path=None,
         state_store=store,
         metrics=metrics,
         logger=logger,

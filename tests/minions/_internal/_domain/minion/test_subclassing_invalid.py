@@ -228,7 +228,7 @@ def test_reject_instantiating_minion_without_steps():
             NoOpMetrics(),
             NoOpLogger(),
             minion_id="dummy-minion-id",
-            minion_config_id="dummy-minion-config-id",
+            minion_config_id="",
             pipeline_id="dummy-pipeline-id",
         )
 
