@@ -1,10 +1,12 @@
 import asyncio
+import random
 from typing import Callable
 
 import pytest
 
 from minions import Minion, minion_step
 from minions._internal._domain.minion import WorkflowPersistencePoint
+from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.logger import ERROR, WARNING
 from minions._internal._framework.metrics_constants import (
     LABEL_MINION,
@@ -30,6 +32,7 @@ from tests.assets.contexts.int_value import IntValueContext
 from tests.assets.events.empty import EmptyEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
+from tests.assets.support.minion_noop import NoOpMinion
 from tests.assets.support.state_store_failable import FailableStateStore
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
 
@@ -46,6 +49,44 @@ async def _wait_until(
             return
         await asyncio.sleep(poll_interval)
     raise TimeoutError("condition did not become true before timeout")
+
+
+def _make_no_op_minion(
+    *,
+    store: FailableStateStore,
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    delay_seconds: float,
+    max_delay_seconds: float,
+    backoff_multiplier: float,
+    jitter_ratio: float,
+):
+    return NoOpMinion(
+        minion_instance_id="dummy-minion-instance-id",
+        orchestration_id="dummy-orchestration-id",
+        minion_module_path="dummy-minion-module-path",
+        config_path=None,
+        state_store=store,
+        metrics=metrics,
+        logger=logger,
+        minion_id="dummy-minion-id",
+        minion_config_id="",
+        pipeline_id="dummy-pipeline-id",
+        workflow_persistence_failure_policy="idle-until-persisted",
+        workflow_persistence_retry_delay_seconds=delay_seconds,
+        workflow_persistence_retry_max_delay_seconds=max_delay_seconds,
+        workflow_persistence_retry_backoff_multiplier=backoff_multiplier,
+        workflow_persistence_retry_jitter_ratio=jitter_ratio,
+    )
+
+
+def _make_empty_workflow_context(orchestration_id: str):
+    return MinionWorkflowContext(
+        orchestration_id=orchestration_id,
+        workflow_id="dummy-workflow-id",
+        event=EmptyEvent(),
+        context=EmptyContext(),
+    )
 
 
 @pytest.mark.parametrize(
@@ -243,6 +284,97 @@ async def test_idle_until_persisted_policy_idles_workflow_until_save_retry_succe
         },
     )
     assert blocked_value == 0
+
+
+@pytest.mark.asyncio
+async def test_retry_delays_follow_exponential_backoff_and_remain_capped(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    store = FailableStateStore(logger=logger)
+    store.save_failures.enable()
+    m = _make_no_op_minion(
+        store=store,
+        logger=logger,
+        metrics=metrics,
+        delay_seconds=0.01,
+        max_delay_seconds=0.04,
+        backoff_multiplier=2.0,
+        jitter_ratio=0.0,
+    )
+    ctx = _make_empty_workflow_context(m._mn_orchestration_id)
+    sleep_delays: list[float] = []
+
+    async def record_sleep(delay: float) -> None:
+        sleep_delays.append(delay)
+        if len(sleep_delays) == 4:
+            store.save_failures.disable()
+
+    def fail_if_jitter_is_applied(_lower: float, _upper: float) -> float:
+        raise AssertionError("zero jitter must not sample randomness")
+
+    monkeypatch.setattr(asyncio, "sleep", record_sleep)
+    monkeypatch.setattr(random, "uniform", fail_if_jitter_is_applied)
+
+    persisted = await m._mn_run_workflow_persistence_operation(
+        ctx,
+        persistence_point="workflow_start",
+    )
+
+    assert persisted
+    assert sleep_delays == [0.01, 0.02, 0.04, 0.04]
+    assert store.save_failures.count == 4
+    idle_log = next(
+        log for log in logger.logs if log.msg == "Workflow idled waiting for persistence"
+    )
+    assert idle_log.kwargs["persistence_point"] == "workflow_start"
+    assert "step_name" not in idle_log.kwargs
+    assert "checkpoint" not in idle_log.kwargs
+
+
+@pytest.mark.asyncio
+async def test_retry_jitter_respects_configured_bounds(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    store = FailableStateStore(logger=logger)
+    store.save_failures.enable()
+    m = _make_no_op_minion(
+        store=store,
+        logger=logger,
+        metrics=metrics,
+        delay_seconds=1.0,
+        max_delay_seconds=1.0,
+        backoff_multiplier=1.0,
+        jitter_ratio=0.25,
+    )
+    ctx = _make_empty_workflow_context(m._mn_orchestration_id)
+    sleep_delays: list[float] = []
+    sampled_bounds: list[tuple[float, float]] = []
+
+    async def record_sleep(delay: float) -> None:
+        sleep_delays.append(delay)
+        if len(sleep_delays) == 2:
+            store.save_failures.disable()
+
+    def sample_each_bound(lower: float, upper: float) -> float:
+        sampled_bounds.append((lower, upper))
+        return lower if len(sampled_bounds) == 1 else upper
+
+    monkeypatch.setattr(asyncio, "sleep", record_sleep)
+    monkeypatch.setattr(random, "uniform", sample_each_bound)
+
+    persisted = await m._mn_run_workflow_persistence_operation(
+        ctx,
+        persistence_point="workflow_start",
+    )
+
+    assert persisted
+    assert sampled_bounds == [(-0.25, 0.25), (-0.25, 0.25)]
+    assert sleep_delays == [0.75, 1.25]
+    assert store.save_failures.count == 2
 
 
 @pytest.mark.asyncio
