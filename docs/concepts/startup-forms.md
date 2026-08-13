@@ -26,6 +26,10 @@ class MyConfig:
     my_key: str
 
 
+class MyMinion(Minion[MyEvent, MyContext]):
+    config: MyConfig
+
+
 gru.start_orchestration(
     MyPipeline,
     MyMinion,
@@ -33,8 +37,10 @@ gru.start_orchestration(
 )
 ```
 
-`MyMinion` declares `config: MyConfig` when its steps read
-`self.config`.
+Passing `minion_config` opts `MyMinion` into configuration, so it must declare
+the framework-defined `config` attribute with the accepted model type. Gru
+validates and binds the supplied model before workflows start; no `load_config`
+override is needed for inline configuration.
 
 Use inline mode when you’re exploring, testing, or composing a runtime directly
 in Python. Gru derives the config identity from the serializable config type and
@@ -59,6 +65,10 @@ gru.start_orchestration(
     minion_config_path="configs/strategy-client-a.yaml",
 )
 ```
+
+When `minion_config_path` is supplied, the Minion must declare its typed
+`config` attribute and override `load_config` to return a matching dataclass or
+`msgspec.Struct` model.
 
 Use module-based mode for declared deployments, multiple configured instances,
 and operator-controlled startup. Component identities still come from

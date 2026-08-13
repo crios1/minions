@@ -219,13 +219,22 @@ For a broader operator view, see {doc}`/guides/operating-with-metrics`.
 
 Each file-backed minion receives a config path when started. Override
 `Minion.load_config` to parse that path and return a dataclass or
-`msgspec.Struct` config model. Declare the model as the Minion's typed
-`config` attribute before accessing `self.config` from workflow steps. Minions
-validates the returned config model before workflows start; it does not expose
-raw parsed config dictionaries to step code.
+`msgspec.Struct` config model. Supplying configuration opts the Minion into the
+fixed public `config` interface, so declare that attribute with the accepted
+model type. Minions validates the returned model against the annotation and
+binds it to `self.config` before workflows start; it does not expose raw parsed
+config dictionaries to step code.
 
 `_minions_config_id` is reserved runtime metadata. If your custom `load_config` parses a TOML, YAML, or JSON file with `_minions_config_id`, you can ignore that key when building the user-facing config model. The runtime reads it separately only to identify the durable config; config contents and config revisions remain application
 responsibility.
+
+The stamped file may instead be a manifest containing the locator for a remote
+configuration source. In either case, `load_config` resolves one typed snapshot
+per Minion startup. That snapshot is bound before saved unfinished workflows
+continue. Restarting with changed file contents or remotely resolved values
+under the same `_minions_config_id` therefore continues those workflows with
+the new snapshot. Keep revisions compatible with saved unfinished workflows, or
+assign a new config ID when the revision must address a distinct orchestration.
 
 ## Persistence strategy
 

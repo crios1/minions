@@ -8,15 +8,18 @@ A task-focused checklist to launch a minion with Gru.
 - `minions.py` with one `Minion[T_Event, T_Ctx]` subclass.
 - `resources.py` for any shared dependencies declared via type hints on your pipeline/minion.
 
-## 2) Add a config model and loader
+## 2) Optional: add a config model and loader
 
-File-backed config is optional. When a minion uses it, override `load_config`
-and return a dataclass or `msgspec.Struct` model so invalid config fails before
-workflows start.
+To opt into file-backed configuration, declare the framework-defined `config`
+attribute with the model type your steps expect, override `load_config`, and
+return a matching dataclass or `msgspec.Struct` model. Minions validates and
+binds the model before workflows start; steps then access it as `self.config`.
+Skip this section when the Minion does not require configuration.
 
 ```python
-from dataclasses import dataclass
+import asyncio
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -29,8 +32,9 @@ class PrintMinion(Minion[PrintEvent, PrintContext]):
     config: PrintConfig
 
     async def load_config(self, config_path: str) -> PrintConfig:
-        raw = json.loads(Path(config_path).read_text())
-        return PrintConfig(prefix=raw["prefix"])
+        raw = await asyncio.to_thread(Path(config_path).read_text)
+        values = json.loads(raw)
+        return PrintConfig(prefix=values["prefix"])
 ```
 
 ## 3) Start Gru and the minion
@@ -41,6 +45,10 @@ Before treating this as a durable deployment, stamp component and config IDs:
 python -m minions stamp all my_app config
 python -m minions doctor ids my_app config
 ```
+
+This example includes `config` because it uses file-backed configuration. If
+you skipped step 2, omit `config` from both commands and omit
+`minion_config_path` from the startup call below.
 
 Id-less components and configs still run, but their module/path fallback
 identities can change during refactors (moves and renames). Stamping an existing running deployment

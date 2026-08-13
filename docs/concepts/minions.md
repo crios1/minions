@@ -61,6 +61,83 @@ thread-safe and safe to finish after workflow or component cancellation. Use a
 cooperative cancellation mechanism or a separately supervised process for
 long-running or non-idempotent work.
 
+### Typed configuration
+
+Use Minion configuration to keep deployment settings out of workflow code while
+giving steps a validated, typed model. For production, use file-backed
+configuration. Declare the framework-defined `config` attribute with the model
+type your steps expect, and override `load_config` to parse the supplied file:
+
+```python
+import asyncio
+import json
+from dataclasses import dataclass
+from pathlib import Path
+
+
+@dataclass
+class OrderConfig:
+    region: str
+
+
+class OrderMinion(Minion[OrderEvent, WorkflowCtx]):
+    config: OrderConfig
+
+    async def load_config(self, config_path: str) -> OrderConfig:
+        raw = await asyncio.to_thread(Path(config_path).read_text)
+        values = json.loads(raw)
+        return OrderConfig(region=values["region"])
+
+    @minion_step
+    async def process_order(self):
+        print(f"Processing order in {self.config.region}")
+```
+
+During startup, Minions calls `load_config`, verifies that its result is a
+dataclass or `msgspec.Struct` instance matching the annotation, and binds it to
+`self.config` before any workflow starts. Invalid configuration therefore
+prevents the Minion from starting. The public attribute name is always
+`config`; another annotated attribute does not participate in configuration
+binding.
+
+The stamped file may contain the complete configuration or act as a manifest
+for a remote configuration source:
+
+```yaml
+_minions_config_id: "44444444-4444-4444-8444-444444444444"
+provider: "database"
+config_key: "clients/acme/order-processing"
+```
+
+An async `load_config` can read that manifest and fetch the referenced values
+through a database, secrets service, or HTTP client. It must return a
+materialized typed snapshot, not a live client or proxy whose effective values
+change during workflow execution. Use `asyncio.to_thread` when the loader performs
+blocking filesystem or other synchronous I/O.
+
+Configuration also participates in orchestration identity. Starting the same
+Minion and Pipeline with different config identities creates distinct
+orchestrations, so one implementation can run independently for different
+clients, campaigns, or deployment profiles. For durable file-backed
+deployments, give each configuration a unique `_minions_config_id`; otherwise
+Gru uses the config path as a fallback identity. Changing a file's contents
+while retaining its stamped ID does not define a new orchestration identity;
+the new contents—or the newly resolved remote values—apply when that
+configuration is next loaded. Minions loads the snapshot once per Minion
+startup and binds it before continuing saved unfinished workflows. Changes made
+under a stable config ID must therefore remain compatible with those workflows;
+use a different config ID when the revision should create a distinct orchestration.
+See {doc}`state-and-persistence` for the complete identity and migration
+contract.
+
+Configuration is opt-in at orchestration startup. A Minion started without
+configuration has no bound `config` attribute; classes that do not use
+configuration need not declare `config` or override `load_config`. Inline
+configuration is supported for tests and direct local composition; Gru receives
+and binds that model directly, so the `config` annotation is still required but
+a `load_config` override is not. Use stamped file-backed configuration for
+durable production deployments.
+
 ### Workflow handle
 
 `self.workflow_handle` is available only while a workflow is running. Accessing it outside an active workflow raises `RuntimeError` because there is no current workflow identity to report.

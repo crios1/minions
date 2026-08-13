@@ -129,8 +129,9 @@ gru.start_orchestration(
 )
 ```
 
-The configured Minion declares `config: MyConfig` before its steps access
-`self.config`.
+Passing `minion_config` requires the Minion to declare the framework-defined
+`config` attribute with the accepted model type. Gru validates and binds the
+model before workflows start; steps then access it as `self.config`.
 
 Inline startup is portable, but its identity is tied to the in-memory
 config value. Use it for development, teaching, and exploration. For
