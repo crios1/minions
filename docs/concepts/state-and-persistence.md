@@ -155,7 +155,7 @@ the `StateStore` interface.
 - After user code reaches a terminal workflow outcome, Minions still treats checkpoint deletion as part of workflow resolution. If checkpoint deletion fails, the workflow does not become terminal until the delete succeeds.
 - Idle retry backoff starts at `workflow_persistence_retry_delay_seconds` (default `1.0`), multiplies by `workflow_persistence_retry_backoff_multiplier` (default `2.0`), is capped by `workflow_persistence_retry_max_delay_seconds` (default `60.0`), and applies `workflow_persistence_retry_jitter_ratio` jitter (default `0.1`) to avoid synchronized retries.
 - Sustained idle retries log repeated warnings every `workflow_persistence_retry_warning_interval_seconds` (default `30.0`) and escalate to error logs after `workflow_persistence_retry_error_after_seconds` (default `60.0`; pass `None` to disable escalation).
-- Persistence failure logs include the workflow checkpoint, persistence operation (`save` or `delete`), retry attempt, elapsed retry time, failure stage, state store, event/context types, minion identity, and exception details when available.
+- Persistence failure logs include the workflow persistence point, step name when applicable, persistence operation (`save` or `delete`), retry attempt, elapsed retry time, failure stage, state store, event/context types, minion identity, and exception details when available.
 
 `workflow_failure_policy` and `workflow_persistence_failure_policy` govern
 different failures. The former handles exceptions from workflow code; the
@@ -187,7 +187,7 @@ Workflow persistence metrics describe the runtime durability guarantee as experi
 - `minion_workflow_persistence_duration_seconds`
 - `minion_workflow_persistence_blocked_gauge`
 
-Use `minion_workflow_persistence_blocked_gauge` and sustained persistence failures to alert on workflow durability impact. Use labels such as `minion_workflow_persistence_failure_stage`, `minion_workflow_persistence_retryable`, `minion_workflow_persistence_policy`, `minion_workflow_persistence_checkpoint_type`, `minion_workflow_step`, and `state_store` to distinguish serialization problems from StateStore outages.
+Use `minion_workflow_persistence_blocked_gauge` and sustained persistence failures to alert on workflow durability impact. Use labels such as `minion_workflow_persistence_failure_stage`, `minion_workflow_persistence_retryable`, `minion_workflow_persistence_policy`, `minion_workflow_persistence_point`, and `state_store` to distinguish serialization problems from StateStore outages.
 
 ### How to read persistence telemetry
 
@@ -200,7 +200,7 @@ Use `minion_workflow_persistence_blocked_gauge` and sustained persistence failur
 The most important labels are:
 
 - `minion_workflow_persistence_operation`: `save` means Minions is trying to durably checkpoint workflow progress; `delete` means user code has already reached a terminal outcome and the runtime is resolving the workflow by removing its checkpoint.
-- `minion_workflow_persistence_checkpoint_type`: `workflow_start`, `before_step`, or `workflow_resolve` tells you where the runtime is in the workflow lifecycle.
+- `minion_workflow_persistence_point`: `workflow_start`, `before_step`, or `workflow_resolve` tells you where the runtime is in the workflow lifecycle.
 - `minion_workflow_persistence_failure_stage`: distinguishes codec/serialization problems from StateStore save/delete failures.
 - `minion_workflow_persistence_retryable`: `false` means the workflow data itself is not persistable and retrying will not help; `true` means the failure is operational and the runtime may retry.
 - `minion_workflow_persistence_policy`: tells you whether the workflow is configured to continue after save failure or idle until the checkpoint is durably persisted.

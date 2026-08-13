@@ -31,7 +31,7 @@ currently publish a separate gauge for saved unfinished workflows.
 When investigating persistence behavior, start with these labels:
 
 - `minion_workflow_persistence_operation`: `save` or `delete`
-- `minion_workflow_persistence_checkpoint_type`: `workflow_start`, `before_step`, or `workflow_resolve`
+- `minion_workflow_persistence_point`: `workflow_start`, `before_step`, or `workflow_resolve`
 - `minion_workflow_persistence_failure_stage`: `serialize`, `save`, or `delete`
 - `minion_workflow_persistence_retryable`: `true` or `false`
 - `minion_workflow_persistence_policy`: `continue-on-failure` or `idle-until-persisted`
@@ -63,10 +63,10 @@ Short-lived retries are expected during transient store problems. What matters i
 - `operation="delete"`:
   user code has already reached a terminal outcome, but Minions is still resolving the workflow because checkpoint deletion has not succeeded yet.
 
-- `checkpoint_type="before_step"`:
+- `persistence_point="before_step"`:
   the workflow is blocked between steps.
 
-- `checkpoint_type="workflow_resolve"`:
+- `persistence_point="workflow_resolve"`:
   the workflow is blocked during terminal cleanup, not during user step execution.
 
 In practice, a sustained non-zero blocked gauge for `operation="save"` is the higher-severity condition because it directly stalls workflow advancement.
@@ -109,7 +109,8 @@ The persistence logs are designed to line up with the metrics:
 Use the shared fields in the log payloads to correlate with metrics:
 
 - `workflow_id`
-- `checkpoint`
+- `persistence_point`
+- `step_name` when the persistence point is `before_step`
 - `persistence_operation`
 - `persistence_failure_stage`
 - `persistence_retryable`

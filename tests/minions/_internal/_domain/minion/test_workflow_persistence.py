@@ -4,12 +4,13 @@ from typing import Callable
 import pytest
 
 from minions import Minion, minion_step
+from minions._internal._domain.minion import WorkflowPersistencePoint
 from minions._internal._framework.logger import ERROR, WARNING
 from minions._internal._framework.metrics_constants import (
     LABEL_MINION,
-    LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE,
     LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE,
     LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION,
+    LABEL_MINION_WORKFLOW_PERSISTENCE_POINT,
     LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY,
     LABEL_MINION_WORKFLOW_PERSISTENCE_RETRYABLE,
     LABEL_ORCHESTRATION_ID,
@@ -45,6 +46,59 @@ async def _wait_until(
             return
         await asyncio.sleep(poll_interval)
     raise TimeoutError("condition did not become true before timeout")
+
+
+@pytest.mark.parametrize(
+    ("persistence_point", "step_name"),
+    [
+        ("workflow_start", None),
+        ("before_step", "step"),
+        ("workflow_resolve", None),
+    ],
+)
+def test_persistence_points_accept_valid_step_name_combinations(
+    persistence_point: WorkflowPersistencePoint,
+    step_name: str | None,
+):
+    Minion._mn_validate_workflow_persistence_point(
+        persistence_point,
+        step_name,
+    )
+
+
+@pytest.mark.parametrize(
+    ("persistence_point", "step_name", "message"),
+    [
+        (
+            "before_step",
+            None,
+            "step_name is required for the 'before_step' persistence point",
+        ),
+        (
+            "workflow_start",
+            "step",
+            "step_name is only valid for the 'before_step' persistence point",
+        ),
+    ],
+)
+def test_persistence_points_reject_incompatible_step_names(
+    persistence_point: WorkflowPersistencePoint,
+    step_name: str | None,
+    message: str,
+):
+    with pytest.raises(ValueError, match=message):
+        Minion._mn_validate_workflow_persistence_point(
+            persistence_point,
+            step_name,
+        )
+
+
+def test_persistence_points_reject_unknown_values():
+    with pytest.raises(ValueError, match="persistence_point must be one of"):
+        Minion._mn_validate_workflow_persistence_point(
+            "unknown",  # pyright: ignore[reportArgumentType]
+            None,
+        )
 
 
 @pytest.mark.asyncio
@@ -102,6 +156,9 @@ async def test_continue_on_failure_policy_advances_after_save_failure_and_persis
     failure_log = next(
         log for log in logger.logs if log.msg == "Workflow continuing after persistence failure"
     )
+    assert failure_log.kwargs["persistence_point"] == "before_step"
+    assert failure_log.kwargs["step_name"] == "disable_save_failures"
+    assert "checkpoint" not in failure_log.kwargs
     assert failure_log.kwargs["persistence_failure_stage"] == "save"
     assert failure_log.kwargs["persistence_retryable"] is True
     assert (
@@ -178,7 +235,7 @@ async def test_idle_until_persisted_policy_idles_workflow_until_save_retry_succe
         {
             LABEL_ORCHESTRATION_ID: m._mn_orchestration_id,
             LABEL_MINION: m._mn_minion_id,
-            LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "before_step",
+            LABEL_MINION_WORKFLOW_PERSISTENCE_POINT: "before_step",
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
             LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "save",
             LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: "idle-until-persisted",
@@ -239,7 +296,7 @@ async def test_persistence_blocked_gauge_tracks_concurrent_workflows_for_same_la
     labels = {
         LABEL_ORCHESTRATION_ID: m._mn_orchestration_id,
         LABEL_MINION: m._mn_minion_id,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "before_step",
+        LABEL_MINION_WORKFLOW_PERSISTENCE_POINT: "before_step",
         LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
         LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "save",
         LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: "idle-until-persisted",
@@ -379,7 +436,7 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds(
     blocked_labels = {
         LABEL_ORCHESTRATION_ID: m._mn_orchestration_id,
         LABEL_MINION: m._mn_minion_id,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "workflow_resolve",
+        LABEL_MINION_WORKFLOW_PERSISTENCE_POINT: "workflow_resolve",
         LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "delete",
         LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "delete",
         LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: "continue-on-failure",
@@ -408,6 +465,12 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds(
 
     assert logger.has_log("Workflow idled waiting for checkpoint delete")
     assert logger.has_log("Workflow checkpoint delete resumed")
+    delete_idle_log = next(
+        log for log in logger.logs if log.msg == "Workflow idled waiting for checkpoint delete"
+    )
+    assert delete_idle_log.kwargs["persistence_point"] == "workflow_resolve"
+    assert "step_name" not in delete_idle_log.kwargs
+    assert "checkpoint" not in delete_idle_log.kwargs
     assert logger.has_log("Workflow succeeded")
     assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_SUCCEEDED_TOTAL) == 1
     assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 5
@@ -484,7 +547,7 @@ async def test_serialization_failure_is_non_retryable_and_preserves_prior_checkp
         {
             LABEL_ORCHESTRATION_ID: m._mn_orchestration_id,
             LABEL_MINION: m._mn_minion_id,
-            LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: "before_step",
+            LABEL_MINION_WORKFLOW_PERSISTENCE_POINT: "before_step",
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
             LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "serialize",
             LABEL_MINION_WORKFLOW_PERSISTENCE_RETRYABLE: "false",
