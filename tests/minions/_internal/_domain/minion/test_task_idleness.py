@@ -3,18 +3,11 @@ from typing import Any
 
 import pytest
 
-from minions import Minion, minion_step
-from tests.assets.contexts.empty import EmptyContext
-from tests.assets.events.empty import EmptyEvent
+from minions import Minion
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
+from tests.assets.support.minion_noop import NoOpMinion
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
-
-
-class NoOpMinion(Minion[EmptyEvent, EmptyContext]):
-    @minion_step
-    async def step_1(self):
-        return
 
 
 def _make_no_op_minion(
