@@ -416,9 +416,6 @@ async def test_separate_batches_commit_in_fifo_order_for_same_workflow(
 ) -> None:
     s, _ = await make_state_store_and_logger(batch_max_queued_writes=1)
 
-    # prevent timer flush so FIFO ordering is driven by explicit cap-triggered batches
-    s._batch_max_flush_delay_ms = 3_000
-
     commit_gate = BlockedCommitBatchNowGate(s, monkeypatch)
     ctx = mk_ctx(i=503, size=16)
     save_task: asyncio.Task[None] | None = None
@@ -452,9 +449,6 @@ async def test_flush_waits_for_worker_after_commit_batch_is_popped_from_queue(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     s, _ = await make_state_store_and_logger(batch_max_queued_writes=1)
-
-    # prevent timer flush so _flush must wait on the already active worker commit
-    s._batch_max_flush_delay_ms = 3_000
 
     commit_gate = BlockedCommitBatchNowGate(s, monkeypatch)
     ctx = mk_ctx(i=504, size=16)
