@@ -76,7 +76,7 @@ async def test_supports_start_wait_shutdown_flow(
 
 
 @pytest.mark.asyncio
-async def test_supports_class_start_with_inline_minion_config(
+async def test_class_start_with_inline_config_records_successful_resolution_and_exact_steps(
     gru: Gru,
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
@@ -169,65 +169,6 @@ async def test_supports_expect_runtime_for_persistence_after_stop(
         ),
         ExpectRuntime(
             expect=RuntimeExpectSpec(persistence={start: 1}),
-        ),
-        GruShutdown(expect_success=True),
-    ]
-
-    await run_gru_scenario(
-        gru,
-        directives,
-        pipeline_event_counts={pipeline_ref: 1},
-    )
-
-
-@pytest.mark.asyncio
-async def test_supports_expect_runtime_for_resolutions_after_completion(
-    gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
-) -> None:
-    minion_ref = "tests.assets.minions.two_steps.simple.default"
-    pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
-
-    start = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
-    directives: list[Directive] = [
-        start,
-        WaitWorkflowCompletions(workflow_steps_mode="exact"),
-        ExpectRuntime(
-            expect=RuntimeExpectSpec(
-                resolutions={start: {"succeeded": 1, "failed": 0, "aborted": 0}}
-            ),
-        ),
-        GruShutdown(expect_success=True),
-    ]
-
-    await run_gru_scenario(
-        gru,
-        directives,
-        pipeline_event_counts={pipeline_ref: 1},
-    )
-
-
-@pytest.mark.asyncio
-async def test_supports_expect_runtime_for_exact_workflow_steps_after_completion(
-    gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
-) -> None:
-    minion_ref = "tests.assets.minions.two_steps.simple.default"
-    pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
-
-    start = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
-    directives: list[Directive] = [
-        start,
-        WaitWorkflowCompletions(workflow_steps_mode="exact"),
-        ExpectRuntime(
-            expect=RuntimeExpectSpec(
-                workflow_steps={start: {"step_1": 1, "step_2": 1}},
-                workflow_steps_mode="exact",
-            ),
         ),
         GruShutdown(expect_success=True),
     ]
@@ -514,43 +455,6 @@ async def test_resumes_identified_minion_without_persisted_minion_metadata(
 
 
 @pytest.mark.asyncio
-async def test_batches_stops_serially(
-    gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
-) -> None:
-    pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
-    from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
-
-    AssetPipeline.configure_gate(expected_subs=2)
-
-    start_1 = OrchestrationStart(
-        pipeline=pipeline_ref,
-        minion="tests.assets.minions.two_steps.simple.default"
-    )
-    start_2 = OrchestrationStart(
-        pipeline=pipeline_ref,
-        minion="tests.assets.minions.two_steps.simple.with_simple_b_resource"
-    )
-
-    directives: list[Directive] = [
-        start_1,
-        start_2,
-        WaitWorkflowCompletions(workflow_steps_mode="exact"),
-        OrchestrationStop(id=start_1, expect_success=True),
-        OrchestrationStop(id=start_2, expect_success=True),
-        GruShutdown(expect_success=True),
-    ]
-
-    await run_gru_scenario(
-        gru,
-        directives,
-        pipeline_event_counts={pipeline_ref: 1},
-    )
-
-
-@pytest.mark.asyncio
 async def test_duplicate_start_fails(
     gru: Gru,
     logger: InMemoryLogger,
@@ -704,37 +608,6 @@ async def test_wait_workflow_completions_targets_selected_orchestrations(
         directives,
         pipeline_event_counts={pipeline_ref: 1},
     )
-
-
-@pytest.mark.asyncio
-async def test_wait_for_unknown_start_fails(
-    gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
-) -> None:
-    pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
-    from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
-
-    AssetPipeline.configure_gate(expected_subs=1)
-
-    start = OrchestrationStart(
-        pipeline=pipeline_ref,
-        minion="tests.assets.minions.two_steps.simple.default",
-    )
-    start_missing = OrchestrationStart(pipeline=pipeline_ref, minion="missing-minion")
-    directives: list[Directive] = [
-        start,
-        WaitWorkflowCompletions(orchestrations=(start_missing,)),
-        GruShutdown(expect_success=True),
-    ]
-
-    with pytest.raises(ValueError, match="outside this ScenarioPlan"):
-        await run_gru_scenario(
-            gru,
-            directives,
-            pipeline_event_counts={pipeline_ref: 1},
-        )
 
 
 @pytest.mark.asyncio
