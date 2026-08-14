@@ -34,7 +34,7 @@ class MarkerRecordingResource(Resource):
 
 
 @pipeline_id(PIPELINE_COMPONENT_ID)
-class ControlledPipeline(TriggeredPipeline[SimpleEvent]):
+class SimpleEventPipeline(TriggeredPipeline[SimpleEvent]):
     async def produce_event(self) -> SimpleEvent:
         return SimpleEvent(timestamp=0)
 

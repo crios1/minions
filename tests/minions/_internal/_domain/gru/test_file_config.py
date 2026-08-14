@@ -72,7 +72,7 @@ async def test_unchanged_id_resumes_persisted_workflow_with_reloaded_contents(
     tmp_path: Path,
 ) -> None:
     @pipeline_id("88888888-8888-4888-8888-88888888888b")
-    class ControlledEventPipeline(TriggeredPipeline[SimpleEvent]):
+    class SimpleEventPipeline(TriggeredPipeline[SimpleEvent]):
         async def produce_event(self) -> SimpleEvent:
             return SimpleEvent(timestamp=0)
 
@@ -132,9 +132,9 @@ async def test_unchanged_id_resumes_persisted_workflow_with_reloaded_contents(
             assert module_path == fake_minion_module_path
             return ConfigObservingMinion
 
-        def resolve_pipeline_class(module_path: str) -> type[ControlledEventPipeline]:
+        def resolve_pipeline_class(module_path: str) -> type[SimpleEventPipeline]:
             assert module_path == fake_pipeline_module_path
-            return ControlledEventPipeline
+            return SimpleEventPipeline
 
         monkeypatch.setattr(gru, "_get_minion_class", resolve_minion_class)
         monkeypatch.setattr(gru, "_get_pipeline_class", resolve_pipeline_class)
@@ -148,7 +148,7 @@ async def test_unchanged_id_resumes_persisted_workflow_with_reloaded_contents(
         assert first_start.orchestration_id is not None
 
         first_pipeline = gru._orchestrations[first_start.orchestration_id].pipeline
-        assert isinstance(first_pipeline, ControlledEventPipeline)
+        assert isinstance(first_pipeline, SimpleEventPipeline)
         await first_pipeline.trigger_event()
         await asyncio.wait_for(
             observation_reached.wait(),
