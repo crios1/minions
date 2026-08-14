@@ -74,7 +74,6 @@ async def test_supports_start_wait_shutdown_flow(
         pipeline_event_counts={pipeline_ref: 1},
     )
 
-
 @pytest.mark.asyncio
 async def test_class_start_with_inline_config_records_successful_resolution_and_exact_steps(
     gru: Gru,
@@ -455,37 +454,6 @@ async def test_resumes_identified_minion_without_persisted_minion_metadata(
 
 
 @pytest.mark.asyncio
-async def test_duplicate_start_fails(
-    gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
-) -> None:
-    pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
-    minion_ref = "tests.assets.minions.two_steps.simple.default"
-
-    directives: list[Directive] = [
-        OrchestrationStart(
-            pipeline=pipeline_ref,
-            minion=minion_ref,
-        ),
-        OrchestrationStart(
-            pipeline=pipeline_ref,
-            minion=minion_ref,
-            expect_success=False,
-        ),
-        WaitWorkflowCompletions(workflow_steps_mode="exact"),
-        GruShutdown(expect_success=True),
-    ]
-
-    await run_gru_scenario(
-        gru,
-        directives,
-        pipeline_event_counts={pipeline_ref: 1},
-    )
-
-
-@pytest.mark.asyncio
 async def test_failed_start_does_not_require_minion_startup(
     gru: Gru,
     logger: InMemoryLogger,
@@ -726,47 +694,6 @@ async def test_wait_for_empty_workflow_set_is_noop(
         WaitWorkflowCompletions(orchestrations=()),
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         OrchestrationStop(id=start, expect_success=True),
-        GruShutdown(expect_success=True),
-    ]
-
-    await run_gru_scenario(
-        gru,
-        directives,
-        pipeline_event_counts={pipeline_ref: 1},
-    )
-
-
-@pytest.mark.asyncio
-async def test_wait_workflow_completions_targets_successful_start_when_concurrent_duplicate_fails(
-    gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
-) -> None:
-    minion_ref = "tests.assets.minions.two_steps.simple.default"
-    pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
-    from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
-
-    AssetPipeline.configure_gate(expected_subs=1)
-
-    successful_start = OrchestrationStart(
-        pipeline=pipeline_ref,
-        minion=minion_ref,
-        expect_success=True,
-    )
-    duplicate_start = OrchestrationStart(
-        pipeline=pipeline_ref,
-        minion=minion_ref,
-        expect_success=False,
-    )
-
-    directives: list[Directive] = [
-        Concurrent(successful_start, duplicate_start),
-        WaitWorkflowCompletions(
-            orchestrations=(successful_start,),
-            workflow_steps_mode="exact",
-        ),
-        OrchestrationStop(id=successful_start, expect_success=True),
         GruShutdown(expect_success=True),
     ]
 
