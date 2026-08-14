@@ -1,6 +1,8 @@
 import asyncio
+import contextlib
 from collections.abc import Coroutine
 from typing import cast
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -76,5 +78,31 @@ async def test_trigger_waits_for_live_subscriber_before_emitting():
     assert subscriber.events == [RecordEvent()]
 
 
-def test_triggered_pipeline_has_no_autonomous_events():
-    assert DummyPipeline.total_events == 0
+@pytest.mark.asyncio
+async def test_run_does_not_produce_events_without_explicit_trigger(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    pipeline = DummyPipeline(
+        pipeline_id="dummy-pipeline-id",
+        pipeline_module_path="dummy-pipeline-module-path",
+        metrics=NoOpMetrics(),
+        logger=NoOpLogger(),
+    )
+    subscriber = RecordingSubscriber()
+    await pipeline._mn_subscribe(
+        cast(Minion[RecordEvent, CounterContext], subscriber)
+    )
+    produce_event = AsyncMock(return_value=RecordEvent())
+    monkeypatch.setattr(pipeline, "produce_event", produce_event)
+
+    run_task = asyncio.create_task(pipeline.run())
+    try:
+        await asyncio.sleep(0)
+
+        assert not run_task.done()
+        produce_event.assert_not_awaited()
+        assert not subscriber.events
+    finally:
+        run_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await run_task
