@@ -109,6 +109,7 @@ async def test_start_orchestration_contains_state_store_resume_read_failure(
             result.reason
             == "tests.assets.minions.one_step.counter.default.AssetMinion.startup failed"
         )
+        assert result.cause == BOOM_MESSAGE
         assert logger.has_log(
             "AssetStateStore.get_contexts_for_orchestration failed",
             log_kwargs={"error_type": "BoomError"},
@@ -155,10 +156,14 @@ async def test_start_orchestration_fails_closed_on_persisted_workflow_decode_mis
         )
 
         assert not result.success
-        assert result.reason is not None
+        assert (
+            result.reason
+            == "tests.assets.minions.one_step.counter.default.AssetMinion.startup failed"
+        )
+        assert result.cause is not None
         assert (
             "could not be decoded with the current Minion event and workflow context types"
-            in result.reason
+            in result.cause
         )
         assert result.suggestion is not None
         assert "drain the orchestration" in result.suggestion

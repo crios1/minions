@@ -103,6 +103,24 @@
 
 
 ### Features:
+- considering: structured Gru failure results for programmatic handling
+  - current incremental contract:
+    - keep `reason` as the curated high-level result description
+    - expose `StartResult.cause` as an optional lower-level diagnostic string
+    - keep `suggestion` reserved for a recommended caller action
+    - do not treat free-form cause messages as stable programmatic identifiers
+  - design work to revisit:
+    - introduce stable reason and cause codes alongside human-readable messages
+    - decide whether codes should be enums or documented string literals
+    - preserve compatibility for callers using existing `reason` strings
+    - determine which result types have one cause and which require collections of
+      structured errors
+    - align this design with the separate `StopResult` disposition and cleanup-error
+      work below
+  - why it matters:
+    - callers should eventually be able to branch on failure semantics without
+      parsing prose while still receiving useful diagnostics at the API call site
+
 - considering: quarantined failed workflows and manual recovery
   - status:
     - this is a design consideration, not committed roadmap work

@@ -41,6 +41,7 @@ class StopResult(GruResult):
 @dataclass
 class StartResult(GruResult):
     orchestration_id: str | None = None
+    cause: str | None = None
 
 
 @dataclass

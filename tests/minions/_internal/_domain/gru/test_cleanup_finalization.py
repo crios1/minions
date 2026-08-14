@@ -9,6 +9,7 @@ import minions._internal._domain.gru as gru_module
 from minions._internal._domain.exceptions import TaskCancellationTimeoutError
 from minions._internal._domain.gru import Gru
 from minions._internal._domain.minion import Minion
+from tests.assets.crash.boom import BOOM_MESSAGE
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
@@ -290,6 +291,7 @@ async def test_start_resource_startup_failure_discards_runtime_state_when_cleanu
             "tests.assets.crash.resources.boom_startup."
             "AssetResource.startup failed"
         )
+        assert result.cause == BOOM_MESSAGE
         await assert_runtime_empty(gru)
 
 

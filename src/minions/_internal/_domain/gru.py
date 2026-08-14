@@ -2154,6 +2154,7 @@ class Gru:
                     return StartResult(
                         success=False,
                         reason=str(e),
+                        cause=str(e.__cause__) if e.__cause__ is not None else None,
                     )
 
             else:
@@ -2233,7 +2234,7 @@ class Gru:
                     if context_type_mismatch_error is not None:
                         return StartResult(
                             success=False,
-                            reason=str(context_type_mismatch_error),
+                            reason=str(e),
                             suggestion=(
                                 "Run the previous compatible code and drain the orchestration "
                                 "before starting it with the new types. If these workflows are "
@@ -2241,10 +2242,12 @@ class Gru:
                                 f"orchestration {spec.orchestration_id!r} from your configured "
                                 "StateStore."
                             ),
+                            cause=str(context_type_mismatch_error),
                         )
                     return StartResult(
                         success=False,
                         reason=str(e),
+                        cause=str(e.__cause__) if e.__cause__ is not None else None,
                     )
 
                 await self._logger._mn_log(
