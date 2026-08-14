@@ -1,13 +1,15 @@
 import asyncio
+import contextlib
 import random
-from typing import Callable
+from typing import Callable, Literal, NoReturn
 
 import pytest
 
 from minions import Minion, minion_step
+from minions._internal._domain.gru import Gru
 from minions._internal._domain.minion import WorkflowPersistencePoint
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
-from minions._internal._framework.logger import ERROR, WARNING
+from minions._internal._framework.logger import ERROR, WARNING, Logger
 from minions._internal._framework.metrics_constants import (
     LABEL_MINION,
     LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE,
@@ -17,6 +19,7 @@ from minions._internal._framework.metrics_constants import (
     LABEL_MINION_WORKFLOW_PERSISTENCE_RETRYABLE,
     LABEL_ORCHESTRATION_ID,
     LABEL_STATE_STORE,
+    MINION_WORKFLOW_INFLIGHT_GAUGE,
     MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL,
     MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
     MINION_WORKFLOW_PERSISTENCE_DURATION_SECONDS,
@@ -27,14 +30,18 @@ from minions._internal._framework.metrics_constants import (
 from minions._internal._framework.minion_workflow_context_codec import (
     deserialize_workflow_context_blob,
 )
+from minions._internal._framework.state_store import StateStore
+from minions._internal._framework.state_store_noop import NoOpStateStore
 from tests.assets.contexts.empty import EmptyContext
 from tests.assets.contexts.int_value import IntValueContext
 from tests.assets.events.empty import EmptyEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.minion_noop import NoOpMinion
+from tests.assets.support.pipeline_triggered import TriggeredPipeline
 from tests.assets.support.state_store_failable import FailableStateStore
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
+from tests.minions._internal._domain.gru.assertions import assert_runtime_empty
 
 
 async def _wait_until(
@@ -51,9 +58,60 @@ async def _wait_until(
     raise TimeoutError("condition did not become true before timeout")
 
 
+class _GatedStateStore(InMemoryStateStore):
+    """Allow a test to pause exactly one selected save or delete attempt until released."""
+
+    def __init__(
+        self,
+        logger: Logger,
+        *,
+        gated_operation: Literal["save", "delete"],
+        fail_after_release: bool,
+    ) -> None:
+        super().__init__(logger)
+        self._gated_operation = gated_operation
+        self._fail_after_release = fail_after_release
+        self.attempt_count = 0
+        self.attempt_started = asyncio.Event()
+        self._attempt_release = asyncio.Event()
+
+    def release_attempt(self) -> None:
+        concurrent_attempt_count = self.attempt_count
+        try:
+            if concurrent_attempt_count != 1:
+                raise AssertionError(
+                    "expected exactly one concurrent persistence attempt, "
+                    f"got {concurrent_attempt_count}"
+                )
+        finally:
+            self._attempt_release.set()
+
+    async def _gate(self, operation: Literal["save", "delete"]) -> None:
+        if operation != self._gated_operation:
+            return
+        self.attempt_count += 1
+        self.attempt_started.set()
+        await self._attempt_release.wait()
+        if self._fail_after_release:
+            raise RuntimeError(f"controlled {operation} failure")
+
+    async def save_context(
+        self,
+        workflow_id: str,
+        orchestration_id: str,
+        context: bytes,
+    ) -> None:
+        await self._gate("save")
+        await super().save_context(workflow_id, orchestration_id, context)
+
+    async def delete_context(self, workflow_id: str) -> None:
+        await self._gate("delete")
+        await super().delete_context(workflow_id)
+
+
 def _make_no_op_minion(
     *,
-    store: FailableStateStore,
+    store: StateStore,
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     delay_seconds: float,
@@ -375,6 +433,314 @@ async def test_retry_jitter_respects_configured_bounds(
     assert sampled_bounds == [(-0.25, 0.25), (-0.25, 0.25)]
     assert sleep_delays == [0.75, 1.25]
     assert store.save_failures.count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("operation", "fail"),
+    [
+        pytest.param("save", False, id="save-succeeds"),
+        pytest.param("save", True, id="save-fails"),
+        pytest.param("delete", False, id="delete-succeeds"),
+        pytest.param("delete", True, id="delete-fails"),
+    ],
+)
+async def test_cancellation_propagates_after_one_active_attempt_finishes(
+    operation: Literal["save", "delete"],
+    fail: bool,
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+):
+    store = _GatedStateStore(
+        logger,
+        gated_operation=operation,
+        fail_after_release=fail,
+    )
+    m = _make_no_op_minion(
+        store=store,
+        logger=logger,
+        metrics=metrics,
+        delay_seconds=0.01,
+        max_delay_seconds=0.01,
+        backoff_multiplier=1.0,
+        jitter_ratio=0.0,
+    )
+    ctx = _make_empty_workflow_context(m._mn_orchestration_id)
+    if operation == "delete":
+        await store._mn_serialize_and_save_context(ctx)
+
+    persistence_task = asyncio.create_task(
+        m._mn_run_workflow_persistence_operation(
+            ctx,
+            persistence_point=(
+                "workflow_start" if operation == "save" else "workflow_resolve"
+            ),
+        )
+    )
+    await asyncio.wait_for(store.attempt_started.wait(), timeout=1.0)
+
+    persistence_task.cancel()
+    await asyncio.sleep(0)
+
+    assert not persistence_task.done()
+
+    store.release_attempt()
+    with pytest.raises(asyncio.CancelledError):
+        await persistence_task
+
+    persisted_contexts = await store.get_all_contexts()
+    expected_context_remains = (operation == "save" and not fail) or (
+        operation == "delete" and fail
+    )
+    assert bool(persisted_contexts) is expected_context_remains
+    assert store.attempt_count == 1
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 1
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == (
+        0 if fail else 1
+    )
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL) == (
+        1 if fail else 0
+    )
+    assert MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE not in metrics.snapshot_gauges()
+
+
+@pytest.mark.asyncio
+async def test_unexpected_active_attempt_error_is_logged_without_replacing_cancellation(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    store = NoOpStateStore()
+    m = _make_no_op_minion(
+        store=store,
+        logger=logger,
+        metrics=metrics,
+        delay_seconds=0.01,
+        max_delay_seconds=0.01,
+        backoff_multiplier=1.0,
+        jitter_ratio=0.0,
+    )
+    ctx = _make_empty_workflow_context(m._mn_orchestration_id)
+    attempt_count = 0
+    attempt_started = asyncio.Event()
+    release_attempt = asyncio.Event()
+
+    async def raise_attempt_error(_ctx: object, **_kwargs: object) -> NoReturn:
+        nonlocal attempt_count
+        attempt_count += 1
+        attempt_started.set()
+        await release_attempt.wait()
+        raise RuntimeError("controlled attempt error")
+
+    monkeypatch.setattr(
+        m,
+        "_mn_run_workflow_persistence_attempt",
+        raise_attempt_error,
+    )
+    persistence_task = asyncio.create_task(
+        m._mn_run_workflow_persistence_operation(
+            ctx,
+            persistence_point="workflow_start",
+        )
+    )
+    await asyncio.wait_for(attempt_started.wait(), timeout=1.0)
+
+    persistence_task.cancel()
+    await asyncio.sleep(0)
+    release_attempt.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await persistence_task
+
+    assert attempt_count == 1
+    failure_log = next(
+        log
+        for log in logger.logs
+        if log.msg == "Workflow persistence attempt failed during cancellation"
+    )
+    assert failure_log.kwargs["error_type"] == "RuntimeError"
+    assert failure_log.kwargs["error_message"] == "controlled attempt error"
+    assert failure_log.kwargs["persistence_point"] == "workflow_start"
+    assert failure_log.kwargs["persistence_operation"] == "save"
+
+
+@pytest.mark.asyncio
+async def test_workflow_cancellation_during_retry_wait_preserves_checkpoint_and_clears_tracking(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+):
+    step_calls: list[str] = []
+
+    class SaveFailureBeforeNextStepMinion(Minion[EmptyEvent, IntValueContext]):
+        @minion_step
+        async def change_context_and_enable_save_failures(self):
+            step_calls.append("change_context_and_enable_save_failures")
+            self.context.value = 1
+            state_store = self._mn_state_store
+            assert isinstance(state_store, FailableStateStore)
+            state_store.save_failures.enable()
+
+        @minion_step
+        async def must_not_run(self):
+            step_calls.append("must_not_run")
+
+    store = FailableStateStore(logger=logger)
+    m = SaveFailureBeforeNextStepMinion(
+        minion_instance_id="dummy-minion-instance-id",
+        orchestration_id="dummy-orchestration-id",
+        minion_module_path="dummy-minion-module-path",
+        config_path=None,
+        state_store=store,
+        metrics=metrics,
+        logger=logger,
+        minion_id="tests.assets.save_failure_before_next_step_minion",
+        minion_config_id="",
+        pipeline_id="dummy-pipeline-id",
+        workflow_persistence_failure_policy="idle-until-persisted",
+        workflow_persistence_retry_delay_seconds=60.0,
+        workflow_persistence_retry_max_delay_seconds=60.0,
+        workflow_persistence_retry_jitter_ratio=0.0,
+    )
+    blocked_labels = {
+        LABEL_ORCHESTRATION_ID: m._mn_orchestration_id,
+        LABEL_MINION: m._mn_minion_id,
+        LABEL_MINION_WORKFLOW_PERSISTENCE_POINT: "before_step",
+        LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
+        LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "save",
+        LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: "idle-until-persisted",
+        LABEL_STATE_STORE: "FailableStateStore",
+    }
+
+    m._mn_mark_running()
+    await m._mn_handle_event(EmptyEvent())
+    await store.save_failures.wait_for(1)
+    await _wait_until(
+        lambda: (
+            MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE in metrics.snapshot_gauges()
+            and metrics.snapshot_gauge_value(
+                MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
+                blocked_labels,
+            )
+            == 1
+        )
+    )
+    async with m._mn_tasks_gate:
+        workflow_task = next(iter(m._mn_workflow_tasks))
+
+    workflow_task.cancel()
+    await m._mn_wait_until_all_tasks_idle(timeout=1.0)
+
+    persisted_contexts = await store.get_all_contexts()
+    assert len(persisted_contexts) == 1
+    persisted = deserialize_workflow_context_blob(persisted_contexts[0].context)
+    assert persisted.next_step_index == 0
+    assert persisted.context.value == 0
+    assert step_calls == ["change_context_and_enable_save_failures"]
+    assert store.save_failures.count == 1
+    assert workflow_task.cancelled()
+    assert not m._mn_workflow_tasks
+    assert not m._mn_service_tasks
+    assert not m._mn_workflow_persistence_blocked_counts
+    assert metrics.snapshot_gauge_value(
+        MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
+        blocked_labels,
+    ) == 0
+    assert metrics.snapshot_gauge_value(
+        MINION_WORKFLOW_INFLIGHT_GAUGE,
+        {
+            LABEL_ORCHESTRATION_ID: m._mn_orchestration_id,
+            LABEL_MINION: m._mn_minion_id,
+        },
+    ) == 0
+
+
+@pytest.mark.asyncio
+async def test_stopping_orchestration_during_retry_wait_preserves_unfinished_workflow_and_cleans_up(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+):
+    step_calls: list[str] = []
+
+    class EmptyEventPipeline(TriggeredPipeline[EmptyEvent]):
+        async def produce_event(self):
+            return EmptyEvent()
+
+    class SaveFailureBeforeNextStepMinion(Minion[EmptyEvent, IntValueContext]):
+        @minion_step
+        async def change_context_and_enable_save_failures(self):
+            step_calls.append("change_context_and_enable_save_failures")
+            self.context.value = 1
+            state_store = self._mn_state_store
+            assert isinstance(state_store, FailableStateStore)
+            state_store.save_failures.enable()
+
+        @minion_step
+        async def must_not_run(self):
+            step_calls.append("must_not_run")
+
+    store = FailableStateStore(logger=logger)
+
+    async with managed_gru_context(
+        logger=logger,
+        metrics=metrics,
+        state_store=store,
+        workflow_persistence_failure_policy="idle-until-persisted",
+        workflow_persistence_retry_delay_seconds=60.0,
+        workflow_persistence_retry_max_delay_seconds=60.0,
+        workflow_persistence_retry_jitter_ratio=0.0,
+    ) as gru:
+        started = await gru.start_orchestration(
+            EmptyEventPipeline,
+            SaveFailureBeforeNextStepMinion,
+        )
+        assert started.success
+        assert started.orchestration_id is not None
+        orchestration = gru._orchestrations[started.orchestration_id]
+        minion = orchestration.minion
+        pipeline = orchestration.pipeline
+        assert isinstance(pipeline, EmptyEventPipeline)
+        blocked_labels = {
+            LABEL_ORCHESTRATION_ID: minion._mn_orchestration_id,
+            LABEL_MINION: minion._mn_minion_id,
+            LABEL_MINION_WORKFLOW_PERSISTENCE_POINT: "before_step",
+            LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
+            LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "save",
+            LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: "idle-until-persisted",
+            LABEL_STATE_STORE: "FailableStateStore",
+        }
+
+        await pipeline.trigger_event()
+        await store.save_failures.wait_for(1)
+        await _wait_until(
+            lambda: (
+                MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE in metrics.snapshot_gauges()
+                and metrics.snapshot_gauge_value(
+                    MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
+                    blocked_labels,
+                )
+                == 1
+            )
+        )
+
+        stopped = await gru.stop_orchestration(started.orchestration_id)
+
+        assert stopped.success
+        persisted_contexts = await store.get_all_contexts()
+        assert len(persisted_contexts) == 1
+        persisted = deserialize_workflow_context_blob(persisted_contexts[0].context)
+        assert persisted.next_step_index == 0
+        assert persisted.context.value == 0
+        assert step_calls == ["change_context_and_enable_save_failures"]
+        assert store.save_failures.count == 1
+        assert not minion._mn_workflow_tasks
+        assert not minion._mn_service_tasks
+        assert not minion._mn_workflow_persistence_blocked_counts
+        assert metrics.snapshot_gauge_value(
+            MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
+            blocked_labels,
+        ) == 0
+        await assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio

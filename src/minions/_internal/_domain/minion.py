@@ -613,6 +613,27 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         elif step_name is not None:
             raise ValueError("step_name is only valid for the 'before_step' persistence point")
 
+    async def _mn_run_workflow_persistence_attempt(
+        self,
+        ctx: MinionWorkflowContext[T_Event, T_Ctx],
+        *,
+        persistence_point: WorkflowPersistencePoint,
+        operation: Literal["save", "delete"],
+    ) -> PersistenceOperationResult:
+        attempt_started_at = time.perf_counter()
+        if operation == "save":
+            result = await self._mn_state_store._mn_serialize_and_save_context(ctx)
+        else:
+            result = await self._mn_state_store._mn_delete_context(ctx.workflow_id)
+        attempt_duration_seconds = time.perf_counter() - attempt_started_at
+        await self._mn_record_workflow_persistence_attempt_metrics(
+            persistence_point=persistence_point,
+            operation=operation,
+            result=result,
+            duration_seconds=attempt_duration_seconds,
+        )
+        return result
+
     async def _mn_run_workflow_persistence_operation(
         self,
         ctx: MinionWorkflowContext[T_Event, T_Ctx],
@@ -645,22 +666,41 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         try:
             while True:
                 attempts += 1
-                attempt_started_at = time.perf_counter()
-                if operation == "save":
-                    result = await asyncio.shield(
-                        self._mn_state_store._mn_serialize_and_save_context(ctx)
-                    )
-                else:
-                    result = await asyncio.shield(
-                        self._mn_state_store._mn_delete_context(ctx.workflow_id)
-                    )
-                attempt_duration_seconds = time.perf_counter() - attempt_started_at
-                await self._mn_record_workflow_persistence_attempt_metrics(
-                    persistence_point=persistence_point,
-                    operation=operation,
-                    result=result,
-                    duration_seconds=attempt_duration_seconds,
+                # An in-progress persistence attempt must finish before cancellation propagates.
+                attempt_task = asyncio.create_task(
+                    self._mn_run_workflow_persistence_attempt(
+                        ctx,
+                        persistence_point=persistence_point,
+                        operation=operation,
+                    ),
+                    name=(
+                        f"{type(self).__name__}:workflow-persistence:"
+                        f"{persistence_point}:{ctx.workflow_id}"
+                    ),
                 )
+                try:
+                    result = await asyncio.shield(attempt_task)
+                except asyncio.CancelledError:
+                    while not attempt_task.done():
+                        try:
+                            await asyncio.shield(attempt_task)
+                        except asyncio.CancelledError:
+                            continue
+                        except Exception:
+                            break
+                    if not attempt_task.cancelled():
+                        attempt_error = attempt_task.exception()
+                        if attempt_error is not None:
+                            await self._mn_logger._mn_log_exception(
+                                ERROR,
+                                "Workflow persistence attempt failed during cancellation",
+                                attempt_error,
+                                workflow_id=ctx.workflow_id,
+                                **persistence_location_log_kwargs,
+                                persistence_operation=operation,
+                                **self._mn_orchestration_log_kwargs(),
+                            )
+                    raise
                 if result.persisted:
                     if blocked_labels is not None:
                         await self._mn_decrement_workflow_persistence_blocked_count(blocked_labels)
