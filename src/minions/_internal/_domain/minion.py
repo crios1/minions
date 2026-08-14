@@ -128,6 +128,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     )
     _mn_defer_minion_setup: ClassVar[bool] = False
 
+    # Subclass Construction and Validation
+
     @staticmethod
     def _mn_is_minion_class(typ: type[Any]) -> bool:
         return issubclass(typ, Minion)
@@ -313,6 +315,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 f"{cls.__name__}.{step_name} cannot call workflow step '{target.attr}'; "
                 "minion steps must be orchestrated only by the runtime workflow engine."
             )
+
+    # Runtime Construction, Identity, and Policy
 
     def __init__(
         self,
@@ -502,6 +506,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         jitter_seconds = delay_seconds * jitter_ratio
         return max(0.0, delay_seconds + random.uniform(-jitter_seconds, jitter_seconds))
 
+    # Workflow Context Access
+
     @property
     def event(self) -> T_Event:
         try:
@@ -522,6 +528,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             return self._mn_workflow_handle_var.get()
         except LookupError:
             raise RuntimeError("No workflow handle is currently bound to this workflow")
+
+    # Startup and Configuration
 
     async def _mn_startup(
         self,
@@ -598,6 +606,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             f"{type(self).__name__}.load_config must be overridden to load "
             "file config into a dataclass or msgspec Struct instance."
         )
+
+    # Workflow Persistence
 
     @staticmethod
     def _mn_validate_workflow_persistence_point(
@@ -877,6 +887,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         else:
             await self._mn_logger._mn_log(level, message, **log_kwargs)
 
+    # Workflow Metrics and Task Tracking
+
     def _mn_workflow_persistence_base_metric_labels(
         self,
         *,
@@ -1078,6 +1090,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 labels=result_labels,
             ),
         )
+
+    # Workflow Execution
 
     @staticmethod
     async def _mn_shielded_gather(*aws: Awaitable[object]) -> list[object]:
@@ -1426,6 +1440,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 }
         return None
 
+    # Lifecycle and Event Handling
+
     async def _mn_shutdown(
         self,
         *,
@@ -1475,6 +1491,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             persistence_point="workflow_start",
         )
         await self._mn_run_workflow(ctx)
+
+    # Task Idleness
 
     async def _mn_wait_until_tasks_idle(
         self,
