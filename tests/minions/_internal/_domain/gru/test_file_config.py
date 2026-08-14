@@ -9,12 +9,14 @@ import pytest
 
 from minions import Minion, minion_id, minion_step, pipeline_id
 from minions._internal._domain.gru import Gru
+from minions._internal._framework.logger import ERROR
 from tests.assets.events.simple import SimpleEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.minion_spied_configed import AssetMinionConfig
 from tests.assets.support.pipeline_triggered import TriggeredPipeline
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
+from tests.minions._internal._domain.gru.assertions import assert_runtime_empty
 
 
 @pytest.mark.asyncio
@@ -60,6 +62,52 @@ async def test_binds_loaded_config_to_minion(
         assert minion.config.name == "alpha"
 
         await gru.stop_orchestration(result.orchestration_id)
+
+
+@pytest.mark.asyncio
+async def test_start_without_load_config_override_returns_cause_and_cleans_up(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    tests_dir: Path,
+) -> None:
+    minion_module_path = "tests.assets.minions.two_steps.simple.default"
+    pipeline_module_path = "tests.assets.pipelines.emit_one.simple.default"
+    config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
+    expected_cause = (
+        "AssetMinion.load_config must be overridden to load file config into a "
+        "dataclass or msgspec Struct instance."
+    )
+    expected_reason = (
+        "tests.assets.minions.two_steps.simple.default.AssetMinion.startup failed"
+    )
+
+    async with managed_gru_context(
+        state_store=state_store,
+        logger=logger,
+        metrics=metrics,
+    ) as gru:
+        result = await gru.start_orchestration(
+            minion=minion_module_path,
+            minion_config_path=config_path,
+            pipeline=pipeline_module_path,
+        )
+
+        assert not result.success
+        assert result.reason == expected_reason
+        assert result.cause == expected_cause
+        assert result.suggestion is None
+        failure_log = logger.find_first_log(
+            "Failed to start orchestration",
+            min_level=ERROR,
+        )
+        assert failure_log is not None
+        assert failure_log.kwargs["error_type"] == "MinionsError"
+        assert failure_log.kwargs["error_message"] == expected_reason
+        assert failure_log.kwargs["cause_error_type"] == "NotImplementedError"
+        assert failure_log.kwargs["cause_error_message"] == expected_cause
+        await assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio
