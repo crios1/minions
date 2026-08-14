@@ -205,7 +205,7 @@ async def test_start_orchestration_fails_closed_on_persisted_workflow_decode_mis
         ),
     ],
 )
-async def test_start_orchestration_contains_user_code_startup_failures(
+async def test_start_orchestration_returns_startup_failure_cause_and_leaves_runtime_reusable(
     managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
@@ -223,6 +223,8 @@ async def test_start_orchestration_contains_user_code_startup_failures(
         )
 
         assert not result.success
+        assert result.reason is not None
+        assert result.cause == BOOM_MESSAGE
         assert logger.has_log(
             "Failed to start orchestration",
             log_kwargs={
