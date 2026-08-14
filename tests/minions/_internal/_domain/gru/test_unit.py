@@ -191,14 +191,14 @@ class TestUnit:
         assert "alpha" not in cfg_a
 
         key = Gru._make_orchestration_id(
-            pipeline_id="tests.assets.Pipeline",
-            minion_id="tests.assets.Minion",
+            pipeline_id="dummy-pipeline-id",
+            minion_id="dummy-minion-id",
             minion_config_id=cfg_a,
         )
         assert key == self._expected_orchestration_id(
-            minion_id="tests.assets.Minion",
+            minion_id="dummy-minion-id",
             minion_config_id=cfg_a,
-            pipeline_id="tests.assets.Pipeline",
+            pipeline_id="dummy-pipeline-id",
         )
         assert len(key) == 44
 
@@ -217,13 +217,13 @@ class TestUnit:
         assert resolved_path == str(config_path.resolve())
         assert identity == CONFIG_ID
         assert Gru._make_orchestration_id(
-            pipeline_id="pipeline-id",
-            minion_id="minion-id",
+            pipeline_id="dummy-pipeline-id",
+            minion_id="dummy-minion-id",
             minion_config_id=CONFIG_ID,
         ) == self._expected_orchestration_id(
-            minion_id="minion-id",
+            minion_id="dummy-minion-id",
             minion_config_id=CONFIG_ID,
-            pipeline_id="pipeline-id",
+            pipeline_id="dummy-pipeline-id",
         )
 
     @pytest.mark.asyncio

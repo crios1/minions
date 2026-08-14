@@ -46,7 +46,7 @@ class RecordingSubscriber:
             "minion_instance_id": "dummy-minion-instance-id",
             "minion_id": "dummy-minion-id",
             "minion_config_id": "dummy-minion-config-id",
-            "minion_module_path": "dummy.recording_subscriber",
+            "minion_module_path": "dummy-minion-module-path",
         }
 
 

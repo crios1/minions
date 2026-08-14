@@ -201,7 +201,7 @@ def test_adapter_payload_roundtrips_msgspec_struct_payloads():
 
 def test_normalize_workflow_context_data_rejects_legacy_unversioned_payload():
     v1_payload: StateStorePayload = {
-        "minion_module_path": "tests.assets.minions.sample",
+        "minion_module_path": "dummy-minion-module-path",
         "workflow_id": "wf-legacy",
         "event": {"v": 1},
         "context": {"c": 1},
@@ -225,7 +225,7 @@ def test_normalize_workflow_context_data_rejects_future_schema_version():
     payload: WorkflowContextData = {
         "schema_version": 999,
         "orchestration_id": "dummy-orchestration-id",
-        "minion_module_path": "tests.assets.minions.sample",
+        "minion_module_path": "dummy-minion-module-path",
         "workflow_id": "wf-future",
         "event": {"v": 1},
         "context": {"c": 1},
