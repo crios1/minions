@@ -74,17 +74,17 @@ class AsyncLifecycle(ABC):
     @classmethod
     def _mn_validate_class_user_code(cls) -> None:
         for name, attr in cls.__dict__.items():
-            if not name or not name[0].isalpha():
+            if name.startswith("__") and name.endswith("__"):
                 continue
+            if isinstance(attr, property):
+                funcs = (attr.fget, attr.fset, attr.fdel)
+            else:
+                # unwrap staticmethod/classmethod if present
+                funcs = (getattr(attr, "__func__", attr),)
 
-            # unwrap staticmethod/classmethod if present
-            func = getattr(attr, "__func__", attr)
-
-            # avoids builtins / descriptors that don't have user code
-            if not inspect.isfunction(func):
-                continue
-
-            cls._mn_validate_user_code(func, cls.__module__)
+            for func in funcs:
+                if inspect.isfunction(func):
+                    cls._mn_validate_user_code(func, cls.__module__)
 
     @classmethod
     def _mn_validate_user_code(cls, func: Callable[..., object], module_path: str) -> None:
