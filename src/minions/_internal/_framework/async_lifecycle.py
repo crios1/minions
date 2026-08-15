@@ -116,6 +116,49 @@ class AsyncLifecycle(ABC):
                 return f"{owner}.{expr.attr}"
             return None
 
+        function_node = next(
+            (
+                node
+                for node in tree.body
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            ),
+            None,
+        )
+        instance_parameter: str | None = None
+        class_parameter: str | None = None
+        if function_node is not None:
+            parameters = (*function_node.args.posonlyargs, *function_node.args.args)
+            first_parameter = parameters[0].arg if parameters else None
+            decorators = {_expr_name(decorator) for decorator in function_node.decorator_list}
+            if "classmethod" in decorators:
+                class_parameter = first_parameter
+            elif "staticmethod" not in decorators:
+                instance_parameter = first_parameter
+
+        def _reserved_attribute_write_target_label(expr: ast.expr) -> str | None:
+            if isinstance(expr, ast.Name) and expr.id in {
+                instance_parameter,
+                class_parameter,
+            }:
+                return expr.id
+            if (
+                isinstance(expr, ast.Call)
+                and isinstance(expr.func, ast.Name)
+                and expr.func.id == "type"
+                and len(expr.args) == 1
+                and isinstance(expr.args[0], ast.Name)
+                and expr.args[0].id == instance_parameter
+            ):
+                return f"type({instance_parameter})"
+            if (
+                isinstance(expr, ast.Attribute)
+                and isinstance(expr.value, ast.Name)
+                and expr.value.id == instance_parameter
+                and expr.attr == "__class__"
+            ):
+                return f"{instance_parameter}.__class__"
+            return None
+
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
                 f = node.func
@@ -170,18 +213,19 @@ class AsyncLifecycle(ABC):
                         )
                     if f.id == "setattr" and len(node.args) >= 2:
                         a0, a1 = node.args[0], node.args[1]
-                        if isinstance(a0, ast.Name) and a0.id == "self":
-                            if (
-                                isinstance(a1, ast.Constant)
-                                and isinstance(a1.value, str)
-                                and a1.value.startswith("_mn_")
-                            ):
-                                raise UnsupportedUserCode(
-                                    f"Invalid attribute assignment: "
-                                    f"`self.{a1.value}` in `{func.__name__}` "
-                                    f"({module_path}). Attributes starting with `_mn_` are "
-                                    "reserved for framework use."
-                                )
+                        target_label = _reserved_attribute_write_target_label(a0)
+                        if (
+                            target_label is not None
+                            and isinstance(a1, ast.Constant)
+                            and isinstance(a1.value, str)
+                            and a1.value.startswith("_mn_")
+                        ):
+                            raise UnsupportedUserCode(
+                                f"Invalid attribute assignment: "
+                                f"`{target_label}.{a1.value}` in `{func.__name__}` "
+                                f"({module_path}). Attributes starting with `_mn_` are "
+                                "reserved for framework use."
+                            )
 
             if isinstance(node, ast.Raise):
                 exc = node.exc
@@ -224,13 +268,13 @@ class AsyncLifecycle(ABC):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             for t in targets:
                 if isinstance(t, ast.Attribute):
-                    owner = getattr(t.value, "id", None)
-                    if owner != "self":
+                    target_label = _reserved_attribute_write_target_label(t.value)
+                    if target_label is None:
                         continue
                     if not t.attr.startswith("_mn_"):
                         continue
                     raise UnsupportedUserCode(
-                        f"Invalid attribute assignment: `self.{t.attr}` in "
+                        f"Invalid attribute assignment: `{target_label}.{t.attr}` in "
                         f"`{func.__name__}` ({module_path}). Attributes starting with "
                         "`_mn_` are reserved for framework use."
                     )

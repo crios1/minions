@@ -12,11 +12,20 @@ from minions._internal._framework.state_store import StateStore
 from tests.assets.contexts.empty import EmptyContext
 from tests.assets.events.empty import EmptyEvent
 from tests.support.component_subclassing_contract import (
+    assert_mn_attribute_annotation_with_value_is_rejected,
+    assert_mn_attribute_annotation_without_value_is_rejected,
     assert_mn_attribute_assignment_in_private_method_is_rejected,
     assert_mn_attribute_assignment_in_property_deleter_is_rejected,
     assert_mn_attribute_assignment_in_property_getter_is_rejected,
     assert_mn_attribute_assignment_in_property_setter_is_rejected,
     assert_mn_attribute_assignment_in_user_method_is_rejected,
+    assert_mn_attribute_assignment_through_cls_is_rejected,
+    assert_mn_attribute_assignment_through_self_class_is_rejected,
+    assert_mn_attribute_assignment_through_type_self_is_rejected,
+    assert_mn_attribute_setattr_through_cls_is_rejected,
+    assert_mn_attribute_setattr_through_self_class_is_rejected,
+    assert_mn_attribute_setattr_through_type_self_is_rejected,
+    assert_mn_attribute_writes_to_unrelated_object_are_allowed,
     assert_mn_class_attribute_assignment_in_class_body_is_rejected,
     assert_safe_create_task_override_is_rejected,
 )
@@ -88,6 +97,78 @@ class TestReservedMnAttributeSpace:
         user_facing_component_base: Any,
     ) -> None:
         assert_mn_attribute_assignment_in_private_method_is_rejected(
+            user_facing_component_base
+        )
+
+    def test_mn_attribute_assignment_through_cls_is_rejected(
+        self,
+        user_facing_component_base: Any,
+    ) -> None:
+        assert_mn_attribute_assignment_through_cls_is_rejected(
+            user_facing_component_base
+        )
+
+    def test_mn_attribute_assignment_through_type_self_is_rejected(
+        self,
+        user_facing_component_base: Any,
+    ) -> None:
+        assert_mn_attribute_assignment_through_type_self_is_rejected(
+            user_facing_component_base
+        )
+
+    def test_mn_attribute_assignment_through_self_class_is_rejected(
+        self,
+        user_facing_component_base: Any,
+    ) -> None:
+        assert_mn_attribute_assignment_through_self_class_is_rejected(
+            user_facing_component_base
+        )
+
+    def test_mn_attribute_setattr_through_cls_is_rejected(
+        self,
+        user_facing_component_base: Any,
+    ) -> None:
+        assert_mn_attribute_setattr_through_cls_is_rejected(
+            user_facing_component_base
+        )
+
+    def test_mn_attribute_setattr_through_type_self_is_rejected(
+        self,
+        user_facing_component_base: Any,
+    ) -> None:
+        assert_mn_attribute_setattr_through_type_self_is_rejected(
+            user_facing_component_base
+        )
+
+    def test_mn_attribute_setattr_through_self_class_is_rejected(
+        self,
+        user_facing_component_base: Any,
+    ) -> None:
+        assert_mn_attribute_setattr_through_self_class_is_rejected(
+            user_facing_component_base
+        )
+
+    def test_mn_attribute_annotation_with_value_is_rejected(
+        self,
+        user_facing_component_base: Any,
+    ) -> None:
+        assert_mn_attribute_annotation_with_value_is_rejected(
+            user_facing_component_base
+        )
+
+    def test_mn_attribute_annotation_without_value_is_rejected(
+        self,
+        user_facing_component_base: Any,
+    ) -> None:
+        assert_mn_attribute_annotation_without_value_is_rejected(
+            user_facing_component_base
+        )
+
+    def test_mn_attribute_writes_to_unrelated_object_are_allowed(
+        self,
+        user_facing_component_base: Any,
+    ) -> None:
+        assert_mn_attribute_writes_to_unrelated_object_are_allowed(
             user_facing_component_base
         )
 
