@@ -1,7 +1,7 @@
 from minions._internal._framework.logger import Logger
 
-from .mixin_spy import SpyMixin
+from .component_spy_meta import ComponentSpyMeta
 
 
-class SpiedLogger(SpyMixin, Logger):
+class SpiedLogger(Logger, metaclass=ComponentSpyMeta):
     pass

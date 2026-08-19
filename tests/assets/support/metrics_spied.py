@@ -1,7 +1,7 @@
 from minions._internal._framework.metrics import Metrics
 
-from .mixin_spy import SpyMixin
+from .component_spy_meta import ComponentSpyMeta
 
 
-class SpiedMetrics(SpyMixin, Metrics):
+class SpiedMetrics(Metrics, metaclass=ComponentSpyMeta):
     pass

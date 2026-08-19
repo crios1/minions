@@ -1,7 +1,7 @@
 from minions._internal._domain.resource import Resource
 
-from .mixin_spy import SpyMixin
+from .component_spy_meta import ComponentSpyMeta
 
 
-class SpiedResource(SpyMixin, Resource):
+class SpiedResource(Resource, metaclass=ComponentSpyMeta):
     pass

@@ -1,8 +1,12 @@
 from minions._internal._domain.minion import Minion
 from minions._internal._domain.types import T_Ctx, T_Event
 
-from .mixin_spy import SpyMixin
+from .component_spy_meta import ComponentSpyMeta
 
 
-class SpiedMinion(SpyMixin, Minion[T_Event, T_Ctx], defer_minion_setup=True):
+class SpiedMinion(
+    Minion[T_Event, T_Ctx],
+    defer_minion_setup=True,
+    metaclass=ComponentSpyMeta,
+):
     pass

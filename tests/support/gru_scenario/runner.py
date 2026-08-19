@@ -2,7 +2,7 @@ import asyncio
 from collections import defaultdict
 from collections.abc import Awaitable
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import pytest
 
@@ -12,13 +12,14 @@ from minions._internal._domain.minion_workflow_context import MinionWorkflowCont
 from minions._internal._framework.minion_workflow_context_codec import (
     deserialize_workflow_context_blob,
 )
+from tests.assets.support.component_spy import component_spy_for
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.minion_spied import SpiedMinion
-from tests.assets.support.mixin_spy import SpyMixin
 from tests.assets.support.pipeline_spied import SpiedPipeline
 from tests.assets.support.resource_spied import SpiedResource
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
+from tests.assets.support.state_store_spied import SpiedStateStore
 
 from .directives import (
     AfterWorkflowStepStarts,
@@ -33,6 +34,13 @@ from .directives import (
 )
 from .introspect import ComponentTaskRegistrySnapshot, GruIntrospector
 from .plan import ScenarioPlan
+
+SpiedComponentClass = (
+    type[SpiedMinion[Any, Any]]
+    | type[SpiedPipeline[Any]]
+    | type[SpiedResource]
+    | type[SpiedStateStore]
+)
 
 
 def _get_minion_event_and_context_types(
@@ -158,10 +166,12 @@ class ScenarioRunResult:
     seen_shutdown: bool = False
     spies: SpyRegistry | None = None
     started_minions: set[SpiedMinion[Any, Any]] = field(default_factory=lambda: set())
-    instance_tags: defaultdict[type[SpyMixin], set[int]] = field(
+    instance_tags: defaultdict[SpiedComponentClass, set[int]] = field(
         default_factory=lambda: defaultdict(set)
     )
-    extra_calls: list[tuple[type[SpyMixin], tuple[object, ...], dict[str, object]]] = field(
+    extra_calls: list[
+        tuple[SpiedComponentClass, tuple[object, ...], dict[str, object]]
+    ] = field(
         default_factory=lambda: list()
     )
     receipts: list[OrchestrationStartReceipt] = field(default_factory=lambda: list())
@@ -607,13 +617,21 @@ class ScenarioRunner:
     def _record_tag_if_present(self, inst: object | None) -> None:
         if inst is None:
             return
-        if not isinstance(inst, SpyMixin):
+        if not isinstance(
+            inst,
+            (SpiedMinion, SpiedPipeline, SpiedResource, SpiedStateStore),
+        ):
             return
-        tag = getattr(inst, "_mspy_instance_tag", None)
+        spied_component = cast(
+            SpiedMinion[Any, Any] | SpiedPipeline[Any] | SpiedResource | SpiedStateStore,
+            inst,
+        )
+        spy_cls: SpiedComponentClass = type(spied_component)
+        tag = component_spy_for(type(spied_component)).instance_tag(spied_component)
         if tag is None:
             return
         result = self._require_result()
-        result.instance_tags[type(inst)].add(tag)
+        result.instance_tags[spy_cls].add(tag)
 
     def _require_result(self) -> ScenarioRunResult:
         if self._result is None:
@@ -696,7 +714,7 @@ class ScenarioRunner:
         )
 
     def _snapshot_spy_call_counts(self) -> dict[str, dict[str, int]]:
-        classes: set[type[SpyMixin]] = set()
+        classes: set[SpiedComponentClass] = set()
         classes.update(self._spies.minions.values())
         classes.update(self._spies.pipelines.values())
         classes.update(self._spies.resources)
@@ -710,7 +728,7 @@ class ScenarioRunner:
         return snapshots
 
     def _snapshot_spy_call_counts_by_instance(self) -> dict[str, dict[int, dict[str, int]]]:
-        classes: set[type[SpyMixin]] = set()
+        classes: set[SpiedComponentClass] = set()
         classes.update(self._spies.minions.values())
         classes.update(self._spies.pipelines.values())
         classes.update(self._spies.resources)

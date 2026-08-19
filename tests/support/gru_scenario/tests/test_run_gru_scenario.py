@@ -454,7 +454,7 @@ async def test_resumes_identified_minion_without_persisted_minion_metadata(
 
 
 @pytest.mark.asyncio
-async def test_failed_start_does_not_require_minion_startup(
+async def test_event_type_mismatch_rejects_start_before_minion_construction(
     gru: Gru,
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,

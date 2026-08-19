@@ -259,6 +259,6 @@ Expected workflow counts are derived from `pipeline_event_counts`:
 - Do not open concurrent/nested `managed_gru_context(...)` contexts in one test because only one `Gru` instance can exist per process.
 
 ## Debugging Tips
-- Use SpyMixin helpers: `get_call_counts()`, `get_call_history()`, `assert_call_order_for_instance()`.
+- Use the spy-enabled component helpers: `get_call_counts()`, `get_call_history()`, `assert_call_order_for_instance()`.
 - Check metrics via `InMemoryMetrics.snapshot_counters()` for workflow resolution mismatches.
 - Validate `pipeline_event_counts` against pipeline `produce_event` spy counts.

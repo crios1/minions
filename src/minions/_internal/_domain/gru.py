@@ -1198,6 +1198,25 @@ class Gru:
     async def _activate_orchestration(
         self, spec: _OrchestrationStartSpec
     ) -> Orchestration:
+        minion_cls = spec.minion_cls
+        if minion_cls is None:
+            minion_cls = self._get_minion_class(spec.minion_module_path)
+        pipeline_cls = spec.pipeline_cls
+        if pipeline_cls is None:
+            pipeline_cls = self._get_pipeline_class(spec.pipeline_module_path)
+
+        minion_event_cls = getattr(minion_cls, "_mn_event_cls")
+        pipeline_event_cls = pipeline_cls._mn_event_cls
+        if minion_event_cls != pipeline_event_cls:
+            raise _OrchestrationStartRejected(
+                reason=(
+                    "Incompatible minion and pipeline event types: "
+                    f"pipeline_emits={pipeline_event_cls.__name__}; "
+                    f"minion_expects={minion_event_cls.__name__}"
+                ),
+                suggestion="Update the minion or pipeline so they use the same event type.",
+            )
+
         minion = self._get_minion(
             minion_instance_id=spec.minion_instance_id,
             orchestration_id=spec.orchestration_id,
@@ -1207,21 +1226,8 @@ class Gru:
             minion_module_path=spec.minion_module_path,
             minion_config_path=spec.minion_config_path,
             inline_minion_config=spec.inline_minion_config,
-            minion_cls=spec.minion_cls,
+            minion_cls=minion_cls,
         )
-        pipeline_cls = spec.pipeline_cls
-        if pipeline_cls is None:
-            pipeline_cls = self._get_pipeline_class(spec.pipeline_module_path)
-
-        if minion._mn_event_cls != pipeline_cls._mn_event_cls:
-            raise _OrchestrationStartRejected(
-                reason=(
-                    "Incompatible minion and pipeline event types: "
-                    f"pipeline_emits={pipeline_cls._mn_event_cls.__name__}; "
-                    f"minion_expects={minion._mn_event_cls.__name__}"
-                ),
-                suggestion="Update the minion or pipeline so they use the same event type.",
-            )
 
         async with self._runtime_state_lock:
             activation = _OrchestrationActivation(

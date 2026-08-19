@@ -62,7 +62,7 @@ async def test_abort_increments_aborted_counter(
     await m._mn_wait_until_workflows_idle(timeout=2)
 
     # wait until the state store has recorded deletion (workflow finished)
-    await state_store.wait_for_call("delete_context", count=1, timeout=2)
+    await type(state_store).wait_for_call("delete_context", count=1, timeout=2)
 
     counters = metrics.snapshot().get("counter", {})
     aborted_total = sum(s.get("value", 0) for s in counters.get(MINION_WORKFLOW_ABORTED_TOTAL, []))
@@ -111,7 +111,7 @@ async def test_failure_is_terminal_deletes_checkpoint_and_increments_failed_coun
     await m._mn_handle_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
 
-    await state_store.wait_for_call("delete_context", count=1, timeout=2)
+    await type(state_store).wait_for_call("delete_context", count=1, timeout=2)
     assert await state_store.get_all_contexts() == []
 
     counters = metrics.snapshot().get("counter", {})
@@ -386,7 +386,7 @@ async def test_runtime_guard_rejects_nested_step_invocation_via_indirect_call(
     m._mn_mark_running()
     await m._mn_handle_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
-    await state_store.wait_for_call("delete_context", count=1, timeout=2)
+    await type(state_store).wait_for_call("delete_context", count=1, timeout=2)
 
     failed_logs = [log for log in logger.logs if log.msg == "Workflow Step failed"]
     assert len(failed_logs) == 1
@@ -438,7 +438,7 @@ async def test_different_steps_share_event_and_context(
     m._mn_mark_running()
     await m._mn_handle_event(IntValueEvent(value=10))
     await m._mn_wait_until_workflows_idle(timeout=2)
-    await state_store.wait_for_call("delete_context", count=1, timeout=2)
+    await type(state_store).wait_for_call("delete_context", count=1, timeout=2)
 
     assert observed == [
         ("step_1", 10, 11),

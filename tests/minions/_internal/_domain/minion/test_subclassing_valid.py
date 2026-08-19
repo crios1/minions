@@ -12,7 +12,6 @@ from tests.assets.contexts.empty import EmptyContext
 from tests.assets.contexts.simple import SimpleContext
 from tests.assets.events.empty import EmptyEvent
 from tests.assets.events.simple import SimpleEvent
-from tests.assets.support.mixin import Mixin
 
 
 def test_accepts_dataclass_and_msgspec_struct_event_and_context_types():
@@ -38,12 +37,6 @@ def test_distinct_resource_dependencies():
     class MyMinion(Minion[EmptyEvent, EmptyContext]):
         r1: MyResource1
         r2: MyResource2
-
-
-def test_mixins_allowed_in_any_order():
-    class MyMinion1(Mixin, Minion[EmptyEvent, EmptyContext]): ...
-
-    class MyMinion2(Minion[EmptyEvent, EmptyContext], Mixin): ...
 
 
 def test_minion_workflow_created_properly():

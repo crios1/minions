@@ -1,7 +1,7 @@
 from minions._internal._framework.state_store import StateStore
 
-from .mixin_spy import SpyMixin
+from .component_spy_meta import ComponentSpyMeta
 
 
-class SpiedStateStore(SpyMixin, StateStore):
+class SpiedStateStore(StateStore, metaclass=ComponentSpyMeta):
     pass

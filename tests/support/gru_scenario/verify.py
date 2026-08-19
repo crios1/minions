@@ -15,7 +15,6 @@ from minions._internal._framework.metrics_constants import (
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.minion_spied import SpiedMinion
-from tests.assets.support.mixin_spy import SpyMixin
 from tests.assets.support.resource_spied import SpiedResource
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.assets.support.state_store_spied import SpiedStateStore
@@ -33,6 +32,7 @@ from .runner import (
     OrchestrationStartReceipt,
     ScenarioCheckpoint,
     ScenarioRunResult,
+    SpiedComponentClass,
     SpyRegistry,
     _get_minion_event_and_context_types,
 )
@@ -55,7 +55,7 @@ class _ExtraCallRecorder:
         self._result.extra_calls.append((self._cls, a, kw))
 
 
-def _names_for_tag(cls: type[SpyMixin], tag: int) -> list[str]:
+def _names_for_tag(cls: SpiedComponentClass, tag: int) -> list[str]:
     return [n for n, _, t in cls.get_call_history() if t == tag]
 
 
@@ -327,8 +327,16 @@ class ScenarioVerifier:
         ] = {}
         allow_unlisted: set[type[SpiedResource]] = set()
 
+        # Resources are singleton while live, but Gru may create a replacement after
+        # the final owner stops. Aggregate lifecycle calls therefore scale with the
+        # distinct Resource instances observed across the scenario.
         for r_cls in spies.resources:
-            call_counts[r_cls] = {"__init__": 1, "startup": 1, "run": 1}
+            instance_count = len(self._result.instance_tags.get(r_cls, set()))
+            call_counts[r_cls] = {
+                "__init__": instance_count,
+                "startup": instance_count,
+                "run": instance_count,
+            }
             allow_unlisted.add(r_cls)
 
         for m_cls in spies.minions.values():
@@ -1502,9 +1510,14 @@ class ScenarioVerifier:
     ) -> None:
         spies = self._require_spies()
         minion_start_counts = self._compute_minion_expectations(spies).minion_start_counts
-        ss_tag = getattr(self._state_store, "_mspy_instance_tag", None)
-        if ss_tag is not None:
-            self._result.instance_tags[type(self._state_store)].add(ss_tag)
+        state_store_cls = type(self._state_store)
+        ss_tag = state_store_cls.get_instance_tag(self._state_store)
+        should_assert_state_store_order = (
+            ss_tag is not None and state_store_cls in call_counts
+        )
+        if should_assert_state_store_order:
+            assert ss_tag is not None
+            self._result.instance_tags[state_store_cls].add(ss_tag)
 
         for m_cls in spies.minions.values():
             if minion_start_counts.get(m_cls, 0) <= 0:
@@ -1542,12 +1555,13 @@ class ScenarioVerifier:
                     order.append("shutdown")
                 r_cls.assert_call_order_for_instance(tag, order)
 
-        if ss_tag is not None:
-            names = _names_for_tag(type(self._state_store), ss_tag)
+        if should_assert_state_store_order:
+            assert ss_tag is not None
+            names = _names_for_tag(state_store_cls, ss_tag)
             order = ["__init__", "startup"]
             if "shutdown" in names:
                 order.append("shutdown")
-            type(self._state_store).assert_call_order_for_instance(ss_tag, order)
+            state_store_cls.assert_call_order_for_instance(ss_tag, order)
 
         if self._result.extra_calls:
             messages = [

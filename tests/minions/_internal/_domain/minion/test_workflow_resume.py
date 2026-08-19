@@ -118,7 +118,7 @@ async def test_minion_startup_resumes_typed_msgspec_event_and_context(
 
     await m._mn_startup()
     await m._mn_wait_until_workflows_idle(timeout=2)
-    await state_store.wait_for_call("delete_context", count=1, timeout=2)
+    await type(state_store).wait_for_call("delete_context", count=1, timeout=2)
 
     assert observed == [(IntValueEvent, IntValueContext, 7, 11)]
 
@@ -167,7 +167,7 @@ async def test_resumed_workflow_step_can_access_event_and_context_from_state_sto
 
     await m._mn_startup()
     await m._mn_wait_until_workflows_idle(timeout=2)
-    await state_store.wait_for_call("delete_context", count=1, timeout=2)
+    await type(state_store).wait_for_call("delete_context", count=1, timeout=2)
 
     assert observed == [("step_2", 7, 8)]
 

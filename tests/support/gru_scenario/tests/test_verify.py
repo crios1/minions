@@ -359,7 +359,24 @@ def test_build_expected_call_counts_keeps_pipelines_out_of_exact_pinning(
 
     assert EmitOneCounterPipeline not in expected.call_counts
     assert EmitOneCounterPipeline not in expected.allow_unlisted
-    assert FixedResource in expected.call_counts
+
+
+def test_build_expected_call_counts_scales_resource_lifecycle_with_observed_instances(
+    verifier_factory: VerifierFactory,
+):
+    result = ScenarioRunResult(spies=SpyRegistry(resources={FixedResource}))
+    result.instance_tags[FixedResource].update({1, 2})
+
+    expected = verifier_factory(
+        ScenarioPlan([], pipeline_event_counts={}),
+        result,
+    )._build_expected_call_counts()
+
+    assert expected.call_counts[FixedResource] == {
+        "__init__": 2,
+        "startup": 2,
+        "run": 2,
+    }
     assert FixedResource in expected.allow_unlisted
 
 
@@ -428,8 +445,6 @@ def test_assert_call_order_reports_extra_calls_with_details(verifier_factory: Ve
         extra_calls=[(TwoStepCounterMinion, ("step_1",), {"count": 2})],
     )
     verifier = verifier_factory(plan, result)
-    # Scope this test to the extra-call diagnostics branch only.
-    setattr(verifier._state_store, "_mspy_instance_tag", None)
 
     with pytest.raises(pytest.fail.Exception, match="Unexpected extra calls detected:"):
         verifier._assert_call_order(call_counts={})
