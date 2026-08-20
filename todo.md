@@ -58,8 +58,6 @@
     - lifecycle outcomes are represented asymmetrically: starts produce detailed `OrchestrationStartReceipt` values, while stops mutate active-start indexes and shutdown is summarized by `seen_shutdown`
     - verifier expectations are derived from a mixture of plan directives, expected success flags, start receipts, lifecycle observations, runtime snapshots, and spy counts; define which source owns each semantic fact before consolidating or extending the model
     - aggregate Resource lifecycle counts cannot be hardcoded to one per class because Gru may stop an unowned Resource and later create a replacement instance; the verifier now derives successful running-instance counts from runner-recorded instance tags, but the audit still needs to define expectations for Resources constructed during failed starts before they become observable there
-    - the previous spy implementation silently accepted listed call counts that already exceeded an exact pinned expectation, which hid the invalid aggregate Resource assumption
-    - parallel exact-call pinning is not all-or-nothing: if one component fails or the verifier is cancelled after another pin succeeds, successful pins are not explicitly released; decide cleanup ownership as part of the verifier audit
     - lifecycle observations may be a better basis for some transition assertions than replaying expected directives, but do not adopt them as a general event ledger without validating observation timing, concurrent groups, failed commands, and shutdown behavior
   - why it matters:
     - the DSL should provide deterministic evidence without making scenario authors or maintainers reconstruct lifecycle semantics from several partially overlapping internal models

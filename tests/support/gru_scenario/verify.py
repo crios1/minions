@@ -1476,19 +1476,33 @@ class ScenarioVerifier:
         ],
         allow_unlisted: set[type[SpiedResource]],
     ) -> list[Callable[[], None]]:
-        try:
-            return await asyncio.gather(
-                *[
-                    cls.await_and_pin_call_counts(
-                        expected=counts,
-                        on_extra=_ExtraCallRecorder(self._result, cls),
-                        allow_unlisted=(cls in allow_unlisted),
-                        timeout=self._timeout,
-                    )
-                    for cls, counts in call_counts.items()
-                ]
+        pin_tasks = [
+            asyncio.create_task(
+                cls.await_and_pin_call_counts(
+                    expected=counts,
+                    on_extra=_ExtraCallRecorder(self._result, cls),
+                    allow_unlisted=(cls in allow_unlisted),
+                    timeout=self._timeout,
+                )
             )
-        except Exception:
+            for cls, counts in call_counts.items()
+        ]
+        try:
+            return await asyncio.gather(*pin_tasks)
+        except BaseException as error:
+            for task in pin_tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*pin_tasks, return_exceptions=True)
+            for task in pin_tasks:
+                if task.cancelled() or task.exception() is not None:
+                    continue
+                unpin_call_counts = task.result()
+                unpin_call_counts()
+
+            if not isinstance(error, Exception):
+                raise
+
             mismatches: list[str] = []
             for cls, expected in call_counts.items():
                 actual = cls.get_call_counts()
