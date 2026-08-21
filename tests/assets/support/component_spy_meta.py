@@ -14,7 +14,10 @@ class ComponentSpyMeta(ABCMeta):
         enable_component_spy(cls)
 
     def reset_spy(cls) -> None:
-        """Clear recorded calls and installed call-count limits."""
+        """Clear recorded calls and instance tags.
+
+        Raises ``RuntimeError`` while call-count synchronization is active.
+        """
         component_spy_for(cls).reset()
 
     def get_call_counts(cls) -> dict[str, int]:
@@ -88,7 +91,7 @@ class ComponentSpyMeta(ABCMeta):
         ``expected`` also raises unless ``allow_unlisted`` is true. When an expected
         count is exceeded or a method absent from ``expected`` is disallowed,
         ``on_extra``, if provided, receives the method name, recorded count, and
-        allowed count.
+        allowed count. Raises ``RuntimeError`` if call-count limits are already active.
         """
         return await component_spy_for(cls).await_and_pin_call_counts(
             expected,

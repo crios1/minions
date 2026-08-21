@@ -207,6 +207,44 @@ def test_repeated_reset_keeps_counts_and_history_empty() -> None:
     assert SpiedComponent.get_call_history() == []
 
 
+def test_reset_clears_instance_tags() -> None:
+    class SpiedComponent(metaclass=ComponentSpyMeta):
+        def method(self) -> None:
+            return
+
+    SpiedComponent.enable_spy()
+    first_component = SpiedComponent()
+    second_component = SpiedComponent()
+    assert SpiedComponent.get_instance_tag(first_component) is not None
+    assert SpiedComponent.get_instance_tag(second_component) is not None
+
+    SpiedComponent.reset_spy()
+
+    assert SpiedComponent.get_instance_tag(first_component) is None
+    assert SpiedComponent.get_instance_tag(second_component) is None
+    second_component.method()
+    assert SpiedComponent.get_instance_tag(second_component) is not None
+
+
+@pytest.mark.asyncio
+async def test_reset_raises_while_wait_for_call_is_pending() -> None:
+    class SpiedComponent(metaclass=ComponentSpyMeta):
+        def method(self) -> None:
+            return
+
+    SpiedComponent.enable_spy()
+    component = SpiedComponent()
+    SpiedComponent.reset_spy()
+    waiter = asyncio.create_task(SpiedComponent.wait_for_call("method", timeout=1.0))
+    await asyncio.sleep(0)
+
+    with pytest.raises(RuntimeError, match="call-count synchronization is active"):
+        SpiedComponent.reset_spy()
+
+    component.method()
+    await waiter
+
+
 def test_call_history_includes_chronological_timestamps() -> None:
     class SpiedComponent(metaclass=ComponentSpyMeta):
         def first(self) -> None:
@@ -276,11 +314,11 @@ def test_call_order_for_instance_excludes_other_instances_calls() -> None:
     SpiedComponent.enable_spy()
     first_component = SpiedComponent()
     second_component = SpiedComponent()
-    first_tag = SpiedComponent.get_instance_tag(first_component)
-    second_tag = SpiedComponent.get_instance_tag(second_component)
     SpiedComponent.reset_spy()
     first_component.first()
     second_component.second()
+    first_tag = SpiedComponent.get_instance_tag(first_component)
+    second_tag = SpiedComponent.get_instance_tag(second_component)
 
     assert first_tag is not None
     assert second_tag is not None
@@ -475,6 +513,47 @@ async def test_exact_call_limit_rejects_extra_calls_until_released() -> None:
 
     unpin_call_counts()
     await component.method()
+
+
+@pytest.mark.asyncio
+async def test_reset_raises_while_call_count_limits_are_active() -> None:
+    class SpiedComponent(metaclass=ComponentSpyMeta):
+        def method(self) -> None:
+            return
+
+    SpiedComponent.enable_spy()
+    component = SpiedComponent()
+    SpiedComponent.reset_spy()
+    unpin_call_counts = await SpiedComponent.await_and_pin_call_counts({})
+
+    with pytest.raises(RuntimeError, match="call-count synchronization is active"):
+        SpiedComponent.reset_spy()
+
+    with pytest.raises(AssertionError, match="unexpected call method"):
+        component.method()
+
+    unpin_call_counts()
+    SpiedComponent.reset_spy()
+
+
+@pytest.mark.asyncio
+async def test_await_and_pin_call_counts_raises_while_limits_are_active() -> None:
+    class SpiedComponent(metaclass=ComponentSpyMeta):
+        def method(self) -> None:
+            return
+
+    SpiedComponent.enable_spy()
+    component = SpiedComponent()
+    SpiedComponent.reset_spy()
+    release_call_count_limits = await SpiedComponent.await_and_pin_call_counts({})
+
+    with pytest.raises(RuntimeError, match="call-count limits are already active"):
+        await SpiedComponent.await_and_pin_call_counts({})
+
+    with pytest.raises(AssertionError, match="unexpected call method"):
+        component.method()
+
+    release_call_count_limits()
 
 
 @pytest.mark.asyncio
