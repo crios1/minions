@@ -41,7 +41,9 @@ class _CallCountWaiter:
 
 
 class ComponentSpy(Generic[T_Component]):
-    """Observe calls to a Spied* test component outside its inheritance hierarchy."""
+    """Record method calls while keeping observation state outside component
+    classes and instances.
+    """
 
     def __init__(self, component_cls: type[T_Component]) -> None:
         self.component_cls = component_cls
@@ -77,7 +79,7 @@ class ComponentSpy(Generic[T_Component]):
             return tag
 
     def instance_tag(self, instance: T_Component) -> int | None:
-        """Return the observation identity assigned to an instantiated component."""
+        """Return the component instance's tag."""
         with self._lock:
             existing = self._observed_instances_by_id.get(id(instance))
             if existing is None or existing.reference() is not instance:
@@ -85,6 +87,7 @@ class ComponentSpy(Generic[T_Component]):
             return existing.tag
 
     def instance_tags(self) -> set[int]:
+        """Return the instance tags present in recorded calls."""
         with self._lock:
             return {
                 observation.instance_tag
@@ -257,6 +260,7 @@ class ComponentSpy(Generic[T_Component]):
                     setattr(component_cls, name, wrap(name, descriptor))
 
     def reset(self) -> None:
+        """Clear recorded calls and installed call-count limits."""
         with self._lock:
             self._call_counts = {}
             self._call_history.clear()
@@ -264,10 +268,12 @@ class ComponentSpy(Generic[T_Component]):
             self._call_count_pin = None
 
     def call_counts(self) -> dict[str, int]:
+        """Return a snapshot of recorded method call counts."""
         with self._lock:
             return dict(self._call_counts)
 
     def call_history(self) -> list[tuple[str, int, int | None]]:
+        """Return recorded calls in chronological order."""
         with self._lock:
             return [
                 (
@@ -279,6 +285,7 @@ class ComponentSpy(Generic[T_Component]):
             ]
 
     def assert_call_order(self, sub_seq: Iterable[str]) -> None:
+        """Assert that methods were called in the given relative order."""
         with self._lock:
             actual = [observation.method_name for observation in self._call_history]
 
@@ -296,6 +303,7 @@ class ComponentSpy(Generic[T_Component]):
     def assert_call_order_for_instance(
         self, instance_tag: int, sub_seq: Iterable[str]
     ) -> None:
+        """Assert that methods were called on the specified instance in the given relative order."""
         with self._lock:
             actual = [
                 observation.method_name
@@ -316,6 +324,7 @@ class ComponentSpy(Generic[T_Component]):
             )
 
     async def wait_for_call(self, name: str, *, count: int = 1, timeout: float = 5.0) -> None:
+        """Wait until the recorded call count for a method reaches ``count``."""
         loop = asyncio.get_running_loop()
         future = loop.create_future()
 
@@ -344,6 +353,7 @@ class ComponentSpy(Generic[T_Component]):
                     self._call_count_waiters_by_method.pop(name, None)
 
     async def wait_for_calls(self, expected: dict[str, int], *, timeout: float = 5.0) -> None:
+        """Wait until each method's recorded call count reaches its requested count."""
         if all(self.call_counts().get(name, 0) >= count for name, count in expected.items()):
             return
         await asyncio.gather(
@@ -361,6 +371,15 @@ class ComponentSpy(Generic[T_Component]):
         on_extra: Callable[[str, int, int], object] | None = None,
         allow_unlisted: bool = False,
     ) -> Callable[[], None]:
+        """Wait for exact call counts and keep them as limits until released.
+
+        Return a callback that releases the limits. Until released, exceeding an
+        expected count raises ``AssertionError``. Calling a method absent from
+        ``expected`` also raises unless ``allow_unlisted`` is true. When an expected
+        count is exceeded or a method absent from ``expected`` is disallowed,
+        ``on_extra``, if provided, receives the method name, recorded count, and
+        allowed count.
+        """
         call_count_pin = _CallCountPin(
             limits=dict(expected),
             on_extra_call=on_extra,
