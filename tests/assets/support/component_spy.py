@@ -29,7 +29,7 @@ class _CallObservation:
 @dataclass(frozen=True, slots=True)
 class _CallCountLimits:
     limits: dict[str, int]
-    on_extra_call: Callable[[str, int, int], object] | None
+    on_limit_exceeded: Callable[[str, int, int], object] | None
     allow_unlisted_calls: bool
 
 
@@ -120,13 +120,13 @@ class ComponentSpy(Generic[T_Component]):
                     not call_count_limits.allow_unlisted_calls
                     and name not in call_count_limits.limits
                 ):
-                    if call_count_limits.on_extra_call is not None:
-                        call_count_limits.on_extra_call(name, current, 0)
+                    if call_count_limits.on_limit_exceeded is not None:
+                        call_count_limits.on_limit_exceeded(name, current, 0)
                     raise AssertionError(f"{self.component_cls.__name__}: unexpected call {name}")
                 allowed = call_count_limits.limits.get(name)
                 if allowed is not None and current > allowed:
-                    if call_count_limits.on_extra_call is not None:
-                        call_count_limits.on_extra_call(name, current, allowed)
+                    if call_count_limits.on_limit_exceeded is not None:
+                        call_count_limits.on_limit_exceeded(name, current, allowed)
                     raise AssertionError(
                         f"{self.component_cls.__name__}: call overflow for {name}: "
                         f"{current} > {allowed}"
@@ -378,7 +378,7 @@ class ComponentSpy(Generic[T_Component]):
         expected: dict[str, int],
         *,
         timeout: float = 5.0,
-        on_extra: Callable[[str, int, int], object] | None = None,
+        on_limit_exceeded: Callable[[str, int, int], object] | None = None,
         allow_unlisted: bool = False,
     ) -> Callable[[], None]:
         """Wait for exact call counts and keep them as limits until released.
@@ -387,12 +387,13 @@ class ComponentSpy(Generic[T_Component]):
         expected count raises ``AssertionError``. Calling a method absent from
         ``expected`` also raises unless ``allow_unlisted`` is true. When an expected
         count is exceeded or a method absent from ``expected`` is disallowed,
-        ``on_extra``, if provided, receives the method name, recorded count, and
-        allowed count. Raises ``RuntimeError`` if call-count limits are already active.
+        ``on_limit_exceeded``, if provided, receives the method name, recorded
+        count, and allowed count. Raises ``RuntimeError`` if call-count limits are
+        already active.
         """
         call_count_limits = _CallCountLimits(
             limits=dict(expected),
-            on_extra_call=on_extra,
+            on_limit_exceeded=on_limit_exceeded,
             allow_unlisted_calls=allow_unlisted,
         )
         with self._lock:
@@ -412,8 +413,8 @@ class ComponentSpy(Generic[T_Component]):
                     current = self._call_counts.get(name, 0)
                     if current <= allowed:
                         continue
-                    if call_count_limits.on_extra_call is not None:
-                        call_count_limits.on_extra_call(name, current, allowed)
+                    if call_count_limits.on_limit_exceeded is not None:
+                        call_count_limits.on_limit_exceeded(name, current, allowed)
                     raise AssertionError(
                         f"{self.component_cls.__name__}: call overflow for {name}: "
                         f"{current} > {allowed}"

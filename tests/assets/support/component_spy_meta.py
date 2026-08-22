@@ -81,7 +81,7 @@ class ComponentSpyMeta(ABCMeta):
         expected: dict[str, int],
         *,
         timeout: float = 5.0,
-        on_extra: Callable[[str, int, int], object] | None = None,
+        on_limit_exceeded: Callable[[str, int, int], object] | None = None,
         allow_unlisted: bool = False,
     ) -> Callable[[], None]:
         """Wait for exact call counts and keep them as limits until released.
@@ -90,12 +90,13 @@ class ComponentSpyMeta(ABCMeta):
         expected count raises ``AssertionError``. Calling a method absent from
         ``expected`` also raises unless ``allow_unlisted`` is true. When an expected
         count is exceeded or a method absent from ``expected`` is disallowed,
-        ``on_extra``, if provided, receives the method name, recorded count, and
-        allowed count. Raises ``RuntimeError`` if call-count limits are already active.
+        ``on_limit_exceeded``, if provided, receives the method name, recorded
+        count, and allowed count. Raises ``RuntimeError`` if call-count limits are
+        already active.
         """
         return await component_spy_for(cls).await_and_pin_call_counts(
             expected,
             timeout=timeout,
-            on_extra=on_extra,
+            on_limit_exceeded=on_limit_exceeded,
             allow_unlisted=allow_unlisted,
         )

@@ -161,6 +161,14 @@ class LifecycleObservation:
     component_task_registries: ComponentTaskRegistrySnapshot
 
 
+@dataclass(frozen=True)
+class CallCountLimitViolation:
+    component_cls: SpiedComponentClass
+    method_name: str
+    observed_count: int
+    allowed_count: int
+
+
 @dataclass
 class ScenarioRunResult:
     seen_shutdown: bool = False
@@ -169,9 +177,7 @@ class ScenarioRunResult:
     instance_tags: defaultdict[SpiedComponentClass, set[int]] = field(
         default_factory=lambda: defaultdict(set)
     )
-    extra_calls: list[
-        tuple[SpiedComponentClass, tuple[object, ...], dict[str, object]]
-    ] = field(
+    call_count_limit_violations: list[CallCountLimitViolation] = field(
         default_factory=lambda: list()
     )
     receipts: list[OrchestrationStartReceipt] = field(default_factory=lambda: list())

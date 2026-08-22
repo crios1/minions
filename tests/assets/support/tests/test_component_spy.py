@@ -558,7 +558,7 @@ async def test_await_and_pin_call_counts_raises_while_limits_are_active() -> Non
 
 @pytest.mark.asyncio
 async def test_exact_call_limit_rejects_listed_count_already_over_expected() -> None:
-    extra_calls: list[tuple[str, int, int]] = []
+    limit_violations: list[tuple[str, int, int]] = []
 
     class SpiedComponent(metaclass=ComponentSpyMeta):
         async def method(self) -> None:
@@ -573,10 +573,12 @@ async def test_exact_call_limit_rejects_listed_count_already_over_expected() -> 
     with pytest.raises(AssertionError, match="call overflow for method: 2 > 1"):
         await SpiedComponent.await_and_pin_call_counts(
             {"method": 1},
-            on_extra=lambda name, current, allowed: extra_calls.append((name, current, allowed)),
+            on_limit_exceeded=lambda method_name, observed_count, allowed_count: (
+                limit_violations.append((method_name, observed_count, allowed_count))
+            ),
         )
 
-    assert extra_calls == [("method", 2, 1)]
+    assert limit_violations == [("method", 2, 1)]
     await component.method()
 
 
@@ -657,8 +659,8 @@ async def test_exact_call_limits_allow_unlisted_calls_when_configured() -> None:
 
 
 @pytest.mark.asyncio
-async def test_on_extra_is_called_when_listed_call_exceeds_exact_limit() -> None:
-    extra_calls: list[tuple[str, int, int]] = []
+async def test_limit_exceeded_callback_receives_listed_call_overflow() -> None:
+    limit_violations: list[tuple[str, int, int]] = []
 
     class SpiedComponent(metaclass=ComponentSpyMeta):
         async def listed(self) -> None:
@@ -672,7 +674,9 @@ async def test_on_extra_is_called_when_listed_call_exceeds_exact_limit() -> None
         SpiedComponent.await_and_pin_call_counts(
             {"listed": 1},
             timeout=1.0,
-            on_extra=lambda name, current, allowed: extra_calls.append((name, current, allowed)),
+            on_limit_exceeded=lambda method_name, observed_count, allowed_count: (
+                limit_violations.append((method_name, observed_count, allowed_count))
+            ),
         )
     )
     await asyncio.sleep(0)
@@ -682,13 +686,13 @@ async def test_on_extra_is_called_when_listed_call_exceeds_exact_limit() -> None
 
     with pytest.raises(AssertionError, match="call overflow for listed"):
         await component.listed()
-    assert extra_calls == [("listed", 2, 1)]
+    assert limit_violations == [("listed", 2, 1)]
 
     unpin_call_counts()
 
 
 @pytest.mark.asyncio
-async def test_on_extra_errors_propagate_for_listed_and_unlisted_extra_calls() -> None:
+async def test_limit_exceeded_callback_errors_propagate_for_listed_and_unlisted_calls() -> None:
     class SpiedComponent(metaclass=ComponentSpyMeta):
         async def listed(self) -> None:
             return
@@ -707,7 +711,7 @@ async def test_on_extra_errors_propagate_for_listed_and_unlisted_extra_calls() -
         SpiedComponent.await_and_pin_call_counts(
             {"listed": 1},
             timeout=1.0,
-            on_extra=raise_extra_call_error,
+            on_limit_exceeded=raise_extra_call_error,
         )
     )
     await asyncio.sleep(0)

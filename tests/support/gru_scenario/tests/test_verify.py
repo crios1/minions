@@ -41,6 +41,7 @@ from tests.support.gru_scenario.directives import (
 from tests.support.gru_scenario.introspect import ComponentTaskRegistrySnapshot
 from tests.support.gru_scenario.plan import ScenarioPlan
 from tests.support.gru_scenario.runner import (
+    CallCountLimitViolation,
     LifecycleObservation,
     OrchestrationStartReceipt,
     ScenarioCheckpoint,
@@ -541,16 +542,32 @@ async def test_pin_and_assert_calls_cancellation_invokes_unpin_and_cancels_pendi
     assert pending_pin_cancelled.is_set()
 
 
-def test_assert_call_order_reports_extra_calls_with_details(verifier_factory: VerifierFactory):
+def test_assert_no_call_count_limit_violations_reports_details(
+    verifier_factory: VerifierFactory,
+):
     plan = ScenarioPlan([], pipeline_event_counts={})
     result = ScenarioRunResult(
         spies=SpyRegistry(),
-        extra_calls=[(TwoStepCounterMinion, ("step_1",), {"count": 2})],
+        call_count_limit_violations=[
+            CallCountLimitViolation(
+                component_cls=TwoStepCounterMinion,
+                method_name="step_1",
+                observed_count=2,
+                allowed_count=1,
+            )
+        ],
     )
     verifier = verifier_factory(plan, result)
 
-    with pytest.raises(pytest.fail.Exception, match="Unexpected extra calls detected:"):
-        verifier._assert_call_order(call_counts={})
+    with pytest.raises(
+        pytest.fail.Exception,
+        match=(
+            "Call-count limits exceeded: "
+            "tests.assets.minions.two_steps.counter.default:AssetMinion.step_1: "
+            "observed 2, allowed 1"
+        ),
+    ):
+        verifier._assert_no_call_count_limit_violations()
 
 
 def test_assert_state_store_read_call_bounds_rejects_excess_get_all_calls(

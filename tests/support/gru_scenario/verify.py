@@ -29,6 +29,7 @@ from .directives import (
 )
 from .plan import ScenarioPlan
 from .runner import (
+    CallCountLimitViolation,
     OrchestrationStartReceipt,
     ScenarioCheckpoint,
     ScenarioRunResult,
@@ -42,7 +43,7 @@ def _class_ref(cls: type[Any]) -> str:
     return f"{cls.__module__}:{cls.__qualname__}"
 
 
-class _ExtraCallRecorder:
+class _CallCountLimitViolationRecorder:
     def __init__(
         self,
         result: ScenarioRunResult,
@@ -51,8 +52,20 @@ class _ExtraCallRecorder:
         self._result = result
         self._cls = cls
 
-    def __call__(self, *a: object, **kw: object) -> None:
-        self._result.extra_calls.append((self._cls, a, kw))
+    def __call__(
+        self,
+        method_name: str,
+        observed_count: int,
+        allowed_count: int,
+    ) -> None:
+        self._result.call_count_limit_violations.append(
+            CallCountLimitViolation(
+                component_cls=self._cls,
+                method_name=method_name,
+                observed_count=observed_count,
+                allowed_count=allowed_count,
+            )
+        )
 
 
 def _names_for_tag(cls: SpiedComponentClass, tag: int) -> list[str]:
@@ -308,6 +321,7 @@ class ScenarioVerifier:
             self._assert_state_store_read_call_bounds()
             self._assert_minion_fanout_delivery()
             self._assert_call_order(expected.call_counts)
+            self._assert_no_call_count_limit_violations()
         finally:
             for unpin in unpin_fns:
                 unpin()
@@ -1480,7 +1494,7 @@ class ScenarioVerifier:
             asyncio.create_task(
                 cls.await_and_pin_call_counts(
                     expected=counts,
-                    on_extra=_ExtraCallRecorder(self._result, cls),
+                    on_limit_exceeded=_CallCountLimitViolationRecorder(self._result, cls),
                     allow_unlisted=(cls in allow_unlisted),
                     timeout=self._timeout,
                 )
@@ -1577,12 +1591,15 @@ class ScenarioVerifier:
                 order.append("shutdown")
             state_store_cls.assert_call_order_for_instance(ss_tag, order)
 
-        if self._result.extra_calls:
-            messages = [
-                f"{cls.__name__}: args={args} kwargs={kwargs}"
-                for cls, args, kwargs in self._result.extra_calls
-            ]
-            pytest.fail("Unexpected extra calls detected: " + "; ".join(messages))
+    def _assert_no_call_count_limit_violations(self) -> None:
+        if not self._result.call_count_limit_violations:
+            return
+        messages = [
+            f"{_class_ref(violation.component_cls)}.{violation.method_name}: "
+            f"observed {violation.observed_count}, allowed {violation.allowed_count}"
+            for violation in self._result.call_count_limit_violations
+        ]
+        pytest.fail("Call-count limits exceeded: " + "; ".join(messages))
 
     def _require_spies(self) -> SpyRegistry:
         if self._result.spies is None:
