@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import FrozenInstanceError
 from typing import Any
 
 import pytest
@@ -129,13 +130,16 @@ def test_assigns_distinct_identities_to_component_instances() -> None:
     SpiedComponent.enable_spy()
     first_component = SpiedComponent()
     second_component = SpiedComponent()
-    first_tag = SpiedComponent.get_instance_tag(first_component)
-    second_tag = SpiedComponent.get_instance_tag(second_component)
+    first_identity = SpiedComponent.get_instance_identity(first_component)
+    second_identity = SpiedComponent.get_instance_identity(second_component)
 
-    assert first_tag is not None
-    assert second_tag is not None
-    assert first_tag != second_tag
-    assert SpiedComponent.get_instance_tags() == {first_tag, second_tag}
+    assert first_identity is not None
+    assert second_identity is not None
+    assert first_identity != second_identity
+    assert SpiedComponent.get_instance_identities() == {
+        first_identity,
+        second_identity,
+    }
 
 
 def test_call_counts_and_history_are_isolated_between_component_classes() -> None:
@@ -157,9 +161,12 @@ def test_call_counts_and_history_are_isolated_between_component_classes() -> Non
     first_component.method()
 
     assert FirstSpiedComponent.get_call_counts() == {"method": 1}
-    assert [name for name, _, _ in FirstSpiedComponent.get_call_history()] == ["method"]
+    assert [
+        recorded_call.method_name
+        for recorded_call in FirstSpiedComponent.get_call_history()
+    ] == ["method"]
     assert SecondSpiedComponent.get_call_counts() == {}
-    assert SecondSpiedComponent.get_call_history() == []
+    assert SecondSpiedComponent.get_call_history() == ()
 
 
 def test_repeated_enablement_records_each_call_once() -> None:
@@ -173,7 +180,10 @@ def test_repeated_enablement_records_each_call_once() -> None:
     component.method()
 
     assert SpiedComponent.get_call_counts() == {"__init__": 1, "method": 1}
-    assert [name for name, _, _ in SpiedComponent.get_call_history()] == [
+    assert [
+        recorded_call.method_name
+        for recorded_call in SpiedComponent.get_call_history()
+    ] == [
         "__init__",
         "method",
     ]
@@ -191,7 +201,7 @@ def test_reset_clears_counts_and_history() -> None:
     SpiedComponent.reset_spy()
 
     assert SpiedComponent.get_call_counts() == {}
-    assert SpiedComponent.get_call_history() == []
+    assert SpiedComponent.get_call_history() == ()
 
 
 def test_repeated_reset_keeps_counts_and_history_empty() -> None:
@@ -204,10 +214,10 @@ def test_repeated_reset_keeps_counts_and_history_empty() -> None:
     SpiedComponent.reset_spy()
 
     assert SpiedComponent.get_call_counts() == {}
-    assert SpiedComponent.get_call_history() == []
+    assert SpiedComponent.get_call_history() == ()
 
 
-def test_reset_clears_instance_tags() -> None:
+def test_reset_clears_instance_identities() -> None:
     class SpiedComponent(metaclass=ComponentSpyMeta):
         def method(self) -> None:
             return
@@ -215,15 +225,15 @@ def test_reset_clears_instance_tags() -> None:
     SpiedComponent.enable_spy()
     first_component = SpiedComponent()
     second_component = SpiedComponent()
-    assert SpiedComponent.get_instance_tag(first_component) is not None
-    assert SpiedComponent.get_instance_tag(second_component) is not None
+    assert SpiedComponent.get_instance_identity(first_component) is not None
+    assert SpiedComponent.get_instance_identity(second_component) is not None
 
     SpiedComponent.reset_spy()
 
-    assert SpiedComponent.get_instance_tag(first_component) is None
-    assert SpiedComponent.get_instance_tag(second_component) is None
+    assert SpiedComponent.get_instance_identity(first_component) is None
+    assert SpiedComponent.get_instance_identity(second_component) is None
     second_component.method()
-    assert SpiedComponent.get_instance_tag(second_component) is not None
+    assert SpiedComponent.get_instance_identity(second_component) is not None
 
 
 @pytest.mark.asyncio
@@ -245,7 +255,7 @@ async def test_reset_raises_while_wait_for_call_is_pending() -> None:
     await waiter
 
 
-def test_call_history_includes_chronological_timestamps() -> None:
+def test_call_history_is_an_immutable_chronological_snapshot() -> None:
     class SpiedComponent(metaclass=ComponentSpyMeta):
         def first(self) -> None:
             return
@@ -256,23 +266,25 @@ def test_call_history_includes_chronological_timestamps() -> None:
     SpiedComponent.enable_spy()
     component = SpiedComponent()
     component.first()
-    component.second()
 
     history = SpiedComponent.get_call_history()
+    component.second()
 
-    relevant_history = [entry for entry in history if entry[0] in {"__init__", "first", "second"}]
-    assert [name for name, _, _ in relevant_history] == [
+    assert isinstance(history, tuple)
+    assert [recorded_call.method_name for recorded_call in history] == [
+        "__init__",
+        "first",
+    ]
+    assert [
+        recorded_call.method_name
+        for recorded_call in SpiedComponent.get_call_history()
+    ] == [
         "__init__",
         "first",
         "second",
     ]
-    assert all(
-        first_timestamp <= second_timestamp
-        for (_, first_timestamp, _), (_, second_timestamp, _) in zip(
-            history,
-            history[1:],
-        )
-    )
+    with pytest.raises(FrozenInstanceError):
+        setattr(history[0], "method_name", "changed")
 
 
 def test_class_call_order_accepts_subsequence_and_reports_missing_tail() -> None:
@@ -293,7 +305,7 @@ def test_class_call_order_accepts_subsequence_and_reports_missing_tail() -> None
     component.second()
     component.third()
 
-    SpiedComponent.assert_call_order(sub_seq=["first", "third"])
+    SpiedComponent.assert_call_order(subsequence=["first", "third"])
 
     with pytest.raises(AssertionError) as exc_info:
         SpiedComponent.assert_call_order(["first", "missing", "third"])
@@ -317,17 +329,17 @@ def test_call_order_for_instance_excludes_other_instances_calls() -> None:
     SpiedComponent.reset_spy()
     first_component.first()
     second_component.second()
-    first_tag = SpiedComponent.get_instance_tag(first_component)
-    second_tag = SpiedComponent.get_instance_tag(second_component)
+    first_identity = SpiedComponent.get_instance_identity(first_component)
+    second_identity = SpiedComponent.get_instance_identity(second_component)
 
-    assert first_tag is not None
-    assert second_tag is not None
-    SpiedComponent.assert_call_order_for_instance(first_tag, ["first"])
-    SpiedComponent.assert_call_order_for_instance(second_tag, ["second"])
-    with pytest.raises(AssertionError, match="not found for instance tag"):
+    assert first_identity is not None
+    assert second_identity is not None
+    SpiedComponent.assert_call_order_for_instance(first_identity, ["first"])
+    SpiedComponent.assert_call_order_for_instance(second_identity, ["second"])
+    with pytest.raises(AssertionError, match="not found for instance identity"):
         SpiedComponent.assert_call_order_for_instance(
-            first_tag,
-            sub_seq=["first", "second"],
+            first_identity,
+            subsequence=["first", "second"],
         )
 
 

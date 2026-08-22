@@ -369,7 +369,7 @@ def test_build_expected_call_counts_scales_resource_lifecycle_with_observed_inst
     verifier_factory: VerifierFactory,
 ):
     result = ScenarioRunResult(spies=SpyRegistry(resources={FixedResource}))
-    result.instance_tags[FixedResource].update({1, 2})
+    result.instance_identities[FixedResource].update({1, 2})
 
     expected = verifier_factory(
         ScenarioPlan([], pipeline_event_counts={}),

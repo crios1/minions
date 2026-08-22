@@ -174,7 +174,7 @@ class ScenarioRunResult:
     seen_shutdown: bool = False
     spies: SpyRegistry | None = None
     started_minions: set[SpiedMinion[Any, Any]] = field(default_factory=lambda: set())
-    instance_tags: defaultdict[SpiedComponentClass, set[int]] = field(
+    instance_identities: defaultdict[SpiedComponentClass, set[int]] = field(
         default_factory=lambda: defaultdict(set)
     )
     call_count_limit_violations: list[CallCountLimitViolation] = field(
@@ -500,7 +500,11 @@ class ScenarioRunner:
         result.receipts.append(receipt)
         self._orchestration_start_receipts_by_directive_id[id(d)] = receipt
         self._active_orchestration_start_indexes.add(receipt.directive_index)
-        self._record_instance_tags(minion_inst, receipt.pipeline_id, receipt.instance_id)
+        self._record_instance_identities(
+            minion_inst,
+            receipt.pipeline_id,
+            receipt.instance_id,
+        )
 
     async def _run_stop(self, d: OrchestrationStop) -> None:
         target_id = self._resolve_stop_target_id(d.id)
@@ -599,18 +603,18 @@ class ScenarioRunner:
             directive=d,
         )
 
-    def _record_instance_tags(
+    def _record_instance_identities(
         self,
         minion_inst: Minion[Any, Any] | None,
         pipeline_id: str,
         instance_id: str | None,
     ) -> None:
-        self._record_tag_if_present(minion_inst)
+        self._record_identity_if_present(minion_inst)
         if instance_id is None:
             return
 
         pipeline_inst = self._insp.get_pipeline_instance(pipeline_id)
-        self._record_tag_if_present(pipeline_inst)
+        self._record_identity_if_present(pipeline_inst)
 
         resource_ids = self._insp.resource_ids_for(
             minion_instance_id=instance_id,
@@ -618,9 +622,9 @@ class ScenarioRunner:
         )
         for rid in resource_ids:
             res_inst = self._insp.get_resource_instance(rid)
-            self._record_tag_if_present(res_inst)
+            self._record_identity_if_present(res_inst)
 
-    def _record_tag_if_present(self, inst: object | None) -> None:
+    def _record_identity_if_present(self, inst: object | None) -> None:
         if inst is None:
             return
         if not isinstance(
@@ -633,11 +637,13 @@ class ScenarioRunner:
             inst,
         )
         spy_cls: SpiedComponentClass = type(spied_component)
-        tag = component_spy_for(type(spied_component)).instance_tag(spied_component)
-        if tag is None:
+        identity = component_spy_for(type(spied_component)).instance_identity(
+            spied_component
+        )
+        if identity is None:
             return
         result = self._require_result()
-        result.instance_tags[spy_cls].add(tag)
+        result.instance_identities[spy_cls].add(identity)
 
     def _require_result(self) -> ScenarioRunResult:
         if self._result is None:
@@ -743,14 +749,18 @@ class ScenarioRunner:
 
         snapshots: dict[str, dict[int, dict[str, int]]] = {}
         for cls in classes:
-            by_tag: defaultdict[int, defaultdict[str, int]] = defaultdict(lambda: defaultdict(int))
-            for name, _, tag in cls.get_call_history():
-                if tag is None:
+            by_identity: defaultdict[int, defaultdict[str, int]] = defaultdict(
+                lambda: defaultdict(int)
+            )
+            for recorded_call in cls.get_call_history():
+                if recorded_call.instance_identity is None:
                     continue
-                by_tag[tag][name] += 1
+                by_identity[recorded_call.instance_identity][recorded_call.method_name] += 1
 
             key = f"{cls.__module__}.{cls.__name__}"
-            snapshots[key] = {tag: dict(counts) for tag, counts in by_tag.items()}
+            snapshots[key] = {
+                identity: dict(counts) for identity, counts in by_identity.items()
+            }
         return snapshots
 
     def _snapshot_workflow_step_started_ids_by_minion_id(

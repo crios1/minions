@@ -1,7 +1,12 @@
 from abc import ABCMeta
 from collections.abc import Callable, Iterable
 
-from .component_spy import T_Component, component_spy_for, enable_component_spy
+from .component_spy import (
+    RecordedCall,
+    T_Component,
+    component_spy_for,
+    enable_component_spy,
+)
 
 
 class ComponentSpyMeta(ABCMeta):
@@ -14,7 +19,7 @@ class ComponentSpyMeta(ABCMeta):
         enable_component_spy(cls)
 
     def reset_spy(cls) -> None:
-        """Clear recorded calls and instance tags.
+        """Clear recorded calls and instance identities.
 
         Raises ``RuntimeError`` while call-count synchronization is active.
         """
@@ -24,31 +29,34 @@ class ComponentSpyMeta(ABCMeta):
         """Return a snapshot of recorded method call counts."""
         return component_spy_for(cls).call_counts()
 
-    def get_call_history(cls) -> list[tuple[str, int, int | None]]:
+    def get_call_history(cls) -> tuple[RecordedCall, ...]:
         """Return recorded calls in chronological order."""
         return component_spy_for(cls).call_history()
 
-    def get_instance_tag(
+    def get_instance_identity(
         cls: type[T_Component], instance: T_Component
     ) -> int | None:
-        """Return the component instance's tag."""
-        return component_spy_for(cls).instance_tag(instance)
+        """Return the component instance's identity in recorded calls."""
+        return component_spy_for(cls).instance_identity(instance)
 
-    def get_instance_tags(cls) -> set[int]:
-        """Return the instance tags present in recorded calls."""
-        return component_spy_for(cls).instance_tags()
+    def get_instance_identities(cls) -> set[int]:
+        """Return the instance identities present in recorded calls."""
+        return component_spy_for(cls).instance_identities()
 
-    def assert_call_order(cls, sub_seq: Iterable[str]) -> None:
+    def assert_call_order(cls, subsequence: Iterable[str]) -> None:
         """Assert that methods were called in the given relative order."""
-        component_spy_for(cls).assert_call_order(sub_seq)
+        component_spy_for(cls).assert_call_order(subsequence)
 
     def assert_call_order_for_instance(
         cls,
-        instance_tag: int,
-        sub_seq: Iterable[str],
+        instance_identity: int,
+        subsequence: Iterable[str],
     ) -> None:
         """Assert that methods were called on the specified instance in the given relative order."""
-        component_spy_for(cls).assert_call_order_for_instance(instance_tag, sub_seq)
+        component_spy_for(cls).assert_call_order_for_instance(
+            instance_identity,
+            subsequence,
+        )
 
     async def wait_for_call(
         cls,
