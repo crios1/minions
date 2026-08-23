@@ -12,7 +12,10 @@ from minions._internal._domain.minion_workflow_context import MinionWorkflowCont
 from minions._internal._framework.minion_workflow_context_codec import (
     deserialize_workflow_context_blob,
 )
-from tests.assets.support.component_spy import component_spy_for
+from tests.assets.support.component_spy import (
+    CallCountLimitViolation,
+    component_spy_for,
+)
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.minion_spied import SpiedMinion
@@ -159,14 +162,6 @@ class LifecycleObservation:
     seen_shutdown: bool
     gru_runtime_state: GruRuntimeStateSnapshot
     component_task_registries: ComponentTaskRegistrySnapshot
-
-
-@dataclass(frozen=True)
-class CallCountLimitViolation:
-    component_cls: SpiedComponentClass
-    method_name: str
-    observed_count: int
-    allowed_count: int
 
 
 @dataclass

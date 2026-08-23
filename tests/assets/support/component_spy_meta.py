@@ -1,7 +1,9 @@
 from abc import ABCMeta
 from collections.abc import Callable, Iterable
+from contextlib import AbstractContextManager
 
 from .component_spy import (
+    CallCountLimitViolation,
     RecordedCall,
     T_Component,
     component_spy_for,
@@ -21,7 +23,8 @@ class ComponentSpyMeta(ABCMeta):
     def reset_spy(cls) -> None:
         """Clear recorded calls and instance identities.
 
-        Raises ``RuntimeError`` while call-count synchronization is active.
+        Raises ``RuntimeError`` while ``wait_for_call`` is pending or an
+        ``enforce_call_count_limits`` context is active.
         """
         component_spy_for(cls).reset()
 
@@ -84,27 +87,27 @@ class ComponentSpyMeta(ABCMeta):
             timeout=timeout,
         )
 
-    async def await_and_pin_call_counts(
+    def enforce_call_count_limits(
         cls,
-        expected: dict[str, int],
+        limits: dict[str, int],
         *,
-        timeout: float = 5.0,
-        on_limit_exceeded: Callable[[str, int, int], object] | None = None,
-        allow_unlisted: bool = False,
-    ) -> Callable[[], None]:
-        """Wait for exact call counts and keep them as limits until released.
+        on_limit_exceeded: Callable[[CallCountLimitViolation], None] | None = None,
+        allow_unlisted_calls: bool = False,
+    ) -> AbstractContextManager[None]:
+        """Enforce call-count limits for the duration of the context.
 
-        Return a callback that releases the limits. Until released, exceeding an
-        expected count raises ``AssertionError``. Calling a method absent from
-        ``expected`` also raises unless ``allow_unlisted`` is true. When an expected
-        count is exceeded or a method absent from ``expected`` is disallowed,
-        ``on_limit_exceeded``, if provided, receives the method name, recorded
-        count, and allowed count. Raises ``RuntimeError`` if call-count limits are
-        already active.
+        Each limit applies to the method's cumulative recorded count, not the
+        number of additional calls allowed after entering the context. Unless
+        ``allow_unlisted_calls`` is true, methods absent from ``limits``
+        are limited to their count when the context is entered. A violating
+        invocation is recorded and blocked before its wrapped method body runs.
+        When a limit is exceeded, ``on_limit_exceeded``, if provided, receives a
+        ``CallCountLimitViolation``. Its exception propagates; otherwise the
+        violation raises ``AssertionError``. Raises ``RuntimeError`` if call-count
+        limits are already active.
         """
-        return await component_spy_for(cls).await_and_pin_call_counts(
-            expected,
-            timeout=timeout,
+        return component_spy_for(cls).enforce_call_count_limits(
+            limits,
             on_limit_exceeded=on_limit_exceeded,
-            allow_unlisted=allow_unlisted,
+            allow_unlisted_calls=allow_unlisted_calls,
         )

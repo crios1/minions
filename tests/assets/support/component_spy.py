@@ -2,7 +2,8 @@ import asyncio
 import inspect
 import itertools
 import threading
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Generator, Iterable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import wraps
 from types import FunctionType
@@ -27,9 +28,20 @@ class RecordedCall:
 
 
 @dataclass(frozen=True, slots=True)
+class CallCountLimitViolation:
+    """A component method invocation that exceeded an enforced call-count limit."""
+
+    component_cls: type[object]
+    method_name: str
+    observed_count: int
+    allowed_count: int
+
+
+@dataclass(frozen=True, slots=True)
 class _CallCountLimits:
     limits: dict[str, int]
-    on_limit_exceeded: Callable[[str, int, int], object] | None
+    unlisted_call_baselines: dict[str, int]
+    on_limit_exceeded: Callable[[CallCountLimitViolation], None] | None
     allow_unlisted_calls: bool
 
 
@@ -119,16 +131,31 @@ class ComponentSpy(Generic[T_Component]):
                     not call_count_limits.allow_unlisted_calls
                     and name not in call_count_limits.limits
                 ):
+                    allowed = call_count_limits.unlisted_call_baselines.get(name, 0)
                     if call_count_limits.on_limit_exceeded is not None:
-                        call_count_limits.on_limit_exceeded(name, current, 0)
+                        call_count_limits.on_limit_exceeded(
+                            CallCountLimitViolation(
+                                component_cls=self.component_cls,
+                                method_name=name,
+                                observed_count=current,
+                                allowed_count=allowed,
+                            )
+                        )
                     raise AssertionError(f"{self.component_cls.__name__}: unexpected call {name}")
                 allowed = call_count_limits.limits.get(name)
                 if allowed is not None and current > allowed:
                     if call_count_limits.on_limit_exceeded is not None:
-                        call_count_limits.on_limit_exceeded(name, current, allowed)
+                        call_count_limits.on_limit_exceeded(
+                            CallCountLimitViolation(
+                                component_cls=self.component_cls,
+                                method_name=name,
+                                observed_count=current,
+                                allowed_count=allowed,
+                            )
+                        )
                     raise AssertionError(
-                        f"{self.component_cls.__name__}: call overflow for {name}: "
-                        f"{current} > {allowed}"
+                        f"{self.component_cls.__name__}: recorded call count for "
+                        f"{name} is {current}; limit is {allowed}"
                     )
 
             remaining_waiters: list[_CallCountWaiter] = []
@@ -261,16 +288,19 @@ class ComponentSpy(Generic[T_Component]):
     def reset(self) -> None:
         """Clear recorded calls and instance identities.
 
-        Raises ``RuntimeError`` while call-count synchronization is active.
+        Raises ``RuntimeError`` while ``wait_for_call`` is pending or an
+        ``enforce_call_count_limits`` context is active.
         """
         with self._lock:
-            if (
-                self._call_count_waiters_by_method
-                or self._active_call_count_limits is not None
-            ):
+            if self._call_count_waiters_by_method:
                 raise RuntimeError(
-                    f"{self.component_cls.__name__}: cannot reset while call-count "
-                    "synchronization is active"
+                    f"{self.component_cls.__name__}: cannot reset while "
+                    "wait_for_call is pending"
+                )
+            if self._active_call_count_limits is not None:
+                raise RuntimeError(
+                    f"{self.component_cls.__name__}: cannot reset within an "
+                    "enforce_call_count_limits context"
                 )
             self._call_counts = {}
             self._call_history.clear()
@@ -365,39 +395,43 @@ class ComponentSpy(Generic[T_Component]):
             )
         )
 
-    async def await_and_pin_call_counts(
+    @contextmanager
+    def enforce_call_count_limits(
         self,
-        expected: dict[str, int],
+        limits: dict[str, int],
         *,
-        timeout: float = 5.0,
-        on_limit_exceeded: Callable[[str, int, int], object] | None = None,
-        allow_unlisted: bool = False,
-    ) -> Callable[[], None]:
-        """Wait for exact call counts and keep them as limits until released.
+        on_limit_exceeded: Callable[[CallCountLimitViolation], None] | None = None,
+        allow_unlisted_calls: bool = False,
+    ) -> Generator[None, None, None]:
+        """Enforce call-count limits for the duration of the context.
 
-        Return a callback that releases the limits. Until released, exceeding an
-        expected count raises ``AssertionError``. Calling a method absent from
-        ``expected`` also raises unless ``allow_unlisted`` is true. When an expected
-        count is exceeded or a method absent from ``expected`` is disallowed,
-        ``on_limit_exceeded``, if provided, receives the method name, recorded
-        count, and allowed count. Raises ``RuntimeError`` if call-count limits are
-        already active.
+        Each limit applies to the method's cumulative recorded count, not the
+        number of additional calls allowed after entering the context. Unless
+        ``allow_unlisted_calls`` is true, methods absent from ``limits``
+        are limited to their count when the context is entered. A violating
+        invocation is recorded and blocked before its wrapped method body runs.
+        When a limit is exceeded, ``on_limit_exceeded``, if provided, receives a
+        ``CallCountLimitViolation``. Its exception propagates; otherwise the
+        violation raises ``AssertionError``. Raises ``RuntimeError`` if call-count
+        limits are already active.
         """
-        call_count_limits = _CallCountLimits(
-            limits=dict(expected),
-            on_limit_exceeded=on_limit_exceeded,
-            allow_unlisted_calls=allow_unlisted,
-        )
+        configured_limits = dict(limits)
         with self._lock:
             if self._active_call_count_limits is not None:
                 raise RuntimeError(
                     f"{self.component_cls.__name__}: call-count limits are already active"
                 )
+            call_count_limits = _CallCountLimits(
+                limits=configured_limits,
+                unlisted_call_baselines={
+                    name: count
+                    for name, count in self._call_counts.items()
+                    if name not in configured_limits
+                },
+                on_limit_exceeded=on_limit_exceeded,
+                allow_unlisted_calls=allow_unlisted_calls,
+            )
             self._active_call_count_limits = call_count_limits
-
-        def release_call_count_limits() -> None:
-            with self._lock:
-                self._active_call_count_limits = None
 
         try:
             with self._lock:
@@ -406,17 +440,22 @@ class ComponentSpy(Generic[T_Component]):
                     if current <= allowed:
                         continue
                     if call_count_limits.on_limit_exceeded is not None:
-                        call_count_limits.on_limit_exceeded(name, current, allowed)
+                        call_count_limits.on_limit_exceeded(
+                            CallCountLimitViolation(
+                                component_cls=self.component_cls,
+                                method_name=name,
+                                observed_count=current,
+                                allowed_count=allowed,
+                            )
+                        )
                     raise AssertionError(
-                        f"{self.component_cls.__name__}: call overflow for {name}: "
-                        f"{current} > {allowed}"
+                        f"{self.component_cls.__name__}: recorded call count for "
+                        f"{name} is {current}; limit is {allowed}"
                     )
-            await self.wait_for_calls(call_count_limits.limits, timeout=timeout)
-        except BaseException:
-            release_call_count_limits()
-            raise
-
-        return release_call_count_limits
+            yield
+        finally:
+            with self._lock:
+                self._active_call_count_limits = None
 
 
 _component_spies: WeakKeyDictionary[

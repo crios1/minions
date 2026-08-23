@@ -1,6 +1,4 @@
-import asyncio
 from typing import Any, Protocol
-from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -25,9 +23,9 @@ from tests.assets.pipelines.emit_two.simple.with_subscriber_counts_one_then_two 
     AssetPipeline as EmitTwoSimplePipeline,
 )
 from tests.assets.resources.fixed.default import AssetResource as FixedResource
+from tests.assets.support.component_spy import CallCountLimitViolation
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
-from tests.assets.support.resource_spied import SpiedResource
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.support.gru_scenario.directives import (
     AfterWorkflowStepStarts,
@@ -41,7 +39,6 @@ from tests.support.gru_scenario.directives import (
 from tests.support.gru_scenario.introspect import ComponentTaskRegistrySnapshot
 from tests.support.gru_scenario.plan import ScenarioPlan
 from tests.support.gru_scenario.runner import (
-    CallCountLimitViolation,
     LifecycleObservation,
     OrchestrationStartReceipt,
     ScenarioCheckpoint,
@@ -328,7 +325,7 @@ def test_build_expected_call_counts_scales_minion_init_with_successful_starts(
     assert minion_counts["run"] == 2
 
 
-def test_build_expected_call_counts_keeps_pipelines_out_of_exact_pinning(
+def test_build_expected_call_counts_excludes_pipelines_from_exact_call_counts(
     verifier_factory: VerifierFactory,
 ):
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
@@ -362,7 +359,7 @@ def test_build_expected_call_counts_keeps_pipelines_out_of_exact_pinning(
     expected = verifier_factory(plan, result)._build_expected_call_counts()
 
     assert EmitOneCounterPipeline not in expected.call_counts
-    assert EmitOneCounterPipeline not in expected.allow_unlisted
+    assert EmitOneCounterPipeline not in expected.allow_unlisted_calls
 
 
 def test_build_expected_call_counts_scales_resource_lifecycle_with_observed_instances(
@@ -381,7 +378,7 @@ def test_build_expected_call_counts_scales_resource_lifecycle_with_observed_inst
         "startup": 2,
         "run": 2,
     }
-    assert FixedResource in expected.allow_unlisted
+    assert FixedResource in expected.allow_unlisted_calls
 
 
 @pytest.mark.asyncio
@@ -440,106 +437,6 @@ async def test_build_expected_call_counts_does_not_require_get_all_for_overridde
     assert state_store_counts["_mn_get_decoded_contexts_for_orchestration"] == 1
     assert state_store_counts["_mn_decode_stored_contexts"] == 1
     assert "get_all_contexts" not in state_store_counts
-
-
-@pytest.mark.asyncio
-async def test_pin_and_assert_calls_invokes_completed_unpin_callback_when_another_fails(
-    verifier_factory: VerifierFactory,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    unpin_call_counts = Mock()
-
-    class CompletedPinResource(SpiedResource):
-        pass
-
-    class FailedPinResource(SpiedResource):
-        pass
-
-    monkeypatch.setattr(
-        CompletedPinResource,
-        "await_and_pin_call_counts",
-        AsyncMock(return_value=unpin_call_counts),
-    )
-    monkeypatch.setattr(
-        FailedPinResource,
-        "await_and_pin_call_counts",
-        AsyncMock(side_effect=TimeoutError),
-    )
-    monkeypatch.setattr(CompletedPinResource, "get_call_counts", Mock(return_value={}))
-    monkeypatch.setattr(FailedPinResource, "get_call_counts", Mock(return_value={}))
-
-    verifier = verifier_factory(
-        ScenarioPlan([], pipeline_event_counts={}),
-        ScenarioRunResult(spies=SpyRegistry()),
-    )
-
-    with pytest.raises(pytest.fail.Exception, match="FailedPinResource"):
-        await verifier._pin_and_assert_calls(
-            {
-                CompletedPinResource: {},
-                FailedPinResource: {"missing": 1},
-            },
-            allow_unlisted=set(),
-        )
-
-    unpin_call_counts.assert_called_once_with()
-
-
-@pytest.mark.asyncio
-async def test_pin_and_assert_calls_cancellation_invokes_unpin_and_cancels_pending_pin(
-    verifier_factory: VerifierFactory,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    unpin_call_counts = Mock()
-    pending_pin_started = asyncio.Event()
-    pending_pin_cancelled = asyncio.Event()
-    pending_pin_can_complete = asyncio.Event()
-
-    class CompletedPinResource(SpiedResource):
-        pass
-
-    class PendingPinResource(SpiedResource):
-        pass
-
-    async def wait_until_pin_can_complete(**_: object):
-        pending_pin_started.set()
-        try:
-            await pending_pin_can_complete.wait()
-        finally:
-            pending_pin_cancelled.set()
-        return lambda: None
-
-    monkeypatch.setattr(
-        CompletedPinResource,
-        "await_and_pin_call_counts",
-        AsyncMock(return_value=unpin_call_counts),
-    )
-    monkeypatch.setattr(
-        PendingPinResource,
-        "await_and_pin_call_counts",
-        staticmethod(wait_until_pin_can_complete),
-    )
-    verifier = verifier_factory(
-        ScenarioPlan([], pipeline_event_counts={}),
-        ScenarioRunResult(spies=SpyRegistry()),
-    )
-    pin_call_counts_task = asyncio.create_task(
-        verifier._pin_and_assert_calls(
-            {
-                CompletedPinResource: {},
-                PendingPinResource: {},
-            },
-            allow_unlisted=set(),
-        )
-    )
-    await asyncio.wait_for(pending_pin_started.wait(), timeout=1.0)
-
-    pin_call_counts_task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await pin_call_counts_task
-
-    unpin_call_counts.assert_called_once_with()
-    assert pending_pin_cancelled.is_set()
 
 
 def test_assert_no_call_count_limit_violations_reports_details(

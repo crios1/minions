@@ -1,8 +1,9 @@
 import asyncio
 from collections import defaultdict
 from collections.abc import Sequence
+from contextlib import ExitStack
 from dataclasses import dataclass
-from typing import Any, Callable, cast
+from typing import Any, cast
 
 import pytest
 
@@ -29,7 +30,6 @@ from .directives import (
 )
 from .plan import ScenarioPlan
 from .runner import (
-    CallCountLimitViolation,
     OrchestrationStartReceipt,
     ScenarioCheckpoint,
     ScenarioRunResult,
@@ -41,31 +41,6 @@ from .runner import (
 
 def _class_ref(cls: type[Any]) -> str:
     return f"{cls.__module__}:{cls.__qualname__}"
-
-
-class _CallCountLimitViolationRecorder:
-    def __init__(
-        self,
-        result: ScenarioRunResult,
-        cls: type[SpiedMinion[Any, Any]] | type[SpiedResource] | type[SpiedStateStore],
-    ):
-        self._result = result
-        self._cls = cls
-
-    def __call__(
-        self,
-        method_name: str,
-        observed_count: int,
-        allowed_count: int,
-    ) -> None:
-        self._result.call_count_limit_violations.append(
-            CallCountLimitViolation(
-                component_cls=self._cls,
-                method_name=method_name,
-                observed_count=observed_count,
-                allowed_count=allowed_count,
-            )
-        )
 
 
 def _names_for_instance_identity(
@@ -89,13 +64,13 @@ class MinionExpectations:
 
 @dataclass(frozen=True)
 class ExpectedCallCounts:
-    """Expected call counts plus spy classes allowed to have extra calls."""
+    """Expected counts plus Resources allowed unlisted calls."""
 
     call_counts: dict[
         type[SpiedMinion[Any, Any]] | type[SpiedResource] | type[SpiedStateStore],
         dict[str, int],
     ]
-    allow_unlisted: set[type[SpiedResource]]
+    allow_unlisted_calls: set[type[SpiedResource]]
 
 
 @dataclass(frozen=True)
@@ -320,18 +295,29 @@ class ScenarioVerifier:
         self._assert_workflow_step_start_events_are_monotonic()
         self._assert_checkpoint_window_workflow_step_progression()
 
-        unpin_fns: list[Callable[[], None]] = []
-        try:
-            unpin_fns = await self._pin_and_assert_calls(
-                expected.call_counts, expected.allow_unlisted
-            )
+        with ExitStack() as call_count_limits:
+            try:
+                for cls, counts in expected.call_counts.items():
+                    call_count_limits.enter_context(
+                        cls.enforce_call_count_limits(
+                            limits=counts,
+                            on_limit_exceeded=(
+                                self._result.call_count_limit_violations.append
+                            ),
+                            allow_unlisted_calls=(
+                                cls in expected.allow_unlisted_calls
+                            ),
+                        )
+                    )
+                await self._wait_for_expected_calls(expected.call_counts)
+            except Exception:
+                self._fail_call_count_mismatches(expected.call_counts)
+
             self._assert_state_store_read_call_bounds()
             self._assert_minion_fanout_delivery()
             self._assert_call_order(expected.call_counts)
-            self._assert_no_call_count_limit_violations()
-        finally:
-            for unpin in unpin_fns:
-                unpin()
+
+        self._assert_no_call_count_limit_violations()
 
     def _assert_metrics_label_contract(self) -> None:
         try:
@@ -346,7 +332,7 @@ class ScenarioVerifier:
             type[SpiedMinion[Any, Any]] | type[SpiedResource] | type[SpiedStateStore],
             dict[str, int],
         ] = {}
-        allow_unlisted: set[type[SpiedResource]] = set()
+        allow_unlisted_calls: set[type[SpiedResource]] = set()
 
         # Resources are singleton while live, but Gru may create a replacement after
         # the final owner stops. Aggregate lifecycle calls therefore scale with the
@@ -358,7 +344,7 @@ class ScenarioVerifier:
                 "startup": instance_count,
                 "run": instance_count,
             }
-            allow_unlisted.add(r_cls)
+            allow_unlisted_calls.add(r_cls)
 
         for m_cls in spies.minions.values():
             starts = expectations.minion_start_counts.get(m_cls, 0)
@@ -412,7 +398,10 @@ class ScenarioVerifier:
             ss["shutdown"] = 1
         call_counts[type(self._state_store)] = ss
 
-        return ExpectedCallCounts(call_counts=call_counts, allow_unlisted=allow_unlisted)
+        return ExpectedCallCounts(
+            call_counts=call_counts,
+            allow_unlisted_calls=allow_unlisted_calls,
+        )
 
     def _compute_replayed_step_counts(
         self,
@@ -1489,52 +1478,37 @@ class ScenarioVerifier:
             successes_by_pipeline_id=successes_by_pipeline_id,
         )
 
-    async def _pin_and_assert_calls(
+    async def _wait_for_expected_calls(
         self,
         call_counts: dict[
             type[SpiedMinion[Any, Any]] | type[SpiedResource] | type[SpiedStateStore],
             dict[str, int],
         ],
-        allow_unlisted: set[type[SpiedResource]],
-    ) -> list[Callable[[], None]]:
-        pin_tasks = [
-            asyncio.create_task(
-                cls.await_and_pin_call_counts(
-                    expected=counts,
-                    on_limit_exceeded=_CallCountLimitViolationRecorder(self._result, cls),
-                    allow_unlisted=(cls in allow_unlisted),
-                    timeout=self._timeout,
-                )
-            )
-            for cls, counts in call_counts.items()
-        ]
-        try:
-            return await asyncio.gather(*pin_tasks)
-        except BaseException as error:
-            for task in pin_tasks:
-                if not task.done():
-                    task.cancel()
-            await asyncio.gather(*pin_tasks, return_exceptions=True)
-            for task in pin_tasks:
-                if task.cancelled() or task.exception() is not None:
-                    continue
-                unpin_call_counts = task.result()
-                unpin_call_counts()
-
-            if not isinstance(error, Exception):
-                raise
-
-            mismatches: list[str] = []
+    ) -> None:
+        async with asyncio.TaskGroup() as task_group:
             for cls, expected in call_counts.items():
-                actual = cls.get_call_counts()
-                diff = {
-                    name: (actual.get(name, 0), count)
-                    for name, count in expected.items()
-                    if actual.get(name, 0) != count
-                }
-                if diff:
-                    mismatches.append(f"{cls.__name__}: {diff}")
-            pytest.fail("Call counts did not reach expected values. " + "; ".join(mismatches))
+                task_group.create_task(
+                    cls.wait_for_calls(expected, timeout=self._timeout)
+                )
+
+    @staticmethod
+    def _fail_call_count_mismatches(
+        call_counts: dict[
+            type[SpiedMinion[Any, Any]] | type[SpiedResource] | type[SpiedStateStore],
+            dict[str, int],
+        ],
+    ) -> None:
+        mismatches: list[str] = []
+        for cls, expected in call_counts.items():
+            actual = cls.get_call_counts()
+            diff = {
+                name: (actual.get(name, 0), count)
+                for name, count in expected.items()
+                if actual.get(name, 0) != count
+            }
+            if diff:
+                mismatches.append(f"{cls.__name__}: {diff}")
+        pytest.fail("Call counts did not reach expected values. " + "; ".join(mismatches))
 
     def _assert_call_order(
         self,

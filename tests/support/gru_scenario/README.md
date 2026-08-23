@@ -231,8 +231,13 @@ Expected workflow counts are derived from `pipeline_event_counts`:
   - `__init__`: between `0/1` (depending on successful starts) and start attempts.
   - `startup` and `run`: bounded similarly, with `run <= startup`.
 - Minion `startup`/`run` expectations are derived from successful starts (failed starts are not treated as running minions).
-- Resource classes allow unlisted calls when pinning counts.
-- Unexpected extra calls during pinning are collected and reported after call-order checks.
+- Exact Minion and StateStore call-count expectations remain enforced while the
+  verifier performs its remaining assertions. Methods omitted from those
+  expectations may have historical calls, but additional calls are rejected during
+  enforcement.
+- Resource classes allow unlisted calls during enforcement.
+- Unexpected extra calls during enforcement are collected and reported after
+  call-order checks.
 
 ## Automatic Lifecycle Verification
 - Scenario authors declare lifecycle actions; they do not declare Gru registry or task counts.
