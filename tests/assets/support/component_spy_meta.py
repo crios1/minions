@@ -21,7 +21,7 @@ class ComponentSpyMeta(ABCMeta):
         enable_component_spy(cls)
 
     def reset_spy(cls) -> None:
-        """Clear recorded calls and instance identities.
+        """Clear recorded calls and spy instance identities.
 
         Raises ``RuntimeError`` while ``wait_for_call`` is pending or an
         ``enforce_call_count_limits`` context is active.
@@ -36,15 +36,15 @@ class ComponentSpyMeta(ABCMeta):
         """Return recorded calls in chronological order."""
         return component_spy_for(cls).call_history()
 
-    def get_instance_identity(
+    def get_spy_instance_identity(
         cls: type[T_Component], instance: T_Component
     ) -> int | None:
-        """Return the component instance's identity in recorded calls."""
-        return component_spy_for(cls).instance_identity(instance)
+        """Return the spy instance identity for a component instance."""
+        return component_spy_for(cls).spy_instance_identity(instance)
 
-    def get_instance_identities(cls) -> set[int]:
-        """Return the instance identities present in recorded calls."""
-        return component_spy_for(cls).instance_identities()
+    def get_spy_instance_identities(cls) -> set[int]:
+        """Return the spy instance identities present in recorded calls."""
+        return component_spy_for(cls).spy_instance_identities()
 
     def assert_call_order(cls, subsequence: Iterable[str]) -> None:
         """Assert that methods were called in the given relative order."""
@@ -52,12 +52,12 @@ class ComponentSpyMeta(ABCMeta):
 
     def assert_call_order_for_instance(
         cls,
-        instance_identity: int,
+        spy_instance_identity: int,
         subsequence: Iterable[str],
     ) -> None:
-        """Assert that methods were called on the specified instance in the given relative order."""
+        """Assert relative call order for one spy instance identity."""
         component_spy_for(cls).assert_call_order_for_instance(
-            instance_identity,
+            spy_instance_identity,
             subsequence,
         )
 

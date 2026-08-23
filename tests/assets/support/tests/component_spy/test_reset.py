@@ -32,7 +32,7 @@ class TestResetSpy:
         assert SpiedComponent.get_call_counts() == {}
         assert SpiedComponent.get_call_history() == ()
 
-    def test_clears_instance_identities(self) -> None:
+    def test_clears_spy_instance_identities(self) -> None:
         class SpiedComponent(metaclass=ComponentSpyMeta):
             def method(self) -> None:
                 return
@@ -40,15 +40,15 @@ class TestResetSpy:
         SpiedComponent.enable_spy()
         first_component = SpiedComponent()
         second_component = SpiedComponent()
-        assert SpiedComponent.get_instance_identity(first_component) is not None
-        assert SpiedComponent.get_instance_identity(second_component) is not None
+        assert SpiedComponent.get_spy_instance_identity(first_component) is not None
+        assert SpiedComponent.get_spy_instance_identity(second_component) is not None
 
         SpiedComponent.reset_spy()
 
-        assert SpiedComponent.get_instance_identity(first_component) is None
-        assert SpiedComponent.get_instance_identity(second_component) is None
+        assert SpiedComponent.get_spy_instance_identity(first_component) is None
+        assert SpiedComponent.get_spy_instance_identity(second_component) is None
         second_component.method()
-        assert SpiedComponent.get_instance_identity(second_component) is not None
+        assert SpiedComponent.get_spy_instance_identity(second_component) is not None
 
     @pytest.mark.asyncio
     async def test_is_rejected_while_wait_for_call_is_pending(self) -> None:

@@ -114,20 +114,20 @@ def test_observation_does_not_mutate_component_instance() -> None:
     assert SpiedComponent.get_call_counts() == {"method": 1}
     assert vars(component) == {"value": "original"}
 
-def test_assigns_distinct_identities_to_component_instances() -> None:
+def test_assigns_distinct_spy_instance_identities() -> None:
     class SpiedComponent(metaclass=ComponentSpyMeta):
         pass
 
     SpiedComponent.enable_spy()
     first_component = SpiedComponent()
     second_component = SpiedComponent()
-    first_identity = SpiedComponent.get_instance_identity(first_component)
-    second_identity = SpiedComponent.get_instance_identity(second_component)
+    first_identity = SpiedComponent.get_spy_instance_identity(first_component)
+    second_identity = SpiedComponent.get_spy_instance_identity(second_component)
 
     assert first_identity is not None
     assert second_identity is not None
     assert first_identity != second_identity
-    assert SpiedComponent.get_instance_identities() == {
+    assert SpiedComponent.get_spy_instance_identities() == {
         first_identity,
         second_identity,
     }
@@ -249,14 +249,14 @@ def test_assert_call_order_for_instance_excludes_other_instances_calls() -> None
     SpiedComponent.reset_spy()
     first_component.first()
     second_component.second()
-    first_identity = SpiedComponent.get_instance_identity(first_component)
-    second_identity = SpiedComponent.get_instance_identity(second_component)
+    first_identity = SpiedComponent.get_spy_instance_identity(first_component)
+    second_identity = SpiedComponent.get_spy_instance_identity(second_component)
 
     assert first_identity is not None
     assert second_identity is not None
     SpiedComponent.assert_call_order_for_instance(first_identity, ["first"])
     SpiedComponent.assert_call_order_for_instance(second_identity, ["second"])
-    with pytest.raises(AssertionError, match="not found for instance identity"):
+    with pytest.raises(AssertionError, match="not found for spy instance identity"):
         SpiedComponent.assert_call_order_for_instance(
             first_identity,
             subsequence=["first", "second"],

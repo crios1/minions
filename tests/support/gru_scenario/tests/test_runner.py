@@ -241,7 +241,7 @@ async def test_records_receipts_for_success_and_expected_failure(
 
 
 @pytest.mark.asyncio
-async def test_concurrent_starts_capture_started_minions_and_instance_identities(
+async def test_concurrent_starts_capture_started_minions_and_spy_instance_identities(
     gru: Gru,
 ) -> None:
     default_minion_ref = "tests.assets.minions.two_steps.simple.default"
@@ -286,14 +286,14 @@ async def test_concurrent_starts_capture_started_minions_and_instance_identities
 
     assert result.spies is not None
     pipeline_cls = result.spies.pipelines[pipeline_id]
-    assert len(result.instance_identities.get(pipeline_cls, set())) >= 1
+    assert len(result.spy_instance_identities.get(pipeline_cls, set())) >= 1
 
     assert any(
-        len(result.instance_identities.get(type(minion), set())) >= 1
+        len(result.spy_instance_identities.get(type(minion), set())) >= 1
         for minion in result.started_minions
     )
     assert any(
-        len(result.instance_identities.get(resource_cls, set())) >= 1
+        len(result.spy_instance_identities.get(resource_cls, set())) >= 1
         for resource_cls in result.spies.resources
     )
 

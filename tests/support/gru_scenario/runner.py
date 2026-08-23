@@ -169,7 +169,7 @@ class ScenarioRunResult:
     seen_shutdown: bool = False
     spies: SpyRegistry | None = None
     started_minions: set[SpiedMinion[Any, Any]] = field(default_factory=lambda: set())
-    instance_identities: defaultdict[SpiedComponentClass, set[int]] = field(
+    spy_instance_identities: defaultdict[SpiedComponentClass, set[int]] = field(
         default_factory=lambda: defaultdict(set)
     )
     call_count_limit_violations: list[CallCountLimitViolation] = field(
@@ -495,7 +495,7 @@ class ScenarioRunner:
         result.receipts.append(receipt)
         self._orchestration_start_receipts_by_directive_id[id(d)] = receipt
         self._active_orchestration_start_indexes.add(receipt.directive_index)
-        self._record_instance_identities(
+        self._record_spy_instance_identities(
             minion_inst,
             receipt.pipeline_id,
             receipt.instance_id,
@@ -598,18 +598,18 @@ class ScenarioRunner:
             directive=d,
         )
 
-    def _record_instance_identities(
+    def _record_spy_instance_identities(
         self,
         minion_inst: Minion[Any, Any] | None,
         pipeline_id: str,
         instance_id: str | None,
     ) -> None:
-        self._record_identity_if_present(minion_inst)
+        self._record_spy_instance_identity_if_present(minion_inst)
         if instance_id is None:
             return
 
         pipeline_inst = self._insp.get_pipeline_instance(pipeline_id)
-        self._record_identity_if_present(pipeline_inst)
+        self._record_spy_instance_identity_if_present(pipeline_inst)
 
         resource_ids = self._insp.resource_ids_for(
             minion_instance_id=instance_id,
@@ -617,9 +617,9 @@ class ScenarioRunner:
         )
         for rid in resource_ids:
             res_inst = self._insp.get_resource_instance(rid)
-            self._record_identity_if_present(res_inst)
+            self._record_spy_instance_identity_if_present(res_inst)
 
-    def _record_identity_if_present(self, inst: object | None) -> None:
+    def _record_spy_instance_identity_if_present(self, inst: object | None) -> None:
         if inst is None:
             return
         if not isinstance(
@@ -632,13 +632,13 @@ class ScenarioRunner:
             inst,
         )
         spy_cls: SpiedComponentClass = type(spied_component)
-        identity = component_spy_for(type(spied_component)).instance_identity(
+        spy_instance_identity = component_spy_for(type(spied_component)).spy_instance_identity(
             spied_component
         )
-        if identity is None:
+        if spy_instance_identity is None:
             return
         result = self._require_result()
-        result.instance_identities[spy_cls].add(identity)
+        result.spy_instance_identities[spy_cls].add(spy_instance_identity)
 
     def _require_result(self) -> ScenarioRunResult:
         if self._result is None:
@@ -744,17 +744,20 @@ class ScenarioRunner:
 
         snapshots: dict[str, dict[int, dict[str, int]]] = {}
         for cls in classes:
-            by_identity: defaultdict[int, defaultdict[str, int]] = defaultdict(
+            by_spy_instance_identity: defaultdict[int, defaultdict[str, int]] = defaultdict(
                 lambda: defaultdict(int)
             )
             for recorded_call in cls.get_call_history():
-                if recorded_call.instance_identity is None:
+                if recorded_call.spy_instance_identity is None:
                     continue
-                by_identity[recorded_call.instance_identity][recorded_call.method_name] += 1
+                by_spy_instance_identity[recorded_call.spy_instance_identity][
+                    recorded_call.method_name
+                ] += 1
 
             key = f"{cls.__module__}.{cls.__name__}"
             snapshots[key] = {
-                identity: dict(counts) for identity, counts in by_identity.items()
+                spy_instance_identity: dict(counts)
+                for spy_instance_identity, counts in by_spy_instance_identity.items()
             }
         return snapshots
 

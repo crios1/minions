@@ -16,7 +16,7 @@ T_Component = TypeVar("T_Component", bound=object)
 @dataclass(frozen=True, slots=True)
 class _ObservedInstance:
     reference: ReferenceType[object]
-    identity: int
+    spy_instance_identity: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,7 +24,7 @@ class RecordedCall:
     """A component method call recorded by ComponentSpy."""
 
     method_name: str
-    instance_identity: int | None
+    spy_instance_identity: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,48 +63,48 @@ class ComponentSpy(Generic[T_Component]):
         self._call_counts: dict[str, int] = {}
         self._call_history: list[RecordedCall] = []
         self._call_count_waiters_by_method: dict[str, list[_CallCountWaiter]] = {}
-        self._instance_identity_counter = itertools.count(1)
-        self._observed_instances_by_id: dict[int, _ObservedInstance] = {}
+        self._spy_instance_identity_counter = itertools.count(1)
+        self._observed_instances_by_python_id: dict[int, _ObservedInstance] = {}
         self._active_call_count_limits: _CallCountLimits | None = None
         self._instrument()
 
-    def _instance_identity(self, instance: object) -> int:
-        instance_id = id(instance)
+    def _spy_instance_identity(self, instance: object) -> int:
+        python_instance_id = id(instance)
         with self._lock:
-            existing = self._observed_instances_by_id.get(instance_id)
+            existing = self._observed_instances_by_python_id.get(python_instance_id)
             if existing is not None and existing.reference() is instance:
-                return existing.identity
+                return existing.spy_instance_identity
 
-            identity = next(self._instance_identity_counter)
+            spy_instance_identity = next(self._spy_instance_identity_counter)
 
             def remove_instance(instance_ref: ReferenceType[object]) -> None:
                 with self._lock:
-                    current = self._observed_instances_by_id.get(instance_id)
+                    current = self._observed_instances_by_python_id.get(python_instance_id)
                     if current is not None and current.reference is instance_ref:
-                        self._observed_instances_by_id.pop(instance_id, None)
+                        self._observed_instances_by_python_id.pop(python_instance_id, None)
 
             instance_ref = ref(instance, remove_instance)
-            self._observed_instances_by_id[instance_id] = _ObservedInstance(
+            self._observed_instances_by_python_id[python_instance_id] = _ObservedInstance(
                 reference=instance_ref,
-                identity=identity,
+                spy_instance_identity=spy_instance_identity,
             )
-            return identity
+            return spy_instance_identity
 
-    def instance_identity(self, instance: T_Component) -> int | None:
-        """Return the component instance's identity in recorded calls."""
+    def spy_instance_identity(self, instance: T_Component) -> int | None:
+        """Return the spy instance identity for a component instance."""
         with self._lock:
-            existing = self._observed_instances_by_id.get(id(instance))
+            existing = self._observed_instances_by_python_id.get(id(instance))
             if existing is None or existing.reference() is not instance:
                 return None
-            return existing.identity
+            return existing.spy_instance_identity
 
-    def instance_identities(self) -> set[int]:
-        """Return the instance identities present in recorded calls."""
+    def spy_instance_identities(self) -> set[int]:
+        """Return the spy instance identities present in recorded calls."""
         with self._lock:
             return {
-                observation.instance_identity
+                observation.spy_instance_identity
                 for observation in self._call_history
-                if observation.instance_identity is not None
+                if observation.spy_instance_identity is not None
             }
 
     @staticmethod
@@ -112,7 +112,7 @@ class ComponentSpy(Generic[T_Component]):
         if not future.done():
             future.set_result(None)
 
-    def _record(self, name: str, instance_identity: int | None = None) -> None:
+    def _record(self, name: str, spy_instance_identity: int | None = None) -> None:
         waiters_to_notify: list[_CallCountWaiter] = []
 
         with self._lock:
@@ -121,7 +121,7 @@ class ComponentSpy(Generic[T_Component]):
             self._call_history.append(
                 RecordedCall(
                     method_name=name,
-                    instance_identity=instance_identity,
+                    spy_instance_identity=spy_instance_identity,
                 )
             )
 
@@ -176,7 +176,7 @@ class ComponentSpy(Generic[T_Component]):
                 waiter.future,
             )
 
-    def _instance_identity_for_owner(
+    def _spy_instance_identity_for_owner(
         self,
         owner: object,
         *,
@@ -186,7 +186,7 @@ class ComponentSpy(Generic[T_Component]):
             if isinstance(owner, type) and issubclass(owner, self.component_cls):
                 return None
         elif isinstance(owner, self.component_cls):
-            return self._instance_identity(owner)
+            return self._spy_instance_identity(owner)
         raise TypeError(
             f"{self.component_cls.__name__} spy wrapper received a "
             f"non-{self.component_cls.__name__} owner."
@@ -200,11 +200,11 @@ class ComponentSpy(Generic[T_Component]):
 
         @wraps(original_init)
         def init_wrapper(instance: object, *args: Any, **kwargs: Any) -> Any:
-            identity = self._instance_identity_for_owner(instance)
+            spy_instance_identity = self._spy_instance_identity_for_owner(instance)
             try:
                 return original_init(instance, *args, **kwargs)
             finally:
-                self._record("__init__", identity)
+                self._record("__init__", spy_instance_identity)
 
         setattr(component_cls, "__init__", init_wrapper)
 
@@ -237,15 +237,15 @@ class ComponentSpy(Generic[T_Component]):
                 @wraps(function)
                 async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
                     owner = component_cls if not args else args[0]
-                    instance_identity = (
+                    spy_instance_identity = (
                         None
                         if is_static
-                        else self._instance_identity_for_owner(
+                        else self._spy_instance_identity_for_owner(
                             owner,
                             class_method=is_class,
                         )
                     )
-                    self._record(name, instance_identity)
+                    self._record(name, spy_instance_identity)
                     return await function(*args, **kwargs)
 
                 wrapped: object = async_wrapper
@@ -254,15 +254,15 @@ class ComponentSpy(Generic[T_Component]):
                 @wraps(function)
                 def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
                     owner = component_cls if not args else args[0]
-                    instance_identity = (
+                    spy_instance_identity = (
                         None
                         if is_static
-                        else self._instance_identity_for_owner(
+                        else self._spy_instance_identity_for_owner(
                             owner,
                             class_method=is_class,
                         )
                     )
-                    self._record(name, instance_identity)
+                    self._record(name, spy_instance_identity)
                     return function(*args, **kwargs)
 
                 wrapped = sync_wrapper
@@ -286,7 +286,7 @@ class ComponentSpy(Generic[T_Component]):
                     setattr(component_cls, name, wrap(name, descriptor))
 
     def reset(self) -> None:
-        """Clear recorded calls and instance identities.
+        """Clear recorded calls and spy instance identities.
 
         Raises ``RuntimeError`` while ``wait_for_call`` is pending or an
         ``enforce_call_count_limits`` context is active.
@@ -304,7 +304,7 @@ class ComponentSpy(Generic[T_Component]):
                 )
             self._call_counts = {}
             self._call_history.clear()
-            self._observed_instances_by_id.clear()
+            self._observed_instances_by_python_id.clear()
 
     def call_counts(self) -> dict[str, int]:
         """Return a snapshot of recorded method call counts."""
@@ -333,14 +333,14 @@ class ComponentSpy(Generic[T_Component]):
             )
 
     def assert_call_order_for_instance(
-        self, instance_identity: int, subsequence: Iterable[str]
+        self, spy_instance_identity: int, subsequence: Iterable[str]
     ) -> None:
-        """Assert that methods were called on the specified instance in the given relative order."""
+        """Assert relative call order for one spy instance identity."""
         with self._lock:
             actual = [
                 observation.method_name
                 for observation in self._call_history
-                if observation.instance_identity == instance_identity
+                if observation.spy_instance_identity == spy_instance_identity
             ]
 
         remaining = iter(actual)
@@ -349,10 +349,10 @@ class ComponentSpy(Generic[T_Component]):
             if any(name == expected_name for name in remaining):
                 continue
             raise AssertionError(
-                f"Expected subsequence {expected_names} not found for instance identity "
-                f"{instance_identity}.\n"
+                f"Expected subsequence {expected_names} not found for spy instance identity "
+                f"{spy_instance_identity}.\n"
                 f"Missing from this point: {expected_names[index:]}\n"
-                f"Full history names for instance identity {instance_identity}: {actual}"
+                f"Full history names for spy instance identity {spy_instance_identity}: {actual}"
             )
 
     async def wait_for_call(self, name: str, *, count: int = 1, timeout: float = 5.0) -> None:

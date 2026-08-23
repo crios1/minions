@@ -43,14 +43,14 @@ def _class_ref(cls: type[Any]) -> str:
     return f"{cls.__module__}:{cls.__qualname__}"
 
 
-def _names_for_instance_identity(
+def _names_for_spy_instance_identity(
     cls: SpiedComponentClass,
-    instance_identity: int,
+    spy_instance_identity: int,
 ) -> list[str]:
     return [
         recorded_call.method_name
         for recorded_call in cls.get_call_history()
-        if recorded_call.instance_identity == instance_identity
+        if recorded_call.spy_instance_identity == spy_instance_identity
     ]
 
 
@@ -338,7 +338,7 @@ class ScenarioVerifier:
         # the final owner stops. Aggregate lifecycle calls therefore scale with the
         # distinct Resource instances observed across the scenario.
         for r_cls in spies.resources:
-            instance_count = len(self._result.instance_identities.get(r_cls, set()))
+            instance_count = len(self._result.spy_instance_identities.get(r_cls, set()))
             call_counts[r_cls] = {
                 "__init__": instance_count,
                 "startup": instance_count,
@@ -1520,13 +1520,15 @@ class ScenarioVerifier:
         spies = self._require_spies()
         minion_start_counts = self._compute_minion_expectations(spies).minion_start_counts
         state_store_cls = type(self._state_store)
-        state_store_identity = state_store_cls.get_instance_identity(self._state_store)
+        state_store_spy_instance_identity = state_store_cls.get_spy_instance_identity(
+            self._state_store
+        )
         should_assert_state_store_order = (
-            state_store_identity is not None and state_store_cls in call_counts
+            state_store_spy_instance_identity is not None and state_store_cls in call_counts
         )
         if should_assert_state_store_order:
-            assert state_store_identity is not None
-            self._result.instance_identities[state_store_cls].add(state_store_identity)
+            assert state_store_spy_instance_identity is not None
+            self._result.spy_instance_identities[state_store_cls].add(state_store_spy_instance_identity)
 
         for m_cls in spies.minions.values():
             if minion_start_counts.get(m_cls, 0) <= 0:
@@ -1538,42 +1540,42 @@ class ScenarioVerifier:
                 for name in workflow
                 if expected_calls.get(name, 0) > 0
             ]
-            for instance_identity in self._result.instance_identities.get(m_cls, set()):
-                names = _names_for_instance_identity(m_cls, instance_identity)
+            for spy_instance_identity in self._result.spy_instance_identities.get(m_cls, set()):
+                names = _names_for_spy_instance_identity(m_cls, spy_instance_identity)
                 order = ["__init__", "startup", "run", *workflow_steps]
                 if "shutdown" in names:
                     order.append("shutdown")
-                m_cls.assert_call_order_for_instance(instance_identity, order)
+                m_cls.assert_call_order_for_instance(spy_instance_identity, order)
 
         for pipeline_id, p_cls in spies.pipelines.items():
             expected_events = self._plan.pipeline_event_targets.get(pipeline_id)
-            for instance_identity in self._result.instance_identities.get(p_cls, set()):
-                names = _names_for_instance_identity(p_cls, instance_identity)
+            for spy_instance_identity in self._result.spy_instance_identities.get(p_cls, set()):
+                names = _names_for_spy_instance_identity(p_cls, spy_instance_identity)
                 order = ["__init__", "startup", "run"]
                 if "produce_event" in names or expected_events:
                     order.append("produce_event")
                 if "shutdown" in names:
                     order.append("shutdown")
-                p_cls.assert_call_order_for_instance(instance_identity, order)
+                p_cls.assert_call_order_for_instance(spy_instance_identity, order)
 
         for r_cls in spies.resources:
-            for instance_identity in self._result.instance_identities.get(r_cls, set()):
-                names = _names_for_instance_identity(r_cls, instance_identity)
+            for spy_instance_identity in self._result.spy_instance_identities.get(r_cls, set()):
+                names = _names_for_spy_instance_identity(r_cls, spy_instance_identity)
                 order = ["__init__", "startup", "run"]
                 if "shutdown" in names:
                     order.append("shutdown")
-                r_cls.assert_call_order_for_instance(instance_identity, order)
+                r_cls.assert_call_order_for_instance(spy_instance_identity, order)
 
         if should_assert_state_store_order:
-            assert state_store_identity is not None
-            names = _names_for_instance_identity(
+            assert state_store_spy_instance_identity is not None
+            names = _names_for_spy_instance_identity(
                 state_store_cls,
-                state_store_identity,
+                state_store_spy_instance_identity,
             )
             order = ["__init__", "startup"]
             if "shutdown" in names:
                 order.append("shutdown")
-            state_store_cls.assert_call_order_for_instance(state_store_identity, order)
+            state_store_cls.assert_call_order_for_instance(state_store_spy_instance_identity, order)
 
     def _assert_no_call_count_limit_violations(self) -> None:
         if not self._result.call_count_limit_violations:
