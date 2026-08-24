@@ -69,7 +69,7 @@
     - ex: tests/minions/_internal/_domain/test_gru.py::TestValidUsage.test_gru_accepts_none_logger_metrics_state_store
   - note: for non-immediate user-facing domain objects, validating composition at class definition time may not always be possible, so it's fine to only validate at orchestration time if that's the case
 
-- todo: simplify generic AsyncLifecycle callback plumbing while preserving framework lifecycle semantics
+- todo: simplify generic AsyncComponent callback plumbing while preserving framework lifecycle semantics
   - problem:
     - `_mn_startup(...)`, `_mn_shutdown(...)`, and `_mn_run(...)` expose generic `pre`, `pre_args`, `post`, and `post_args` parameters across the internal component hierarchy
     - production subclasses use those callbacks for specific framework-owned responsibilities such as validation, config loading, workflow resume, and bounded task cleanup

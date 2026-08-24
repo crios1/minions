@@ -2,17 +2,19 @@
 
 from minions import Minion, Pipeline, Resource
 from minions._internal._framework.async_component import AsyncComponent
-from minions._internal._framework.async_lifecycle import AsyncLifecycle
 from minions._internal._framework.async_service import AsyncService
 from minions._internal._framework.logger import Logger
+from minions._internal._framework.logger_backed_async_component import (
+    LoggerBackedAsyncComponent,
+)
 from minions._internal._framework.metrics import Metrics
 from minions._internal._framework.state_store import StateStore
 
 
-def test_user_extensible_lifecycle_classes_do_not_define_user_private_attributes() -> None:
-    user_extensible_lifecycle_classes = [
-        AsyncLifecycle,
+def test_user_extensible_component_classes_do_not_define_user_private_attributes() -> None:
+    user_extensible_component_classes = [
         AsyncComponent,
+        LoggerBackedAsyncComponent,
         AsyncService,
         Minion,
         Pipeline,
@@ -23,7 +25,7 @@ def test_user_extensible_lifecycle_classes_do_not_define_user_private_attributes
     ]
 
     bad: dict[str, list[str]] = {}
-    for cls in user_extensible_lifecycle_classes:
+    for cls in user_extensible_component_classes:
         names = {**cls.__dict__, **getattr(cls, "__annotations__", {})}
         private_names = sorted(
             name

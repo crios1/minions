@@ -10,6 +10,21 @@ A few guardrails while the framework is still evolving.
 - **Compose via type hints**: declare dependencies with annotations instead of manual wiring; let Gru manage the graph.
 - **Metrics-first**: use the built-in Prometheus counters/gauges to watch throughput and errors before tuning concurrency.
 
+## Component inheritance
+
+User-authored Minion, Pipeline, Resource, Logger, Metrics, and StateStore
+classes must declare exactly one direct Python base. Additional bases and
+mixins are rejected. Use helper functions, helper objects, composition, or a
+Resource to share behavior across otherwise independent component classes.
+User-defined metaclasses are also unsupported for Minions components.
+
+Ordinary single-inheritance specialization remains supported where the
+component family permits it. For example, a StateStore implementation may
+specialize another StateStore implementation without adding a second base.
+Minion and Pipeline retain stricter construction rules: subclass Minion or
+Pipeline directly; a completed Minion or Pipeline subclass cannot be extended
+further.
+
 ## Anti-patterns
 
 - **Global throttling**: do not add arbitrary sleeps in minion steps to slow the world; throttle inside the resource that needs it.

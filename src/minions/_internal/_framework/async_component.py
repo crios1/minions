@@ -1,142 +1,423 @@
+import ast
 import inspect
-from collections.abc import Mapping, Sequence
-from typing import Awaitable, Callable, ParamSpec, TypeVar, overload
+import textwrap
+from abc import ABC, ABCMeta
+from typing import Awaitable, Callable, ClassVar, TypeAlias
 
-from .async_lifecycle import AsyncLifecycle
-from .logger import ERROR, Logger
+from .._domain.exceptions import (
+    MinionsError,
+    TaskCancellationError,
+    UnsupportedUserCode,
+)
 
-T = TypeVar("T")
-P = ParamSpec("P")
+LifecycleCallback: TypeAlias = Callable[..., object | Awaitable[object]]
 
 
-class AsyncComponent(AsyncLifecycle):
-    def __init__(self, logger: Logger):
-        self._mn_logger = logger
+class _ComponentMeta(ABCMeta):
+    def __new__(
+        mcls,
+        name: str,
+        bases: tuple[type, ...],
+        namespace: dict[str, object],
+        **kwargs: object,
+    ) -> type:
+        extends_user_facing_component = any(
+            getattr(base, "_mn_user_facing", False) for base in bases
+        )
+        if extends_user_facing_component and len(bases) != 1:
+            base_names = ", ".join(base.__name__ for base in bases)
+            raise UnsupportedUserCode(
+                f"{name} cannot use multiple inheritance; "
+                f"declared bases: {base_names}. "
+                "Minions components must inherit from exactly one base. "
+                "Use composition to share behavior."
+            )
 
-    def _mn_require_bound_method(self, method: Callable[..., object]) -> None:
-        owner = getattr(method, "__self__", None)
-        if owner is self or owner is type(self):
+        return super().__new__(mcls, name, bases, namespace, **kwargs)
+
+
+class AsyncComponent(ABC, metaclass=_ComponentMeta):
+    """
+    Framework base class for asynchronous Minions components.
+
+    Definition-time validation applies only to user-facing domain classes
+    and is restricted to established user-facing inheritance chains.
+    """
+
+    _mn_user_facing = False
+    _mn_non_overridable_public_names: ClassVar[frozenset[str]] = frozenset()
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        if cls.__module__.startswith("minions._internal."):
             return
-        raise TypeError(
-            "run-and-log helpers require a method bound to this component instance "
-            "or its class; pass self.method or type(self).method."
-        )
+        if not cls._mn_user_facing:
+            return
+        if not any(getattr(base, "_mn_user_facing", False) for base in cls.__mro__[1:]):
+            return
+        cls._mn_ensure_attrspace()
+        cls._mn_ensure_public_operations_not_overridden()
+        cls._mn_validate_class_user_code()
 
-    async def _mn_call_bound_method(
-        self,
-        method: Callable[..., T | Awaitable[T]],
-        method_args: Sequence[object] | None = None,
-        method_kwargs: Mapping[str, object] | None = None,
-    ) -> T:
-        args = method_args or ()
-        kwargs = method_kwargs or {}
-        result = method(*args, **kwargs)
-        if inspect.isawaitable(result):
-            return await result
-        return result
-
-    async def _mn_log_method_failure(
-        self,
-        method: Callable[..., object],
-        error: Exception,
-        log_msg: str | None = None,
-        log_kwargs: Mapping[str, object] | None = None,
-    ) -> None:
-        relative_module_path = type(self).__module__
-        component_path = f"{relative_module_path}.{type(self).__qualname__}"
-        method_name = getattr(method, "__name__", None) or type(method).__name__
-        msg = log_msg or f"{component_path}.{method_name} failed"
-        kwargs = {
-            **(log_kwargs or {}),
-            "relative_module_path": relative_module_path,
+    @classmethod
+    def _mn_ensure_attrspace(cls) -> None:
+        "Ensure no user-defined class attributes or annotations violate the reserved _mn_ attrspace."  # noqa: E501
+        names = {**cls.__dict__, **getattr(cls, "__annotations__", {})}
+        allowed = {"_mn_user_facing"}  # allows subclasses of user facing classes to be user facing too  # noqa: E501
+        bad = {
+            n
+            for n in names
+            if isinstance(n, str)
+            and n.startswith("_mn_")
+            and n not in allowed
         }
-        await self._mn_logger._mn_log_exception(
-            ERROR,
-            msg,
-            error,
-            **kwargs,
+        if bad:
+            module_path = f"{cls.__module__}.{cls.__qualname__}"
+            names = ", ".join(f"`{cls.__name__}.{n}`" for n in sorted(bad))
+            raise UnsupportedUserCode(
+                f"Invalid attribute assignment: {names} in `{module_path}`. "
+                "Attributes starting with `_mn_` are reserved for internal Minions runtime use."
+            )
+
+    @classmethod
+    def _mn_ensure_public_operations_not_overridden(cls) -> None:
+        names = {**cls.__dict__, **getattr(cls, "__annotations__", {})}
+        non_overridable = cls._mn_non_overridable_public_names.intersection(names)
+        if non_overridable:
+            module_path = f"{cls.__module__}.{cls.__qualname__}"
+            formatted_names = ", ".join(
+                f"`{cls.__name__}.{name}`" for name in sorted(non_overridable)
+            )
+            raise UnsupportedUserCode(
+                f"Invalid attribute assignment: {formatted_names} in `{module_path}`. "
+                "These public operations are provided by the Minions runtime and "
+                "cannot be overridden."
+            )
+
+    @classmethod
+    def _mn_validate_class_user_code(cls) -> None:
+        for name, attr in cls.__dict__.items():
+            if name.startswith("__") and name.endswith("__"):
+                continue
+            if isinstance(attr, property):
+                funcs = (attr.fget, attr.fset, attr.fdel)
+            else:
+                # unwrap staticmethod/classmethod if present
+                funcs = (getattr(attr, "__func__", attr),)
+
+            for func in funcs:
+                if inspect.isfunction(func):
+                    cls._mn_validate_user_code(func, cls.__module__)
+
+    @classmethod
+    def _mn_validate_user_code(cls, func: Callable[..., object], module_path: str) -> None:
+        try:
+            src = textwrap.dedent(inspect.getsource(func))
+            tree = ast.parse(src)
+        except (OSError, TypeError, IndentationError) as e:
+            raise UnsupportedUserCode(
+                f"Could not validate source of function `{func.__name__}` ({module_path}): {e}"
+            )
+
+        banned_task_fns = {"create_task", "ensure_future"}
+        banned_exit_names = {"exit", "quit", "_exit", "SystemExit"}
+        banned_exit_attrs = {
+            ("sys", "exit"),
+            ("os", "_exit"),
+            ("builtins", "exit"),
+            ("builtins", "quit"),
+            ("builtins", "SystemExit"),
+        }
+
+        def _expr_name(expr: ast.expr | None) -> str | None:
+            if isinstance(expr, ast.Name):
+                return expr.id
+            if isinstance(expr, ast.Attribute):
+                owner = _expr_name(expr.value)
+                if owner is None:
+                    return expr.attr
+                return f"{owner}.{expr.attr}"
+            return None
+
+        function_node = next(
+            (
+                node
+                for node in tree.body
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            ),
+            None,
+        )
+        instance_parameter: str | None = None
+        class_parameter: str | None = None
+        if function_node is not None:
+            parameters = (*function_node.args.posonlyargs, *function_node.args.args)
+            first_parameter = parameters[0].arg if parameters else None
+            decorators = {_expr_name(decorator) for decorator in function_node.decorator_list}
+            if "classmethod" in decorators:
+                class_parameter = first_parameter
+            elif "staticmethod" not in decorators:
+                instance_parameter = first_parameter
+
+        def _reserved_attribute_write_target_label(expr: ast.expr) -> str | None:
+            if isinstance(expr, ast.Name) and expr.id in {
+                instance_parameter,
+                class_parameter,
+            }:
+                return expr.id
+            if (
+                isinstance(expr, ast.Call)
+                and isinstance(expr.func, ast.Name)
+                and expr.func.id == "type"
+                and len(expr.args) == 1
+                and isinstance(expr.args[0], ast.Name)
+                and expr.args[0].id == instance_parameter
+            ):
+                return f"type({instance_parameter})"
+            if (
+                isinstance(expr, ast.Attribute)
+                and isinstance(expr.value, ast.Name)
+                and expr.value.id == instance_parameter
+                and expr.attr == "__class__"
+            ):
+                return f"{instance_parameter}.__class__"
+            return None
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                f = node.func
+
+                if isinstance(f, ast.Attribute):
+                    owner = getattr(f.value, "id", None)
+                    if owner in {"asyncio", "aio"} and f.attr in banned_task_fns:
+                        raise UnsupportedUserCode(
+                            f"Unsupported use of `{owner}.{f.attr}` in "
+                            f"`{func.__name__}` ({module_path}). Use "
+                            "`self.safe_create_task(...)` instead."
+                        )
+                    if (owner, f.attr) in banned_exit_attrs:
+                        name = f"{owner}.{f.attr}"
+                        raise UnsupportedUserCode(
+                            f"Unsupported use of `{name}` in `{func.__name__}` "
+                            f"({module_path}). If you want to abort an in-flight workflow, "
+                            "raise an AbortWorkflow exception. If you want to stop "
+                            "an orchestration, run stop_orchestration."
+                        )
+                    if owner == "object" and f.attr == "__setattr__":
+                        if (
+                            len(node.args) >= 2
+                            and isinstance(node.args[0], ast.Name)
+                            and node.args[0].id == "self"
+                        ):
+                            a1 = node.args[1]
+                            if (
+                                isinstance(a1, ast.Constant)
+                                and isinstance(a1.value, str)
+                                and a1.value.startswith("_mn_")
+                            ):
+                                raise UnsupportedUserCode(
+                                    f"Invalid attribute assignment: "
+                                    f"`self.{a1.value}` in `{func.__name__}` "
+                                    f"({module_path}). Attributes starting with `_mn_` are "
+                                    "reserved for framework use."
+                                )
+
+                if isinstance(f, ast.Name):
+                    if f.id in banned_task_fns:
+                        raise UnsupportedUserCode(
+                            f"Unsupported use of `{f.id}` in `{func.__name__}` "
+                            f"({module_path}). Use `self.safe_create_task(...)` instead."
+                        )
+                    if f.id in banned_exit_names:
+                        raise UnsupportedUserCode(
+                            f"Unsupported use of `{f.id}` in `{func.__name__}` "
+                            f"({module_path}). If you want to abort an in-flight workflow, "
+                            "raise an AbortWorkflow exception. If you want to stop "
+                            "an orchestration, run stop_orchestration."
+                        )
+                    if f.id == "setattr" and len(node.args) >= 2:
+                        a0, a1 = node.args[0], node.args[1]
+                        target_label = _reserved_attribute_write_target_label(a0)
+                        if (
+                            target_label is not None
+                            and isinstance(a1, ast.Constant)
+                            and isinstance(a1.value, str)
+                            and a1.value.startswith("_mn_")
+                        ):
+                            raise UnsupportedUserCode(
+                                f"Invalid attribute assignment: "
+                                f"`{target_label}.{a1.value}` in `{func.__name__}` "
+                                f"({module_path}). Attributes starting with `_mn_` are "
+                                "reserved for framework use."
+                            )
+
+            if isinstance(node, ast.Raise):
+                exc = node.exc
+                if isinstance(exc, ast.Name) and exc.id == "SystemExit":
+                    raise UnsupportedUserCode(
+                        f"Unsupported use of `raise SystemExit` in "
+                        f"`{func.__name__}` ({module_path}). If you want to abort an "
+                        "in-flight workflow, raise an AbortWorkflow exception. If "
+                        "you want to stop an orchestration, run stop_orchestration."
+                    )
+                if (
+                    isinstance(exc, ast.Call)
+                    and isinstance(exc.func, ast.Name)
+                    and exc.func.id == "SystemExit"
+                ):
+                    raise UnsupportedUserCode(
+                        f"Unsupported use of `raise SystemExit(...)` in "
+                        f"`{func.__name__}` ({module_path}). If you want to abort an "
+                        "in-flight workflow, raise an AbortWorkflow exception. If "
+                        "you want to stop an orchestration, run stop_orchestration."
+                    )
+                raised_name = _expr_name(exc.func if isinstance(exc, ast.Call) else exc)
+                if raised_name in {
+                    "CancelledError",
+                    "asyncio.CancelledError",
+                    "aio.CancelledError",
+                    "asyncio.exceptions.CancelledError",
+                }:
+                    raise UnsupportedUserCode(
+                        f"Unsupported use of `raise {raised_name}` in "
+                        f"`{func.__name__}` ({module_path}). The runtime treats "
+                        "asyncio cancellation as workflow interruption and may "
+                        "resume the workflow. If you want to intentionally stop an "
+                        "in-flight workflow, raise AbortWorkflow instead."
+                    )
+
+            if not isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                continue
+
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for t in targets:
+                if isinstance(t, ast.Attribute):
+                    target_label = _reserved_attribute_write_target_label(t.value)
+                    if target_label is None:
+                        continue
+                    if not t.attr.startswith("_mn_"):
+                        continue
+                    raise UnsupportedUserCode(
+                        f"Invalid attribute assignment: `{target_label}.{t.attr}` in "
+                        f"`{func.__name__}` ({module_path}). Attributes starting with "
+                        "`_mn_` are reserved for framework use."
+                    )
+
+                if not isinstance(t, ast.Subscript):
+                    continue
+
+                base = t.value
+                if not (
+                    isinstance(base, ast.Attribute)
+                    and isinstance(base.value, ast.Name)
+                    and base.value.id == "self"
+                    and base.attr == "__dict__"
+                ):
+                    continue
+
+                k = t.slice
+                key = getattr(k, "value", None) if isinstance(k, ast.Constant) else None
+                if not (isinstance(key, str) and key.startswith("_mn_")):
+                    continue
+
+                raise UnsupportedUserCode(
+                    f"Invalid attribute assignment: `self.{key}` in "
+                    f"`{func.__name__}` ({module_path}). Attributes starting with "
+                    "`_mn_` are reserved for framework use."
+                )
+
+    @staticmethod
+    def _mn_raise_not_implemented(method_name: str, cls: type) -> None:
+        raise NotImplementedError(
+            f"{cls.__name__}.{method_name} must be implemented in a subclass and "
+            f"should only be called via _{method_name}(), which ensures logging "
+            "and lifecycle safety."
         )
 
-    @overload
-    async def _mn_run_and_log_failure(
+    async def _mn_run_lifecycle_phase(
         self,
-        method: Callable[P, Awaitable[T]],
-        method_args: Sequence[object] | None = ...,
-        method_kwargs: Mapping[str, object] | None = ...,
-        log_msg: str | None = ...,
-        log_kwargs: Mapping[str, object] | None = ...,
-    ) -> T:
-        ...
-
-    @overload
-    async def _mn_run_and_log_failure(
-        self,
-        method: Callable[P, T],
-        method_args: Sequence[object] | None = ...,
-        method_kwargs: Mapping[str, object] | None = ...,
-        log_msg: str | None = ...,
-        log_kwargs: Mapping[str, object] | None = ...,
-    ) -> T: ...
-
-    async def _mn_run_and_log_failure(
-        self,
-        method: Callable[..., T | Awaitable[T]],
-        method_args: Sequence[object] | None = None,
-        method_kwargs: Mapping[str, object] | None = None,
-        log_msg: str | None = None,
-        log_kwargs: Mapping[str, object] | None = None,
-    ) -> T:
-        """Run a bound instance/class method, log failures, and re-raise them."""
-        self._mn_require_bound_method(method)
+        *,
+        name: str,
+        lifecycle_method: Callable[[], Awaitable[object]],
+        log_kwargs: dict[str, object] | None = None,
+        pre: LifecycleCallback | None = None,
+        pre_args: list[object] | None = None,
+        post: LifecycleCallback | None = None,
+        post_args: list[object] | None = None,
+    ) -> None:
         try:
-            return await self._mn_call_bound_method(
-                method,
-                method_args=method_args,
-                method_kwargs=method_kwargs,
-            )
-        except Exception as e:
-            await self._mn_log_method_failure(method, e, log_msg, log_kwargs)
+            if pre:
+                pre_args = pre_args or []
+                result = pre(*pre_args)
+                if inspect.isawaitable(result):
+                    await result
+            await lifecycle_method()
+            if post:
+                post_args = post_args or []
+                result = post(*post_args)
+                if inspect.isawaitable(result):
+                    await result
+        except TaskCancellationError:
             raise
-
-    @overload
-    async def _mn_safe_run_and_log_failure(
-        self,
-        method: Callable[P, Awaitable[T]],
-        method_args: Sequence[object] | None = ...,
-        method_kwargs: Mapping[str, object] | None = ...,
-        log_msg: str | None = ...,
-        log_kwargs: Mapping[str, object] | None = ...,
-    ) -> T | None: ...
-
-    @overload
-    async def _mn_safe_run_and_log_failure(
-        self,
-        method: Callable[P, T],
-        method_args: Sequence[object] | None = ...,
-        method_kwargs: Mapping[str, object] | None = ...,
-        log_msg: str | None = ...,
-        log_kwargs: Mapping[str, object] | None = ...,
-    ) -> T | None: ...
-
-    async def _mn_safe_run_and_log_failure(
-        self,
-        method: Callable[..., T | Awaitable[T]],
-        method_args: Sequence[object] | None = None,
-        method_kwargs: Mapping[str, object] | None = None,
-        log_msg: str | None = None,
-        log_kwargs: Mapping[str, object] | None = None,
-    ) -> T | None:
-        """Run a bound instance/class method and log any exception it raises.
-
-        Callers may provide `log_msg` and `log_kwargs` to enrich the fallback
-        failure log with additional context.
-        """
-        self._mn_require_bound_method(method)
-        try:
-            return await self._mn_call_bound_method(
-                method,
-                method_args=method_args,
-                method_kwargs=method_kwargs,
-            )
         except Exception as e:
-            await self._mn_log_method_failure(method, e, log_msg, log_kwargs)
+            log_kwargs = log_kwargs or {}
+            relative_module_path = type(self).__module__
+            component_path = f"{relative_module_path}.{type(self).__qualname__}"
+            raise MinionsError(
+                f"{component_path}.{name} failed",
+                context=log_kwargs,
+            ) from e
+
+    async def _mn_startup(
+        self,
+        *,
+        log_kwargs: dict[str, object] | None = None,
+        pre: LifecycleCallback | None = None,
+        pre_args: list[object] | None = None,
+        post: LifecycleCallback | None = None,
+        post_args: list[object] | None = None,
+    ) -> None:
+        pre_args = pre_args or []
+
+        async def _pre() -> None:
+            self._mn_validate_user_code(self.startup, type(self).__module__)
+            self._mn_validate_user_code(self.shutdown, type(self).__module__)
+            if pre:
+                result = pre(*pre_args)
+                if inspect.isawaitable(result):
+                    await result
+
+        await self._mn_run_lifecycle_phase(
+            name="startup",
+            lifecycle_method=self.startup,
+            log_kwargs=log_kwargs,
+            pre=_pre,
+            post=post,
+            post_args=post_args,
+        )
+
+    async def _mn_shutdown(
+        self,
+        *,
+        log_kwargs: dict[str, object] | None = None,
+        pre: LifecycleCallback | None = None,
+        pre_args: list[object] | None = None,
+        post: LifecycleCallback | None = None,
+        post_args: list[object] | None = None,
+    ) -> None:
+        await self._mn_run_lifecycle_phase(
+            name="shutdown",
+            lifecycle_method=self.shutdown,
+            log_kwargs=log_kwargs,
+            pre=pre,
+            pre_args=pre_args,
+            post=post,
+            post_args=post_args,
+        )
+
+    async def startup(self) -> None:
+        "Prepare internal state or dependencies"
+        # self._raise_not_implemented("startup", type(self))
+
+    async def shutdown(self) -> None:
+        "Clean up anything async-allocated in startup"
+        # self._raise_not_implemented("shutdown", type(self))

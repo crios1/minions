@@ -98,7 +98,7 @@ the value immutable at runtime. Prefer immutable values for user-defined class
 attributes. Keep mutable per-workflow Minion state in `self.context`, not on the
 Minion instance, so concurrent workflows remain isolated and resumable.
 
-## Components
+## Runtime roles
 
 - **Gru** – orchestrator; manages lifecycles, dependency wiring, metrics, logging, and persistence.
 - **Pipeline** – long-lived producer of events; Gru fans each event out to subscribed minions.

@@ -2,7 +2,7 @@ import inspect
 import time
 from typing import Any, Awaitable, Callable, Coroutine, ParamSpec, TypeGuard, TypeVar, overload
 
-from .._framework.async_lifecycle import LifecycleCallback
+from .._framework.async_component import LifecycleCallback
 from .._framework.async_service import AsyncService
 from .._framework.logger import WARNING, Logger
 from .._framework.metrics import Metrics

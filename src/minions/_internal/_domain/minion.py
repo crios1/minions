@@ -24,7 +24,7 @@ from typing import (
     get_type_hints,
 )
 
-from .._framework.async_lifecycle import LifecycleCallback
+from .._framework.async_component import LifecycleCallback
 from .._framework.async_service import AsyncService
 from .._framework.logger import DEBUG, ERROR, INFO, WARNING, Logger
 from .._framework.metrics import Metrics

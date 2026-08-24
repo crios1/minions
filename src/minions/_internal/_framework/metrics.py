@@ -19,8 +19,8 @@ from typing import Literal, TypedDict, overload
 from minions._internal._utils.safe_create_task import safe_create_task
 from minions._internal._utils.task_failure_handler import report_task_failure_to_stderr
 
-from .async_component import AsyncComponent
 from .logger import WARNING, Logger
+from .logger_backed_async_component import LoggerBackedAsyncComponent
 from .metrics_constants import METRIC_LABEL_NAMES
 from .metrics_interface import (
     LabelledCounter,
@@ -56,7 +56,7 @@ SnapshotHistograms = dict[str, list[HistogramSample]]
 SnapshotResult = dict[Kind, SnapshotCounters | SnapshotGauges | SnapshotHistograms]
 
 
-class Metrics(AsyncComponent):
+class Metrics(LoggerBackedAsyncComponent):
     """
     To implement your own metrics backend, subclass this and override:
 

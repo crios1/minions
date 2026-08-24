@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .._utils.format_exception_traceback import format_exception_traceback
-from .async_lifecycle import AsyncLifecycle
+from .async_component import AsyncComponent
 
 DEBUG = 10
 INFO = 20
@@ -23,7 +23,7 @@ LEVEL_NAMES = {
 }
 
 
-class Logger(AsyncLifecycle):
+class Logger(AsyncComponent):
     """
     This framework enforces structured logs by default
     because it is the only sane way to trace workflow behavior, errors, and performance

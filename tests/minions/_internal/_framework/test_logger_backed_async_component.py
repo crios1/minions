@@ -1,11 +1,13 @@
 import pytest
 
-from minions._internal._framework.async_component import AsyncComponent
+from minions._internal._framework.logger_backed_async_component import (
+    LoggerBackedAsyncComponent,
+)
 from minions._internal._framework.logger_noop import NoOpLogger
 from tests.assets.support.logger_inmemory import InMemoryLogger
 
 
-class ComponentA(AsyncComponent):
+class ComponentA(LoggerBackedAsyncComponent):
     def instance_add_one(self, value: int) -> int:
         return value + 1
 
@@ -21,7 +23,7 @@ class ComponentA(AsyncComponent):
         return value + 4
 
 
-class ComponentB(AsyncComponent):
+class ComponentB(LoggerBackedAsyncComponent):
     def instance_add_ten(self, value: int) -> int:
         return value + 10
 
@@ -30,7 +32,7 @@ def free_add_five(value: int) -> int:
     return value + 5
 
 
-class FailingComponent(AsyncComponent):
+class FailingComponent(LoggerBackedAsyncComponent):
     def raise_runtime_error(self) -> None:
         raise RuntimeError("boom")
 

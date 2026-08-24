@@ -7,9 +7,9 @@ from typing import Any, ClassVar, final
 from .._domain.exceptions import MinionsError, TaskCancellationErrors
 from .._utils.safe_cancel_task import safe_cancel_task
 from .._utils.safe_create_task import safe_create_task
-from .async_component import AsyncComponent
-from .async_lifecycle import LifecycleCallback
+from .async_component import LifecycleCallback
 from .logger import ERROR, Logger
+from .logger_backed_async_component import LoggerBackedAsyncComponent
 
 
 class _AsyncServiceState(Enum):
@@ -26,7 +26,7 @@ class _AsyncServiceState(Enum):
     STOPPED = auto()
 
 
-class AsyncService(AsyncComponent):
+class AsyncService(LoggerBackedAsyncComponent):
     """Provide a service managed through a retained asyncio task.
 
     Lifecycle managers use the private protocol:

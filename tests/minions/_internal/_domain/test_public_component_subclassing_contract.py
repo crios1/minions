@@ -47,6 +47,20 @@ def user_facing_component_base(request: pytest.FixtureRequest) -> Any:
 
 @pytest.fixture(
     params=[
+        pytest.param(Resource, id="resource"),
+        pytest.param(Logger, id="logger"),
+        pytest.param(Metrics, id="metrics"),
+        pytest.param(StateStore, id="state-store"),
+    ],
+)
+def user_facing_component_base_supporting_subclass_chains(
+    request: pytest.FixtureRequest,
+) -> Any:
+    return request.param
+
+
+@pytest.fixture(
+    params=[
         pytest.param(Minion[EmptyEvent, EmptyContext], id="minion"),
         pytest.param(Pipeline[EmptyEvent], id="pipeline"),
         pytest.param(Resource, id="resource"),
@@ -54,6 +68,70 @@ def user_facing_component_base(request: pytest.FixtureRequest) -> Any:
 )
 def user_facing_async_service_base(request: pytest.FixtureRequest) -> Any:
     return request.param
+
+
+class TestInheritance:
+    @pytest.mark.parametrize(
+        "component_base_is_first",
+        [True, False],
+        ids=["component-base-first", "subclass-hook-base-first"],
+    )
+    def test_rejects_multiple_inheritance_before_init_subclass_hooks_run(
+        self,
+        user_facing_component_base: Any,
+        component_base_is_first: bool,
+    ) -> None:
+        class BaseWithSubclassHook:
+            def __init_subclass__(cls, **kwargs: object) -> None:
+                raise AssertionError(
+                    "__init_subclass__ ran before multiple inheritance was rejected"
+                )
+
+        direct_bases = (
+            (user_facing_component_base, BaseWithSubclassHook)
+            if component_base_is_first
+            else (BaseWithSubclassHook, user_facing_component_base)
+        )
+        with pytest.raises(
+            UnsupportedUserCode,
+            match=(
+                "InvalidUserComponent cannot use multiple inheritance.*"
+                "Minions components must inherit from exactly one base"
+            ),
+        ):
+            class InvalidUserComponent(
+                *direct_bases  # pyright: ignore[reportUntypedBaseClass]
+            ):
+                pass
+
+    def test_rejects_multiple_inheritance_despite_internal_module_name_override(
+        self,
+        user_facing_component_base: Any,
+    ) -> None:
+        class AdditionalBase:
+            pass
+
+        with pytest.raises(
+            UnsupportedUserCode,
+            match="InvalidUserComponent cannot use multiple inheritance",
+        ):
+            class InvalidUserComponent(user_facing_component_base, AdditionalBase):
+                __module__ = "minions._internal.user_component"
+
+    def test_allows_user_component_subclass_chain(
+        self,
+        user_facing_component_base_supporting_subclass_chains: Any,
+    ) -> None:
+        class UserComponent(user_facing_component_base_supporting_subclass_chains):
+            pass
+
+        class UserComponentSubclass(UserComponent):
+            pass
+
+        assert UserComponent.__bases__ == (
+            user_facing_component_base_supporting_subclass_chains,
+        )
+        assert UserComponentSubclass.__bases__ == (UserComponent,)
 
 
 class TestReservedMnAttributeSpace:

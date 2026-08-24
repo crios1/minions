@@ -1,6 +1,7 @@
-from abc import ABCMeta
 from collections.abc import Callable, Iterable
 from contextlib import AbstractContextManager
+
+from minions._internal._framework.async_component import _ComponentMeta
 
 from .component_spy import (
     CallCountLimitViolation,
@@ -11,7 +12,7 @@ from .component_spy import (
 )
 
 
-class ComponentSpyMeta(ABCMeta):
+class ComponentSpyMeta(_ComponentMeta):
     """Expose method-call recording controls while keeping observation state
     outside component classes and instances.
     """

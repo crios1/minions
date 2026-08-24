@@ -4,8 +4,8 @@ from typing import Any, Literal, overload
 
 from .._domain.minion_workflow_context import MinionWorkflowContext
 from .._domain.types import T_Ctx, T_Event
-from .async_component import AsyncComponent
 from .logger import ERROR
+from .logger_backed_async_component import LoggerBackedAsyncComponent
 from .minion_workflow_context_codec import (
     WorkflowContextTypeMismatchError,
     deserialize_workflow_context_blob,
@@ -30,7 +30,7 @@ class PersistenceOperationResult:
     retryable: bool = False
 
 
-class StateStore(AsyncComponent):
+class StateStore(LoggerBackedAsyncComponent):
     """Base class for durable workflow context storage.
 
     Custom stores must persist serialized context bytes by workflow ID, keep

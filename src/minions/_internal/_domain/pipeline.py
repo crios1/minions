@@ -2,7 +2,7 @@ import asyncio
 from abc import abstractmethod
 from typing import Any, ClassVar, Generic, get_args, get_origin
 
-from .._framework.async_lifecycle import LifecycleCallback
+from .._framework.async_component import LifecycleCallback
 from .._framework.async_service import AsyncService
 from .._framework.logger import DEBUG, ERROR, Logger
 from .._framework.metrics import Metrics
