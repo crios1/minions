@@ -392,11 +392,22 @@
       - if degraded start is supported, add explicit runtime state such as `recovery_pending` / `state_store_unavailable` / `partial_recovery`
       - decide whether new workflow admission should be allowed before persisted recovery completes, and how to avoid duplicate or out-of-order work if recovery later succeeds
     - stop_orchestration design questions:
-      - make stop modes persistence-aware once `pause` / `drain` / `cutover` exist
+      - make `pause` / `drain` and higher-level redeploy cutover persistence-aware
       - `drain` can usually proceed with warnings because live in-memory workflows are allowed to finish
       - `pause` / persisted handoff should require durable checkpoint confidence or report degraded persistence risk
-      - `cutover` / immediate interruption should warn strongly or require `force=True` when state-store health is bad or unpersisted workflows exist
+      - redeploy cutover composes pause-style interruption with immediate restart;
+        warn strongly or require `force=True` when state-store health is bad or
+        unfinished workflows are not durably current
       - decide how stop results should report unresolved failed checkpoints under `continue-on-failure`
+      - track actual unresolved persistence gaps per orchestration rather than
+        warning merely because `continue-on-failure` is configured
+      - distinguish workflows with no durable checkpoint, which may disappear,
+        from workflows with stale checkpoints, which may lose context progress
+        and repeat step side effects after resume
+      - summarize at-risk workflow counts and last durable/current step positions
+        where reliable; do not describe raw step counts as exact lost work
+      - make the stop decision and persistence-risk check atomic so an
+        inspect-then-stop race cannot apply a command against stale risk data
     - result/API shape:
       - consider adding structured warning/status fields to start/stop results rather than overloading `reason`
       - possible fields:
@@ -405,16 +416,28 @@
         - `recovery_status: Literal["complete", "pending", "not_required", "failed", "partial"]`
         - `persistence_risk: Literal["none", "degraded", "possible_workflow_loss"]`
         - `warnings: tuple[str, ...]`
+        - structured stop-risk details for workflow counts with missing or stale
+          checkpoints and an explicit `confirmation_required` outcome
       - keep string `reason` for failure summaries, but make degraded success machine-readable
     - observability:
       - log state-store availability transitions and command-level persistence risk with stable kwargs
       - add metrics for recovery-pending/degraded starts and stop commands that proceed with persistence risk
-      - make GruShell surface warnings before dangerous operations and require explicit confirmation/force for high-risk cutover paths
+      - make the future attach surface render runtime-provided risk details and
+        require explicit confirmation before pause-style stop or redeploy cutover
+        when unfinished workflow state is not durably current
+      - provide a noninteractive `--force` equivalent, but do not prompt or warn
+        solely because `continue-on-failure` is configured when no unresolved
+        persistence gap exists
+      - keep confirmation presentation in the operational surface while the
+        runtime owns authoritative risk tracking and command authorization
     - tests:
       - keep the current regression that read failure during `start_orchestration` fails closed and cleans up runtime state
       - if degraded start is added, prove start returns applied-with-warning, recovery retries continue, and persisted workflows are not silently abandoned
-      - prove stop `drain` / `pause` / `cutover` report different persistence risks when the state store is unavailable
-      - prove forced cutover is explicit and observable when persistence risk is present
+      - prove stop `drain` / `pause` and redeploy cutover report different persistence risks when the state store is unavailable
+      - prove pause and cutover require confirmation for actual missing/stale
+        checkpoints, proceed without confirmation when persistence is current,
+        and revalidate risk atomically before applying a confirmed command
+      - prove forced pause/cutover is explicit and observable when persistence risk is present
     - docs:
       - explain the distinction between live-process control and durable recovery guarantees
       - document how `WorkflowPersistenceFailurePolicy` relates to command behavior without overloading it to mean recovery-read policy
@@ -826,6 +849,11 @@
     - read runtime metadata, connect to endpoint, include token on every request
     - support interactive command loop or command passthrough
     - `exit`, `quit`, and Ctrl-D close attach only; they must not stop the served runtime
+    - for stop/redeploy commands, render structured persistence-risk details
+      returned by the runtime and request explicit confirmation only when the
+      command would interrupt workflows without durably current checkpoints
+    - support an explicit noninteractive force flag for automation; do not infer
+      consent merely from the configured workflow persistence failure policy
   - protocol:
     - JSON lines, one JSON object per request/response
     - request:
