@@ -67,7 +67,7 @@ class AsyncService(LoggerBackedAsyncComponent):
         )  # serializes access to domain-level tasks owned by subclasses
         # serializes reads and shutdown cleanup of service-level tasks while
         # creates and deletes happen sync on-loop
-        self._mn_shutdown_grace_seconds = 1.0
+        self._mn_component_owned_task_cancellation_timeout_seconds = 5.0
 
     async def _mn_on_service_task_failure(
         self, exception: BaseException, task_name: str | None
@@ -237,7 +237,9 @@ class AsyncService(LoggerBackedAsyncComponent):
                         *[
                             safe_cancel_task(
                                 task=task,
-                                timeout=self._mn_shutdown_grace_seconds,
+                                timeout=(
+                                    self._mn_component_owned_task_cancellation_timeout_seconds
+                                ),
                                 logger=self._mn_logger,
                             )
                             for task in tasks

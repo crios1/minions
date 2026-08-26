@@ -264,7 +264,6 @@ async def test_publishes_zero_on_shutdown(
             step_started.set()
             await can_finish.wait()
 
-    MyMinion._mn_shutdown_grace_seconds = 0.01
     minion = _make_minion(
         MyMinion,
         logger=logger,

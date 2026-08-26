@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, ClassVar
+from typing import ClassVar
 
 from minions import minion_id, minion_step
 from tests.assets.contexts.counter import CounterContext
@@ -15,10 +15,6 @@ class AssetMinion(SpiedMinion[CounterEvent, CounterContext]):
     cancellation_stalled: ClassVar[asyncio.Event] = asyncio.Event()
     allow_cancellation: ClassVar[asyncio.Event] = asyncio.Event()
     step_exited: ClassVar[asyncio.Event] = asyncio.Event()
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        setattr(self, "_mn_shutdown_grace_seconds", 0.01)
 
     @minion_step
     async def step_1(self) -> None:

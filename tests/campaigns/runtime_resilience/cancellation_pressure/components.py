@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import ClassVar
 
 from minions import Minion, Resource, minion_step
 from tests.assets.contexts.counter import CounterContext
@@ -62,10 +62,6 @@ class BurstPipeline(SubscriberReadyFixedEventsPipeline[CounterEvent]):
 class GatedResourceMinion(Minion[CounterEvent, CounterContext]):
     config: CampaignConfig
     gated_shared_resource: GatedSharedResource
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        setattr(self, "_mn_shutdown_grace_seconds", 0.05)
 
     @minion_step
     async def handle(self) -> None:

@@ -241,6 +241,7 @@ class Gru:
         workflow_persistence_retry_jitter_ratio: float = 0.1,
         workflow_persistence_retry_warning_interval_seconds: float = 30.0,
         workflow_persistence_retry_error_after_seconds: float | None = 60.0,
+        component_owned_task_cancellation_timeout_seconds: float = 5.0,
     ):
         """
         Args:
@@ -272,6 +273,10 @@ class Gru:
                     repeated idle persistence warnings.
             workflow_persistence_retry_error_after_seconds: Elapsed idle retry time after
                     which repeated warnings escalate to error logs. Pass None to disable.
+            component_owned_task_cancellation_timeout_seconds: Maximum time to await
+                    cancellation of each task owned by a Minion, Pipeline, or Resource.
+                    This includes framework-created workflow and event-handling tasks,
+                    plus user background tasks created through `self.safe_create_task()`.
 
         Note:
             This constructor uses a unique internal sentinel (`_UNSET`) to
@@ -291,6 +296,13 @@ class Gru:
         self._is_started = False
         self._is_shutdown = False
         self._is_shutting_down = False
+
+        self._component_owned_task_cancellation_timeout_seconds = (
+            Minion._mn_validate_positive_seconds(
+                "component_owned_task_cancellation_timeout_seconds",
+                component_owned_task_cancellation_timeout_seconds,
+            )
+        )
 
         self._workflow_failure_policy: WorkflowFailurePolicy = (
             Minion._mn_validate_workflow_failure_policy(
@@ -446,6 +458,7 @@ class Gru:
         workflow_persistence_retry_jitter_ratio: float = 0.1,
         workflow_persistence_retry_warning_interval_seconds: float = 30.0,
         workflow_persistence_retry_error_after_seconds: float | None = 60.0,
+        component_owned_task_cancellation_timeout_seconds: float = 5.0,
     ) -> "Gru":
         cls._allow_direct_init = True
         try:
@@ -455,6 +468,9 @@ class Gru:
                 logger=logger,
                 metrics=metrics,
                 metrics_port=metrics_port,
+                component_owned_task_cancellation_timeout_seconds=(
+                    component_owned_task_cancellation_timeout_seconds
+                ),
                 workflow_failure_policy=workflow_failure_policy,
                 workflow_persistence_failure_policy=workflow_persistence_failure_policy,
                 workflow_persistence_retry_delay_seconds=workflow_persistence_retry_delay_seconds,
@@ -684,7 +700,7 @@ class Gru:
         if minion_cls is None:
             minion_cls = self._get_minion_class(minion_module_path)
 
-        return minion_cls(
+        minion = minion_cls(
             minion_instance_id=minion_instance_id,
             orchestration_id=orchestration_id,
             minion_id=minion_id,
@@ -705,6 +721,10 @@ class Gru:
             workflow_persistence_retry_warning_interval_seconds=self._workflow_persistence_retry_warning_interval_seconds,
             workflow_persistence_retry_error_after_seconds=self._workflow_persistence_retry_error_after_seconds,
         )
+        minion._mn_component_owned_task_cancellation_timeout_seconds = (
+            self._component_owned_task_cancellation_timeout_seconds
+        )
+        return minion
 
     # Minion Lifecycle Primitives
 
@@ -962,6 +982,9 @@ class Gru:
                         resource_module_path=f"{resource_cls.__module__}.{resource_cls.__name__}",
                         resource_id=resource_id,
                     )
+                    resource._mn_component_owned_task_cancellation_timeout_seconds = (
+                        self._component_owned_task_cancellation_timeout_seconds
+                    )
                     inject_resource_dependencies(resource)
                     self._resources[resource_id] = resource
                     self._resource_tasks[resource_id] = safe_create_task(
@@ -1061,12 +1084,16 @@ class Gru:
         pipeline_module_path: str,
         pipeline_cls: type[Pipeline[Any]],
     ) -> Pipeline[Any]:
-        return pipeline_cls(
+        pipeline = pipeline_cls(
             pipeline_id=pipeline_id,
             pipeline_module_path=pipeline_module_path,
             metrics=self._metrics,
             logger=self._logger,
         )
+        pipeline._mn_component_owned_task_cancellation_timeout_seconds = (
+            self._component_owned_task_cancellation_timeout_seconds
+        )
+        return pipeline
 
     # Pipeline Lifecycle Primitives
 

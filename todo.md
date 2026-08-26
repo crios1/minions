@@ -638,30 +638,52 @@
     - why it matters:
       - diagnostics help debug user-owned cleanup leaks without changing Gru's core cleanup guarantee
 
-- todo: add stop modes to gru.stop_orchestration and map to GruShell redeploy strategies
-  - default mode: pause (current behavior)
+- todo: add pause and drain modes to gru.stop_orchestration and map them to
+  higher-level redeploy strategies
+  - default mode: pause
   - modes and behavior:
-    - pause: stop new workflows; persist in-flight workflows for resume on restart
-    - drain: stop new workflows; await in-flight workflows to finish; then stop
-    - cutover: stop new workflows; abort in-flight workflows; then stop
+    - pause: close workflow admission; interrupt in-flight workflows; retain the
+      last successfully persisted pre-step checkpoint for resume on restart
+    - drain: close workflow admission; await every accepted workflow to resolve;
+      then stop
+    - cutover is not a distinct stop mode: it is a future redeploy strategy that
+      composes pause-style stop with immediate restart under replacement code
   - interruptibility:
-    - if drain is in progress and caller requests cutover or pause, override drain immediately
-    - if drain is requested again, treat as idempotent
-    - if orchestration already stopped, return success with reason
+    - represent one active stop operation per orchestration
+    - if drain is in progress and a caller requests pause, stop waiting and
+      interrupt unfinished workflows
+    - repeated drain callers join the existing operation
+    - do not retain stopped-orchestration tombstones solely to distinguish a
+      previously stopped id from an unknown id
   - api sketch:
-    - gru.stop_orchestration(orchestration_id, mode="pause"|"drain"|"cutover")
+    - gru.stop_orchestration(orchestration_id, mode="pause"|"drain")
     - grushell redeploy maps:
       - redeploy drain -> stop_orchestration(mode="drain")
-      - redeploy cutover -> stop_orchestration(mode="cutover")
+      - redeploy cutover -> stop_orchestration(mode="pause"), then restart
+  - shutdown:
+    - keep Gru.shutdown() bounded and pause-style initially
+    - callers that require a full drain can drain their orchestrations before
+      terminal shutdown
+  - timing:
+    - pause has no implicit workflow-drain grace period
+    - omit automatic drain timeout/fallback from the first implementation;
+      callers can explicitly request pause to override an active drain
+    - separate the stable component-owned task cancellation timeout from
+      workflow drain behavior
   - tests:
-    - add orchestration helper directives for mode="drain"/"cutover"
+    - add an orchestration helper directive for mode="drain"
     - add runtime tests for in-flight workflow behavior per mode
+    - prove admission closure covers event-handler tasks accepted before Pipeline
+      detachment but not yet registered as workflow tasks
   - open questions:
     - Should `continue-on-failure` track outstanding failed checkpoints instead of only retrying when the workflow reaches the next checkpoint?
     - Should `WorkflowPersistenceFailurePolicy` remain Gru-level, become Minion-level, or support both global defaults and per-minion overrides?
-    - The desired guarantee is that `Gru.stop_orchestration(...)` should not lose workflow state in any stop mode unless the process is force-interrupted.
+    - A pause preserves the last successfully persisted safe step boundary, which
+      may be older than in-memory context when `continue-on-failure` allowed a
+      workflow to advance after a failed save.
   - why it matters:
-    - failed checkpoint state affects the exact semantics of `drain` and `cutover`, especially when a workflow has progressed beyond its last durable checkpoint.
+    - failed checkpoint state affects the exact semantics of pause and drain,
+      especially when a workflow has progressed beyond its last durable checkpoint
 
 - todo: add Minion `max_inflight_workflows` class attr for bounded lossy workflow admission control
   - goal:

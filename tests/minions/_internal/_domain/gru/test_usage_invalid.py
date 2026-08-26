@@ -112,6 +112,26 @@ class TestInvalidUsage:
             )
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("value", [0, True])
+    async def test_gru_rejects_invalid_component_owned_task_cancellation_timeout(
+        self,
+        value: object,
+    ) -> None:
+        with pytest.raises(
+            ValueError,
+            match=(
+                "component_owned_task_cancellation_timeout_seconds must be a positive "
+                "number of seconds"
+            ),
+        ):
+            await Gru.create(
+                logger=NoOpLogger(),
+                metrics=NoOpMetrics(),
+                state_store=NoOpStateStore(),
+                component_owned_task_cancellation_timeout_seconds=cast(Any, value),
+            )
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("kwarg", "value", "match"),
         [

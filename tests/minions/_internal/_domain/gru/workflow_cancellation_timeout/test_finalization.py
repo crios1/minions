@@ -55,6 +55,7 @@ async def _running_stalled_workflow(
         logger=logger,
         metrics=metrics,
         state_store=state_store,
+        component_owned_task_cancellation_timeout_seconds=0.01,
     ) as gru:
         started = await gru.start_orchestration(PIPELINE, MINION)
         assert started.success

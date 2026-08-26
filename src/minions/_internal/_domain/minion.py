@@ -103,8 +103,6 @@ class WorkflowPersistenceNonRetryableError(RuntimeError):
 
 class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     _mn_user_facing = True
-    _mn_shutdown_grace_seconds: ClassVar[float] = 1.0
-
     _mn_event_var: contextvars.ContextVar[T_Event] = (
         contextvars.ContextVar(
             "minion_pipeline_event"
@@ -1453,19 +1451,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     ) -> None:
         self._mn_shutting_down = True
 
-        async def _post():
-            async with self._mn_tasks_gate:
-                tasks = list(self._mn_workflow_tasks)
-            if tasks:
-                await asyncio.wait(
-                    tasks,
-                    timeout=self._mn_shutdown_grace_seconds,
-                )
-
         try:
             return await super()._mn_shutdown(
                 log_kwargs=self._mn_identity_log_kwargs(),
-                post=_post,
             )
         finally:
             # A stopped Minion owns no active workflow tasks. Persisted unresolved

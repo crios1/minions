@@ -284,7 +284,7 @@ class TestServiceOwnedTasks:
         self,
     ):
         service = NoOpService()
-        service._mn_shutdown_grace_seconds = 0.02
+        service._mn_component_owned_task_cancellation_timeout_seconds = 0.02
 
         async with task_with_stalled_cancellation(
             name="stalled-task",

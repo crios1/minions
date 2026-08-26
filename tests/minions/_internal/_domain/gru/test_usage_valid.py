@@ -68,6 +68,38 @@ class TestValidUsage:
             assert gru._workflow_failure_policy == "delete"
 
     @pytest.mark.asyncio
+    async def test_gru_applies_component_owned_task_cancellation_timeout(
+        self,
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
+    ) -> None:
+        async with managed_gru_context(
+            state_store=state_store,
+            logger=logger,
+            metrics=metrics,
+            component_owned_task_cancellation_timeout_seconds=0.25,
+        ) as gru:
+            started = await gru.start_orchestration(
+                pipeline="tests.assets.pipelines.triggered.counter.default",
+                minion="tests.assets.minions.two_steps.counter.with_fixed_resource",
+            )
+            assert started.success
+            assert started.orchestration_id is not None
+
+            orchestration = gru._orchestrations[started.orchestration_id]
+            components = (
+                orchestration.minion,
+                orchestration.pipeline,
+                *gru._resources.values(),
+            )
+            assert all(
+                component._mn_component_owned_task_cancellation_timeout_seconds == 0.25
+                for component in components
+            )
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "policy",
         ["continue-on-failure", "idle-until-persisted"],
