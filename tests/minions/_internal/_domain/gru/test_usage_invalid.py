@@ -112,36 +112,37 @@ class TestInvalidUsage:
             )
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("value", [0, True])
+    @pytest.mark.parametrize(
+        ("value", "match"),
+        [
+            (0, "must be a positive number"),
+            (True, "must be a finite number"),
+        ],
+    )
     async def test_gru_rejects_invalid_component_owned_task_cancellation_timeout(
         self,
         value: object,
+        match: str,
     ) -> None:
-        with pytest.raises(
-            ValueError,
-            match=(
-                "component_owned_task_cancellation_timeout_seconds must be a positive "
-                "number of seconds"
-            ),
-        ):
+        with pytest.raises(ValueError, match=match):
             await Gru.create(
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics(),
                 state_store=NoOpStateStore(),
-                component_owned_task_cancellation_timeout_seconds=cast(Any, value),
+                component_owned_task_cancellation_timeout_seconds=value,  # type: ignore[arg-type]
             )
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("kwarg", "value", "match"),
         [
-            ("workflow_persistence_retry_delay_seconds", 0, "must be a positive number of seconds"),  # noqa: E501
-            ("workflow_persistence_retry_max_delay_seconds", 0, "must be a positive number of seconds"),  # noqa: E501
+            ("workflow_persistence_retry_delay_seconds", 0, "must be a positive number"),
+            ("workflow_persistence_retry_max_delay_seconds", 0, "must be a positive number"),
             ("workflow_persistence_retry_backoff_multiplier", 0.5, "must be a number greater than or equal to 1"),  # noqa: E501
             ("workflow_persistence_retry_jitter_ratio", -0.1, "must be a number between 0 and 1"),  # noqa: E501
             ("workflow_persistence_retry_jitter_ratio", 1.1, "must be a number between 0 and 1"),  # noqa: E501
-            ("workflow_persistence_retry_warning_interval_seconds", -1, "must be a positive number of seconds"),  # noqa: E501
-            ("workflow_persistence_retry_error_after_seconds", -1, "must be None or a non-negative number of seconds"),  # noqa: E501
+            ("workflow_persistence_retry_warning_interval_seconds", -1, "must be a positive number"),  # noqa: E501
+            ("workflow_persistence_retry_error_after_seconds", -1, "must be a non-negative number"),  # noqa: E501
         ],
     )
     async def test_gru_raises_on_invalid_workflow_persistence_retry_settings(
@@ -158,41 +159,22 @@ class TestInvalidUsage:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        ("kwarg", "match"),
+        "kwarg",
         [
-            (
-                "workflow_persistence_retry_delay_seconds",
-                "must be a positive number of seconds",
-            ),
-            (
-                "workflow_persistence_retry_max_delay_seconds",
-                "must be a positive number of seconds",
-            ),
-            (
-                "workflow_persistence_retry_backoff_multiplier",
-                "must be a number greater than or equal to 1",
-            ),
-            (
-                "workflow_persistence_retry_jitter_ratio",
-                "must be a number between 0 and 1",
-            ),
-            (
-                "workflow_persistence_retry_warning_interval_seconds",
-                "must be a positive number of seconds",
-            ),
-            (
-                "workflow_persistence_retry_error_after_seconds",
-                "must be None or a non-negative number of seconds",
-            ),
+            "workflow_persistence_retry_delay_seconds",
+            "workflow_persistence_retry_max_delay_seconds",
+            "workflow_persistence_retry_backoff_multiplier",
+            "workflow_persistence_retry_jitter_ratio",
+            "workflow_persistence_retry_warning_interval_seconds",
+            "workflow_persistence_retry_error_after_seconds",
         ],
     )
     async def test_gru_rejects_boolean_workflow_persistence_retry_settings(
         self,
         kwarg: str,
-        match: str,
     ) -> None:
         kwargs: dict[str, Any] = {kwarg: True}
-        with pytest.raises(ValueError, match=match):
+        with pytest.raises(ValueError, match=f"{kwarg} must be a finite number"):
             await Gru.create(
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics(),

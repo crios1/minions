@@ -42,6 +42,12 @@ from .._utils.serialization import (
     serialize,
 )
 from .._utils.task_failure_handler import TaskFailureHandler
+from .._utils.validation import (
+    ensure_nonnegative_number,
+    ensure_number_at_least,
+    ensure_number_in_closed_range,
+    ensure_positive_number,
+)
 from .component_identity import get_component_id
 from .config_identity import get_config_id
 from .exceptions import TaskCancellationError
@@ -298,9 +304,9 @@ class Gru:
         self._is_shutting_down = False
 
         self._component_owned_task_cancellation_timeout_seconds = (
-            Minion._mn_validate_positive_seconds(
-                "component_owned_task_cancellation_timeout_seconds",
+            ensure_positive_number(
                 component_owned_task_cancellation_timeout_seconds,
+                label="component_owned_task_cancellation_timeout_seconds",
             )
         )
 
@@ -314,13 +320,13 @@ class Gru:
                 workflow_persistence_failure_policy,
             )
         )
-        self._workflow_persistence_retry_delay_seconds = Minion._mn_validate_positive_seconds(
-            "workflow_persistence_retry_delay_seconds",
+        self._workflow_persistence_retry_delay_seconds = ensure_positive_number(
             workflow_persistence_retry_delay_seconds,
+            label="workflow_persistence_retry_delay_seconds",
         )
-        self._workflow_persistence_retry_max_delay_seconds = Minion._mn_validate_positive_seconds(
-            "workflow_persistence_retry_max_delay_seconds",
+        self._workflow_persistence_retry_max_delay_seconds = ensure_positive_number(
             workflow_persistence_retry_max_delay_seconds,
+            label="workflow_persistence_retry_max_delay_seconds",
         )
         if (
             self._workflow_persistence_retry_max_delay_seconds
@@ -331,25 +337,30 @@ class Gru:
                 "workflow_persistence_retry_delay_seconds"
             )
         self._workflow_persistence_retry_backoff_multiplier = (
-            Minion._mn_validate_backoff_multiplier(
-                "workflow_persistence_retry_backoff_multiplier",
+            ensure_number_at_least(
                 workflow_persistence_retry_backoff_multiplier,
+                1,
+                label="workflow_persistence_retry_backoff_multiplier",
             )
         )
-        self._workflow_persistence_retry_jitter_ratio = Minion._mn_validate_jitter_ratio(
-            "workflow_persistence_retry_jitter_ratio",
+        self._workflow_persistence_retry_jitter_ratio = ensure_number_in_closed_range(
             workflow_persistence_retry_jitter_ratio,
+            minimum=0,
+            maximum=1,
+            label="workflow_persistence_retry_jitter_ratio",
         )
         self._workflow_persistence_retry_warning_interval_seconds = (
-            Minion._mn_validate_positive_seconds(
-                "workflow_persistence_retry_warning_interval_seconds",
+            ensure_positive_number(
                 workflow_persistence_retry_warning_interval_seconds,
+                label="workflow_persistence_retry_warning_interval_seconds",
             )
         )
         self._workflow_persistence_retry_error_after_seconds = (
-            Minion._mn_validate_optional_nonnegative_seconds(
-                "workflow_persistence_retry_error_after_seconds",
+            None
+            if workflow_persistence_retry_error_after_seconds is None
+            else ensure_nonnegative_number(
                 workflow_persistence_retry_error_after_seconds,
+                label="workflow_persistence_retry_error_after_seconds",
             )
         )
 

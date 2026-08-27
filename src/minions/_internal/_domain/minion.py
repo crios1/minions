@@ -65,6 +65,12 @@ from .._utils.get_type_from_hint import get_type_from_hint
 from .._utils.serialization import (
     require_user_declared_type,
 )
+from .._utils.validation import (
+    ensure_nonnegative_number,
+    ensure_number_at_least,
+    ensure_number_in_closed_range,
+    ensure_positive_number,
+)
 from .exceptions import AbortWorkflow
 from .minion_workflow_context import MinionWorkflowContext
 from .minion_workflow_handle import MinionWorkflowHandle
@@ -369,13 +375,13 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 workflow_persistence_failure_policy,
             )
         )
-        self._mn_workflow_persistence_retry_delay_seconds = self._mn_validate_positive_seconds(
-            "workflow_persistence_retry_delay_seconds",
+        self._mn_workflow_persistence_retry_delay_seconds = ensure_positive_number(
             workflow_persistence_retry_delay_seconds,
+            label="workflow_persistence_retry_delay_seconds",
         )
-        self._mn_workflow_persistence_retry_max_delay_seconds = self._mn_validate_positive_seconds(
-            "workflow_persistence_retry_max_delay_seconds",
+        self._mn_workflow_persistence_retry_max_delay_seconds = ensure_positive_number(
             workflow_persistence_retry_max_delay_seconds,
+            label="workflow_persistence_retry_max_delay_seconds",
         )
         if (
             self._mn_workflow_persistence_retry_max_delay_seconds
@@ -386,25 +392,30 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 "workflow_persistence_retry_delay_seconds"
             )
         self._mn_workflow_persistence_retry_backoff_multiplier = (
-            self._mn_validate_backoff_multiplier(
-                "workflow_persistence_retry_backoff_multiplier",
+            ensure_number_at_least(
                 workflow_persistence_retry_backoff_multiplier,
+                1,
+                label="workflow_persistence_retry_backoff_multiplier",
             )
         )
-        self._mn_workflow_persistence_retry_jitter_ratio = self._mn_validate_jitter_ratio(
-            "workflow_persistence_retry_jitter_ratio",
+        self._mn_workflow_persistence_retry_jitter_ratio = ensure_number_in_closed_range(
             workflow_persistence_retry_jitter_ratio,
+            minimum=0,
+            maximum=1,
+            label="workflow_persistence_retry_jitter_ratio",
         )
         self._mn_workflow_persistence_retry_warning_interval_seconds = (
-            self._mn_validate_positive_seconds(
-                "workflow_persistence_retry_warning_interval_seconds",
+            ensure_positive_number(
                 workflow_persistence_retry_warning_interval_seconds,
+                label="workflow_persistence_retry_warning_interval_seconds",
             )
         )
         self._mn_workflow_persistence_retry_error_after_seconds = (
-            self._mn_validate_optional_nonnegative_seconds(
-                "workflow_persistence_retry_error_after_seconds",
+            None
+            if workflow_persistence_retry_error_after_seconds is None
+            else ensure_nonnegative_number(
                 workflow_persistence_retry_error_after_seconds,
+                label="workflow_persistence_retry_error_after_seconds",
             )
         )
         self._mn_workflow_tasks: set[asyncio.Task[None]] = set()
@@ -470,32 +481,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             )
             raise ValueError(f"workflow_persistence_failure_policy must be {policies}")
         return policy
-
-    @staticmethod
-    def _mn_validate_positive_seconds(name: str, value: float) -> float:
-        if isinstance(value, bool) or value <= 0:
-            raise ValueError(f"{name} must be a positive number of seconds")
-        return float(value)
-
-    @staticmethod
-    def _mn_validate_optional_nonnegative_seconds(name: str, value: float | None) -> float | None:
-        if value is None:
-            return None
-        if isinstance(value, bool) or value < 0:
-            raise ValueError(f"{name} must be None or a non-negative number of seconds")
-        return float(value)
-
-    @staticmethod
-    def _mn_validate_backoff_multiplier(name: str, value: float) -> float:
-        if isinstance(value, bool) or value < 1:
-            raise ValueError(f"{name} must be a number greater than or equal to 1")
-        return float(value)
-
-    @staticmethod
-    def _mn_validate_jitter_ratio(name: str, value: float) -> float:
-        if isinstance(value, bool) or value < 0 or value > 1:
-            raise ValueError(f"{name} must be a number between 0 and 1")
-        return float(value)
 
     def _mn_apply_workflow_persistence_retry_jitter(self, delay_seconds: float) -> float:
         jitter_ratio = self._mn_workflow_persistence_retry_jitter_ratio
