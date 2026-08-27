@@ -135,18 +135,15 @@ async def test_produce_event_failure_is_logged_and_measured(
     metrics: InMemoryMetrics,
 ):
     class ErrorPipeline(Pipeline[EmptyEvent]):
-        def __init__(self) -> None:
-            super().__init__(
-                "dummy-pipeline-id",
-                "dummy-pipeline-module-path",
-                metrics,
-                logger,
-            )
-
         async def produce_event(self):
             raise RuntimeError("boom")
 
-    pipeline = ErrorPipeline()
+    pipeline = ErrorPipeline(
+        "dummy-pipeline-id",
+        "dummy-pipeline-module-path",
+        metrics,
+        logger,
+    )
 
     await pipeline._mn_produce_and_fan_out_event()
 
@@ -170,31 +167,30 @@ async def test_continues_after_produce_event_failure(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
 ):
-    class FailsOncePipeline(Pipeline[EmptyEvent]):
-        def __init__(self) -> None:
-            super().__init__(
-                "dummy-pipeline-id",
-                "dummy-pipeline-module-path",
-                metrics,
-                logger,
-            )
-            self.produce_event_calls = 0
-            self.second_attempt_started = asyncio.Event()
+    produce_event_calls = 0
+    second_attempt_started = asyncio.Event()
 
+    class FailsOncePipeline(Pipeline[EmptyEvent]):
         async def produce_event(self):
-            self.produce_event_calls += 1
-            if self.produce_event_calls == 1:
+            nonlocal produce_event_calls
+            produce_event_calls += 1
+            if produce_event_calls == 1:
                 raise RuntimeError("boom")
-            self.second_attempt_started.set()
+            second_attempt_started.set()
             await asyncio.Future()
             raise AssertionError("unreachable")
 
-    pipeline = FailsOncePipeline()
+    pipeline = FailsOncePipeline(
+        "dummy-pipeline-id",
+        "dummy-pipeline-module-path",
+        metrics,
+        logger,
+    )
 
     run_task = asyncio.create_task(pipeline.run())
-    await asyncio.wait_for(pipeline.second_attempt_started.wait(), timeout=1.0)
+    await asyncio.wait_for(second_attempt_started.wait(), timeout=1.0)
     run_task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await run_task
 
-    assert pipeline.produce_event_calls == 2
+    assert produce_event_calls == 2

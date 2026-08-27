@@ -24,6 +24,8 @@ from tests.support.component_subclassing_contract import (
     assert_mn_attribute_assignment_in_user_method_is_rejected,
     assert_mn_class_attribute_assignment_in_class_body_is_rejected,
     assert_safe_create_task_override_is_rejected,
+    assert_user_defined_init_is_rejected,
+    assert_user_defined_new_is_rejected,
 )
 
 
@@ -49,6 +51,19 @@ def spied_component_base(request: pytest.FixtureRequest) -> Any:
     ],
 )
 def spied_async_service_base(request: pytest.FixtureRequest) -> Any:
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(SpiedLogger, id="logger"),
+        pytest.param(SpiedMetrics, id="metrics"),
+        pytest.param(SpiedStateStore, id="state-store"),
+    ],
+)
+def spied_component_base_allowing_user_defined_construction(
+    request: pytest.FixtureRequest,
+) -> Any:
     return request.param
 
 
@@ -82,6 +97,26 @@ def test_spied_base_uses_component_spy_metaclass(
     assert isinstance(spied_base, ComponentSpyMeta)
 
 
+def test_user_defined_init_is_rejected(
+    spied_async_service_base: Any,
+) -> None:
+    assert_user_defined_init_is_rejected(spied_async_service_base)
+
+
+def test_user_defined_new_is_rejected(
+    spied_async_service_base: Any,
+) -> None:
+    assert_user_defined_new_is_rejected(spied_async_service_base)
+
+
+def test_user_defined_init_rejects_reserved_mn_attribute_assignment(
+    spied_component_base_allowing_user_defined_construction: Any,
+) -> None:
+    assert_mn_attribute_assignment_in_init_is_rejected(
+        spied_component_base_allowing_user_defined_construction
+    )
+
+
 def test_mn_class_attribute_assignment_in_class_body_is_rejected(
     spied_component_base: Any,
 ) -> None:
@@ -94,12 +129,6 @@ def test_mn_attribute_assignment_in_user_method_is_rejected(
     spied_component_base: Any,
 ) -> None:
     assert_mn_attribute_assignment_in_user_method_is_rejected(spied_component_base)
-
-
-def test_mn_attribute_assignment_in_init_is_rejected(
-    spied_component_base: Any,
-) -> None:
-    assert_mn_attribute_assignment_in_init_is_rejected(spied_component_base)
 
 
 def test_mn_attribute_assignment_in_call_is_rejected(

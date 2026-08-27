@@ -50,6 +50,7 @@ class AsyncService(LoggerBackedAsyncComponent):
     _mn_non_overridable_public_names: ClassVar[frozenset[str]] = frozenset(
         {"safe_create_task"}
     )
+    _mn_user_defined_construction_allowed = False
 
     def __init__(self, logger: Logger):
         super().__init__(logger)

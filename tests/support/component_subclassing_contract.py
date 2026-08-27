@@ -10,6 +10,28 @@ from minions import minion_step
 from minions._internal._domain.exceptions import UnsupportedUserCode
 
 
+def assert_user_defined_init_is_rejected(component_base: Any) -> None:
+    with pytest.raises(
+        UnsupportedUserCode,
+        match=r"InvalidComponent cannot define __init__.*constructed by the Minions runtime",
+    ):
+
+        class InvalidComponent(component_base):
+            def __init__(self) -> None:
+                pass
+
+
+def assert_user_defined_new_is_rejected(component_base: Any) -> None:
+    with pytest.raises(
+        UnsupportedUserCode,
+        match=r"InvalidComponent cannot define __new__.*constructed by the Minions runtime",
+    ):
+
+        class InvalidComponent(component_base):
+            def __new__(cls) -> "InvalidComponent":
+                return object.__new__(cls)
+
+
 def assert_mn_class_attribute_assignment_in_class_body_is_rejected(
     component_base: Any,
 ) -> None:
@@ -42,7 +64,10 @@ def assert_mn_attribute_assignment_in_private_method_is_rejected(
 def assert_mn_attribute_assignment_in_init_is_rejected(
     component_base: Any,
 ) -> None:
-    with pytest.raises(UnsupportedUserCode):
+    with pytest.raises(
+        UnsupportedUserCode,
+        match=r"Invalid attribute assignment: `self\._mn_bad_attribute` in `__init__`",
+    ):
 
         class InvalidComponent(component_base):
             def __init__(self) -> None:

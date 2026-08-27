@@ -30,6 +30,8 @@ from tests.support.component_subclassing_contract import (
     assert_mn_attribute_writes_to_unrelated_object_are_allowed,
     assert_mn_class_attribute_assignment_in_class_body_is_rejected,
     assert_safe_create_task_override_is_rejected,
+    assert_user_defined_init_is_rejected,
+    assert_user_defined_new_is_rejected,
 )
 
 
@@ -69,6 +71,19 @@ def user_facing_component_base_supporting_subclass_chains(
     ],
 )
 def user_facing_async_service_base(request: pytest.FixtureRequest) -> Any:
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(Logger, id="logger"),
+        pytest.param(Metrics, id="metrics"),
+        pytest.param(StateStore, id="state-store"),
+    ],
+)
+def user_facing_component_base_allowing_user_defined_construction(
+    request: pytest.FixtureRequest,
+) -> Any:
     return request.param
 
 
@@ -136,6 +151,52 @@ class TestInheritance:
         assert UserComponentSubclass.__bases__ == (UserComponent,)
 
 
+class TestConstruction:
+    def test_rejects_user_defined_init(
+        self,
+        user_facing_async_service_base: Any,
+    ) -> None:
+        assert_user_defined_init_is_rejected(user_facing_async_service_base)
+
+    def test_rejects_user_defined_new(
+        self,
+        user_facing_async_service_base: Any,
+    ) -> None:
+        assert_user_defined_new_is_rejected(user_facing_async_service_base)
+
+    def test_allows_user_defined_init(
+        self,
+        user_facing_component_base_allowing_user_defined_construction: Any,
+    ) -> None:
+        class UserComponent(
+            user_facing_component_base_allowing_user_defined_construction
+        ):
+            def __init__(self) -> None:
+                pass
+
+        assert "__init__" in UserComponent.__dict__
+
+    def test_allows_user_defined_new(
+        self,
+        user_facing_component_base_allowing_user_defined_construction: Any,
+    ) -> None:
+        class UserComponent(
+            user_facing_component_base_allowing_user_defined_construction
+        ):
+            def __new__(cls) -> "UserComponent":
+                return object.__new__(cls)
+
+        assert "__new__" in UserComponent.__dict__
+
+    def test_user_defined_init_rejects_reserved_mn_attribute_assignment(
+        self,
+        user_facing_component_base_allowing_user_defined_construction: Any,
+    ) -> None:
+        assert_mn_attribute_assignment_in_init_is_rejected(
+            user_facing_component_base_allowing_user_defined_construction
+        )
+
+
 class TestReservedMnAttributeSpace:
     def test_mn_class_attribute_assignment_in_class_body_is_rejected(
         self,
@@ -177,14 +238,6 @@ class TestReservedMnAttributeSpace:
         user_facing_component_base: Any,
     ) -> None:
         assert_mn_attribute_assignment_in_private_method_is_rejected(
-            user_facing_component_base
-        )
-
-    def test_mn_attribute_assignment_in_init_is_rejected(
-        self,
-        user_facing_component_base: Any,
-    ) -> None:
-        assert_mn_attribute_assignment_in_init_is_rejected(
             user_facing_component_base
         )
 

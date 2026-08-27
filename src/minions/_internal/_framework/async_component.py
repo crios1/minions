@@ -45,6 +45,7 @@ class AsyncComponent(ABC, metaclass=_ComponentMeta):
     """
 
     _mn_user_facing = False
+    _mn_user_defined_construction_allowed: ClassVar[bool] = True
     _mn_non_overridable_public_names: ClassVar[frozenset[str]] = frozenset()
 
     def __init_subclass__(cls, **kwargs: object) -> None:
@@ -56,6 +57,7 @@ class AsyncComponent(ABC, metaclass=_ComponentMeta):
         if not any(getattr(base, "_mn_user_facing", False) for base in cls.__mro__[1:]):
             return
         cls._mn_ensure_attrspace()
+        cls._mn_enforce_construction_policy()
         cls._mn_ensure_public_operations_not_overridden()
         cls._mn_validate_class_user_code()
 
@@ -93,6 +95,19 @@ class AsyncComponent(ABC, metaclass=_ComponentMeta):
                 "These public operations are provided by the Minions runtime and "
                 "cannot be overridden."
             )
+
+    @classmethod
+    def _mn_enforce_construction_policy(cls) -> None:
+        if cls._mn_user_defined_construction_allowed:
+            return
+
+        for name in ("__new__", "__init__"):
+            if name in cls.__dict__:
+                raise UnsupportedUserCode(
+                    f"{cls.__name__} cannot define {name} because its instances are "
+                    "constructed by the Minions runtime. "
+                    "Initialize component lifecycle state in startup() instead."
+                )
 
     @classmethod
     def _mn_validate_class_user_code(cls) -> None:

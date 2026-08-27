@@ -25,6 +25,18 @@ Minion and Pipeline retain stricter construction rules: subclass Minion or
 Pipeline directly; a completed Minion or Pipeline subclass cannot be extended
 further.
 
+## Component construction
+
+Gru constructs Minion, Pipeline, and Resource instances with framework-owned
+arguments. These component classes cannot define `__new__` or `__init__`. Put
+mutable lifecycle state in `startup()` and declare injected dependencies with
+instance-attribute annotations.
+
+Callers construct Logger, Metrics, and StateStore instances and pass them to
+`Gru.create()`, so those component families may define their own constructors.
+Once supplied, their runtime lifecycle belongs to Gru: Gru starts them during
+creation and shuts them down when creation fails or the Gru instance shuts down.
+
 ## Anti-patterns
 
 - **Global throttling**: do not add arbitrary sleeps in minion steps to slow the world; throttle inside the resource that needs it.

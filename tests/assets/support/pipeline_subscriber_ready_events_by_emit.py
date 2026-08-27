@@ -3,8 +3,6 @@ import sys
 from typing import Any, ClassVar, NoReturn
 
 from minions._internal._domain.types import T_Event
-from minions._internal._framework.logger import Logger
-from minions._internal._framework.metrics import Metrics
 
 from .pipeline_subscriber_ready_fixed_events import SubscriberReadyFixedEventsPipeline
 
@@ -33,14 +31,7 @@ class SubscriberReadyEventsByEmitPipeline(
 
         cls.total_events = len(cls.expected_subs_by_emit)
 
-    def __init__(
-        self,
-        pipeline_id: str,
-        pipeline_module_path: str,
-        metrics: Metrics,
-        logger: Logger,
-    ) -> None:
-        super().__init__(pipeline_id, pipeline_module_path, metrics, logger)
+    async def startup(self) -> None:
         self._emit_index = 0
 
     @classmethod
