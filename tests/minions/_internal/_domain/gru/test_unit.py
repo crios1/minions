@@ -712,7 +712,10 @@ class TestUnit:
                 "tests.assets.minions.one_step.counter.default",
             )
             assert result.success
+
             monitor_task = gru._resource_monitor_task
+            assert monitor_task is not None
+
             shutdown_components: list[AsyncComponent] = []
 
             async def tracking_shutdown_async_component(

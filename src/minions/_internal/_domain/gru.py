@@ -447,10 +447,7 @@ class Gru:
             int
         )  # total refs (owners + edges)
 
-        self._resource_monitor_task = safe_create_task(
-            self._monitor_process_resources(),
-            on_failure=self._on_resource_monitor_failure,
-        )
+        self._resource_monitor_task: asyncio.Task[None] | None = None
 
     @classmethod
     async def create(
@@ -495,7 +492,7 @@ class Gru:
             cls._allow_direct_init = False
         try:
             await inst._startup()
-        except Exception:
+        except BaseException:
             global _gru_instance
             if _gru_instance is inst:
                 _gru_instance = None
@@ -503,12 +500,55 @@ class Gru:
         return inst
 
     async def _startup(self) -> None:
-        if hasattr(self._logger, "_startup"):
+        attempted_components: list[tuple[str, AsyncComponent]] = []
+        try:
+            attempted_components.append(("logger", self._logger))
             await self._logger._mn_startup()
-        await asyncio.gather(
-            self._startup_async_component(self._state_store),
-            self._startup_async_component(self._metrics),
-        )
+
+            attempted_components.append(("state_store", self._state_store))
+            attempted_components.append(("metrics", self._metrics))
+            startup_tasks = (
+                asyncio.create_task(
+                    self._startup_async_component(self._state_store),
+                    name="Gru:start-state-store",
+                ),
+                asyncio.create_task(
+                    self._startup_async_component(self._metrics),
+                    name="Gru:start-metrics",
+                ),
+            )
+            try:
+                await asyncio.gather(*startup_tasks)
+            except BaseException:
+                for task in startup_tasks:
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*startup_tasks, return_exceptions=True)
+                raise
+
+            self._resource_monitor_task = safe_create_task(
+                self._monitor_process_resources(),
+                on_failure=self._on_resource_monitor_failure,
+            )
+        except BaseException as startup_error:
+            for component_name, component in reversed(attempted_components):
+                try:
+                    await component._mn_shutdown()
+                except BaseException as shutdown_error:
+                    shutdown_error_detail = (
+                        f"{type(shutdown_error).__name__}: {shutdown_error}"
+                    )
+                    if shutdown_error.__cause__ is not None:
+                        shutdown_error_detail += (
+                            f"; caused by {type(shutdown_error.__cause__).__name__}: "
+                            f"{shutdown_error.__cause__}"
+                        )
+                    startup_error.add_note(
+                        f"shutdown failed for {component_name}: "
+                        f"{shutdown_error_detail}"
+                    )
+            raise
+
         self._is_started = True
 
     async def _startup_async_component(
