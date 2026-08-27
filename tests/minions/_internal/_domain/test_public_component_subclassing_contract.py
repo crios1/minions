@@ -14,6 +14,8 @@ from tests.assets.events.empty import EmptyEvent
 from tests.support.component_subclassing_contract import (
     assert_mn_attribute_annotation_with_value_is_rejected,
     assert_mn_attribute_annotation_without_value_is_rejected,
+    assert_mn_attribute_assignment_in_call_is_rejected,
+    assert_mn_attribute_assignment_in_init_is_rejected,
     assert_mn_attribute_assignment_in_private_method_is_rejected,
     assert_mn_attribute_assignment_in_property_deleter_is_rejected,
     assert_mn_attribute_assignment_in_property_getter_is_rejected,
@@ -175,6 +177,22 @@ class TestReservedMnAttributeSpace:
         user_facing_component_base: Any,
     ) -> None:
         assert_mn_attribute_assignment_in_private_method_is_rejected(
+            user_facing_component_base
+        )
+
+    def test_mn_attribute_assignment_in_init_is_rejected(
+        self,
+        user_facing_component_base: Any,
+    ) -> None:
+        assert_mn_attribute_assignment_in_init_is_rejected(
+            user_facing_component_base
+        )
+
+    def test_mn_attribute_assignment_in_call_is_rejected(
+        self,
+        user_facing_component_base: Any,
+    ) -> None:
+        assert_mn_attribute_assignment_in_call_is_rejected(
             user_facing_component_base
         )
 

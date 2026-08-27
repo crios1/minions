@@ -39,6 +39,26 @@ def assert_mn_attribute_assignment_in_private_method_is_rejected(
                 self._mn_bad_attribute = 1
 
 
+def assert_mn_attribute_assignment_in_init_is_rejected(
+    component_base: Any,
+) -> None:
+    with pytest.raises(UnsupportedUserCode):
+
+        class InvalidComponent(component_base):
+            def __init__(self) -> None:
+                self._mn_bad_attribute = 1
+
+
+def assert_mn_attribute_assignment_in_call_is_rejected(
+    component_base: Any,
+) -> None:
+    with pytest.raises(UnsupportedUserCode):
+
+        class InvalidComponent(component_base):
+            def __call__(self) -> None:
+                self._mn_bad_attribute = 1
+
+
 def assert_mn_attribute_assignment_through_cls_is_rejected(
     component_base: Any,
 ) -> None:

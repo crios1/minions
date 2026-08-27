@@ -96,9 +96,7 @@ class AsyncComponent(ABC, metaclass=_ComponentMeta):
 
     @classmethod
     def _mn_validate_class_user_code(cls) -> None:
-        for name, attr in cls.__dict__.items():
-            if name.startswith("__") and name.endswith("__"):
-                continue
+        for attr in cls.__dict__.values():
             if isinstance(attr, property):
                 funcs = (attr.fget, attr.fset, attr.fdel)
             else:

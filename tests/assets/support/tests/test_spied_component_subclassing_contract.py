@@ -18,6 +18,8 @@ from tests.assets.support.pipeline_spied import SpiedPipeline
 from tests.assets.support.resource_spied import SpiedResource
 from tests.assets.support.state_store_spied import SpiedStateStore
 from tests.support.component_subclassing_contract import (
+    assert_mn_attribute_assignment_in_call_is_rejected,
+    assert_mn_attribute_assignment_in_init_is_rejected,
     assert_mn_attribute_assignment_in_minion_step_is_rejected,
     assert_mn_attribute_assignment_in_user_method_is_rejected,
     assert_mn_class_attribute_assignment_in_class_body_is_rejected,
@@ -92,6 +94,18 @@ def test_mn_attribute_assignment_in_user_method_is_rejected(
     spied_component_base: Any,
 ) -> None:
     assert_mn_attribute_assignment_in_user_method_is_rejected(spied_component_base)
+
+
+def test_mn_attribute_assignment_in_init_is_rejected(
+    spied_component_base: Any,
+) -> None:
+    assert_mn_attribute_assignment_in_init_is_rejected(spied_component_base)
+
+
+def test_mn_attribute_assignment_in_call_is_rejected(
+    spied_component_base: Any,
+) -> None:
+    assert_mn_attribute_assignment_in_call_is_rejected(spied_component_base)
 
 
 def test_mn_attribute_assignment_in_minion_step_is_rejected() -> None:
