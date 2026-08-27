@@ -1,7 +1,7 @@
 import asyncio
 import contextlib
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 
 import pytest
 
@@ -57,7 +57,7 @@ class TestInvalidUsage:
     async def test_gru_raises_on_invalid_logger_param(self, bad_logger: object) -> None:
         with pytest.raises(TypeError):
             await Gru.create(
-                logger=cast(Any, bad_logger),
+                logger=bad_logger,  # type: ignore[arg-type]
                 metrics=NoOpMetrics(),
                 state_store=NoOpStateStore()
             )
@@ -68,7 +68,7 @@ class TestInvalidUsage:
         with pytest.raises(TypeError):
             await Gru.create(
                 logger=NoOpLogger(),
-                metrics=cast(Any, bad_metrics),
+                metrics=bad_metrics,  # type: ignore[arg-type]
                 state_store=NoOpStateStore()
             )
 
@@ -79,7 +79,7 @@ class TestInvalidUsage:
             await Gru.create(
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics(),
-                state_store=cast(Any, bad_state_store)
+                state_store=bad_state_store,  # type: ignore[arg-type]
             )
 
     @pytest.mark.asyncio
@@ -95,7 +95,7 @@ class TestInvalidUsage:
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics(),
                 state_store=NoOpStateStore(),
-                workflow_persistence_failure_policy=cast(Any, "invalid"),
+                workflow_persistence_failure_policy="invalid",  # type: ignore[arg-type]
             )
 
     @pytest.mark.asyncio
@@ -108,7 +108,7 @@ class TestInvalidUsage:
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics(),
                 state_store=NoOpStateStore(),
-                workflow_failure_policy=cast(Any, "invalid"),
+                workflow_failure_policy="invalid",  # type: ignore[arg-type]
             )
 
     @pytest.mark.asyncio

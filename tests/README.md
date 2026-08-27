@@ -88,6 +88,17 @@ This suite is intentionally layered. Each layer has a different purpose and conf
   `config_path=None` and `minion_config_id=""`; configured test setup uses
   non-empty values appropriate to its configuration form.
 
+## Invalid Input Typing Policy
+
+- When a test intentionally passes an object outside an API's annotated type to
+  prove runtime rejection, pass that object directly and add a narrow
+  `# type: ignore[arg-type]` comment at the offending argument.
+- Do not use `cast(Any, ...)` or widen the test value's type to silence
+  Pyright/Pylance. Doing so hides the invalid input that the test is meant to
+  communicate.
+- This exception applies only to deliberate runtime type-contract tests. Resolve
+  unexpected typing errors instead of suppressing them.
+
 ## Contributor Placement Guide
 
 1. Orchestration semantics changed:
