@@ -786,32 +786,6 @@
       - small local systems: `4-8`
       - slow NAS / shared hosts: start lower and tune up
 
-- todo: define the Core / Compose / Cluster codebase boundary after Core stabilizes
-  - context:
-    - the public docs now describe Minions as a progressive execution platform with Core, Compose, and Cluster layers
-    - the current source tree is effectively Minions Core, even though the package structure does not name that boundary yet
-    - Core is still the active product surface and should be finished before reorganizing the repository around future execution layers
-  - principle:
-    - do not create empty `compose` or `cluster` packages just to mirror the docs
-    - do not move `_domain` / `_framework` into a new hierarchy until there is a real runtime/topology contract that benefits from the move
-    - keep `from minions import Gru, Minion, Pipeline, Resource` as the stable public API while Core is settling
-  - questions to answer before restructuring:
-    - what is the Core engine contract that Compose can wrap without importing arbitrary private internals?
-    - what is a workflow definition versus a deployment/topology definition?
-    - which identity, config, persistence, metrics, and resource contracts must remain portable across Core, Compose, and Cluster?
-    - which CLI surfaces belong to Core directly, and which belong to Compose/Cluster orchestration?
-  - likely future shape:
-    - `minions` remains the public facade
-    - Core internals may eventually live under `_internal/core/`
-    - Compose and Cluster packages should appear only when they own real code, config schemas, or operator commands
-  - implementation order:
-    - finish Core runtime semantics first
-    - write a short internal architecture note for the Core/Compose/Cluster boundary
-    - audit source/CLI terminology for old names such as "deployment mode" or ambiguous "runtime mode"
-    - only then consider package moves or new top-level modules
-  - why it matters:
-    - premature folders would imply contracts that are not designed yet, while waiting too long could let Core internals harden in ways that make Compose/Cluster awkward to build
-
 - todo: implement `minions gru serve` / `minions gru attach`
   - goal:
     - replace `GruShell` as the canonical runtime controller/operator UX
@@ -1096,9 +1070,9 @@
 ### Docs:
 - todo: autogenerate API tree for the minions module using Sphinx autodoc/autosummary/intersphinx
 
-- todo: consolidate the Minions Core single-event-loop execution and deployment-topology contract
+- todo: consolidate the Minions single-event-loop execution and deployment-topology contract
   - goal:
-    - state plainly that one Core runtime uses one process and one asyncio event loop for orchestration, while blocking I/O and CPU-heavy work must be offloaded
+    - state plainly that one Minions runtime uses one process and one asyncio event loop for orchestration, while blocking I/O and CPU-heavy work must be offloaded
     - frame Minions as an orchestration runtime rather than a general-purpose compute runtime
     - explain that workflow/component design does not have to equal deployment shape: users may colocate campaigns for shared-resource efficiency or split them across runtimes for isolation
   - content to consolidate:
@@ -1106,11 +1080,13 @@
     - work suited to threads: blocking I/O that cannot use an async client
     - work suited to processes/sidecars: CPU-heavy work, risky libraries, or workloads needing a stronger failure boundary
     - practical reasons to split runtimes: CPU or memory pressure, tail-latency requirements, fault/deployment isolation, independent scaling, external durable buffering, or availability boundaries
-    - link the model to existing concurrency/backpressure, sidecar-resource, scale-out, lifecycle-failure, and execution-ladder documentation rather than duplicating their detailed guidance
+    - link the model to existing concurrency/backpressure, sidecar-resource,
+      scale-out, and lifecycle-failure documentation rather than duplicating
+      their detailed guidance
   - evidence constraint:
     - do not publish specific coroutine/socket capacity claims until the benchmark harness establishes reproducible workload definitions and measured limits
   - why it matters:
-    - users need one clear mental model for both the efficiency benefit and the isolation/compute limits of Core before choosing a deployment topology
+    - users need one clear mental model for both the efficiency benefit and the isolation/compute limits of Minions before choosing a deployment topology
 
 - todo: document how operators should choose a SQLite persistence tuning profile
   - decision model:

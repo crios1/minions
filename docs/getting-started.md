@@ -1,6 +1,6 @@
 # Getting Started
 
-A quick “hello minion” to see how the pieces fit together in Minions Core.
+A quick “hello minion” to see how the pieces fit together in Minions.
 
 ## Install the docs + dev stack
 

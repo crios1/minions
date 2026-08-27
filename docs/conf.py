@@ -38,8 +38,7 @@ html_theme = "sphinx_book_theme"
 html_theme_options = {
     "repository_url": "https://github.com/crios1/minions",
     "announcement": (
-        "Status: Pre-alpha (`0.0.x`). Core is active today; Compose and Cluster "
-        "are roadmap direction. APIs and docs may change."
+        "Status: Pre-alpha (`0.0.x`). APIs and docs subject to change."
     ),
     "use_repository_button": False,
     "use_issues_button": False,

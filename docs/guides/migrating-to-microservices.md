@@ -1,8 +1,13 @@
 # Migrating from Minions to Microservices
 
-Minions is designed to preserve Python workflow source code as you move from Core, to Compose, to Cluster (see {doc}`/concepts/execution-ladder`). That progressive path is the normal way to add isolation or distribution while staying inside the Minions model.
+Minions gives a system explicit workflow and dependency boundaries inside one
+Python process. Those boundaries can help when extracting selected logic, but
+Minions does not promise that component classes or runtime semantics transfer
+unchanged to independently deployed services.
 
-There are still cases where you may decide to leave the Minions runtime and operate the system as conventional microservices. This guide explains how to map a Minions workflow system to independently owned services, what you need to replace when you leave the runtime, and a practical step-by-step way to migrate without rewriting domain logic.
+This guide explains how to map a Minions system to conventional microservices,
+what runtime guarantees you must replace, and how to preserve reusable domain
+logic where practical.
 
 ## The core idea: 1:1 component mapping
 
@@ -17,15 +22,19 @@ When you migrate out of Minions, you usually turn each of those into a deployabl
 
 ## When microservices are worth it
 
-Core, Compose, and Cluster are the preferred path when the Minions workflow model still fits. Consider migrating to conventional microservices when you genuinely need platform or organizational properties outside the Minions contract:
+Consider migrating to conventional microservices when you genuinely need
+platform or organizational properties outside the Minions contract:
 
-- **Independent scaling** beyond the topology Minions supports.
-- **Hard isolation** for security, untrusted code, or stricter blast-radius constraints than your Minions deployment topology provides.
+- **Independent scaling** for separately deployed components.
+- **Hard isolation** for security, untrusted code, or stricter blast-radius constraints than one Minions process provides.
 - **Multi-language** components or heavy native dependencies you don’t want in one artifact.
 - **Multi-team ownership** with independent release trains and SLAs.
 - **Geographic distribution** or strong data-locality constraints.
 
-If you mostly want separation of concerns, operational clarity, or containerized local topology, prefer the progressive Minions path first (see {doc}`/concepts/startup-forms` and {doc}`/guides/deployment-strategies`).
+If you mostly want separation of concerns or operational clarity, Minions
+already provides explicit component boundaries without requiring separate
+services. You can also deploy the complete runtime in a container or isolate a
+risky dependency behind a sidecar (see {doc}`/guides/deployment-strategies`).
 
 If you’re primarily thinking about throughput, also consider the intermediate options in {doc}`/guides/scale-out-strategies`.
 
@@ -131,18 +140,6 @@ Replace “start/stop/restart” semantics with:
 - Readiness/liveness probes
 - Horizontal scaling rules (if needed)
 - Separate deployables per component boundary
-
-## A concrete example mapping (from the README)
-
-The “on-chain trading bot” example in `README.md` maps cleanly:
-
-- `ChainEvents(Resource)` becomes an ingress service: `chain-events-ingress` publishes events to a topic.
-- `PriceFeed(Resource)` becomes either:
-  - a shared library used by workers, or
-  - a dedicated `price-service` if you need independent scaling/caching.
-- `OnChainStrategy(Minion)` becomes a worker service: `strategy-worker` consumes chain events and submits transactions.
-
-Your `OnChainStrategy` logic stays Python; the migration work is mostly deciding the transport (HTTP vs queue) and explicitly implementing the reliability guarantees (state, retries, idempotency) that Minions previously handled in-process.
 
 ## Checklist: “done” looks like
 

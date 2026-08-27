@@ -1,19 +1,22 @@
 # Scale-Out Strategies
 
-Minions is designed around progressive execution: start with Core in one process, then add isolation or distribution when the workflow needs it (see {doc}`/concepts/execution-ladder`).
-
-The default Core path is still to **scale up** first: use a bigger box, tune concurrency, and keep the operational model simple while that remains correct.
+Minions coordinates work inside one Python process. The simplest scaling
+path is to **scale up** first: use a bigger box, tune concurrency, and keep the
+operational model simple while that remains correct.
 
 When scale-up is not enough, scale-out is mostly about **topology**:
 
 - replicate the runtime into multiple processes, and
 - ensure each process owns a **disjoint slice of work**, or offload hotspots to **sidecars**.
 
-Minions Core does not provide cross-process coordination by itself. If you run multiple Core runtimes with the same inputs, you will usually get duplicated work unless you partition ownership explicitly. Compose and Cluster are the intended path for making those topologies more explicit as the platform matures.
+Minions does not provide cross-process coordination. If you run multiple
+Minions runtimes with the same inputs, you will usually get duplicated work unless
+you partition ownership explicitly. The transports, leases, shared persistence,
+and deployment coordination described below remain your responsibility.
 
 ## 0) Start with scale-up (the normal path)
 
-Scale-up preserves the simplest Core deployment model:
+Scale-up preserves the simplest Minions deployment model:
 
 - Increase CPU/RAM.
 - Increase safe concurrency (more workflows/steps in flight).
@@ -29,7 +32,7 @@ If you have CPU headroom on the host but one dependency is the bottleneck (or ri
 - risky native libs (segfault risk)
 - slow/blocking integrations you want isolated
 
-Your Minions Core process stays the orchestrator; the sidecar scales independently (more processes/threads; different resource limits).
+Your Minions process stays the orchestrator; the sidecar scales independently (more processes/threads; different resource limits).
 
 Related reading: {doc}`/advanced/sidecar-resources`.
 
@@ -88,6 +91,8 @@ If you’re currently using SQLite for the state store, multiple replicas genera
 
 ## 5) When to leave the Minions model
 
-If you need independent scaling for many components, strong isolation boundaries, or lots of cross-process coordination, first decide whether Compose or Cluster should own that topology inside the Minions model.
-
-If your requirements go beyond that contract, see {doc}`/guides/migrating-to-microservices` for a pragmatic 1:1 mapping approach out of Minions.
+If you need independent scaling for many components, strong isolation
+boundaries, or extensive cross-process coordination, Minions does not
+provide that distributed runtime model. See
+{doc}`/guides/migrating-to-microservices` for a pragmatic mapping from Minions
+components to independently deployed services.

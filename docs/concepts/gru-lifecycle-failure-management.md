@@ -2,7 +2,7 @@
 
 This note captures the design deliberation around failed lifecycle operations in Gru, especially failed `start_orchestration` and `stop_orchestration` semantics.
 
-## Core Runtime Constraint
+## Runtime Constraint
 
 Gru is an in-process orchestration runtime. That is the point of the model: components can share memory, resources, event loops, metrics, and state without the cost and operational overhead of microservice boundaries.
 
@@ -157,7 +157,7 @@ Recommendation:
 Check MyResource.shutdown() and ensure background tasks and caches are cleared.
 ```
 
-This kind of tool reinforces the Minions Core model. Instead of pretending an in-process `Gru` has hard service-style cleanup isolation, it gives users a practical way to validate that their cooperative lifecycle code is healthy.
+This kind of tool reinforces the Minions model. Instead of pretending an in-process `Gru` has hard service-style cleanup isolation, it gives users a practical way to validate that their cooperative lifecycle code is healthy.
 
 ## Working Design Summary
 

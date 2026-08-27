@@ -65,7 +65,9 @@ Keeping pipelines separate mirrors how real systems have distinct ingress points
 Reusable shared utilities (DB clients, HTTP clients, RPC connections, etc.). Resources are loaded once and shared across minions. Keeping them together keeps imports predictable and avoids circular-import traps.
 
 **state/**  
-Where Minions stores runtime persistence. Default: `state/minions.sqlite3`. Everything stored here is portable; a deployment can be paused, zipped, moved, and resumed unchanged.
+Where Minions stores runtime persistence. Default: `state/minions.sqlite3`.
+Moving this state with the matching code, configuration, and stamped identities
+preserves the local workflow data needed for resume.
 
 **orchestrations/**  
 Entry points that start your system:
@@ -88,7 +90,9 @@ This is where operators add, remove, or redeploy components.
 ## Why this structure works well
 
 1. **Explicit component UUIDs → refactor-stable deploys**: stamped component IDs move with the source class, while id-less components keep the low-friction module-path fallback for exploration.  
-2. **Portability is built in**: configs, module paths, component IDs, and state live inside the project, so you can copy the folder and run anywhere.  
+2. **Deployment data stays together**: configs, module paths, component IDs,
+   and local state can live inside the project and move as one unit; the
+   destination environment and external dependencies are provisioned separately.
 3. **Separation of concerns without microservice complexity**: minions = long-lived workers; pipelines = ingress; resources = shared infra; orchestrations = composition.  
 4. **Fast onboarding**: new contributors can quickly see where workflows live, where events originate, what’s shared, and how the system is launched.
 

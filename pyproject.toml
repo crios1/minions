@@ -1,7 +1,7 @@
 [project]
 name = "minions"
 version = "0.0.2"
-description = "Progressive execution platform for Python workflow-per-event compute."
+description = "Python-native runtime for long-running, event-driven systems."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }

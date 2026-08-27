@@ -2,8 +2,13 @@
 
 Minions is designed around a clear principle:
 
-**A Minions system should be portable as a single project directory.**  
-Copy the folder anywhere, and your entire system—code, configs, orchestrations, and state—runs exactly the same.
+**A Minions project should keep its code, in-project configuration, component
+identities, and local workflow state together.**
+
+Moving that directory can preserve code, in-project configuration, component
+identity, and local workflow state. The destination still needs a compatible
+Python environment and access to any external services, assets, configuration,
+or persistence the system deliberately keeps outside the project.
 
 This page explains how Minions achieves that, and what counts as part of your portable deployment footprint.
 
@@ -18,7 +23,8 @@ Traditional microservice systems are tied to:
 - environment-specific config paths  
 - operational infrastructure  
 
-Minions takes a different approach: your *project directory* is the deployment artifact.
+A project directory can serve as the deployment artifact for that code,
+configuration, identity, and local state.
 
 A Minions system is just:
 
@@ -32,7 +38,8 @@ my_project/
     your_entrypoint.py
 ```
 
-If this directory exists, Minions can orchestrate it.
+When its Python environment and external dependencies are available, Minions
+can load and orchestrate this project as a unit.
 
 ---
 
@@ -142,11 +149,9 @@ long-lived deployment slots, use file-based configs with
 
 ## Why Minions defaults to relative paths
 
-Stamped component and config IDs give Minions systems a property that
-distributed systems often require additional deployment infrastructure to
-maintain:
-
-> **A Minions deployment is fully self-contained. Copy the folder anywhere and everything—including running state—still works.**
+Stamped component and config IDs let source, configuration, and persisted
+workflow state retain their identities when an in-project deployment footprint
+is relocated.
 
 Your SQLite state store, configs, pipelines, and code remain coherent as a unit.
 Relative paths remain useful fallbacks while prototyping, but explicit IDs are
@@ -164,7 +169,9 @@ the durable contract for moving and refactoring that unit.
 - Let Minions resolve absolute paths internally for loading.  
 - Keep state stores (SQLite, files, checkpoints) inside the project directory.  
 
-If you follow this structure, Minions gives you a deployment artifact that works anywhere.
+If you follow this structure, the project directory contains the Minions data
+needed to relocate the runtime. Provision the destination's Python environment
+and any external dependencies separately.
 
 ---
 
@@ -174,9 +181,11 @@ If you follow this structure, Minions gives you a deployment artifact that works
 - Id-less components and configs use module/path fallbacks for low-friction prototypes.
 - External configs remain external deployment dependencies even when stamped.
 - Inline config is portable and identity follows its serializable type and value.
-- A Minions project directory is intentionally designed to be a **self-contained system**.
+- A Minions project directory can contain code, in-project configuration,
+  identities, and local state as one relocatable unit.
 
-Portability isn’t an accident—it’s a design goal. Minions gives you microservice structure with single-artifact deployment simplicity.
+Portability isn’t an accident—it’s a design goal. Minions gives you explicit
+component structure while keeping these in-project parts together.
 
 See {doc}`state-and-persistence` for the complete identity matrix and the
 required migration boundary when stamping an existing deployment.

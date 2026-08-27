@@ -7,7 +7,7 @@ how-to/run-your-first-minion
 how-to/writing-a-custom-resource
 how-to/integrating-with-cli
 reference/cli
-reference/api/minions_core
+reference/api/minions
 reference/api/minions_cli
 guides/patterns-and-anti-patterns
 guides/testing-minions
@@ -24,7 +24,6 @@ guides/scale-out-strategies
 :caption: Concepts
 
 concepts/overview
-concepts/execution-ladder
 concepts/minions
 concepts/pipelines
 concepts/resources
@@ -57,15 +56,10 @@ kitchen-skin/writing-minions
 
 # Minions
 
-Minions is a progressive execution platform for Python workflow-per-event compute.
-
-Build locally and progressively scale from single-process execution, to isolated containers, to distributed self-hosted clusters without rewriting your workflow code.
-
-## The execution ladder
-
-Minions has three execution layers: Core for single-process workflow execution, Compose for local containerized topology, and Cluster for self-hosted multi-machine deployment.
-
-See {doc}`/concepts/execution-ladder` for the compatibility contract between layers.
+Minions is a Python-native runtime for building long-running, event-driven systems.
+Model pipelines, minions, ordered workflows, and shared resources directly in
+Python, then run them together in a single process. Minions manages their
+lifecycle, dependencies, workflow state, metrics, and graceful shutdown.
 
 ## What Minions runs
 
@@ -130,4 +124,4 @@ if __name__ == "__main__":
 - Read {doc}`/concepts/overview` to understand the Minions mental model
 - Jump to {doc}`how-to/run-your-first-minion` for a hands-on checklist
 - Use {doc}`/guides/operating-with-metrics` when you need to interpret persistence and runtime telemetry in production
-- Explore {doc}`reference/api/minions_core` as the API surface evolves
+- Explore {doc}`reference/api/minions` as the API surface evolves

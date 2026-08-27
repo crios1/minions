@@ -1,8 +1,9 @@
 # Startup Forms: Inline vs. Module-Based
 
-This page describes how Minions Core loads workflow components inside a running `Gru` process. It is separate from the broader Core/Compose/Cluster {doc}`execution ladder <execution-ladder>`.
+This page describes the two ways Minions loads workflow components inside
+a running `Gru` process.
 
-Minions Core supports two startup forms:
+Minions supports two startup forms:
 
 1. **Inline mode** — pass Minion/Pipeline classes and an optional dataclass or `msgspec.Struct` config.
 2. **Module-based mode** — pass module paths and a file-backed config.

@@ -7,7 +7,8 @@ A few guardrails while the framework is still evolving.
 - **Explicit resources**: move I/O and rate limits into `Resource` subclasses; keep minion steps mostly orchestration logic.
 - **Typed events/contexts**: use dataclasses or `msgspec.Struct` types with serializable fields. If serialization throughput matters, prefer `msgspec.Struct` (or use `@dataclass(slots=True)` as a close second).
 - **Idempotent steps**: design steps so reruns after restarts are safe; persist intent, not transient state.
-- **Compose via type hints**: declare dependencies with annotations instead of manual wiring; let Gru manage the graph.
+- **Declare dependencies with type hints**: annotate dependencies instead of
+  wiring them manually; let Gru manage the graph.
 - **Metrics-first**: use the built-in Prometheus counters/gauges to watch throughput and errors before tuning concurrency.
 
 ## Component inheritance
