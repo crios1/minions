@@ -700,10 +700,19 @@
       detachment but not yet registered as workflow tasks
   - open questions:
     - Should `continue-on-failure` track outstanding failed checkpoints instead of only retrying when the workflow reaches the next checkpoint?
-    - Should `WorkflowPersistenceFailurePolicy` remain Gru-level, become Minion-level, or support both global defaults and per-minion overrides?
     - A pause preserves the last successfully persisted safe step boundary, which
       may be older than in-memory context when `continue-on-failure` allowed a
       workflow to advance after a failed save.
+  - persistence policy scope:
+    - keep `Gru.create(...)` as the source of the default
+      `WorkflowPersistenceFailurePolicy`
+    - allow a future `start_orchestration(...)` override because the durability
+      guarantee may differ between orchestrations sharing one Gru
+    - treat the effective policy as operational configuration and do not include
+      it in orchestration identity
+    - keep retry delay, maximum delay, backoff, jitter, warning interval, and
+      error escalation Gru-level; reconsider finer-grained tuning only for a
+      concrete workload that cannot use the shared StateStore policy
   - why it matters:
     - failed checkpoint state affects the exact semantics of pause and drain,
       especially when a workflow has progressed beyond its last durable checkpoint
