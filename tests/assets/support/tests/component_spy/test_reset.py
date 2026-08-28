@@ -6,7 +6,7 @@ from tests.assets.support.component_spy_meta import ComponentSpyMeta
 
 
 class TestResetSpy:
-    def test_clears_call_counts_and_history(self) -> None:
+    def test_clears_call_counts_and_history(self):
         class SpiedComponent(metaclass=ComponentSpyMeta):
             def method(self) -> None:
                 return
@@ -20,7 +20,7 @@ class TestResetSpy:
         assert SpiedComponent.get_call_counts() == {}
         assert SpiedComponent.get_call_history() == ()
 
-    def test_repeated_calls_keep_call_counts_and_history_empty(self) -> None:
+    def test_repeated_calls_keep_call_counts_and_history_empty(self):
         class SpiedComponent(metaclass=ComponentSpyMeta):
             pass
 
@@ -32,7 +32,7 @@ class TestResetSpy:
         assert SpiedComponent.get_call_counts() == {}
         assert SpiedComponent.get_call_history() == ()
 
-    def test_clears_spy_instance_identities(self) -> None:
+    def test_clears_spy_instance_identities(self):
         class SpiedComponent(metaclass=ComponentSpyMeta):
             def method(self) -> None:
                 return
@@ -51,7 +51,7 @@ class TestResetSpy:
         assert SpiedComponent.get_spy_instance_identity(second_component) is not None
 
     @pytest.mark.asyncio
-    async def test_is_rejected_while_wait_for_call_is_pending(self) -> None:
+    async def test_is_rejected_while_wait_for_call_is_pending(self):
         class SpiedComponent(metaclass=ComponentSpyMeta):
             def method(self) -> None:
                 return
@@ -68,7 +68,7 @@ class TestResetSpy:
         component.method()
         await waiter
 
-    def test_is_rejected_within_enforce_call_count_limits_context(self) -> None:
+    def test_is_rejected_within_enforce_call_count_limits_context(self):
         class SpiedComponent(metaclass=ComponentSpyMeta):
             def method(self) -> None:
                 return

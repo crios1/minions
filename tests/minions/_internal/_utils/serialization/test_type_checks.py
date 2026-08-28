@@ -84,7 +84,7 @@ def test_is_type_serializable_accepts_basic_supported_shapes():
 
 
 @pytest.mark.parametrize("primitive_type", SERIALIZABLE_PRIMITIVE_TYPES)
-def test_serializable_primitive_types_are_serializable(primitive_type: object) -> None:
+def test_serializable_primitive_types_are_serializable(primitive_type: object):
     assert is_type_serializable(primitive_type)
 
 
@@ -106,7 +106,7 @@ def test_private_require_type_serializable_accepts_serializable_type():
 @pytest.mark.parametrize("primitive_type", SERIALIZABLE_PRIMITIVE_TYPES)
 def test_require_user_declared_type_rejects_primitive_contracts(
     primitive_type: type[object],
-) -> None:
+):
     with pytest.raises(TypeError) as excinfo:
         require_user_declared_type(primitive_type, owner="MyOwner", type_label="event")
     assert str(excinfo.value) == (
@@ -302,7 +302,7 @@ def test_dataclass_default_factory_any_annotation_but_serializable_instance():
         MyStruct,
     ],
 )
-def test_serializable_type_annotations_are_accepted(tp: object) -> None:
+def test_serializable_type_annotations_are_accepted(tp: object):
     assert type_checks.is_type_serializable(tp) is True
 
 
@@ -323,7 +323,7 @@ def test_serializable_type_annotations_are_accepted(tp: object) -> None:
         _BadTD,
     ],
 )
-def test_unserializable_type_annotations_are_rejected(tp: object) -> None:
+def test_unserializable_type_annotations_are_rejected(tp: object):
     assert type_checks.is_type_serializable(tp) is False
 
 

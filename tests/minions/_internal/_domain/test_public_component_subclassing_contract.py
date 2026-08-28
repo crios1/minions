@@ -97,7 +97,7 @@ class TestInheritance:
         self,
         user_facing_component_base: Any,
         component_base_is_first: bool,
-    ) -> None:
+    ):
         class BaseWithSubclassHook:
             def __init_subclass__(cls, **kwargs: object) -> None:
                 raise AssertionError(
@@ -124,7 +124,7 @@ class TestInheritance:
     def test_rejects_multiple_inheritance_despite_internal_module_name_override(
         self,
         user_facing_component_base: Any,
-    ) -> None:
+    ):
         class AdditionalBase:
             pass
 
@@ -138,7 +138,7 @@ class TestInheritance:
     def test_allows_user_component_subclass_chain(
         self,
         user_facing_component_base_supporting_subclass_chains: Any,
-    ) -> None:
+    ):
         class UserComponent(user_facing_component_base_supporting_subclass_chains):
             pass
 
@@ -155,19 +155,19 @@ class TestConstruction:
     def test_rejects_user_defined_init(
         self,
         user_facing_async_service_base: Any,
-    ) -> None:
+    ):
         assert_user_defined_init_is_rejected(user_facing_async_service_base)
 
     def test_rejects_user_defined_new(
         self,
         user_facing_async_service_base: Any,
-    ) -> None:
+    ):
         assert_user_defined_new_is_rejected(user_facing_async_service_base)
 
     def test_allows_user_defined_init(
         self,
         user_facing_component_base_allowing_user_defined_construction: Any,
-    ) -> None:
+    ):
         class UserComponent(
             user_facing_component_base_allowing_user_defined_construction
         ):
@@ -179,7 +179,7 @@ class TestConstruction:
     def test_allows_user_defined_new(
         self,
         user_facing_component_base_allowing_user_defined_construction: Any,
-    ) -> None:
+    ):
         class UserComponent(
             user_facing_component_base_allowing_user_defined_construction
         ):
@@ -191,7 +191,7 @@ class TestConstruction:
     def test_user_defined_init_rejects_reserved_mn_attribute_assignment(
         self,
         user_facing_component_base_allowing_user_defined_construction: Any,
-    ) -> None:
+    ):
         assert_mn_attribute_assignment_in_init_is_rejected(
             user_facing_component_base_allowing_user_defined_construction
         )
@@ -201,7 +201,7 @@ class TestReservedMnAttributeSpace:
     def test_mn_class_attribute_assignment_in_class_body_is_rejected(
         self,
         user_facing_component_base: Any,
-    ) -> None:
+    ):
         assert_mn_class_attribute_assignment_in_class_body_is_rejected(
             user_facing_component_base
         )
@@ -209,7 +209,7 @@ class TestReservedMnAttributeSpace:
     def test_mn_class_attribute_annotation_in_class_body_is_rejected(
         self,
         user_facing_component_base: Any,
-    ) -> None:
+    ):
         with pytest.raises(UnsupportedUserCode):
 
             class InvalidUserComponent(user_facing_component_base):
@@ -218,7 +218,7 @@ class TestReservedMnAttributeSpace:
     def test_mn_method_definition_is_rejected(
         self,
         user_facing_component_base: Any,
-    ) -> None:
+    ):
         with pytest.raises(UnsupportedUserCode):
 
             class InvalidUserComponent(user_facing_component_base):
@@ -228,7 +228,7 @@ class TestReservedMnAttributeSpace:
     def test_mn_attribute_assignment_in_user_method_is_rejected(
         self,
         user_facing_component_base: Any,
-    ) -> None:
+    ):
         assert_mn_attribute_assignment_in_user_method_is_rejected(
             user_facing_component_base
         )
@@ -236,7 +236,7 @@ class TestReservedMnAttributeSpace:
     def test_mn_attribute_assignment_in_private_method_is_rejected(
         self,
         user_facing_component_base: Any,
-    ) -> None:
+    ):
         assert_mn_attribute_assignment_in_private_method_is_rejected(
             user_facing_component_base
         )
@@ -244,7 +244,7 @@ class TestReservedMnAttributeSpace:
     def test_mn_attribute_assignment_in_call_is_rejected(
         self,
         user_facing_component_base: Any,
-    ) -> None:
+    ):
         assert_mn_attribute_assignment_in_call_is_rejected(
             user_facing_component_base
         )
@@ -252,7 +252,7 @@ class TestReservedMnAttributeSpace:
     def test_mn_attribute_assignment_through_cls_is_rejected(
         self,
         user_facing_component_base: Any,
-    ) -> None:
+    ):
         assert_mn_attribute_assignment_through_cls_is_rejected(
             user_facing_component_base
         )
@@ -260,7 +260,7 @@ class TestReservedMnAttributeSpace:
     def test_mn_attribute_assignment_through_type_self_is_rejected(
         self,
         user_facing_component_base: Any,
-    ) -> None:
+    ):
         assert_mn_attribute_assignment_through_type_self_is_rejected(
             user_facing_component_base
         )
@@ -268,7 +268,7 @@ class TestReservedMnAttributeSpace:
     def test_mn_attribute_assignment_through_self_class_is_rejected(
         self,
         user_facing_component_base: Any,
-    ) -> None:
+    ):
         assert_mn_attribute_assignment_through_self_class_is_rejected(
             user_facing_component_base
         )
@@ -276,7 +276,7 @@ class TestReservedMnAttributeSpace:
     def test_mn_attribute_setattr_through_cls_is_rejected(
         self,
         user_facing_component_base: Any,
-    ) -> None:
+    ):
         assert_mn_attribute_setattr_through_cls_is_rejected(
             user_facing_component_base
         )
@@ -284,7 +284,7 @@ class TestReservedMnAttributeSpace:
     def test_mn_attribute_setattr_through_type_self_is_rejected(
         self,
         user_facing_component_base: Any,
-    ) -> None:
+    ):
         assert_mn_attribute_setattr_through_type_self_is_rejected(
             user_facing_component_base
         )
@@ -292,7 +292,7 @@ class TestReservedMnAttributeSpace:
     def test_mn_attribute_setattr_through_self_class_is_rejected(
         self,
         user_facing_component_base: Any,
-    ) -> None:
+    ):
         assert_mn_attribute_setattr_through_self_class_is_rejected(
             user_facing_component_base
         )
@@ -300,7 +300,7 @@ class TestReservedMnAttributeSpace:
     def test_mn_attribute_annotation_with_value_is_rejected(
         self,
         user_facing_component_base: Any,
-    ) -> None:
+    ):
         assert_mn_attribute_annotation_with_value_is_rejected(
             user_facing_component_base
         )
@@ -308,7 +308,7 @@ class TestReservedMnAttributeSpace:
     def test_mn_attribute_annotation_without_value_is_rejected(
         self,
         user_facing_component_base: Any,
-    ) -> None:
+    ):
         assert_mn_attribute_annotation_without_value_is_rejected(
             user_facing_component_base
         )
@@ -316,7 +316,7 @@ class TestReservedMnAttributeSpace:
     def test_mn_attribute_writes_to_unrelated_object_are_allowed(
         self,
         user_facing_component_base: Any,
-    ) -> None:
+    ):
         assert_mn_attribute_writes_to_unrelated_object_are_allowed(
             user_facing_component_base
         )
@@ -324,7 +324,7 @@ class TestReservedMnAttributeSpace:
     def test_mn_attribute_assignment_in_property_getter_is_rejected(
         self,
         user_facing_component_base: Any,
-    ) -> None:
+    ):
         assert_mn_attribute_assignment_in_property_getter_is_rejected(
             user_facing_component_base
         )
@@ -332,7 +332,7 @@ class TestReservedMnAttributeSpace:
     def test_mn_attribute_assignment_in_property_setter_is_rejected(
         self,
         user_facing_component_base: Any,
-    ) -> None:
+    ):
         assert_mn_attribute_assignment_in_property_setter_is_rejected(
             user_facing_component_base
         )
@@ -340,7 +340,7 @@ class TestReservedMnAttributeSpace:
     def test_mn_attribute_assignment_in_property_deleter_is_rejected(
         self,
         user_facing_component_base: Any,
-    ) -> None:
+    ):
         assert_mn_attribute_assignment_in_property_deleter_is_rejected(
             user_facing_component_base
         )
@@ -350,5 +350,5 @@ class TestFinalPublicOperations:
     def test_safe_create_task_override_is_rejected(
         self,
         user_facing_async_service_base: Any,
-    ) -> None:
+    ):
         assert_safe_create_task_override_is_rejected(user_facing_async_service_base)

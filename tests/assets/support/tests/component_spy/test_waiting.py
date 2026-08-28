@@ -7,7 +7,7 @@ from tests.assets.support.component_spy_meta import ComponentSpyMeta
 
 
 @pytest.mark.asyncio
-async def test_wait_for_call_returns_immediately_when_requested_count_was_already_reached() -> None:
+async def test_wait_for_call_returns_immediately_when_requested_count_was_already_reached():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         async def method(self) -> None:
             return
@@ -21,7 +21,7 @@ async def test_wait_for_call_returns_immediately_when_requested_count_was_alread
 
 
 @pytest.mark.asyncio
-async def test_wait_for_call_resolves_multiple_waiters_at_their_requested_counts() -> None:
+async def test_wait_for_call_resolves_multiple_waiters_at_their_requested_counts():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         async def method(self) -> None:
             return
@@ -45,7 +45,7 @@ async def test_wait_for_call_resolves_multiple_waiters_at_their_requested_counts
 
 
 @pytest.mark.asyncio
-async def test_wait_for_calls_resolves_after_requested_count_is_reached() -> None:
+async def test_wait_for_calls_resolves_after_requested_count_is_reached():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         async def method(self) -> None:
             return
@@ -62,7 +62,7 @@ async def test_wait_for_calls_resolves_after_requested_count_is_reached() -> Non
 
 
 @pytest.mark.asyncio
-async def test_wait_for_call_resolves_when_async_method_call_starts_not_when_it_finishes() -> None:
+async def test_wait_for_call_resolves_when_async_method_call_starts_not_when_it_finishes():
     call_can_finish = asyncio.Event()
 
     class SpiedComponent(metaclass=ComponentSpyMeta):
@@ -82,7 +82,7 @@ async def test_wait_for_call_resolves_when_async_method_call_starts_not_when_it_
 
 
 @pytest.mark.asyncio
-async def test_cancelling_wait_for_call_does_not_disrupt_later_wait() -> None:
+async def test_cancelling_wait_for_call_does_not_disrupt_later_wait():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         async def method(self) -> None:
             return
@@ -104,7 +104,7 @@ async def test_cancelling_wait_for_call_does_not_disrupt_later_wait() -> None:
 
 
 @pytest.mark.asyncio
-async def test_observes_sync_method_call_from_another_thread() -> None:
+async def test_observes_sync_method_call_from_another_thread():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         def method(self) -> None:
             return
@@ -119,7 +119,7 @@ async def test_observes_sync_method_call_from_another_thread() -> None:
 
 
 @pytest.mark.asyncio
-async def test_wait_for_call_resolves_when_sync_method_is_called_in_another_thread() -> None:
+async def test_wait_for_call_resolves_when_sync_method_is_called_in_another_thread():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         def method(self) -> None:
             return
@@ -136,7 +136,7 @@ async def test_wait_for_call_resolves_when_sync_method_is_called_in_another_thre
 
 @pytest.mark.asyncio
 async def test_cancelling_wait_for_call_during_notification_does_not_report_event_loop_error(
-) -> None:
+):
     class SpiedComponent(metaclass=ComponentSpyMeta):
         def method(self) -> None:
             return

@@ -470,7 +470,7 @@ def test_assert_no_call_count_limit_violations_reports_details(
 def test_assert_state_store_read_call_bounds_rejects_excess_get_all_calls(
     verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -518,7 +518,7 @@ def test_assert_state_store_read_call_bounds_rejects_excess_get_all_calls(
 def test_assert_minion_fanout_delivery_proves_pipeline_event_delivery_to_steps(
     verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -563,7 +563,7 @@ def test_assert_minion_fanout_delivery_proves_pipeline_event_delivery_to_steps(
 def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnostics(
     verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -638,7 +638,7 @@ def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnost
 def test_assert_minion_fanout_delivery_allows_plus_one_per_start_tolerance(
     verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -683,7 +683,7 @@ def test_assert_minion_fanout_delivery_allows_plus_one_per_start_tolerance(
 def test_assert_minion_fanout_delivery_rejects_overage_beyond_plus_one(
     verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -736,7 +736,7 @@ def test_assert_minion_fanout_delivery_rejects_overage_beyond_plus_one(
 def test_assert_pipeline_events_uses_exact_singleton_activation_counts_by_default(
     verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     directives = [
         OrchestrationStart(
             pipeline="tests.assets.pipelines.emit_one.counter.default",
@@ -795,7 +795,7 @@ def test_assert_pipeline_events_uses_exact_singleton_activation_counts_by_defaul
 def test_assert_pipeline_events_uses_pipeline_total_events_for_produce_calls(
     verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_two.simple.with_subscriber_counts_one_then_two"
     minion_ref = "tests.assets.minions.two_steps.simple.default"
     plan = ScenarioPlan(
@@ -835,7 +835,7 @@ def test_assert_pipeline_events_uses_pipeline_total_events_for_produce_calls(
 def test_assert_pipeline_events_keeps_concurrent_starts_exact(
     verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
     minion_ref = "tests.assets.minions.two_steps.counter.default"
     start_a = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
@@ -888,7 +888,7 @@ def test_assert_pipeline_events_keeps_concurrent_starts_exact(
 def test_assert_pipeline_events_keeps_lifecycle_exact_for_stop_boundary(
     verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
     minion_ref = "tests.assets.minions.two_steps.counter.default"
     start = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
@@ -939,7 +939,7 @@ def test_assert_pipeline_events_keeps_lifecycle_exact_for_stop_boundary(
 def test_assert_pipeline_events_ignores_failed_start_when_pipeline_is_active(
     verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
     minion_ref = "tests.assets.minions.two_steps.counter.default"
     directives = [
@@ -999,7 +999,7 @@ def test_assert_pipeline_events_ignores_failed_start_when_pipeline_is_active(
 def test_assert_pipeline_events_falls_back_for_failed_start_before_activation(
     verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
     minion_ref = "tests.assets.minions.two_steps.counter.default"
     directives = [
@@ -1045,7 +1045,7 @@ def test_assert_pipeline_events_falls_back_for_failed_start_before_activation(
 def test_assert_pipeline_events_expects_no_lifecycle_calls_for_event_type_failure(
     verifier_factory: VerifierFactory,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
     minion_ref = "tests.assets.minions.two_steps.simple.default"
     directives = [

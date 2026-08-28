@@ -6,7 +6,7 @@ from tests.support.race_window import GatedAsyncCallable
 
 
 @pytest.mark.asyncio
-async def test_blocks_until_return_is_allowed() -> None:
+async def test_blocks_until_return_is_allowed():
     gated_callable = GatedAsyncCallable(result="result")
 
     task = asyncio.create_task(gated_callable())
@@ -21,7 +21,7 @@ async def test_blocks_until_return_is_allowed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_wait_until_called_times_out_when_not_called() -> None:
+async def test_wait_until_called_times_out_when_not_called():
     gated_callable = GatedAsyncCallable[None]()
 
     with pytest.raises(TimeoutError):
@@ -29,7 +29,7 @@ async def test_wait_until_called_times_out_when_not_called() -> None:
 
 
 @pytest.mark.asyncio
-async def test_allow_return_releases_future_calls() -> None:
+async def test_allow_return_releases_future_calls():
     gated_callable = GatedAsyncCallable(result="result")
     gated_callable.allow_return()
 

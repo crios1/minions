@@ -10,7 +10,7 @@ from textwrap import dedent
 # to keep command setup and output checks consistent across entrypoint tests.
 
 
-def test_python_m_minions_tune_sqlite_help() -> None:
+def test_python_m_minions_tune_sqlite_help():
     completed = subprocess.run(
         [sys.executable, "-m", "minions", "tune", "sqlite", "--help"],
         check=False,
@@ -23,7 +23,7 @@ def test_python_m_minions_tune_sqlite_help() -> None:
     assert "--recommend-config" in completed.stdout
 
 
-def test_python_m_minions_tune_sqlite_recommend_config_smoke() -> None:
+def test_python_m_minions_tune_sqlite_recommend_config_smoke():
     completed = subprocess.run(
         [
             sys.executable,
@@ -70,7 +70,7 @@ def test_python_m_minions_tune_sqlite_recommend_config_smoke() -> None:
     assert "Recommended batched_max_throughput config:" in completed.stdout
 
 
-def test_python_m_minions_stamp_component_ids_help() -> None:
+def test_python_m_minions_stamp_component_ids_help():
     completed = subprocess.run(
         [sys.executable, "-m", "minions", "stamp", "component-ids", "--help"],
         check=False,
@@ -83,7 +83,7 @@ def test_python_m_minions_stamp_component_ids_help() -> None:
     assert "--dry-run" in completed.stdout
 
 
-def test_python_m_minions_stamp_config_ids_help() -> None:
+def test_python_m_minions_stamp_config_ids_help():
     completed = subprocess.run(
         [sys.executable, "-m", "minions", "stamp", "config-ids", "--help"],
         check=False,
@@ -96,7 +96,7 @@ def test_python_m_minions_stamp_config_ids_help() -> None:
     assert "--dry-run" in completed.stdout
 
 
-def test_python_m_minions_stamp_all_help() -> None:
+def test_python_m_minions_stamp_all_help():
     completed = subprocess.run(
         [sys.executable, "-m", "minions", "stamp", "all", "--help"],
         check=False,
@@ -109,7 +109,7 @@ def test_python_m_minions_stamp_all_help() -> None:
     assert "--dry-run" in completed.stdout
 
 
-def test_python_m_minions_doctor_ids_help() -> None:
+def test_python_m_minions_doctor_ids_help():
     completed = subprocess.run(
         [sys.executable, "-m", "minions", "doctor", "ids", "--help"],
         check=False,
@@ -121,7 +121,7 @@ def test_python_m_minions_doctor_ids_help() -> None:
     assert "python -m minions doctor ids" in completed.stdout
 
 
-def test_python_m_minions_stamp_component_ids_smoke(tmp_path: Path) -> None:
+def test_python_m_minions_stamp_component_ids_smoke(tmp_path: Path):
     source_path = tmp_path / "components.py"
     source_path.write_text(
         dedent(
@@ -179,7 +179,7 @@ def test_python_m_minions_stamp_component_ids_smoke(tmp_path: Path) -> None:
     assert "no missing component ids" in second.stdout
 
 
-def test_python_m_minions_stamp_component_ids_recurses_directories(tmp_path: Path) -> None:
+def test_python_m_minions_stamp_component_ids_recurses_directories(tmp_path: Path):
     source_dir = tmp_path / "src"
     nested_dir = source_dir / "nested"
     hidden_dir = source_dir / ".hidden"
@@ -221,7 +221,7 @@ def test_python_m_minions_stamp_component_ids_recurses_directories(tmp_path: Pat
     assert "@resource_id" not in (hidden_dir / "ignored.py").read_text()
 
 
-def test_python_m_minions_stamp_config_ids_toml_smoke(tmp_path: Path) -> None:
+def test_python_m_minions_stamp_config_ids_toml_smoke(tmp_path: Path):
     config_path = tmp_path / "minion.toml"
     config_path.write_text('[config]\nname = "alpha"\n')
 
@@ -252,7 +252,7 @@ def test_python_m_minions_stamp_config_ids_toml_smoke(tmp_path: Path) -> None:
 
 def test_python_m_minions_stamp_config_ids_toml_detects_whitespace_assignment(
     tmp_path: Path,
-) -> None:
+):
     config_path = tmp_path / "minion.toml"
     config_id = "11111111-1111-4111-8111-111111111111"
     source = f'   _minions_config_id   =   "{config_id}"\n[config]\nname = "alpha"\n'
@@ -270,7 +270,7 @@ def test_python_m_minions_stamp_config_ids_toml_detects_whitespace_assignment(
     assert config_path.read_text() == source
 
 
-def test_python_m_minions_stamp_config_ids_yaml_smoke(tmp_path: Path) -> None:
+def test_python_m_minions_stamp_config_ids_yaml_smoke(tmp_path: Path):
     config_path = tmp_path / "minion.yaml"
     config_path.write_text("config:\n  name: alpha\n")
 
@@ -289,7 +289,7 @@ def test_python_m_minions_stamp_config_ids_yaml_smoke(tmp_path: Path) -> None:
     assert str(uuid.UUID(config_id)) == config_id
 
 
-def test_python_m_minions_stamp_config_ids_yml_smoke(tmp_path: Path) -> None:
+def test_python_m_minions_stamp_config_ids_yml_smoke(tmp_path: Path):
     config_path = tmp_path / "minion.yml"
     config_path.write_text("config:\n  name: alpha\n")
 
@@ -308,7 +308,7 @@ def test_python_m_minions_stamp_config_ids_yml_smoke(tmp_path: Path) -> None:
     assert str(uuid.UUID(config_id)) == config_id
 
 
-def test_python_m_minions_stamp_config_ids_recurses_directories(tmp_path: Path) -> None:
+def test_python_m_minions_stamp_config_ids_recurses_directories(tmp_path: Path):
     config_dir = tmp_path / "configs"
     nested_dir = config_dir / "nested"
     hidden_dir = config_dir / ".hidden"
@@ -342,7 +342,7 @@ def test_python_m_minions_stamp_config_ids_recurses_directories(tmp_path: Path) 
     assert "_minions_config_id" not in ignored_path.read_text()
 
 
-def test_python_m_minions_stamp_all_recurses_components_and_configs(tmp_path: Path) -> None:
+def test_python_m_minions_stamp_all_recurses_components_and_configs(tmp_path: Path):
     project_dir = tmp_path / "project"
     src_dir = project_dir / "src"
     config_dir = project_dir / "configs"
@@ -376,7 +376,7 @@ def test_python_m_minions_stamp_all_recurses_components_and_configs(tmp_path: Pa
     assert "_minions_config_id" in config_path.read_text()
 
 
-def test_python_m_minions_stamp_all_accepts_mixed_explicit_files(tmp_path: Path) -> None:
+def test_python_m_minions_stamp_all_accepts_mixed_explicit_files(tmp_path: Path):
     component_path = tmp_path / "components.py"
     config_path = tmp_path / "minion.yaml"
     component_path.write_text(
@@ -411,7 +411,7 @@ def test_python_m_minions_stamp_all_accepts_mixed_explicit_files(tmp_path: Path)
     assert "_minions_config_id" in config_path.read_text()
 
 
-def test_python_m_minions_doctor_ids_passes_clean_project(tmp_path: Path) -> None:
+def test_python_m_minions_doctor_ids_passes_clean_project(tmp_path: Path):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     component_id = "11111111-1111-4111-8111-11111111111a"
@@ -442,7 +442,7 @@ def test_python_m_minions_doctor_ids_passes_clean_project(tmp_path: Path) -> Non
 
 def test_python_m_minions_doctor_ids_reports_missing_invalid_and_duplicate_ids(
     tmp_path: Path,
-) -> None:
+):
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     duplicate_component_id = "33333333-3333-4333-8333-33333333333c"
@@ -492,7 +492,7 @@ def test_python_m_minions_doctor_ids_reports_missing_invalid_and_duplicate_ids(
 
 def test_python_m_minions_doctor_ids_resolves_module_level_component_id_constants(
     tmp_path: Path,
-) -> None:
+):
     source_path = tmp_path / "components.py"
     duplicate_component_id = "55555555-5555-4555-8555-55555555555e"
     source_path.write_text(

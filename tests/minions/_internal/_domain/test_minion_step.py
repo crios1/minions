@@ -28,11 +28,11 @@ async def test_can_be_used_as_decorator_factory():
 def test_rejects_sync_function():
     with pytest.raises(TypeError):
         @minion_step  # pyright: ignore[reportArgumentType]
-        def not_async() -> None:  # pyright: ignore[reportUnusedFunction]
+        def not_async():  # pyright: ignore[reportUnusedFunction]
             ...
 
 
-def test_rejects_decorated_function_passed_by_keyword() -> None:
+def test_rejects_decorated_function_passed_by_keyword():
     async def step() -> None:
         pass
 
@@ -40,6 +40,6 @@ def test_rejects_decorated_function_passed_by_keyword() -> None:
         minion_step(fn=step)  # pyright: ignore[reportCallIssue]
 
 
-def test_rejects_decorator_options() -> None:
+def test_rejects_decorator_options():
     with pytest.raises(TypeError, match="unexpected keyword argument 'name'"):
         minion_step(name="custom")  # pyright: ignore[reportCallIssue]

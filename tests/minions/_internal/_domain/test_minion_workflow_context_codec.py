@@ -50,7 +50,7 @@ class MsgspecStructContext(msgspec.Struct):
 def test_adapter_payload_roundtrip_restores_typed_event_and_context(
     event: Any,
     context: Any,
-) -> None:
+):
     event_cls = cast(type[Any], type(event))
     context_cls = cast(type[Any], type(context))
     ctx: MinionWorkflowContext[Any, Any] = MinionWorkflowContext(
@@ -81,7 +81,7 @@ def test_adapter_payload_roundtrip_restores_typed_event_and_context(
 def test_direct_typed_decoder_accepts_persisted_workflow_context(
     event: Any,
     context: Any,
-) -> None:
+):
     event_cls = cast(type[Any], type(event))
     context_cls = cast(type[Any], type(context))
     ctx: MinionWorkflowContext[Any, Any] = MinionWorkflowContext(
@@ -104,7 +104,7 @@ def test_direct_typed_decoder_accepts_persisted_workflow_context(
     assert loaded_ctx == ctx
 
 
-def test_direct_typed_decoder_ignores_stale_persisted_context_type_path() -> None:
+def test_direct_typed_decoder_ignores_stale_persisted_context_type_path():
     ctx: MinionWorkflowContext[Any, Any] = MinionWorkflowContext(
         orchestration_id="moved",
         workflow_id="wf-moved-context-cls",

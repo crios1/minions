@@ -93,7 +93,7 @@ class TestUnit:
         # Left-padding keeps the ID consistently 44 characters long.
         return base62_encode(hashlib.sha256(serialized).digest()).rjust(44, "0")
 
-    def test_attached_component_ids_are_stable_identities(self) -> None:
+    def test_attached_component_ids_are_stable_identities(self):
         @minion_id(MINION_COMPONENT_ID)
         class StableIdMinion(Minion[SimpleEvent, SimpleContext]):
             @minion_step
@@ -120,7 +120,7 @@ class TestUnit:
         )
         assert Gru._get_minion_identity(StableIdMinion) == MINION_COMPONENT_ID
 
-    def test_idless_components_keep_fallback_identity(self) -> None:
+    def test_idless_components_keep_fallback_identity(self):
         class PrototypeResource(Resource):
             pass
 
@@ -131,7 +131,7 @@ class TestUnit:
 
     def test_minion_string_entrypoint_identity_fallback_preserves_entrypoint_module_path(
         self,
-    ) -> None:
+    ):
         from tests.assets.minions.two_steps.simple.default import (
             AssetMinion as TwoStepSimpleMinion,
         )
@@ -148,7 +148,7 @@ class TestUnit:
 
     def test_pipeline_string_entrypoint_identity_fallback_preserves_entrypoint_module_path(
         self,
-    ) -> None:
+    ):
         from tests.assets.pipelines.emit_one.simple.default import (
             AssetPipeline as EmitOneSimplePipeline,
         )
@@ -163,7 +163,7 @@ class TestUnit:
             entrypoint_module_path
         )
 
-    def test_attached_component_identity_ignores_current_address(self) -> None:
+    def test_attached_component_identity_ignores_current_address(self):
         @resource_id(RESOURCE_COMPONENT_ID)
         class AddressStableResource(Resource):
             pass
@@ -180,7 +180,7 @@ class TestUnit:
         finally:
             AddressStableResource.__module__ = original_module
 
-    def test_inline_config_identity_is_stable_hashed_and_content_sensitive(self) -> None:
+    def test_inline_config_identity_is_stable_hashed_and_content_sensitive(self):
         cfg_a, _ = Gru._make_inline_config_identity_and_snapshot(
             InlineIdentityConfig(name="alpha")
         )
@@ -212,7 +212,7 @@ class TestUnit:
     async def test_config_id_is_used_for_toml_config_identity(
         self,
         tmp_path: Path,
-    ) -> None:
+    ):
         config_path = tmp_path / "renamable.toml"
         config_path.write_text(
             f'_minions_config_id = "{CONFIG_ID}"\n\n[config]\nname = "alpha"\n'
@@ -236,7 +236,7 @@ class TestUnit:
     async def test_config_id_is_used_for_json_config_identity(
         self,
         tmp_path: Path,
-    ) -> None:
+    ):
         config_path = tmp_path / "renamable.json"
         config_path.write_text(f'{{"_minions_config_id": "{CONFIG_ID}", "name": "alpha"}}')
 
@@ -249,7 +249,7 @@ class TestUnit:
     async def test_config_id_is_used_for_yaml_config_identity(
         self,
         tmp_path: Path,
-    ) -> None:
+    ):
         config_path = tmp_path / "renamable.yaml"
         config_path.write_text(f'_minions_config_id: "{CONFIG_ID}"\nname: alpha\n')
 
@@ -262,7 +262,7 @@ class TestUnit:
     async def test_idless_config_keeps_path_fallback_identity(
         self,
         tmp_path: Path,
-    ) -> None:
+    ):
         config_path = tmp_path / "fallback.toml"
         config_path.write_text('[config]\nname = "alpha"\n')
 
@@ -272,7 +272,7 @@ class TestUnit:
         assert identity == config_path.resolve().as_posix()
 
     @pytest.mark.asyncio
-    async def test_config_id_must_be_canonical_uuid(self, tmp_path: Path) -> None:
+    async def test_config_id_must_be_canonical_uuid(self, tmp_path: Path):
         config_path = tmp_path / "bad.toml"
         config_path.write_text('_minions_config_id = "not-a-uuid"\n')
 
@@ -286,7 +286,7 @@ class TestUnit:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
+    ):
         event_loop_thread_id = threading.get_ident()
         resolution_thread_ids: list[int] = []
 
@@ -319,7 +319,7 @@ class TestUnit:
     async def test_start_and_stop_delegate_to_canonical_methods(
         self,
         monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
+    ):
         gru = object.__new__(Gru)
         start_calls: list[tuple[object, object, object | None, object | None]] = []
         stop_calls: list[str] = []
@@ -517,7 +517,7 @@ class TestUnit:
 
             async def failing_shutdown_async_component(
                 _comp: AsyncComponent, log_kwargs: dict[str, object] | None = None
-            ) -> None:
+            ):
                 raise RuntimeError("component shutdown boom")
 
             monkeypatch.setattr(gru, "_shutdown_async_component", failing_shutdown_async_component)
@@ -553,7 +553,7 @@ class TestUnit:
 
             async def failing_shutdown_async_component(
                 _comp: AsyncComponent, log_kwargs: dict[str, object] | None = None
-            ) -> None:
+            ):
                 raise RuntimeError("component shutdown boom")
 
             monkeypatch.setattr(gru, "_shutdown_async_component", failing_shutdown_async_component)
@@ -726,7 +726,7 @@ class TestUnit:
 
             async def tracking_shutdown_async_component(
                 comp: AsyncComponent, log_kwargs: dict[str, object] | None = None
-            ) -> None:
+            ):
                 shutdown_components.append(comp)
 
             async def failing_log(*args: object, **kwargs: object) -> None:
@@ -761,7 +761,7 @@ class TestUnit:
             )
             assert result.success
 
-            async def failing_logger_shutdown() -> None:
+            async def failing_logger_shutdown():
                 raise RuntimeError("logger shutdown boom")
 
             monkeypatch.setattr(gru._logger, "_mn_shutdown", failing_logger_shutdown)

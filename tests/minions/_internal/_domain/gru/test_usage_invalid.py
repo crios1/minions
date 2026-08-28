@@ -26,7 +26,7 @@ from tests.support.gru_scenario import (
 
 class TestInvalidUsage:
     @pytest.mark.asyncio
-    async def test_gru_raises_on_direct_instantiation(self) -> None:
+    async def test_gru_raises_on_direct_instantiation(self):
         with pytest.raises(RuntimeError):
             Gru(
                 loop=asyncio.get_running_loop(),
@@ -36,7 +36,7 @@ class TestInvalidUsage:
             )
 
     @pytest.mark.asyncio
-    async def test_gru_raises_on_multiple_instances(self) -> None:
+    async def test_gru_raises_on_multiple_instances(self):
         gru = await Gru.create(
             logger=NoOpLogger(),
             metrics=NoOpMetrics(),
@@ -54,7 +54,7 @@ class TestInvalidUsage:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("bad_logger", [123, "invalid"])
-    async def test_gru_raises_on_invalid_logger_param(self, bad_logger: object) -> None:
+    async def test_gru_raises_on_invalid_logger_param(self, bad_logger: object):
         with pytest.raises(TypeError):
             await Gru.create(
                 logger=bad_logger,  # type: ignore[arg-type]
@@ -64,7 +64,7 @@ class TestInvalidUsage:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("bad_metrics", [123, "invalid"])
-    async def test_gru_raises_on_invalid_metrics_param(self, bad_metrics: object) -> None:
+    async def test_gru_raises_on_invalid_metrics_param(self, bad_metrics: object):
         with pytest.raises(TypeError):
             await Gru.create(
                 logger=NoOpLogger(),
@@ -74,7 +74,7 @@ class TestInvalidUsage:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("bad_state_store", [123, "invalid"])
-    async def test_gru_raises_on_invalid_state_store_param(self, bad_state_store: object) -> None:
+    async def test_gru_raises_on_invalid_state_store_param(self, bad_state_store: object):
         with pytest.raises(TypeError):
             await Gru.create(
                 logger=NoOpLogger(),
@@ -83,7 +83,7 @@ class TestInvalidUsage:
             )
 
     @pytest.mark.asyncio
-    async def test_gru_raises_on_invalid_workflow_persistence_failure_policy(self) -> None:
+    async def test_gru_raises_on_invalid_workflow_persistence_failure_policy(self):
         with pytest.raises(
             ValueError,
             match=(
@@ -99,7 +99,7 @@ class TestInvalidUsage:
             )
 
     @pytest.mark.asyncio
-    async def test_gru_raises_on_invalid_workflow_failure_policy(self) -> None:
+    async def test_gru_raises_on_invalid_workflow_failure_policy(self):
         with pytest.raises(
             ValueError,
             match="workflow_failure_policy must be 'delete'",
@@ -123,7 +123,7 @@ class TestInvalidUsage:
         self,
         value: object,
         match: str,
-    ) -> None:
+    ):
         with pytest.raises(ValueError, match=match):
             await Gru.create(
                 logger=NoOpLogger(),
@@ -147,7 +147,7 @@ class TestInvalidUsage:
     )
     async def test_gru_raises_on_invalid_workflow_persistence_retry_settings(
         self, kwarg: str, value: object, match: str
-    ) -> None:
+    ):
         kwargs: dict[str, Any] = {kwarg: value}
         with pytest.raises(ValueError, match=match):
             await Gru.create(
@@ -172,7 +172,7 @@ class TestInvalidUsage:
     async def test_gru_rejects_boolean_workflow_persistence_retry_settings(
         self,
         kwarg: str,
-    ) -> None:
+    ):
         kwargs: dict[str, Any] = {kwarg: True}
         with pytest.raises(ValueError, match=f"{kwarg} must be a finite number"):
             await Gru.create(
@@ -185,7 +185,7 @@ class TestInvalidUsage:
     @pytest.mark.asyncio
     async def test_gru_raises_when_workflow_persistence_retry_max_delay_is_below_initial_delay(
         self,
-    ) -> None:
+    ):
         with pytest.raises(
             ValueError,
             match=(
@@ -205,7 +205,7 @@ class TestInvalidUsage:
     async def test_gru_returns_error_when_starting_running_orchestration(
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.minions.two_steps.counter.default"
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
 
@@ -236,7 +236,7 @@ class TestInvalidUsage:
     async def test_gru_rejects_dict_inline_minion_config(
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
+    ):
         from tests.assets.minions.two_steps.counter.with_file_config import (
             AssetMinion as FileConfigMinion,
         )
@@ -265,7 +265,7 @@ class TestInvalidUsage:
     async def test_gru_returns_error_when_stopping_nonexistant_orchestration(
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
-    ) -> None:
+    ):
         async with managed_gru_context(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
@@ -281,7 +281,7 @@ class TestInvalidUsage:
     async def test_gru_returns_error_when_mismatched_minion_and_pipeline_event_types(
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.minions.two_steps.counter.default"
         pipeline_module_path = "tests.assets.pipelines.emit_one.record.default"
 
@@ -308,7 +308,7 @@ class TestInvalidUsageDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-    ) -> None:
+    ):
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
 
         directives: list[Directive] = [
@@ -338,7 +338,7 @@ class TestInvalidUsageDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-    ) -> None:
+    ):
         directives: list[Directive] = [
             OrchestrationStop(id="dummy-orchestration-id", expect_success=False),
             GruShutdown(expect_success=True),
@@ -357,7 +357,7 @@ class TestInvalidUsageDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-    ) -> None:
+    ):
 
         directives: list[Directive] = [
             OrchestrationStart(

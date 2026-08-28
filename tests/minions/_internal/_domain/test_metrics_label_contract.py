@@ -65,7 +65,7 @@ async def test_pipeline_runtime_metric_labels_match_contract(
     class FakeMinion:
         _mn_orchestration_id = "contract-minion-key"
 
-        def __init__(self) -> None:
+        def __init__(self):
             self.tasks: list[asyncio.Task[None]] = []
 
         async def _mn_handle_event(self, event: EmptyEvent) -> None:

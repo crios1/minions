@@ -39,7 +39,7 @@ class FakeGru:
 
 
 @pytest.mark.skip("GruShell deprecated")
-def test_running_state_uses_orchestration_identity() -> None:
+def test_running_state_uses_orchestration_identity():
     gru = FakeGru()
     gru._orchestrations["orchestration-1"] = object()
     gru._minions_by_instance_id["minion-instance-1"] = object()
@@ -51,7 +51,7 @@ def test_running_state_uses_orchestration_identity() -> None:
 
 
 @pytest.mark.skip("GruShell deprecated")
-def test_summary_counts_live_orchestrations_instead_of_minion_instances() -> None:
+def test_summary_counts_live_orchestrations_instead_of_minion_instances():
     gru = FakeGru()
     gru._orchestrations["orchestration-1"] = object()
     gru._minions_by_instance_id["minion-instance-1"] = object()
@@ -66,7 +66,7 @@ def test_summary_counts_live_orchestrations_instead_of_minion_instances() -> Non
 
 
 @pytest.mark.skip("GruShell deprecated")
-def test_start_prints_failed_start_result_with_recovery_guidance() -> None:
+def test_start_prints_failed_start_result_with_recovery_guidance():
     gru = FakeGru(
         StartResult(
             success=False,
@@ -108,7 +108,7 @@ def test_start_prints_failed_start_result_with_recovery_guidance() -> None:
 
 
 @pytest.mark.skip("GruShell deprecated")
-def test_wait_uses_last_target_without_undefined_helper_crash() -> None:
+def test_wait_uses_last_target_without_undefined_helper_crash():
     gru = FakeGru()
     shell = GruShell(gru)  # type: ignore[arg-type]
 
@@ -130,7 +130,7 @@ def test_wait_uses_last_target_without_undefined_helper_crash() -> None:
 
 
 @pytest.mark.skip("GruShell deprecated")
-def test_start_calls_current_gru_signature_and_rekeys_successful_result() -> None:
+def test_start_calls_current_gru_signature_and_rekeys_successful_result():
     gru = FakeGru()
     shell = GruShell(gru)  # type: ignore[arg-type]
     submitted: list[Coroutine[Any, Any, StartResult]] = []

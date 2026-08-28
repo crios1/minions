@@ -316,7 +316,7 @@ async def test_closes_connection_when_startup_phase_fails(
     s = SQLiteStateStore(db_path=db_path, logger=logger)
     close_called = False
 
-    async def _boom(self: SQLiteStateStore) -> None:
+    async def _boom(self: SQLiteStateStore):
         nonlocal close_called
         assert self._db is not None
         # Wrap the private connection close to prove startup cleans up after probe failure.

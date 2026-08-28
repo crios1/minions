@@ -27,7 +27,7 @@ async def test_uses_durable_pipeline_id_for_event_targets(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     from tests.assets.pipelines.emit_one.counter.identified import (
         AssetPipeline as IdentifiedEmitOneCounterPipeline,
     )
@@ -56,7 +56,7 @@ async def test_supports_start_wait_shutdown_flow(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
 
     directives: list[Directive] = [
@@ -80,7 +80,7 @@ async def test_class_start_with_inline_config_records_successful_resolution_and_
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     from tests.assets.minions.two_steps.simple.with_config import (
         AssetMinion as ConfiguredMinion,
     )
@@ -122,7 +122,7 @@ async def test_supports_after_workflow_step_starts_wrapping_orchestration_stop(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     minion_ref = "tests.assets.minions.failure.abort_step"
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
     start = OrchestrationStart(
@@ -152,7 +152,7 @@ async def test_supports_expect_runtime_for_persistence_after_stop(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     minion_ref = "tests.assets.minions.failure.slow_step"
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
     start = OrchestrationStart(
@@ -185,7 +185,7 @@ async def test_supports_mixed_wait_workflow_step_modes_end_to_end(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     minion_ref_a = "tests.assets.minions.two_steps.simple.default"
     minion_ref_b = "tests.assets.minions.two_steps.simple.with_simple_b_resource"
     pipeline_ref_a = "tests.assets.pipelines.emit_one.simple.default"
@@ -233,7 +233,7 @@ async def test_supports_expect_runtime_at_checkpoint_index(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     minion_ref = "tests.assets.minions.failure.slow_step"
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
     start = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
@@ -264,7 +264,7 @@ async def test_supports_mixed_directives_in_concurrent_group(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
     from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
 
@@ -303,7 +303,7 @@ async def test_restart_same_pipeline_preserves_persistence_and_resolutions(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     minion_ref = "tests.assets.minions.failure.slow_step"
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
     start_1 = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
@@ -348,7 +348,7 @@ async def test_explicit_step_boundary_resume_excludes_completed_step_replay(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     minion_ref = "tests.assets.minions.two_steps.counter.slow_second_step"
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
     first_start = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
@@ -393,7 +393,7 @@ async def test_resumes_identified_minion_without_persisted_minion_metadata(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     from tests.assets.pipelines.emit_one.counter.identified import (
         AssetPipeline as IdentifiedEmitOneCounterPipeline,
     )
@@ -459,7 +459,7 @@ async def test_event_type_mismatch_rejects_start_before_minion_construction(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.record.default"
     minion_ref = "tests.assets.minions.two_steps.simple.default"
 
@@ -485,7 +485,7 @@ async def test_unknown_stop_fails(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
 
     directives: list[Directive] = [
@@ -511,7 +511,7 @@ async def test_runs_starts_in_parallel(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
     from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
 
@@ -547,7 +547,7 @@ async def test_wait_workflow_completions_targets_selected_orchestrations(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
     from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
 
@@ -584,7 +584,7 @@ async def test_exact_runtime_expectation_reports_mismatch(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
     from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
 
@@ -635,7 +635,7 @@ async def test_strict_wait_reports_workflow_window_overlap_mismatch(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
     cfg2 = str(tests_dir / "assets" / "config/minions/b.toml")
     pipeline_ref = (
@@ -681,7 +681,7 @@ async def test_wait_for_empty_workflow_set_is_noop(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
     start = OrchestrationStart(
         pipeline=pipeline_ref,

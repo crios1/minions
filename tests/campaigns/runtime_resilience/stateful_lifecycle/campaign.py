@@ -164,7 +164,7 @@ async def test_seeded_gru_lifecycle_matches_reference_model(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     rng = random.Random(seed)
     model = LifecycleModel(
         active_composition_by_orchestration={},

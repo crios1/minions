@@ -33,7 +33,7 @@ _ChildCommand = Literal[
 
 def test_unfinished_workflow_continues_after_process_restart_with_relocated_package_and_config(
     tmp_path: Path,
-) -> None:
+):
     original_package_name = "original_system"
     relocated_package_name = "relocated_system"
 

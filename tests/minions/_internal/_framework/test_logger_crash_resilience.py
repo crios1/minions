@@ -11,7 +11,7 @@ from tests.assets.support.logger_inmemory import InMemoryLogger
 @pytest.mark.asyncio
 async def test_log_wrapper_falls_back_to_stderr_when_log_raises_exception(
     capsys: pytest.CaptureFixture[str],
-) -> None:
+):
     logger = BoomLogLogger()
 
     await logger._mn_log(INFO, "hello", key="value")
@@ -29,7 +29,7 @@ async def test_log_wrapper_falls_back_to_stderr_when_log_raises_exception(
 async def test_log_wrapper_falls_back_to_stderr_when_log_raises_system_exit_or_keyboard_interrupt(
     logger_error: BaseException,
     capsys: pytest.CaptureFixture[str],
-) -> None:
+):
     logger = InMemoryLogger()
     logger.log = AsyncMock(side_effect=logger_error)  # type: ignore[method-assign]
 
@@ -41,7 +41,7 @@ async def test_log_wrapper_falls_back_to_stderr_when_log_raises_system_exit_or_k
 
 
 @pytest.mark.asyncio
-async def test_log_wrapper_can_be_cancelled_while_log_is_blocked() -> None:
+async def test_log_wrapper_can_be_cancelled_while_log_is_blocked():
     logger = InMemoryLogger()
     logging_started = asyncio.Event()
 

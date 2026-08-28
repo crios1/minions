@@ -39,7 +39,7 @@ class TestValidUsage:
     async def test_gru_accepts_none_logger_metrics_state_store(
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
+    ):
         async with managed_gru_context(logger=None, state_store=None, metrics=None):
             pass
 
@@ -47,7 +47,7 @@ class TestValidUsage:
     async def test_gru_allows_create_and_immediate_shutdown(
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
+    ):
         async with managed_gru_context(
             state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()
         ):
@@ -57,7 +57,7 @@ class TestValidUsage:
     async def test_gru_accepts_workflow_failure_policy(
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
+    ):
         policy: WorkflowFailurePolicy = "delete"
         async with managed_gru_context(
             state_store=NoOpStateStore(),
@@ -74,7 +74,7 @@ class TestValidUsage:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-    ) -> None:
+    ):
         async with managed_gru_context(
             state_store=state_store,
             logger=logger,
@@ -108,7 +108,7 @@ class TestValidUsage:
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         policy: WorkflowPersistenceFailurePolicy,
-    ) -> None:
+    ):
         async with managed_gru_context(
             state_store=NoOpStateStore(),
             logger=NoOpLogger(),
@@ -121,7 +121,7 @@ class TestValidUsage:
     async def test_gru_accepts_workflow_persistence_retry_settings(
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
+    ):
         async with managed_gru_context(
             state_store=NoOpStateStore(),
             logger=NoOpLogger(),
@@ -139,7 +139,7 @@ class TestValidUsage:
     async def test_gru_start_stop_orchestration(
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.minions.two_steps.simple.default"
         pipeline_module_path = (
             "tests.assets.pipelines.emit_one.simple.default"
@@ -177,7 +177,7 @@ class TestValidUsage:
     async def test_gru_start_stop_orchestration_from_classes(
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
+    ):
         from tests.assets.minions.two_steps.counter.default import (
             AssetMinion as TwoStepCounterMinion,
         )
@@ -209,7 +209,7 @@ class TestValidUsage:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-    ) -> None:
+    ):
         """
         Start three minions each with their own pipeline and their own Resource type
         so there is no sharing of pipelines or resources between minions.
@@ -282,7 +282,7 @@ class TestValidUsage:
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
         tests_dir: Path,
-    ) -> None:
+    ):
         """
         Start three minions that share the same pipeline and a single Resource type.
         Verify pipeline and resource are shared and cleaned up after stopping all minions.
@@ -366,7 +366,7 @@ class TestValidUsage:
     async def test_gru_start_orchestration_shutdown_without_stop(
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
+    ):
         async with managed_gru_context(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
@@ -390,7 +390,7 @@ class TestValidUsage:
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         inline_config_kind: str,
-    ) -> None:
+    ):
         from tests.assets.minions.one_step.counter.with_inline_config import (
             AssetMinion as InlineConfigMinion,
         )
@@ -443,7 +443,7 @@ class TestValidUsage:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.minions.two_steps.simple.with_simple_resource"
         pipeline_module_path = (
             "tests.assets.pipelines.emit_one.simple.with_simple_resource"
@@ -493,7 +493,7 @@ class TestValidUsageDSL:
         state_store: InMemoryStateStore,
         minion_module_path: str,
         pipeline_module_path: str,
-    ) -> None:
+    ):
         start_1 = OrchestrationStart(pipeline=pipeline_module_path, minion=minion_module_path)
         start_2 = OrchestrationStart(pipeline=pipeline_module_path, minion=minion_module_path)
         directives: list[Directive] = [
@@ -535,7 +535,7 @@ class TestValidUsageDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-    ) -> None:
+    ):
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         start = OrchestrationStart(
             pipeline=pipeline_module_path,
@@ -569,7 +569,7 @@ class TestValidUsageDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-    ) -> None:
+    ):
         pipeline1 = "tests.assets.pipelines.emit_one.counter.default"
         pipeline2 = "tests.assets.pipelines.emit_one.counter.default_b"
         pipeline3 = "tests.assets.pipelines.emit_one.counter.default_c"
@@ -623,7 +623,7 @@ class TestValidUsageDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-    ) -> None:
+    ):
         pipeline_module_path = (
             "tests.assets.pipelines.emit_one.counter.after_three_subscribers"
         )
@@ -673,7 +673,7 @@ class TestValidUsageDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-    ) -> None:
+    ):
         pipeline_module_path = (
             "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
         )
@@ -709,7 +709,7 @@ class TestValidUsageDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-    ) -> None:
+    ):
         pipeline_module_path = (
             "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
         )
@@ -741,7 +741,7 @@ class TestValidUsageDSL:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-    ) -> None:
+    ):
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         start = OrchestrationStart(
             pipeline=pipeline_module_path,

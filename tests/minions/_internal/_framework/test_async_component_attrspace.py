@@ -11,7 +11,7 @@ from minions._internal._framework.metrics import Metrics
 from minions._internal._framework.state_store import StateStore
 
 
-def test_user_extensible_component_classes_do_not_define_user_private_attributes() -> None:
+def test_user_extensible_component_classes_do_not_define_user_private_attributes():
     user_extensible_component_classes = [
         AsyncComponent,
         LoggerBackedAsyncComponent,

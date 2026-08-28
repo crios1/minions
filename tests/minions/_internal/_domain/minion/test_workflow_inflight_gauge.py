@@ -71,7 +71,7 @@ async def test_cancellation_before_workflow_registration_does_not_create_task(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     workflow_created = False
 
     class MyMinion(Minion[EmptyEvent, EmptyContext]):

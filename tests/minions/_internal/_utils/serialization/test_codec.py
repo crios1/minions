@@ -46,19 +46,19 @@ def _make_event() -> Event:
     )
 
 
-def test_invalid_serialize() -> None:
+def test_invalid_serialize():
     with pytest.raises(TypeError):
         serialize(print)
 
 
-def test_invalid_deserialize() -> None:
+def test_invalid_deserialize():
     with pytest.raises(ValueError):
         deserialize(bytes([1, 2, 3]), Event)
     with pytest.raises(TypeError):
         deserialize("invalid", None)  # type: ignore[arg-type]
 
 
-def test_decoder_cache_used_for_hashable_types() -> None:
+def test_decoder_cache_used_for_hashable_types():
     orig = _cached_decoder
     orig.cache_clear()
 
@@ -80,7 +80,7 @@ def test_decoder_cache_used_for_hashable_types() -> None:
 
 def test_decoder_fallback_for_unhashable_annotation(
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     orig = _cached_decoder
     orig.cache_clear()
 
@@ -97,7 +97,7 @@ def test_decoder_fallback_for_unhashable_annotation(
 
 def test_decoder_cache_prevents_repeated_decoder_instantiation(
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     orig = _cached_decoder
     orig.cache_clear()
     Decoder = msgspec.msgpack.Decoder

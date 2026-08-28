@@ -109,7 +109,7 @@ async def test_single_write_flushes_on_batch_max_interarrival_delay_ms(
 async def test_writes_inside_batch_max_interarrival_delay_ms_batch_together(
     make_state_store_and_logger: MakeStateStoreAndLogger,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     s, _ = await make_state_store_and_logger(
         batch_max_queued_writes=100,
         batch_max_flush_delay_ms=40,
@@ -141,7 +141,7 @@ async def test_writes_inside_batch_max_interarrival_delay_ms_batch_together(
 async def test_max_flush_delay_still_applies_during_continuous_arrivals(
     make_state_store_and_logger: MakeStateStoreAndLogger,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     s, _ = await make_state_store_and_logger(
         batch_max_queued_writes=100,
         batch_max_flush_delay_ms=30,
@@ -204,7 +204,7 @@ async def test_delete_context_batches_but_waits_for_batch_commit(
 async def test_flush_paths_do_not_overlap_transactions(
     make_state_store_and_logger: MakeStateStoreAndLogger,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     s, _ = await make_state_store_and_logger(
         batch_max_queued_writes=100,
         batch_max_flush_delay_ms=5,
@@ -249,7 +249,7 @@ async def test_flush_paths_do_not_overlap_transactions(
 async def test_write_arriving_during_scheduled_flush_gets_next_flush_task(
     make_state_store_and_logger: MakeStateStoreAndLogger,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     s, _ = await make_state_store_and_logger(
         batch_max_queued_writes=100,
         batch_max_flush_delay_ms=5,
@@ -288,7 +288,7 @@ async def test_write_arriving_during_scheduled_flush_gets_next_flush_task(
 async def test_subsequent_writes_succeed_after_scheduled_flush_failure_settles_buffered_writes(
     make_state_store_and_logger: MakeStateStoreAndLogger,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     s, logger = await make_state_store_and_logger(
         batch_max_queued_writes=100,
         batch_max_flush_delay_ms=40,
@@ -374,7 +374,7 @@ async def test_flush_on_batch_cap(make_state_store_and_logger: MakeStateStoreAnd
 async def test_cancelled_cap_triggering_save_does_not_cancel_shared_batch_commit(
     make_state_store_and_logger: MakeStateStoreAndLogger,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     s, _ = await make_state_store_and_logger(batch_max_queued_writes=2)
 
     # prevent timer flush so cancellation happens while the cap-triggered commit is shared
@@ -413,7 +413,7 @@ async def test_cancelled_cap_triggering_save_does_not_cancel_shared_batch_commit
 async def test_separate_batches_commit_in_fifo_order_for_same_workflow(
     make_state_store_and_logger: MakeStateStoreAndLogger,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     s, _ = await make_state_store_and_logger(batch_max_queued_writes=1)
 
     commit_gate = BlockedCommitBatchNowGate(s, monkeypatch)
@@ -447,7 +447,7 @@ async def test_separate_batches_commit_in_fifo_order_for_same_workflow(
 async def test_flush_waits_for_worker_after_commit_batch_is_popped_from_queue(
     make_state_store_and_logger: MakeStateStoreAndLogger,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     s, _ = await make_state_store_and_logger(batch_max_queued_writes=1)
 
     commit_gate = BlockedCommitBatchNowGate(s, monkeypatch)
@@ -531,7 +531,7 @@ async def test_same_batch_save_then_delete_removes_row(
 async def test_commit_failure_rolls_back_transaction_and_settles_futures(
     make_state_store_and_logger: MakeStateStoreAndLogger,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     s, _ = await make_state_store_and_logger()
     good_ctx = mk_ctx(i=403)
     first_completion: asyncio.Future[None] = asyncio.get_running_loop().create_future()
@@ -585,7 +585,7 @@ async def test_commit_failure_rolls_back_transaction_and_settles_futures(
 async def test_shutdown_waits_for_active_scheduled_flush_commit(
     make_state_store_and_logger: MakeStateStoreAndLogger,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     s, _ = await make_state_store_and_logger(
         batch_max_queued_writes=100,
         batch_max_flush_delay_ms=5,

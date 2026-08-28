@@ -32,7 +32,7 @@ async def test_gru_does_not_resume_same_workflow_id_twice_during_startup(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     from tests.assets.minions.race_cases.duplicate_workflow_resume import (
         AssetMinion as DuplicateWorkflowResumeMinion,
     )
@@ -97,7 +97,7 @@ async def test_gru_serializes_concurrent_starts_for_same_orchestration(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
 
     async with managed_gru_context(
         logger=logger,
@@ -156,7 +156,7 @@ async def test_gru_serializes_concurrent_stops_for_same_orchestration(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
 
     async with managed_gru_context(
         logger=logger,
@@ -215,7 +215,7 @@ async def test_gru_serializes_concurrent_start_and_stop_for_same_orchestration(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
 
     async with managed_gru_context(
         logger=logger,
@@ -273,7 +273,7 @@ async def test_gru_stop_waits_for_in_progress_start_of_same_orchestration(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     async with managed_gru_context(
         logger=logger,
         metrics=metrics,
@@ -316,7 +316,7 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
 
     async with managed_gru_context(
         logger=logger,
@@ -386,7 +386,7 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
 
     fixed_resource_pipeline_module = importlib.import_module(
         "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
@@ -465,7 +465,7 @@ async def test_gru_runtime_state_uses_singletons_for_shared_pipeline_and_resourc
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     from tests.assets.resources.fixed.default import AssetResource as FixedResource
     from tests.assets.resources.with_dependencies.depends_on_fixed import (
         AssetResource as ResourceDependingOnFixed,
@@ -568,7 +568,7 @@ async def test_concurrent_start_does_not_attach_during_last_subscriber_pipeline_
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
 
     async with managed_gru_context(
@@ -623,7 +623,7 @@ async def test_failed_start_preserves_existing_gru_runtime_state(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     healthy_pipeline = "tests.assets.pipelines.emit_one.counter.default"
     healthy_minion = "tests.assets.minions.one_step.counter.default"
     incompatible_pipeline_module = importlib.import_module(
@@ -676,7 +676,7 @@ async def test_failed_start_does_not_clean_up_resource_created_by_concurrent_sta
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     failing_minion = "tests.assets.crash.minions.counter.boom_startup"
     failing_start_reached_minion = asyncio.Event()
     allow_failing_minion_start = asyncio.Event()
@@ -730,7 +730,7 @@ async def test_gru_injects_resource_dependencies_before_resource_startup(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     from tests.assets.minions.two_steps.counter.default import (
         AssetMinion as TwoStepCounterMinion,
     )
@@ -787,7 +787,7 @@ async def test_gru_starts_resource_with_multiple_resource_dependencies(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     class FirstLeafResource(Resource):
         async def value(self) -> int:
             return 10
@@ -864,7 +864,7 @@ async def test_gru_start_fails_clearly_for_circular_resource_dependencies(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     class CycleAResource(Resource):
         pass
 
@@ -907,7 +907,7 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations_while_s
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
 
     async with managed_gru_context(
         logger=logger,
@@ -969,7 +969,7 @@ async def test_gru_shutdown_advertises_shutdown_before_waiting(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
 
     async with managed_gru_context(
         logger=logger,
@@ -998,7 +998,7 @@ async def test_gru_shutdown_waits_for_in_flight_start_orchestration(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
 
     async with managed_gru_context(
         logger=logger,
@@ -1037,7 +1037,7 @@ async def test_gru_shutdown_waits_for_in_flight_stop_orchestration(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
 
     async with managed_gru_context(
         logger=logger,
@@ -1078,7 +1078,7 @@ async def test_gru_shutdown_rejects_new_lifecycle_work_while_shutdown_is_pending
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
 
     async with managed_gru_context(
         logger=logger,
@@ -1119,7 +1119,7 @@ async def test_gru_shutdown_rejects_new_lifecycle_work_during_shutdown_in_progre
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
 
     async with managed_gru_context(
         logger=logger,
@@ -1169,7 +1169,7 @@ async def test_pending_failure_finalization_waits_for_first_and_blocks_second_li
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     first_lifecycle_reservation_acquired = asyncio.Event()
     first_lifecycle_reservation_release = asyncio.Event()
 
@@ -1246,7 +1246,7 @@ async def test_gru_shutdown_serializes_concurrent_shutdown_calls(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
 
     async with managed_gru_context(
         logger=logger,

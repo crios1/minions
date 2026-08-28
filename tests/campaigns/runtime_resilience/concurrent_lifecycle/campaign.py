@@ -177,7 +177,7 @@ async def _run_shutdown_race_call(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("seed", _SEEDS)
-async def test_concurrent_lifecycle_batches_are_linearizable(seed: int) -> None:
+async def test_concurrent_lifecycle_batches_are_linearizable(seed: int):
     rng = random.Random(seed)
     logger = InMemoryLogger()
     metrics = InMemoryMetrics(logger=logger)
@@ -275,7 +275,7 @@ async def test_concurrent_lifecycle_batches_are_linearizable(seed: int) -> None:
 @pytest.mark.parametrize("seed", _SEEDS)
 async def test_shutdown_race_drains_reserved_work_and_rejects_late_work(
     seed: int,
-) -> None:
+):
     rng = random.Random(seed)
     logger = InMemoryLogger()
     gru = await Gru.create(

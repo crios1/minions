@@ -85,33 +85,33 @@ def spied_base_and_component_base(
 
 def test_spied_base_directly_inherits_component_base(
     spied_base_and_component_base: tuple[type[object], type[object]],
-) -> None:
+):
     spied_base, component_base = spied_base_and_component_base
     assert spied_base.__bases__ == (component_base,)
 
 
 def test_spied_base_uses_component_spy_metaclass(
     spied_base_and_component_base: tuple[type[object], type[object]],
-) -> None:
+):
     spied_base, _ = spied_base_and_component_base
     assert isinstance(spied_base, ComponentSpyMeta)
 
 
 def test_user_defined_init_is_rejected(
     spied_async_service_base: Any,
-) -> None:
+):
     assert_user_defined_init_is_rejected(spied_async_service_base)
 
 
 def test_user_defined_new_is_rejected(
     spied_async_service_base: Any,
-) -> None:
+):
     assert_user_defined_new_is_rejected(spied_async_service_base)
 
 
 def test_user_defined_init_rejects_reserved_mn_attribute_assignment(
     spied_component_base_allowing_user_defined_construction: Any,
-) -> None:
+):
     assert_mn_attribute_assignment_in_init_is_rejected(
         spied_component_base_allowing_user_defined_construction
     )
@@ -119,7 +119,7 @@ def test_user_defined_init_rejects_reserved_mn_attribute_assignment(
 
 def test_mn_class_attribute_assignment_in_class_body_is_rejected(
     spied_component_base: Any,
-) -> None:
+):
     assert_mn_class_attribute_assignment_in_class_body_is_rejected(
         spied_component_base
     )
@@ -127,17 +127,17 @@ def test_mn_class_attribute_assignment_in_class_body_is_rejected(
 
 def test_mn_attribute_assignment_in_user_method_is_rejected(
     spied_component_base: Any,
-) -> None:
+):
     assert_mn_attribute_assignment_in_user_method_is_rejected(spied_component_base)
 
 
 def test_mn_attribute_assignment_in_call_is_rejected(
     spied_component_base: Any,
-) -> None:
+):
     assert_mn_attribute_assignment_in_call_is_rejected(spied_component_base)
 
 
-def test_mn_attribute_assignment_in_minion_step_is_rejected() -> None:
+def test_mn_attribute_assignment_in_minion_step_is_rejected():
     assert_mn_attribute_assignment_in_minion_step_is_rejected(
         SpiedMinion[EmptyEvent, EmptyContext]
     )
@@ -145,5 +145,5 @@ def test_mn_attribute_assignment_in_minion_step_is_rejected() -> None:
 
 def test_safe_create_task_override_is_rejected(
     spied_async_service_base: Any,
-) -> None:
+):
     assert_safe_create_task_override_is_rejected(spied_async_service_base)

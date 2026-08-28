@@ -8,7 +8,7 @@ from tests.assets.support.state_store_failable import FailableStateStore
 
 
 @pytest.mark.asyncio
-async def test_save_failures_can_be_enabled_and_disabled() -> None:
+async def test_save_failures_can_be_enabled_and_disabled():
     store = FailableStateStore(InMemoryLogger())
 
     await store.save_context("workflow", "orchestration", b"first")
@@ -31,7 +31,7 @@ async def test_save_failures_can_be_enabled_and_disabled() -> None:
 
 
 @pytest.mark.asyncio
-async def test_delete_failures_can_be_enabled_and_disabled() -> None:
+async def test_delete_failures_can_be_enabled_and_disabled():
     store = FailableStateStore(InMemoryLogger())
     await store.save_context("workflow", "orchestration", b"context")
     store.delete_failures.enable()
@@ -49,7 +49,7 @@ async def test_delete_failures_can_be_enabled_and_disabled() -> None:
 
 
 @pytest.mark.asyncio
-async def test_save_and_delete_failures_are_controlled_independently() -> None:
+async def test_save_and_delete_failures_are_controlled_independently():
     store = FailableStateStore(InMemoryLogger())
     await store.save_context("workflow", "orchestration", b"first")
 
@@ -66,7 +66,7 @@ async def test_save_and_delete_failures_are_controlled_independently() -> None:
 
 
 @pytest.mark.asyncio
-async def test_save_failures_wait_for_returns_after_requested_count() -> None:
+async def test_save_failures_wait_for_returns_after_requested_count():
     store = FailableStateStore(InMemoryLogger())
     store.save_failures.enable()
 
@@ -83,7 +83,7 @@ async def test_save_failures_wait_for_returns_after_requested_count() -> None:
 
 
 @pytest.mark.asyncio
-async def test_save_failures_wait_for_times_out_when_disabled() -> None:
+async def test_save_failures_wait_for_times_out_when_disabled():
     store = FailableStateStore(InMemoryLogger())
 
     with pytest.raises(TimeoutError):
@@ -91,7 +91,7 @@ async def test_save_failures_wait_for_times_out_when_disabled() -> None:
 
 
 @pytest.mark.asyncio
-async def test_save_failures_wait_for_rejects_non_positive_count() -> None:
+async def test_save_failures_wait_for_rejects_non_positive_count():
     store = FailableStateStore(InMemoryLogger())
 
     with pytest.raises(ValueError, match="failure count must be positive"):

@@ -89,7 +89,7 @@ async def test_stop_reports_stalled_workflow_cancellation_timeout_and_clears_run
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     async with _running_stalled_workflow(
         managed_gru_context,
         logger,
@@ -115,7 +115,7 @@ async def test_shutdown_reports_stalled_workflow_cancellation_timeout_and_clears
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     async with _running_stalled_workflow(
         managed_gru_context,
         logger,

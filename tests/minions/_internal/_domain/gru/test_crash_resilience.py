@@ -95,7 +95,7 @@ async def test_start_orchestration_contains_state_store_resume_read_failure(
     managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
-) -> None:
+):
     state_store = BoomGetContextsForOrchestrationStateStore(logger=logger)
 
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
@@ -131,7 +131,7 @@ async def test_start_orchestration_fails_closed_on_persisted_workflow_decode_mis
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     expected_orchestration_id = orchestration_id(
         "tests.assets.pipelines.emit_one.counter.default",
         "tests.assets.minions.one_step.counter.default",
@@ -213,7 +213,7 @@ async def test_start_orchestration_returns_startup_failure_cause_and_leaves_runt
     pipeline_module_path: str,
     minion_module_path: str,
     tests_dir: Path,
-) -> None:
+):
     config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_orchestration(
@@ -243,7 +243,7 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         healthy_counter_pipeline_id = gru._get_pipeline_identity_from_module_path(
             "tests.assets.pipelines.emit_one.counter.default",
@@ -296,7 +296,7 @@ async def test_minion_runtime_failure_deactivates_only_its_orchestration(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     from tests.assets.crash.minions.counter.gated_boom_run import (
         AssetMinion as FailingMinion,
     )
@@ -352,7 +352,7 @@ async def test_stop_waits_for_runtime_failure_finalization(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     from tests.assets.crash.minions.counter.gated_boom_run import (
         AssetMinion as FailingMinion,
     )
@@ -419,7 +419,7 @@ async def test_shutdown_waits_for_runtime_failure_finalization(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     from tests.assets.crash.minions.counter.gated_boom_run import (
         AssetMinion as FailingMinion,
     )
@@ -480,7 +480,7 @@ async def test_runtime_failure_finalizer_failure_shuts_down_gru(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         start = await gru.start_orchestration(
             "tests.assets.pipelines.emit_one.counter.default",
@@ -540,7 +540,7 @@ async def test_runtime_failure_finalizer_failure_does_not_reopen_lifecycle_admis
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         start = await gru.start_orchestration(
             "tests.assets.pipelines.emit_one.counter.default",
@@ -602,7 +602,7 @@ async def test_resource_runtime_failure_deactivates_only_dependent_orchestration
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     from tests.assets.crash.resources.gated_boom_run import (
         AssetResource as GatedBoomRunResource,
     )
@@ -672,7 +672,7 @@ async def test_pipeline_runtime_failure_deactivates_all_subscribers_only(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     from tests.assets.pipelines.emit_one.counter.default import (  # noqa: I001
         AssetPipeline as HealthyPipeline,
     )
@@ -744,7 +744,7 @@ async def test_shared_transitive_resource_failure_deactivates_all_dependent_orch
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     from tests.assets.crash.resources.gated_boom_run import (
         AssetResource as GatedBoomRunResource,
     )
@@ -810,7 +810,7 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         healthy_counter_pipeline_id = gru._get_pipeline_identity_from_module_path(
             "tests.assets.pipelines.emit_one.counter.default",
@@ -882,7 +882,7 @@ async def test_shutdown_failures_are_reported_and_singleton_is_released(
     state_store: InMemoryStateStore,
     pipeline_module_path: str,
     minion_module_path: str,
-) -> None:
+):
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_orchestration(pipeline_module_path, minion_module_path)
         assert result.success
@@ -931,7 +931,7 @@ async def test_gru_shutdown_reports_active_domain_component_shutdown_failures(
     pipeline_module_path: str,
     minion_module_path: str,
     failed_component_kind: str,
-) -> None:
+):
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         start = await gru.start_orchestration(pipeline_module_path, minion_module_path)
         assert start.success

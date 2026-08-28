@@ -31,7 +31,7 @@ from tests.support.gru_scenario.runner import (
 )
 
 
-def test_orchestration_start_receipt_requires_durable_ids() -> None:
+def test_orchestration_start_receipt_requires_durable_ids():
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
     minion_ref = "tests.assets.minions.two_steps.simple.default"
 
@@ -60,7 +60,7 @@ def test_orchestration_start_receipt_requires_durable_ids() -> None:
         )
 
 
-def test_require_result_reports_that_run_must_be_called_first(gru: Gru) -> None:
+def test_require_result_reports_that_run_must_be_called_first(gru: Gru):
     runner = ScenarioRunner(
         gru,
         ScenarioPlan([], pipeline_event_counts={}),
@@ -73,7 +73,7 @@ def test_require_result_reports_that_run_must_be_called_first(gru: Gru) -> None:
         runner._require_result()
 
 
-def test_metrics_counter_snapshot_reflects_gru_metrics(gru: Gru) -> None:
+def test_metrics_counter_snapshot_reflects_gru_metrics(gru: Gru):
     assert isinstance(gru._metrics, InMemoryMetrics)
     counter = gru._metrics.create_metric(
         MINION_WORKFLOW_SUCCEEDED_TOTAL,
@@ -105,7 +105,7 @@ def test_metrics_counter_snapshot_reflects_gru_metrics(gru: Gru) -> None:
 
 
 @pytest.mark.asyncio
-async def test_rejects_non_inmemory_metrics(gru: Gru) -> None:
+async def test_rejects_non_inmemory_metrics(gru: Gru):
     class UnsupportedMetrics:
         pass
 
@@ -124,7 +124,7 @@ async def test_rejects_non_inmemory_metrics(gru: Gru) -> None:
 
 
 @pytest.mark.asyncio
-async def test_rejects_non_inmemory_logger(gru: Gru) -> None:
+async def test_rejects_non_inmemory_logger(gru: Gru):
     class UnsupportedLogger:
         pass
 
@@ -143,7 +143,7 @@ async def test_rejects_non_inmemory_logger(gru: Gru) -> None:
 
 
 @pytest.mark.asyncio
-async def test_rejects_non_inmemory_state_store(gru: Gru) -> None:
+async def test_rejects_non_inmemory_state_store(gru: Gru):
     class UnsupportedStateStore:
         pass
 
@@ -167,7 +167,7 @@ async def test_rejects_non_inmemory_state_store(gru: Gru) -> None:
 @pytest.mark.asyncio
 async def test_validates_missing_pipeline_event_count_after_resolving_identity(
     gru: Gru,
-) -> None:
+):
     plan = ScenarioPlan(
         [
             OrchestrationStart(
@@ -185,7 +185,7 @@ async def test_validates_missing_pipeline_event_count_after_resolving_identity(
 @pytest.mark.asyncio
 async def test_validates_unused_pipeline_event_count_after_resolving_identity(
     gru: Gru,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
     minion_ref = "tests.assets.minions.two_steps.simple.default"
     plan = ScenarioPlan(
@@ -208,7 +208,7 @@ async def test_validates_unused_pipeline_event_count_after_resolving_identity(
 @pytest.mark.asyncio
 async def test_records_receipts_for_success_and_expected_failure(
     gru: Gru,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
     pipeline_id = pipeline_ref
     minion_ref = "tests.assets.minions.two_steps.simple.default"
@@ -243,7 +243,7 @@ async def test_records_receipts_for_success_and_expected_failure(
 @pytest.mark.asyncio
 async def test_concurrent_starts_capture_started_minions_and_spy_instance_identities(
     gru: Gru,
-) -> None:
+):
     default_minion_ref = "tests.assets.minions.two_steps.simple.default"
     resourced_minion_ref = (
         "tests.assets.minions.two_steps.simple.with_simple_b_resource"
@@ -301,7 +301,7 @@ async def test_concurrent_starts_capture_started_minions_and_spy_instance_identi
 @pytest.mark.asyncio
 async def test_tracks_durable_minion_pipeline_and_resources(
     gru: Gru,
-) -> None:
+):
     from tests.assets.minions.two_steps.counter.identified_with_fixed_resource import (
         AssetMinion as IdentifiedFixedResourceMinion,
     )
@@ -359,7 +359,7 @@ async def test_tracks_durable_minion_pipeline_and_resources(
 @pytest.mark.asyncio
 async def test_wait_workflow_completions_targets_successful_start_after_duplicate_start_fails(
     gru: Gru,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
     pipeline_id = pipeline_ref
     minion_ref = "tests.assets.minions.two_steps.simple.default"
@@ -397,7 +397,7 @@ async def test_wait_workflow_completions_targets_successful_start_after_duplicat
 @pytest.mark.asyncio
 async def test_wait_minion_tasks_times_out_instead_of_blocking_indefinitely(
     gru: Gru,
-) -> None:
+):
     class _DummyMinion:
         def __init__(self) -> None:
             self._mn_tasks_gate = asyncio.Lock()
@@ -441,7 +441,7 @@ async def test_wait_minion_tasks_times_out_instead_of_blocking_indefinitely(
 
 
 @pytest.mark.asyncio
-async def test_wait_minion_tasks_waits_for_minions_concurrently(gru: Gru) -> None:
+async def test_wait_minion_tasks_waits_for_minions_concurrently(gru: Gru):
     class _DummyMinion:
         def __init__(
             self,
@@ -479,7 +479,7 @@ async def test_wait_minion_tasks_waits_for_minions_concurrently(gru: Gru) -> Non
 @pytest.mark.asyncio
 async def test_wait_workflow_step_starts_then_rejects_unsupported_wrapped_directive(
     gru: Gru,
-) -> None:
+):
     start = OrchestrationStart(
         pipeline="tests.assets.pipelines.emit_one.simple.default",
         minion="tests.assets.minions.two_steps.simple.default",
@@ -504,7 +504,7 @@ async def test_wait_workflow_step_starts_then_rejects_unsupported_wrapped_direct
 
 
 @pytest.mark.asyncio
-async def test_wait_workflow_step_starts_then_rejects_external_start(gru: Gru) -> None:
+async def test_wait_workflow_step_starts_then_rejects_external_start(gru: Gru):
     start = OrchestrationStart(pipeline="missing", minion="missing")
     directives = [
         AfterWorkflowStepStarts(
@@ -517,7 +517,7 @@ async def test_wait_workflow_step_starts_then_rejects_external_start(gru: Gru) -
 
 
 @pytest.mark.asyncio
-async def test_wait_workflow_step_starts_then_rejects_unknown_steps(gru: Gru) -> None:
+async def test_wait_workflow_step_starts_then_rejects_unknown_steps(gru: Gru):
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
     pipeline_id = pipeline_ref
     start = OrchestrationStart(
@@ -544,7 +544,7 @@ async def test_wait_workflow_step_starts_then_rejects_unknown_steps(gru: Gru) ->
 @pytest.mark.asyncio
 async def test_records_checkpoints_for_wait_workflow_completions_and_shutdown(
     gru: Gru,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
     pipeline_id = pipeline_ref
 
@@ -577,7 +577,7 @@ async def test_records_checkpoints_for_wait_workflow_completions_and_shutdown(
 @pytest.mark.asyncio
 async def test_records_lifecycle_observations_after_start_stop_and_shutdown(
     gru: Gru,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
     start = OrchestrationStart(
         pipeline=pipeline_ref,
@@ -630,7 +630,7 @@ async def test_records_lifecycle_observations_after_start_stop_and_shutdown(
 
 
 @pytest.mark.asyncio
-async def test_records_checkpoint_for_wait_workflow_step_starts_then(gru: Gru) -> None:
+async def test_records_checkpoint_for_wait_workflow_step_starts_then(gru: Gru):
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
     minion_ref = "tests.assets.minions.failure.abort_step"
 
@@ -664,7 +664,7 @@ async def test_records_checkpoint_for_wait_workflow_step_starts_then(gru: Gru) -
 @pytest.mark.asyncio
 async def test_restart_flow_checkpoints_separate_pre_stop_and_post_restart_windows(
     gru: Gru,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
     pipeline_id = pipeline_ref
     minion_ref = "tests.assets.minions.two_steps.counter.default"
@@ -728,7 +728,7 @@ async def test_restart_flow_checkpoints_separate_pre_stop_and_post_restart_windo
 
 
 @pytest.mark.asyncio
-async def test_restart_same_orchestration_id_after_stop_succeeds(gru: Gru) -> None:
+async def test_restart_same_orchestration_id_after_stop_succeeds(gru: Gru):
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
     pipeline_id = pipeline_ref
     minion_ref = "tests.assets.minions.failure.abort_step"
@@ -753,7 +753,7 @@ async def test_restart_same_orchestration_id_after_stop_succeeds(gru: Gru) -> No
 @pytest.mark.asyncio
 async def test_records_expect_runtime_checkpoint_with_persistence_snapshot(
     gru: Gru,
-) -> None:
+):
     from tests.assets.minions.failure.slow_step import AssetMinion as SlowStepMinion
 
     minion_ref = "tests.assets.minions.failure.slow_step"

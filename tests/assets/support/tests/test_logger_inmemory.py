@@ -45,7 +45,7 @@ async def test_logs_and_queries():
 async def test_wait_for_log_matches_kwargs():
     logger = InMemoryLogger(level=DEBUG)
 
-    async def log_later() -> None:
+    async def log_later():
         await logger.log(INFO, "first event", status="wrong")
         await logger.log(INFO, "first event", status="right")
 

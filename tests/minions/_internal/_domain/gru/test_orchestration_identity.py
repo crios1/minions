@@ -25,7 +25,7 @@ CONFIG_ID = "99999999-9999-4999-8999-99999999999c"
 async def test_start_orchestration_uses_attached_component_ids(
     managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
-) -> None:
+):
     @pipeline_id(PIPELINE_COMPONENT_ID)
     class IdentifiedPipeline(TriggeredPipeline[SimpleEvent]):
         async def produce_event(self) -> SimpleEvent:
@@ -76,7 +76,7 @@ async def test_start_orchestration_uses_attached_component_and_config_ids(
     logger: InMemoryLogger,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-) -> None:
+):
     package_dir = tmp_path / "durable_app"
     package_dir.mkdir()
     (package_dir / "__init__.py").write_text("")

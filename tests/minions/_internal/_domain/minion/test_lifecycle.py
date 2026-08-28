@@ -14,7 +14,7 @@ async def test_startup_failure_context_includes_minion_identity(
     logger: InMemoryLogger,
 ):
     class FailingStartupMinion(Minion[EmptyEvent, EmptyContext]):
-        async def startup(self) -> None:
+        async def startup(self):
             raise RuntimeError("boom")
 
         @minion_step

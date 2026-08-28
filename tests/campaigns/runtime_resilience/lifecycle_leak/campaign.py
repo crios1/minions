@@ -100,7 +100,7 @@ async def _settle_and_assert_released(
 
 
 @pytest.mark.asyncio
-async def test_repeated_gru_lifecycle_resources_remain_bounded() -> None:
+async def test_repeated_gru_lifecycle_resources_remain_bounded():
     current_task = asyncio.current_task()
     baseline_tasks = {
         task

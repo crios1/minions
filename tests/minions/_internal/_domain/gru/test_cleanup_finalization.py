@@ -30,7 +30,7 @@ async def test_shutdown_failure_removes_target_without_affecting_other_runtime_s
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     shared_pipeline = "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
 
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
@@ -68,7 +68,7 @@ async def test_cancellation_timeout_fails_closed_and_recommends_process_restart(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     async with managed_gru_context(
         logger=logger,
         metrics=metrics,
@@ -111,7 +111,7 @@ async def test_stop_unsubscribe_failure_discards_runtime_state_after_subscriptio
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_orchestration(HEALTHY_PIPELINE, HEALTHY_MINION)
         assert result.success
@@ -139,7 +139,7 @@ async def test_failed_start_discards_pipeline_resources_when_pipeline_stop_fails
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
 
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
@@ -167,7 +167,7 @@ async def test_pipeline_resource_binding_failure_restores_previous_runtime_state
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     from tests.assets.events.counter import CounterEvent
     from tests.assets.minions.two_steps.counter.default import (
         AssetMinion as UnresourcedCounterMinion,
@@ -212,7 +212,7 @@ async def test_cancelled_start_rolls_back_runtime_state(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
 
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
@@ -241,7 +241,7 @@ async def test_cancelled_stop_finalizes_runtime_state(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_orchestration(HEALTHY_PIPELINE, HEALTHY_MINION)
         assert result.success
@@ -265,7 +265,7 @@ async def test_start_resource_startup_failure_discards_runtime_state_when_cleanu
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
 
         async def failing_cleanup_resources(_resource_ids: set[str]) -> None:
@@ -302,7 +302,7 @@ async def test_stop_resource_cleanup_failure_discards_runtime_state_when_no_shar
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_orchestration(
             HEALTHY_PIPELINE,
@@ -328,7 +328,7 @@ async def test_stop_resource_cleanup_failure_preserves_shared_runtime_state_for_
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         first = await gru.start_orchestration(
             "tests.assets.pipelines.emit_one.counter.default",
@@ -367,7 +367,7 @@ async def test_stop_pipeline_resource_cleanup_failure_discards_runtime_state_whe
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_orchestration(
             "tests.assets.pipelines.emit_one.simple.with_simple_resource",
@@ -393,7 +393,7 @@ async def test_start_subscribe_failure_preserves_shared_runtime_state_for_live_o
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+):
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         first = await gru.start_orchestration(
             "tests.assets.pipelines.emit_one.counter.default",
@@ -435,7 +435,7 @@ async def test_forced_resource_discard_releases_dependency_refcounts(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
-) -> None:
+):
     from tests.assets.resources.fixed.default import AssetResource as FixedResource
     from tests.assets.resources.fixed.default_b import AssetResource as FixedResourceB
 

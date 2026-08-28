@@ -14,7 +14,7 @@ from minions._internal._framework.metrics_noop import NoOpMetrics
 
 def test_lifecycle_hooks_are_not_wrapped_as_resource_methods():
     class MyResource(Resource):
-        async def startup(self) -> None:
+        async def startup(self):
             pass
 
         async def run(self) -> None:

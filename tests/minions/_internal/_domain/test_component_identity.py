@@ -28,13 +28,13 @@ def _isolate_component_id_registry() -> Iterator[None]:  # pyright: ignore[repor
         _COMPONENT_ID_REGISTRY.update(registry_snapshot)
 
 
-def test_generated_component_id_satisfies_validation_contract() -> None:
+def test_generated_component_id_satisfies_validation_contract():
     generated_id = generate_component_id()
 
     assert validate_component_id(generated_id) == generated_id
 
 
-def test_component_id_decorators_validate_component_kind() -> None:
+def test_component_id_decorators_validate_component_kind():
     with pytest.raises(TypeError, match="@minion_id"):
         minion_id(MINION_COMPONENT_ID)(Resource)
 
@@ -45,17 +45,17 @@ def test_component_id_decorators_validate_component_kind() -> None:
         resource_id(RESOURCE_COMPONENT_ID)(Pipeline)
 
 
-def test_component_id_decorators_require_string_ids() -> None:
+def test_component_id_decorators_require_string_ids():
     with pytest.raises(TypeError, match="component id must be a string"):
         resource_id(123)(Resource)  # pyright: ignore[reportArgumentType]
 
 
-def test_component_id_decorators_reject_empty_ids() -> None:
+def test_component_id_decorators_reject_empty_ids():
     with pytest.raises(ValueError, match="component id must not be empty"):
         resource_id("   ")(Resource)
 
 
-def test_component_id_decorators_require_uuid_ids() -> None:
+def test_component_id_decorators_require_uuid_ids():
     with pytest.raises(ValueError, match="component id"):
         resource_id("test.resource.alpha")(Resource)
 
@@ -63,7 +63,7 @@ def test_component_id_decorators_require_uuid_ids() -> None:
         resource_id(RESOURCE_COMPONENT_ID.upper())(Resource)
 
 
-def test_component_id_decorators_reject_duplicate_loaded_ids() -> None:
+def test_component_id_decorators_reject_duplicate_loaded_ids():
     @resource_id(RESOURCE_COMPONENT_ID)
     class FirstDuplicateResource(Resource):  # pyright: ignore[reportUnusedClass]
         pass
@@ -74,7 +74,7 @@ def test_component_id_decorators_reject_duplicate_loaded_ids() -> None:
             pass
 
 
-def test_component_id_decorators_reject_conflicting_redecoration() -> None:
+def test_component_id_decorators_reject_conflicting_redecoration():
     class MyResource(Resource):
         pass
 

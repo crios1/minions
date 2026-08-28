@@ -163,7 +163,7 @@ async def _run_interruption_and_resume(
 
 
 @pytest.mark.asyncio
-async def test_stop_interrupts_and_resumes_high_fanout_workflows() -> None:
+async def test_stop_interrupts_and_resumes_high_fanout_workflows():
     await _run_interruption_and_resume(
         action="stop",
         subscribers=32,
@@ -172,7 +172,7 @@ async def test_stop_interrupts_and_resumes_high_fanout_workflows() -> None:
 
 
 @pytest.mark.asyncio
-async def test_shutdown_interrupts_and_resumes_high_fanout_workflows() -> None:
+async def test_shutdown_interrupts_and_resumes_high_fanout_workflows():
     await _run_interruption_and_resume(
         action="shutdown",
         subscribers=16,

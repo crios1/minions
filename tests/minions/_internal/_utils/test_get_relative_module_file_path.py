@@ -14,7 +14,7 @@ from minions._internal._utils.get_relative_module_file_path import (
 
 def test_returns_module_file_path_relative_to_explicit_base(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+):
     mod_name = f"mymod_{uuid4().hex}"
     (tmp_path / f"{mod_name}.py").write_text(
         dedent(
@@ -38,7 +38,7 @@ def test_returns_module_file_path_relative_to_explicit_base(
 
 def test_returns_nested_module_file_path_relative_to_explicit_base(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+):
     package_name = f"package_{uuid4().hex}"
     package_dir = tmp_path / package_name
     nested_dir = package_dir / "nested"
@@ -71,7 +71,7 @@ def test_returns_nested_module_file_path_relative_to_explicit_base(
             sys.modules.pop(loaded_module_name, None)
 
 
-def test_raises_when_module_is_not_loaded() -> None:
+def test_raises_when_module_is_not_loaded():
     class C:
         pass
 
@@ -81,7 +81,7 @@ def test_raises_when_module_is_not_loaded() -> None:
         get_relative_module_file_path(C, relative_to=Path.cwd())
 
 
-def test_raises_when_module_has_no_file(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_raises_when_module_has_no_file(monkeypatch: pytest.MonkeyPatch):
     mod_name = f"module_without_file_{uuid4().hex}"
     module = types.ModuleType(mod_name)
     monkeypatch.setitem(sys.modules, mod_name, module)
@@ -97,7 +97,7 @@ def test_raises_when_module_has_no_file(monkeypatch: pytest.MonkeyPatch) -> None
 
 def test_raises_when_module_file_is_outside_explicit_base(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+):
     mod_name = f"mymod_{uuid4().hex}"
     module_dir = tmp_path / "module"
     base_dir = tmp_path / "base"

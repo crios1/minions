@@ -62,7 +62,7 @@ async def test_logs_on_timeout_with_label_when_using_logger(logger: InMemoryLogg
 @pytest.mark.asyncio
 async def test_prints_on_timeout_when_logger_not_provided(
     capsys: pytest.CaptureFixture[str],
-) -> None:
+):
     async with task_with_stalled_cancellation() as task:
         with pytest.raises(TaskCancellationTimeoutError):
             await safe_cancel_task(task, label="worker", timeout=0.01)
@@ -76,7 +76,7 @@ async def test_prints_on_timeout_when_logger_not_provided(
 @pytest.mark.asyncio
 async def test_uses_task_name_as_label_when_label_not_provided(
     logger: InMemoryLogger,
-) -> None:
+):
     async with task_with_stalled_cancellation(name="worker") as task:
         with pytest.raises(TaskCancellationTimeoutError) as raised:
             await safe_cancel_task(task, timeout=0.01, logger=logger)
@@ -104,7 +104,7 @@ async def test_cancellation_timeout_error_is_raised_when_logger_fails(
     logger: InMemoryLogger,
     logger_error: BaseException,
     capsys: pytest.CaptureFixture[str],
-) -> None:
+):
     logger.log = AsyncMock(side_effect=logger_error)  # type: ignore[method-assign]
 
     async with task_with_stalled_cancellation() as task:
@@ -119,7 +119,7 @@ async def test_cancellation_timeout_error_is_raised_when_logger_fails(
 @pytest.mark.asyncio
 async def test_can_be_cancelled_during_timeout_reporting(
     logger: InMemoryLogger,
-) -> None:
+):
     logging_started = asyncio.Event()
 
     async def blocking_log(level: int, msg: str, **kwargs: object) -> None:

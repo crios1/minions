@@ -187,7 +187,7 @@ async def test_retry_delays_follow_exponential_backoff_and_remain_capped(
     ctx = _make_empty_workflow_context(m._mn_orchestration_id)
     sleep_delays: list[float] = []
 
-    async def record_sleep(delay: float) -> None:
+    async def record_sleep(delay: float):
         sleep_delays.append(delay)
         if len(sleep_delays) == 4:
             store.save_failures.disable()
@@ -235,7 +235,7 @@ async def test_retry_jitter_respects_configured_bounds(
     sleep_delays: list[float] = []
     sampled_bounds: list[tuple[float, float]] = []
 
-    async def record_sleep(delay: float) -> None:
+    async def record_sleep(delay: float):
         sleep_delays.append(delay)
         if len(sleep_delays) == 2:
             store.save_failures.disable()

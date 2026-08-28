@@ -59,7 +59,7 @@ class PrintMinion(Minion[Heartbeat, WorkflowCtx]):
 
 
 @pytest.mark.asyncio
-async def test_getting_started_example_handles_a_live_event() -> None:
+async def test_getting_started_example_handles_a_live_event():
     HeartbeatStore.reset()
     PrintMinion.observed_user_ids = []
     logger = InMemoryLogger()

@@ -147,7 +147,7 @@ class TestWaitUntilRunningWithRunExitBeforeCompletion:
     @pytest.mark.asyncio
     async def test_return_raises_minions_error(self):
         class ReturningRunService(NoOpService):
-            async def run(self) -> None:
+            async def run(self):
                 return
 
         service = ReturningRunService()
@@ -167,7 +167,7 @@ class TestWaitUntilRunningWithRunExitBeforeCompletion:
     @pytest.mark.asyncio
     async def test_failure_raises_minions_error(self):
         class FailingRunService(NoOpService):
-            async def run(self) -> None:
+            async def run(self):
                 raise RuntimeError("run failed")
 
         service = FailingRunService()
@@ -189,7 +189,7 @@ class TestWaitUntilRunningWithRunExitAfterCompletion:
     @pytest.mark.asyncio
     async def test_return_raises_minions_error(self):
         class GatedReturningRunService(NoOpService):
-            def __init__(self) -> None:
+            def __init__(self):
                 super().__init__()
                 self.finish_run = asyncio.Event()
 
@@ -215,7 +215,7 @@ class TestWaitUntilRunningWithRunExitAfterCompletion:
     @pytest.mark.asyncio
     async def test_failure_raises_minions_error(self):
         class GatedFailingRunService(NoOpService):
-            def __init__(self) -> None:
+            def __init__(self):
                 super().__init__()
                 self.run_started = asyncio.Event()
                 self.fail_run = asyncio.Event()
@@ -315,7 +315,7 @@ class TestEnsureShutdown:
     @pytest.mark.asyncio
     async def test_concurrent_callers_wait_for_single_shutdown_attempt(self):
         class GatedShutdownService(NoOpService):
-            def __init__(self) -> None:
+            def __init__(self):
                 super().__init__()
                 self.shutdown_calls = 0
                 self.shutdown_entered = asyncio.Event()
@@ -355,7 +355,7 @@ class TestEnsureShutdown:
         self,
     ):
         class FailingShutdownService(NoOpService):
-            def __init__(self) -> None:
+            def __init__(self):
                 super().__init__()
                 self.shutdown_calls = 0
 

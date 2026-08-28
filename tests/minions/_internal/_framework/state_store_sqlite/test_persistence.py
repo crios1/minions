@@ -112,7 +112,7 @@ async def test_runtime_save_context_failure_returns_structured_result(
 ):
     s, logger = await make_state_store_and_logger()
 
-    async def _boom(*_args: object) -> None:
+    async def _boom(*_args: object):
         raise RuntimeError("save boom")
 
     monkeypatch.setattr(s, "save_context", _boom)

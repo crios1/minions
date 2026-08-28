@@ -140,7 +140,7 @@ async def _run_scenario(subscribers: int, events: int) -> FanoutSample:
 
 
 @pytest.mark.asyncio
-async def test_high_fanout_shared_slow_resource_remains_correct_and_bounded() -> None:
+async def test_high_fanout_shared_slow_resource_remains_correct_and_bounded():
     samples = [await _run_scenario(subscribers, events) for subscribers, events in _SCENARIOS]
     for sample in samples:
         print(

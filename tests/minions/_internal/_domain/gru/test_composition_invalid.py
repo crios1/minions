@@ -16,7 +16,7 @@ class TestMinionFile:
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         tests_dir: Path,
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.entrypoints.invalid.empty"
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -41,7 +41,7 @@ class TestMinionFile:
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         tests_dir: Path,
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.entrypoints.invalid.two_minions"
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -66,7 +66,7 @@ class TestMinionFile:
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         tests_dir: Path,
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.entrypoints.invalid.invalid_explicit_minion"
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -91,7 +91,7 @@ class TestMinionFile:
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         tests_dir: Path,
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.minions.invalid.unsupported_context_type"
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -120,7 +120,7 @@ class TestMinionFile:
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         tests_dir: Path,
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.minions.invalid.unserializable_context"
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -145,7 +145,7 @@ class TestMinionFile:
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         tests_dir: Path,
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.minions.invalid.unsupported_event_type"
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -174,7 +174,7 @@ class TestMinionFile:
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         tests_dir: Path,
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.minions.invalid.unserializable_event"
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -201,7 +201,7 @@ class TestPipelineFile:
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         tests_dir: Path,
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.minions.two_steps.counter.default"
         pipeline_module_path = "tests.assets.entrypoints.invalid.empty"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -226,7 +226,7 @@ class TestPipelineFile:
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         tests_dir: Path,
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.minions.two_steps.counter.default"
         pipeline_module_path = "tests.assets.entrypoints.invalid.two_pipelines"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -251,7 +251,7 @@ class TestPipelineFile:
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         tests_dir: Path,
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.minions.two_steps.counter.default"
         pipeline_module_path = "tests.assets.entrypoints.invalid.invalid_explicit_pipeline"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -276,7 +276,7 @@ class TestPipelineFile:
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         tests_dir: Path,
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.minions.two_steps.counter.default"
         pipeline_module_path = "tests.assets.pipelines.invalid.unsupported_event_type"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -305,7 +305,7 @@ class TestPipelineFile:
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         tests_dir: Path,
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.minions.two_steps.counter.default"
         pipeline_module_path = "tests.assets.pipelines.invalid.with_unserializable_event"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")

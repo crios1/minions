@@ -63,7 +63,7 @@ async def test_minion_startup_resumes_only_own_contexts(
 
     resumed_ids: list[str] = []
 
-    async def _capture(ctx: MinionWorkflowContext[EmptyEvent, EmptyContext]) -> None:
+    async def _capture(ctx: MinionWorkflowContext[EmptyEvent, EmptyContext]):
         resumed_ids.append(ctx.workflow_id)
 
     m._mn_run_workflow = _capture  # type: ignore[method-assign]

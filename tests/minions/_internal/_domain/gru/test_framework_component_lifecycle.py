@@ -13,7 +13,7 @@ class TestStartup:
     @pytest.mark.asyncio
     async def test_create_starts_injected_logger_before_state_store_and_metrics(
         self,
-    ) -> None:
+    ):
         calls: list[str] = []
 
         class MyLogger(NoOpLogger):
@@ -45,7 +45,7 @@ class TestStartup:
     @pytest.mark.asyncio
     async def test_create_settles_in_progress_component_startup_before_framework_component_shutdown_when_component_startup_fails(  # noqa: E501
         self,
-    ) -> None:
+    ):
         calls: list[str] = []
 
         class MyLogger(NoOpLogger):
@@ -97,7 +97,7 @@ class TestStartup:
     @pytest.mark.asyncio
     async def test_create_preserves_startup_failure_when_framework_component_shutdown_also_fails(  # noqa: E501
         self,
-    ) -> None:
+    ):
         class MyStateStore(NoOpStateStore):
             async def shutdown(self) -> None:
                 raise RuntimeError("state store shutdown failed")
@@ -122,7 +122,7 @@ class TestStartup:
     async def test_create_does_not_start_resource_monitor_when_framework_component_startup_fails(  # noqa: E501
         self,
         monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
+    ):
         monitor_started = asyncio.Event()
 
         async def record_monitor_start(_gru: Gru) -> None:
@@ -147,7 +147,7 @@ class TestStartup:
     @pytest.mark.asyncio
     async def test_create_continues_framework_component_shutdown_when_a_shutdown_fails(
         self,
-    ) -> None:
+    ):
         calls: list[str] = []
 
         class MyLogger(NoOpLogger):
@@ -186,7 +186,7 @@ class TestStartup:
     @pytest.mark.asyncio
     async def test_cancelling_create_shuts_down_attempted_framework_components_and_releases_singleton(  # noqa: E501
         self,
-    ) -> None:
+    ):
         calls: list[str] = []
         state_store_startup_blocked = asyncio.Event()
 

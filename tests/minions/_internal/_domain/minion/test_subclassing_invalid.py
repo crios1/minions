@@ -31,7 +31,7 @@ def test_missing_event_and_context_types():
     )
 
 
-def test_mn_attribute_assignment_in_minion_step_is_rejected() -> None:
+def test_mn_attribute_assignment_in_minion_step_is_rejected():
     assert_mn_attribute_assignment_in_minion_step_is_rejected(
         Minion[EmptyEvent, EmptyContext]
     )

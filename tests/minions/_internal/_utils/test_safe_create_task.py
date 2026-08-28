@@ -9,7 +9,7 @@ from minions._internal._utils.safe_create_task import safe_create_task
 
 
 @pytest.mark.asyncio
-async def test_contains_task_failure() -> None:
+async def test_contains_task_failure():
     def ignore_failure(exception: BaseException, task_name: str | None) -> None:
         pass
 
@@ -29,7 +29,7 @@ async def test_contains_task_failure() -> None:
 
 
 @pytest.mark.asyncio
-async def test_does_not_call_failure_handler_on_task_success() -> None:
+async def test_does_not_call_failure_handler_on_task_success():
     on_failure = AsyncMock()
 
     async def okay() -> int:
@@ -41,7 +41,7 @@ async def test_does_not_call_failure_handler_on_task_success() -> None:
 
 
 @pytest.mark.asyncio
-async def test_calls_and_awaits_async_failure_handler_once_on_task_failure() -> None:
+async def test_calls_and_awaits_async_failure_handler_once_on_task_failure():
     on_failure = AsyncMock()
 
     async def faulty() -> None:
@@ -54,7 +54,7 @@ async def test_calls_and_awaits_async_failure_handler_once_on_task_failure() -> 
 
 
 @pytest.mark.asyncio
-async def test_calls_sync_failure_handler_once_on_task_failure() -> None:
+async def test_calls_sync_failure_handler_once_on_task_failure():
     call_count = 0
 
     def on_failure(exception: BaseException, task_name: str | None) -> None:
@@ -73,7 +73,7 @@ async def test_calls_sync_failure_handler_once_on_task_failure() -> None:
 
 
 @pytest.mark.asyncio
-async def test_invokes_protocol_with_original_failure_and_explicit_name() -> None:
+async def test_invokes_protocol_with_original_failure_and_explicit_name():
     received: list[tuple[BaseException, str | None]] = []
     task_failure = ValueError("boom")
 
@@ -97,7 +97,7 @@ async def test_invokes_protocol_with_original_failure_and_explicit_name() -> Non
 
 @pytest.mark.asyncio
 async def test_invokes_protocol_with_non_cancellation_base_exception_and_inferred_name(
-) -> None:
+):
     on_failure = AsyncMock()
     error = SystemExit("bye")
 
@@ -116,7 +116,7 @@ async def test_invokes_protocol_with_non_cancellation_base_exception_and_inferre
 @pytest.mark.asyncio
 async def test_contains_failure_handler_exception_and_reports_both_failures_to_stderr(
     capsys: pytest.CaptureFixture[str],
-) -> None:
+):
     async def bad_failure_handler(
         exception: BaseException,
         task_name: str | None,
@@ -136,7 +136,7 @@ async def test_contains_failure_handler_exception_and_reports_both_failures_to_s
 @pytest.mark.asyncio
 async def test_contains_failure_handler_base_exception_and_reports_both_failures_to_stderr(
     capsys: pytest.CaptureFixture[str],
-) -> None:
+):
     async def exiting_failure_handler(
         exception: BaseException,
         task_name: str | None,
@@ -157,7 +157,7 @@ async def test_contains_failure_handler_base_exception_and_reports_both_failures
 
 
 @pytest.mark.asyncio
-async def test_task_cancellation_propagates_without_calling_failure_handler() -> None:
+async def test_task_cancellation_propagates_without_calling_failure_handler():
     on_failure = AsyncMock()
 
     async def cancelled() -> None:
@@ -170,7 +170,7 @@ async def test_task_cancellation_propagates_without_calling_failure_handler() ->
 
 
 @pytest.mark.asyncio
-async def test_task_cancellation_interrupts_failure_handler_and_propagates() -> None:
+async def test_task_cancellation_interrupts_failure_handler_and_propagates():
     handler_started = asyncio.Event()
 
     async def waiting_failure_handler(
@@ -195,7 +195,7 @@ async def test_task_cancellation_interrupts_failure_handler_and_propagates() -> 
 
 
 @pytest.mark.asyncio
-async def test_propagates_cancellation_raised_by_failure_handler() -> None:
+async def test_propagates_cancellation_raised_by_failure_handler():
     async def cancelling_failure_handler(
         exception: BaseException,
         task_name: str | None,

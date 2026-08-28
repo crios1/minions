@@ -3,7 +3,7 @@ from pathlib import Path
 from minions._internal._cli.doctor_ids import inspect_paths
 
 
-def test_official_asset_component_ids_are_valid_and_unique(tests_dir: Path) -> None:
+def test_official_asset_component_ids_are_valid_and_unique(tests_dir: Path):
     component_id_issues = [
         issue
         for issue in inspect_paths([tests_dir / "assets"])

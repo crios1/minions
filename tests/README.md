@@ -90,6 +90,8 @@ This suite is intentionally layered. Each layer has a different purpose and conf
 
 ## Invalid Input Typing Policy
 
+- Omit return annotations from collected `test_*` functions. Pytest does not use
+  their return values; keep helpers and fixtures normally typed.
 - When a test intentionally passes an object outside an API's annotated type to
   prove runtime rejection, pass that object directly and add a narrow
   `# type: ignore[arg-type]` comment at the offending argument.

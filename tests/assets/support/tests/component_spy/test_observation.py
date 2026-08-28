@@ -5,7 +5,7 @@ import pytest
 from tests.assets.support.component_spy_meta import ComponentSpyMeta
 
 
-def test_requires_explicit_enablement() -> None:
+def test_requires_explicit_enablement():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         pass
 
@@ -19,7 +19,7 @@ def test_requires_explicit_enablement() -> None:
 
     assert SpiedComponent.get_call_counts() == {}
 
-def test_observes_initialization() -> None:
+def test_observes_initialization():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         pass
 
@@ -29,7 +29,7 @@ def test_observes_initialization() -> None:
 
     assert SpiedComponent.get_call_counts()["__init__"] == 1
 
-def test_observes_sync_method_calls() -> None:
+def test_observes_sync_method_calls():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         def sync_method(self) -> None:
             return
@@ -44,7 +44,7 @@ def test_observes_sync_method_calls() -> None:
 
 
 @pytest.mark.asyncio
-async def test_observes_async_method_calls() -> None:
+async def test_observes_async_method_calls():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         async def async_method(self) -> None:
             return
@@ -57,7 +57,7 @@ async def test_observes_async_method_calls() -> None:
 
     assert SpiedComponent.get_call_counts() == {"async_method": 1}
 
-def test_observes_class_method_calls() -> None:
+def test_observes_class_method_calls():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         @classmethod
         def class_method(cls) -> None:
@@ -69,7 +69,7 @@ def test_observes_class_method_calls() -> None:
 
     assert SpiedComponent.get_call_counts() == {"class_method": 1}
 
-def test_observes_static_method_calls() -> None:
+def test_observes_static_method_calls():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         @staticmethod
         def static_method() -> None:
@@ -81,7 +81,7 @@ def test_observes_static_method_calls() -> None:
 
     assert SpiedComponent.get_call_counts() == {"static_method": 1}
 
-def test_does_not_observe_property_access() -> None:
+def test_does_not_observe_property_access():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         @property
         def value(self) -> int:
@@ -95,7 +95,7 @@ def test_does_not_observe_property_access() -> None:
 
     assert SpiedComponent.get_call_counts() == {}
 
-def test_observation_does_not_mutate_component_instance() -> None:
+def test_observation_does_not_mutate_component_instance():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         def __init__(self) -> None:
             self.value = "original"
@@ -114,7 +114,7 @@ def test_observation_does_not_mutate_component_instance() -> None:
     assert SpiedComponent.get_call_counts() == {"method": 1}
     assert vars(component) == {"value": "original"}
 
-def test_assigns_distinct_spy_instance_identities() -> None:
+def test_assigns_distinct_spy_instance_identities():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         pass
 
@@ -132,7 +132,7 @@ def test_assigns_distinct_spy_instance_identities() -> None:
         second_identity,
     }
 
-def test_call_counts_and_history_are_isolated_between_component_classes() -> None:
+def test_call_counts_and_history_are_isolated_between_component_classes():
     class FirstSpiedComponent(metaclass=ComponentSpyMeta):
         def method(self) -> None:
             return
@@ -158,7 +158,7 @@ def test_call_counts_and_history_are_isolated_between_component_classes() -> Non
     assert SecondSpiedComponent.get_call_counts() == {}
     assert SecondSpiedComponent.get_call_history() == ()
 
-def test_repeated_enablement_records_each_call_once() -> None:
+def test_repeated_enablement_records_each_call_once():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         def method(self) -> None:
             return
@@ -177,7 +177,7 @@ def test_repeated_enablement_records_each_call_once() -> None:
         "method",
     ]
 
-def test_call_history_is_an_immutable_chronological_snapshot() -> None:
+def test_call_history_is_an_immutable_chronological_snapshot():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         def first(self) -> None:
             return
@@ -208,7 +208,7 @@ def test_call_history_is_an_immutable_chronological_snapshot() -> None:
     with pytest.raises(FrozenInstanceError):
         setattr(history[0], "method_name", "changed")
 
-def test_assert_call_order_accepts_subsequence_and_reports_missing_tail() -> None:
+def test_assert_call_order_accepts_subsequence_and_reports_missing_tail():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         def first(self) -> None:
             return
@@ -235,7 +235,7 @@ def test_assert_call_order_accepts_subsequence_and_reports_missing_tail() -> Non
     assert "Missing from this point: ['missing', 'third']" in message
     assert "Full history names: ['first', 'second', 'third']" in message
 
-def test_assert_call_order_for_instance_excludes_other_instances_calls() -> None:
+def test_assert_call_order_for_instance_excludes_other_instances_calls():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         def first(self) -> None:
             return

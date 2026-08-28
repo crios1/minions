@@ -157,7 +157,7 @@ def test_process_termination_recovers_from_durable_checkpoint(
     scenario: Scenario,
     expected_step_1_count: int,
     expected_step_2_count: int,
-) -> None:
+):
     artifact_dir = tmp_path / scenario
     artifact_dir.mkdir()
     db_path = artifact_dir / "state.db"

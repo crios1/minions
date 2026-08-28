@@ -35,7 +35,7 @@ async def test_uses_task_factory_and_name_when_provided():
         coro: Coroutine[Any, Any, object],
         name: str | None = None,
     ) -> asyncio.Task[None]:
-        async def run() -> None:
+        async def run():
             await coro
 
         task = asyncio.create_task(run(), name=name)

@@ -26,7 +26,7 @@ async def test_binds_loaded_config_to_minion(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     tests_dir: Path,
-) -> None:
+):
     minion_module_path = "tests.assets.minions.two_steps.counter.with_file_config"
     pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
     config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -71,7 +71,7 @@ async def test_start_without_load_config_override_returns_cause_and_cleans_up(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     tests_dir: Path,
-) -> None:
+):
     minion_module_path = "tests.assets.minions.two_steps.simple.default"
     pipeline_module_path = "tests.assets.pipelines.emit_one.simple.default"
     config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
@@ -118,7 +118,7 @@ async def test_unchanged_id_resumes_persisted_workflow_with_reloaded_contents(
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-) -> None:
+):
     @pipeline_id("88888888-8888-4888-8888-88888888888b")
     class SimpleEventPipeline(TriggeredPipeline[SimpleEvent]):
         async def produce_event(self) -> SimpleEvent:

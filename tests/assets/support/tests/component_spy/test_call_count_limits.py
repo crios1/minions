@@ -7,7 +7,7 @@ from tests.assets.support.component_spy_meta import ComponentSpyMeta
 
 
 class TestEnforceCallCountLimits:
-    def test_rejects_extra_call_without_running_method_body(self) -> None:
+    def test_rejects_extra_call_without_running_method_body(self):
         method_body_calls = 0
 
         class SpiedComponent(metaclass=ComponentSpyMeta):
@@ -31,7 +31,7 @@ class TestEnforceCallCountLimits:
         component.method()
         assert method_body_calls == 2
 
-    def test_rejects_already_exceeded_limit_on_entry(self) -> None:
+    def test_rejects_already_exceeded_limit_on_entry(self):
         limit_violations: list[CallCountLimitViolation] = []
 
         class SpiedComponent(metaclass=ComponentSpyMeta):
@@ -64,7 +64,7 @@ class TestEnforceCallCountLimits:
         ]
         component.method()
 
-    def test_rejects_only_new_calls_to_unlisted_methods(self) -> None:
+    def test_rejects_only_new_calls_to_unlisted_methods(self):
         limit_violations: list[CallCountLimitViolation] = []
 
         class SpiedComponent(metaclass=ComponentSpyMeta):
@@ -96,7 +96,7 @@ class TestEnforceCallCountLimits:
             )
         ]
 
-    def test_allows_unlisted_calls_when_configured(self) -> None:
+    def test_allows_unlisted_calls_when_configured(self):
         class SpiedComponent(metaclass=ComponentSpyMeta):
             def method_a(self) -> None:
                 return
@@ -117,7 +117,7 @@ class TestEnforceCallCountLimits:
 
     def test_on_limit_exceeded_receives_listed_call_count_violation(
         self,
-    ) -> None:
+    ):
         limit_violations: list[CallCountLimitViolation] = []
 
         class SpiedComponent(metaclass=ComponentSpyMeta):
@@ -150,7 +150,7 @@ class TestEnforceCallCountLimits:
 
     def test_on_limit_exceeded_errors_propagate_for_listed_and_unlisted_calls(
         self,
-    ) -> None:
+    ):
         class SpiedComponent(metaclass=ComponentSpyMeta):
             def method_a(self) -> None:
                 return
@@ -175,7 +175,7 @@ class TestEnforceCallCountLimits:
             with pytest.raises(RuntimeError, match="limit violation"):
                 component.method_b()
 
-    def test_rejects_second_context_while_one_is_active(self) -> None:
+    def test_rejects_second_context_while_one_is_active(self):
         class SpiedComponent(metaclass=ComponentSpyMeta):
             def method(self) -> None:
                 return
@@ -193,7 +193,7 @@ class TestEnforceCallCountLimits:
                 component.method()
 
     @pytest.mark.asyncio
-    async def test_cancelling_task_stops_enforcing_call_count_limits(self) -> None:
+    async def test_cancelling_task_stops_enforcing_call_count_limits(self):
         class SpiedComponent(metaclass=ComponentSpyMeta):
             def method(self) -> None:
                 return

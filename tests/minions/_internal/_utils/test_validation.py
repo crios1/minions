@@ -11,7 +11,7 @@ from minions._internal._utils.validation import (
 
 
 @pytest.mark.parametrize("label", ["", " "])
-def test_requires_nonblank_label(label: str) -> None:
+def test_requires_nonblank_label(label: str):
     """Exercise every validator in validation.py against blank labels."""
 
     with pytest.raises(ValueError, match="label must not be blank"):
@@ -35,7 +35,7 @@ def test_requires_nonblank_label(label: str) -> None:
 @pytest.mark.parametrize("value", [True, "1", math.nan, math.inf, -math.inf])
 def test_rejects_values_that_are_not_finite_numbers(
     value: object,
-) -> None:
+):
     """Exercise every numeric validator against values outside its numeric contract."""
 
     with pytest.raises(ValueError, match="value must be a finite number"):
@@ -56,7 +56,7 @@ def test_rejects_values_that_are_not_finite_numbers(
         )
 
 
-def test_rejects_integers_outside_float_range() -> None:
+def test_rejects_integers_outside_float_range():
     """Exercise every numeric validator against integers outside float range."""
     value = 10**1000
 
@@ -81,7 +81,7 @@ def test_rejects_integers_outside_float_range() -> None:
 @pytest.mark.parametrize("value", [0.5, 1])
 def test_ensure_positive_number_accepts_values_above_zero(
     value: int | float,
-) -> None:
+):
     result = ensure_positive_number(value, label="value")
 
     assert result == value
@@ -91,7 +91,7 @@ def test_ensure_positive_number_accepts_values_above_zero(
 @pytest.mark.parametrize("value", [-1, 0])
 def test_ensure_positive_number_rejects_values_at_or_below_zero(
     value: int,
-) -> None:
+):
     with pytest.raises(ValueError, match="value must be a positive number"):
         ensure_positive_number(value, label="value")
 
@@ -99,7 +99,7 @@ def test_ensure_positive_number_rejects_values_at_or_below_zero(
 @pytest.mark.parametrize("value", [0, 1])
 def test_ensure_nonnegative_number_accepts_values_at_or_above_zero(
     value: int,
-) -> None:
+):
     result = ensure_nonnegative_number(value, label="value")
 
     assert result == value
@@ -109,7 +109,7 @@ def test_ensure_nonnegative_number_accepts_values_at_or_above_zero(
 @pytest.mark.parametrize("value", [-1, -0.5])
 def test_ensure_nonnegative_number_rejects_values_below_zero(
     value: int | float,
-) -> None:
+):
     with pytest.raises(ValueError, match="value must be a non-negative number"):
         ensure_nonnegative_number(value, label="value")
 
@@ -126,7 +126,7 @@ def test_ensure_nonnegative_number_rejects_values_below_zero(
 def test_ensure_number_at_least_accepts_values_at_or_above_threshold(
     value: int | float,
     threshold: int | float,
-) -> None:
+):
     result = ensure_number_at_least(value, threshold, label="value")
 
     assert result == value
@@ -145,7 +145,7 @@ def test_ensure_number_at_least_accepts_values_at_or_above_threshold(
 def test_ensure_number_at_least_rejects_values_below_threshold(
     value: int | float,
     threshold: int | float,
-) -> None:
+):
     with pytest.raises(
         ValueError,
         match=f"value must be a number greater than or equal to {threshold}",
@@ -156,12 +156,12 @@ def test_ensure_number_at_least_rejects_values_below_threshold(
 @pytest.mark.parametrize("threshold", [True, "1", math.nan, math.inf, -math.inf])
 def test_ensure_number_at_least_requires_finite_threshold(
     threshold: object,
-) -> None:
+):
     with pytest.raises(ValueError, match="threshold must be a finite number"):
         ensure_number_at_least(1, threshold, label="value")  # type: ignore[arg-type]
 
 
-def test_ensure_number_at_least_rejects_threshold_outside_float_range() -> None:
+def test_ensure_number_at_least_rejects_threshold_outside_float_range():
     with pytest.raises(
         ValueError,
         match="threshold must be within the finite float range",
@@ -183,7 +183,7 @@ def test_ensure_number_in_closed_range_accepts_values_within_bounds(
     value: int | float,
     minimum: int | float,
     maximum: int | float,
-) -> None:
+):
     result = ensure_number_in_closed_range(
         value,
         minimum=minimum,
@@ -207,7 +207,7 @@ def test_ensure_number_in_closed_range_rejects_values_outside_bounds(
     value: int | float,
     minimum: int | float,
     maximum: int | float,
-) -> None:
+):
     with pytest.raises(
         ValueError,
         match=f"value must be a number between {minimum} and {maximum}, inclusive",
@@ -223,7 +223,7 @@ def test_ensure_number_in_closed_range_rejects_values_outside_bounds(
 @pytest.mark.parametrize("bound", [True, "1", math.nan, math.inf, -math.inf])
 def test_ensure_number_in_closed_range_requires_finite_bounds(
     bound: object,
-) -> None:
+):
     with pytest.raises(ValueError, match="minimum must be a finite number"):
         ensure_number_in_closed_range(
             0,
@@ -241,7 +241,7 @@ def test_ensure_number_in_closed_range_requires_finite_bounds(
         )
 
 
-def test_ensure_number_in_closed_range_rejects_bounds_outside_float_range() -> None:
+def test_ensure_number_in_closed_range_rejects_bounds_outside_float_range():
     with pytest.raises(
         ValueError,
         match="minimum must be within the finite float range",
@@ -265,7 +265,7 @@ def test_ensure_number_in_closed_range_rejects_bounds_outside_float_range() -> N
         )
 
 
-def test_ensure_number_in_closed_range_rejects_minimum_above_maximum() -> None:
+def test_ensure_number_in_closed_range_rejects_minimum_above_maximum():
     with pytest.raises(
         ValueError,
         match="minimum must be less than or equal to maximum",

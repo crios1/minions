@@ -20,7 +20,7 @@ class TestMinionFile:
     async def test_gru_accepts_file_with_multiple_minions_and_explicit_minion(
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.entrypoints.valid.two_minions_explicit_minion"
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
 
@@ -40,7 +40,7 @@ class TestMinionFile:
     async def test_gru_accepts_file_with_single_minion_subclass(
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.entrypoints.valid.single_minion_subclass"
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
 
@@ -63,7 +63,7 @@ class TestMinionFile:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
         state_store: InMemoryStateStore,
-    ) -> None:
+    ):
         minion_module_path = (
             "tests.assets.minions.one_step.counter."
             "with_fixed_and_fixed_b_resources"
@@ -90,7 +90,7 @@ class TestPipelineFile:
     async def test_gru_accepts_file_with_single_pipeline_class(
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.minions.two_steps.counter.default"
         pipeline_module_path = "tests.assets.pipelines.entrypoint.counter.single_class"
 
@@ -110,7 +110,7 @@ class TestPipelineFile:
     async def test_gru_accepts_file_with_single_pipeline_subclass(
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
-    ) -> None:
+    ):
         minion_module_path = "tests.assets.minions.two_steps.counter.default"
         pipeline_module_path = "tests.assets.entrypoints.valid.single_pipeline_subclass"
 

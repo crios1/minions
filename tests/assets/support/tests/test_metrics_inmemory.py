@@ -7,7 +7,7 @@ from tests.assets.support.metrics_inmemory import InMemoryMetrics
 
 
 class TestInMemoryMetrics:
-    def test_counter_healthy_with_label_ordering(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_counter_healthy_with_label_ordering(self, monkeypatch: pytest.MonkeyPatch):
         """
         Counter increments aggregate correctly; labels follow METRIC_LABEL_NAMES order.
         """
@@ -26,7 +26,7 @@ class TestInMemoryMetrics:
         assert list(sample["labels"].keys()) == ["minion", "pipeline"]
         assert sample["value"] == 3.0
 
-    def test_gauge_set_with_missing_label_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_gauge_set_with_missing_label_defaults(self, monkeypatch: pytest.MonkeyPatch):
         """
         Gauge .set() overwrites, and missing expected labels default to "".
         """
@@ -41,7 +41,7 @@ class TestInMemoryMetrics:
         assert m.snapshot_gauge_value("cpu_gauge", {"region": ""}) == 10.5
         assert m.snapshot_gauge_value("cpu_gauge", {"region": "us-east"}) == 8.0
 
-    def test_histogram_observe_aggregates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_histogram_observe_aggregates(self, monkeypatch: pytest.MonkeyPatch):
         """
         Histogram aggregates count/sum/min/max for a label set.
         """
@@ -64,7 +64,7 @@ class TestInMemoryMetrics:
     def test_snapshot_counter_value_total_across_label_sets(
         self,
         monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
+    ):
         monkeypatch.setitem(METRIC_LABEL_NAMES, "requests_total", ["route"])
 
         metrics = InMemoryMetrics()
@@ -77,7 +77,7 @@ class TestInMemoryMetrics:
     def test_snapshot_counter_value_selects_label_set(
         self,
         monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
+    ):
         monkeypatch.setitem(METRIC_LABEL_NAMES, "requests_total", ["route"])
 
         metrics = InMemoryMetrics()
@@ -90,7 +90,7 @@ class TestInMemoryMetrics:
     def test_snapshot_gauge_value_total_across_label_sets(
         self,
         monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
+    ):
         monkeypatch.setitem(METRIC_LABEL_NAMES, "connections", ["host"])
 
         metrics = InMemoryMetrics()
@@ -103,7 +103,7 @@ class TestInMemoryMetrics:
     def test_snapshot_gauge_value_selects_label_set(
         self,
         monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
+    ):
         monkeypatch.setitem(METRIC_LABEL_NAMES, "connections", ["host"])
 
         metrics = InMemoryMetrics()
@@ -115,7 +115,7 @@ class TestInMemoryMetrics:
 
     def test_snapshot_histogram_count_total_across_label_sets(
         self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    ):
         monkeypatch.setitem(METRIC_LABEL_NAMES, "latency_seconds", ["route"])
 
         metrics = InMemoryMetrics()
@@ -129,7 +129,7 @@ class TestInMemoryMetrics:
     def test_snapshot_histogram_count_selects_label_set(
         self,
         monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
+    ):
         monkeypatch.setitem(METRIC_LABEL_NAMES, "latency_seconds", ["route"])
 
         metrics = InMemoryMetrics()
@@ -143,7 +143,7 @@ class TestInMemoryMetrics:
     def test_snapshot_histogram_sum_total_across_label_sets(
         self,
         monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
+    ):
         monkeypatch.setitem(METRIC_LABEL_NAMES, "latency_seconds", ["route"])
 
         metrics = InMemoryMetrics()
@@ -160,7 +160,7 @@ class TestInMemoryMetrics:
     def test_snapshot_histogram_sum_selects_label_set(
         self,
         monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
+    ):
         monkeypatch.setitem(METRIC_LABEL_NAMES, "latency_seconds", ["route"])
 
         metrics = InMemoryMetrics()
@@ -177,7 +177,7 @@ class TestInMemoryMetrics:
     def test_snapshot_counter_value_raises_when_labels_are_not_found(
         self,
         monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
+    ):
         monkeypatch.setitem(METRIC_LABEL_NAMES, "requests_total", ["route"])
 
         metrics = InMemoryMetrics()
@@ -187,7 +187,7 @@ class TestInMemoryMetrics:
         with pytest.raises(AssertionError, match="labels not found in snapshot"):
             metrics.snapshot_counter_value("requests_total", {"route": "/missing"})
 
-    def test_unbound_metric_methods_raise(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_unbound_metric_methods_raise(self, monkeypatch: pytest.MonkeyPatch):
         """
         Calling .inc/.set/.observe on the unbound metric (without .labels()) should raise TypeError.
         """
@@ -229,7 +229,7 @@ class TestInMemoryMetrics:
         assert list(sample["labels"].keys()) == ["a", "b"]
         assert sample["value"] == 1.0
 
-    def test_counter_multiple_label_sets(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_counter_multiple_label_sets(self, monkeypatch: pytest.MonkeyPatch):
         """
         Multiple distinct label sets are tracked independently.
         """
@@ -257,7 +257,7 @@ class TestInMemoryMetrics:
     @pytest.mark.asyncio
     async def test_async_metric_operations_update_all_metric_types(
         self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    ):
         """
         Drive the async metric operations and verify snapshots reflect the updates.
         """
@@ -309,7 +309,7 @@ class TestInMemoryMetrics:
     @pytest.mark.asyncio
     async def test_async_metric_operations_apply_label_defaults_and_ordering(
         self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    ):
         """
         Missing expected labels default to "" and ordering follows METRIC_LABEL_NAMES.
         """
@@ -333,7 +333,7 @@ class TestInMemoryMetrics:
     @pytest.mark.asyncio
     async def test_async_metric_operations_preserve_all_concurrent_updates(
         self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    ):
         """
         Ensure counter updates are safe when awaited concurrently across tasks.
         """
