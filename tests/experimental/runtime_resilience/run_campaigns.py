@@ -15,16 +15,24 @@ from pathlib import Path
 import psutil
 
 CAMPAIGNS: dict[str, str] = {
-    "subprocess-recovery": ("tests/campaigns/runtime_resilience/subprocess_recovery/campaign.py"),
-    "stateful-lifecycle": ("tests/campaigns/runtime_resilience/stateful_lifecycle/campaign.py"),
-    "lifecycle-leak": ("tests/campaigns/runtime_resilience/lifecycle_leak/campaign.py"),
-    "high-fanout-resource": ("tests/campaigns/runtime_resilience/high_fanout_resource/campaign.py"),
-    "concurrent-lifecycle": ("tests/campaigns/runtime_resilience/concurrent_lifecycle/campaign.py"),
+    "subprocess-recovery": (
+        "tests/experimental/runtime_resilience/subprocess_recovery/campaign.py"
+    ),
+    "stateful-lifecycle": (
+        "tests/experimental/runtime_resilience/stateful_lifecycle/campaign.py"
+    ),
+    "lifecycle-leak": ("tests/experimental/runtime_resilience/lifecycle_leak/campaign.py"),
+    "high-fanout-resource": (
+        "tests/experimental/runtime_resilience/high_fanout_resource/campaign.py"
+    ),
+    "concurrent-lifecycle": (
+        "tests/experimental/runtime_resilience/concurrent_lifecycle/campaign.py"
+    ),
     "resource-failure-storm": (
-        "tests/campaigns/runtime_resilience/resource_failure_storm/campaign.py"
+        "tests/experimental/runtime_resilience/resource_failure_storm/campaign.py"
     ),
     "cancellation-pressure": (
-        "tests/campaigns/runtime_resilience/cancellation_pressure/campaign.py"
+        "tests/experimental/runtime_resilience/cancellation_pressure/campaign.py"
     ),
 }
 DEFAULT_TIMEOUT_SECONDS = 180.0
@@ -60,7 +68,7 @@ class RunResult:
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent
+    return Path(__file__).resolve().parents[3]
 
 
 def _pytest_bin(repo_root: Path, explicit: str | None) -> str:

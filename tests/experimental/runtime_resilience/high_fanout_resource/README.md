@@ -22,7 +22,7 @@ Run it directly:
 
 ```shell
 .venv/bin/python -m pytest -q -s \
-  tests/campaigns/runtime_resilience/high_fanout_resource/campaign.py
+  tests/experimental/runtime_resilience/high_fanout_resource/campaign.py
 ```
 
 The default scenarios are single-event fanout to 16, 64, and 128 subscribers,

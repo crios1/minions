@@ -47,6 +47,9 @@ This suite is intentionally layered. Each layer has a different purpose and conf
 - Purpose: detect intermittent timing/race issues and long-running safety regressions.
 - Scope: loop targeted high-risk tests and selected workload scenarios.
 - This layer complements deterministic checks; it does not replace them.
+- Unreviewed exploratory probes belong under `tests/experimental/`, not in the
+  authoritative layers above. Promote discovered defects into focused ordinary
+  regression tests.
 
 ## Scope Policy
 

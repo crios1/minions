@@ -7,7 +7,7 @@ Run the campaign from the repository root:
 
 ```bash
 .venv/bin/python -m pytest \
-  tests/campaigns/runtime_resilience/subprocess_recovery/campaign.py
+  tests/experimental/runtime_resilience/subprocess_recovery/campaign.py
 ```
 
 The campaign uses isolated temporary SQLite databases and kills only

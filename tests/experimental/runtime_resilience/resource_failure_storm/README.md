@@ -23,7 +23,7 @@ Run it directly:
 
 ```shell
 .venv/bin/python -m pytest -q -s \
-  tests/campaigns/runtime_resilience/resource_failure_storm/campaign.py
+  tests/experimental/runtime_resilience/resource_failure_storm/campaign.py
 ```
 
 The default workload is 64 consecutive failure/rebuild cycles.

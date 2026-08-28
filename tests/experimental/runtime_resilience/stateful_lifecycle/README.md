@@ -8,7 +8,7 @@ Run it from the repository root:
 
 ```bash
 .venv/bin/python -m pytest \
-  tests/campaigns/runtime_resilience/stateful_lifecycle/campaign.py
+  tests/experimental/runtime_resilience/stateful_lifecycle/campaign.py
 ```
 
 The initial model covers orchestration membership and component ownership for:

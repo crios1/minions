@@ -27,5 +27,5 @@ Run it directly:
 
 ```shell
 .venv/bin/python -m pytest -q -s \
-  tests/campaigns/runtime_resilience/concurrent_lifecycle/campaign.py
+  tests/experimental/runtime_resilience/concurrent_lifecycle/campaign.py
 ```

@@ -12,7 +12,7 @@ from minions import Gru
 from minions._internal._framework.logger import Logger
 from minions.implementations import NoOpMetrics, SQLiteStateStore
 from tests.assets.support.logger_inmemory import InMemoryLogger
-from tests.campaigns.runtime_resilience.subprocess_recovery.components import (
+from tests.experimental.runtime_resilience.subprocess_recovery.components import (
     CrashCheckpointMinion,
     CrashCheckpointPipeline,
 )

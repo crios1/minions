@@ -8,7 +8,7 @@ Run it from the repository root:
 
 ```bash
 .venv/bin/python -m pytest \
-  tests/campaigns/runtime_resilience/lifecycle_leak/campaign.py
+  tests/experimental/runtime_resilience/lifecycle_leak/campaign.py
 ```
 
 The campaign uses warm-up cycles before measuring:

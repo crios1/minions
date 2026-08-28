@@ -13,7 +13,7 @@ from minions._internal._framework.metrics_constants import (
 from minions.implementations import NoOpLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
-from tests.campaigns.runtime_resilience.cancellation_pressure.components import (
+from tests.experimental.runtime_resilience.cancellation_pressure.components import (
     BurstPipeline,
     CampaignConfig,
     GatedResourceMinion,

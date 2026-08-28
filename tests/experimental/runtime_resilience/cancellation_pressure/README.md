@@ -30,5 +30,5 @@ Run it directly:
 
 ```shell
 .venv/bin/python -m pytest -q -s \
-  tests/campaigns/runtime_resilience/cancellation_pressure/campaign.py
+  tests/experimental/runtime_resilience/cancellation_pressure/campaign.py
 ```

@@ -1,19 +1,21 @@
-# Runtime resilience verification
+# Experimental runtime resilience campaigns
 
-These campaigns exercise recovery, lifecycle coordination, resource ownership,
-fanout pressure, cancellation/resume, and process/resource cleanup beyond the
-default unit-test suite.
+These explicitly invoked campaigns explore recovery, lifecycle coordination,
+resource ownership, fanout pressure, cancellation/resume, and process/resource
+cleanup beyond the reviewed test suite. They follow the experimental testing
+policy in the parent directory; discoveries require focused regressions in the
+ordinary suite.
 
 Run every campaign once, sequentially:
 
 ```shell
-.venv/bin/python scripts/runtime_resilience_soak.py
+.venv/bin/python tests/experimental/runtime_resilience/run_campaigns.py
 ```
 
 Run a longer soak with bounded concurrency and a JSON summary:
 
 ```shell
-.venv/bin/python scripts/runtime_resilience_soak.py \
+.venv/bin/python tests/experimental/runtime_resilience/run_campaigns.py \
   --repeat 10 \
   --jobs 2 \
   --json-summary /tmp/minions-resilience-summary.json
@@ -22,7 +24,7 @@ Run a longer soak with bounded concurrency and a JSON summary:
 Run selected campaigns:
 
 ```shell
-.venv/bin/python scripts/runtime_resilience_soak.py \
+.venv/bin/python tests/experimental/runtime_resilience/run_campaigns.py \
   --campaign concurrent-lifecycle \
   --campaign cancellation-pressure \
   --repeat 25

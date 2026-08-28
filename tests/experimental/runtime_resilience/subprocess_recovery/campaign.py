@@ -31,7 +31,7 @@ Scenario = Literal[
     "incompatible_payload",
 ]
 
-_RUNNER_MODULE = "tests.campaigns.runtime_resilience.subprocess_recovery.runner"
+_RUNNER_MODULE = "tests.experimental.runtime_resilience.subprocess_recovery.runner"
 _PROCESS_TIMEOUT_SECONDS = 5.0
 _CRASH_READY_TIMEOUT_SECONDS = 3.0
 _MAX_SCENARIO_ARTIFACT_BYTES = 7 * 1024 * 1024
