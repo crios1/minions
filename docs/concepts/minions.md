@@ -134,9 +134,12 @@ Configuration is opt-in at orchestration startup. A Minion started without
 configuration has no bound `config` attribute; classes that do not use
 configuration need not declare `config` or override `load_config`. Inline
 configuration is supported for tests and direct local composition; Gru receives
-and binds that model directly, so the `config` annotation is still required but
-a `load_config` override is not. Use stamped file-backed configuration for
-durable production deployments.
+the model by value and binds an independent snapshot, so later mutations to the
+caller's object do not affect the Minion. Treat the bound `self.config` snapshot
+as immutable; start another orchestration with a new config value when its
+settings need to change. The `config` annotation is still required, but a
+`load_config` override is not. Use stamped file-backed configuration for durable
+production deployments.
 
 ### Workflow handle
 

@@ -138,12 +138,13 @@ gru.start_orchestration(
 
 Passing `minion_config` requires the Minion to declare the framework-defined
 `config` attribute with the accepted model type. Gru validates and binds the
-model before workflows start; steps then access it as `self.config`.
+model by value before workflows start; steps then access the independent
+snapshot as `self.config`. Later mutations to the caller's object do not affect
+the Minion, and the bound snapshot should be treated as immutable.
 
-Inline startup is portable, but its identity is tied to the in-memory
-config value. Use it for development, teaching, and exploration. For
-long-lived deployment slots, use file-based configs with
-`_minions_config_id`.
+Inline startup is portable, but its identity is tied to the captured config type
+and value. Use it for development, teaching, and exploration. For long-lived
+deployment slots, use file-based configs with `_minions_config_id`.
 
 ---
 

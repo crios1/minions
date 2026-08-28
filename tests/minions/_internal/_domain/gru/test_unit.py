@@ -181,9 +181,15 @@ class TestUnit:
             AddressStableResource.__module__ = original_module
 
     def test_inline_config_identity_is_stable_hashed_and_content_sensitive(self) -> None:
-        cfg_a = Gru._make_inline_config_identity(InlineIdentityConfig(name="alpha"))
-        cfg_a_again = Gru._make_inline_config_identity(InlineIdentityConfig(name="alpha"))
-        cfg_b = Gru._make_inline_config_identity(InlineIdentityConfig(name="bravo"))
+        cfg_a, _ = Gru._make_inline_config_identity_and_snapshot(
+            InlineIdentityConfig(name="alpha")
+        )
+        cfg_a_again, _ = Gru._make_inline_config_identity_and_snapshot(
+            InlineIdentityConfig(name="alpha")
+        )
+        cfg_b, _ = Gru._make_inline_config_identity_and_snapshot(
+            InlineIdentityConfig(name="bravo")
+        )
 
         assert cfg_a == cfg_a_again
         assert cfg_a != cfg_b

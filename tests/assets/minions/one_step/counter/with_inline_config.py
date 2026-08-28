@@ -10,10 +10,12 @@ from tests.assets.events.counter import CounterEvent
 @dataclass
 class InlineDataclassConfig:
     name: str
+    values: list[str]
 
 
 class InlineStructConfig(msgspec.Struct):
     name: str
+    values: list[str]
 
 
 class AssetMinion(Minion[CounterEvent, CounterContext]):

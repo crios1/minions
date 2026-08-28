@@ -40,8 +40,10 @@ gru.start_orchestration(
 
 Passing `minion_config` opts `MyMinion` into configuration, so it must declare
 the framework-defined `config` attribute with the accepted model type. Gru
-validates and binds the supplied model before workflows start; no `load_config`
-override is needed for inline configuration.
+captures the supplied model by value and binds that independent snapshot before
+workflows start; later mutations to the caller's object do not affect the
+Minion. Treat the bound config as immutable. No `load_config` override is needed
+for inline configuration.
 
 Use inline mode when you’re exploring, testing, or composing a runtime directly
 in Python. Gru derives the config identity from the serializable config type and
@@ -50,9 +52,11 @@ and `@pipeline_id(...)` when present; otherwise Gru falls back to each class's
 module and name. Starting the same component identities with the same inline
 config value addresses the same orchestration.
 
-Inline config identity is deterministic, but inline config is not intended as a
-long-lived deployment slot. Use a stamped file-backed config before relying on
-resume across deployment refactors.
+Inline config identity is derived from the same captured type and value bound to
+the Minion. To change the settings, start an orchestration with a new config
+value rather than mutating the bound snapshot. Inline config is not intended as
+a long-lived deployment slot; use a stamped file-backed config before relying
+on resume across deployment refactors.
 
 ## Module-based mode
 

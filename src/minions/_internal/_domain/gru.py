@@ -38,6 +38,7 @@ from .._utils.get_type_from_hint import get_type_from_hint
 from .._utils.safe_cancel_task import safe_cancel_task
 from .._utils.safe_create_task import safe_create_task
 from .._utils.serialization import (
+    deserialize,
     require_user_declared_type,
     serialize,
 )
@@ -600,18 +601,30 @@ class Gru:
         return base62_encode(digest).rjust(44, "0")
 
     @staticmethod
-    def _make_inline_config_identity(minion_config: object) -> str:
+    def _make_inline_config_identity_and_snapshot(
+        minion_config: object,
+    ) -> tuple[str, object]:
         config_type = type(minion_config)
         require_user_declared_type(
             config_type,
-            owner="Gru.start_orchestration",
+            owner="inline config",
             type_label="minion_config",
         )
 
         type_id = f"{config_type.__module__}.{config_type.__qualname__}".encode("utf-8")
-        payload = serialize(minion_config, exp_msg_prefix="Gru.start_orchestration minion_config: ")
+        payload = serialize(minion_config, exp_msg_prefix="inline config: ")
         digest = hashlib.sha256(type_id + b"\0" + payload).hexdigest()[:16]
-        return f"<inline:{digest}>"
+        try:
+            snapshot = deserialize(
+                payload,
+                config_type,
+            )
+        except (TypeError, ValueError) as e:
+            raise TypeError(
+                "inline config cannot be captured by value: "
+                f"{e}"
+            ) from e
+        return f"<inline:{digest}>", snapshot
 
     @staticmethod
     async def _resolve_file_config_path_and_identity(
@@ -2167,6 +2180,7 @@ class Gru:
 
             effective_minion_config_path: str | None = None
             minion_config_identity = ""
+            inline_config_snapshot: object | None = None
 
             # string based start
             if isinstance(minion, str):
@@ -2230,7 +2244,10 @@ class Gru:
                 pipeline_module_path = pipeline_cls.__module__
                 try:
                     if minion_config is not None:
-                        minion_config_identity = self._make_inline_config_identity(
+                        (
+                            minion_config_identity,
+                            inline_config_snapshot,
+                        ) = self._make_inline_config_identity_and_snapshot(
                             minion_config
                         )
                         effective_minion_config_path = minion_config_identity
@@ -2252,7 +2269,7 @@ class Gru:
                 pipeline_module_path=pipeline_module_path,
                 minion_config_path=effective_minion_config_path,
                 minion_config_identity=minion_config_identity,
-                inline_minion_config=minion_config,
+                inline_minion_config=inline_config_snapshot,
                 minion_cls=minion_cls,
                 pipeline_cls=pipeline_cls,
             )

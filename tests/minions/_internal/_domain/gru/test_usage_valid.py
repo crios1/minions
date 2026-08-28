@@ -386,7 +386,7 @@ class TestValidUsage:
         "inline_config_kind",
         ["dataclass", "struct"],
     )
-    async def test_gru_loads_inline_minion_config_from_classes(
+    async def test_inline_minion_config_is_captured_by_value(
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         inline_config_kind: str,
@@ -403,10 +403,12 @@ class TestValidUsage:
         )
 
         inline_config = (
-            InlineDataclassConfig(name="dataclass")
+            InlineDataclassConfig(name="dataclass", values=["original"])
             if inline_config_kind == "dataclass"
-            else InlineStructConfig(name="struct")
+            else InlineStructConfig(name="struct", values=["original"])
         )
+        original_name = inline_config.name
+
         async with managed_gru_context(
             state_store=NoOpStateStore(),
             logger=ConsoleLogger(),
@@ -423,7 +425,13 @@ class TestValidUsage:
 
             minion = gru._orchestrations[result.orchestration_id].minion
             assert isinstance(minion, InlineConfigMinion)
-            assert minion.config is inline_config
+            assert minion.config == inline_config
+            assert minion.config is not inline_config
+
+            inline_config.name = "changed by caller"
+            inline_config.values.append("changed by caller")
+            assert minion.config.name == original_name
+            assert minion.config.values == ["original"]
 
             stop = await gru.stop_orchestration(result.orchestration_id)
             assert stop.success
