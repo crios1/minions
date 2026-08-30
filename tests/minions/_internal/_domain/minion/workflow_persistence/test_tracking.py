@@ -12,6 +12,9 @@ from minions._internal._framework.metrics_constants import (
     MINION_WORKFLOW_DURATION_SECONDS,
     MINION_WORKFLOW_INFLIGHT_GAUGE,
 )
+from minions._internal._framework.minion_workflow_context_codec import (
+    deserialize_workflow_context_blob,
+)
 from tests.assets.contexts.empty import EmptyContext
 from tests.assets.events.empty import EmptyEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
@@ -67,6 +70,58 @@ async def _get_workflow_state(
 
 
 @pytest.mark.asyncio
+async def test_persists_at_workflow_start_before_first_step_and_before_later_steps(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+):
+    first_step_started = asyncio.Event()
+    continue_first_step = asyncio.Event()
+    second_step_started = asyncio.Event()
+    continue_second_step = asyncio.Event()
+
+    class TwoStepMinion(Minion[EmptyEvent, EmptyContext]):
+        @minion_step
+        async def first_step(self):
+            first_step_started.set()
+            await continue_first_step.wait()
+
+        @minion_step
+        async def second_step(self):
+            second_step_started.set()
+            await continue_second_step.wait()
+
+    store = FailableStateStore(logger=logger)
+    minion = _make_minion(
+        minion_class=TwoStepMinion,
+        store=store,
+        logger=logger,
+        metrics=metrics,
+    )
+    minion._mn_mark_running()
+
+    await minion._mn_handle_event(EmptyEvent())
+    await asyncio.wait_for(first_step_started.wait(), timeout=1.0)
+
+    assert len(store.saved_context_history) == 1
+    initial_persisted_context = deserialize_workflow_context_blob(
+        store.saved_context_history[0].context
+    )
+    assert initial_persisted_context.next_step_index == 0
+
+    continue_first_step.set()
+    await asyncio.wait_for(second_step_started.wait(), timeout=1.0)
+
+    assert len(store.saved_context_history) == 2
+    later_step_persisted_context = deserialize_workflow_context_blob(
+        store.saved_context_history[1].context
+    )
+    assert later_step_persisted_context.next_step_index == 1
+
+    continue_second_step.set()
+    await minion._mn_wait_until_workflows_idle(timeout=1.0)
+
+
+@pytest.mark.asyncio
 async def test_register_new_workflow_persistence_state_rejects_duplicate_workflow_id(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
@@ -114,38 +169,6 @@ async def test_workflow_start_save_failure_creates_missing_checkpoint_risk(
     assert state.persisted_next_step_index is None
     assert state.next_step_index == 0
     assert state.risk == "missing_checkpoint"
-
-
-@pytest.mark.asyncio
-async def test_save_failure_at_durable_step_does_not_create_checkpoint_risk(
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-):
-    store = FailableStateStore(logger=logger)
-    minion = _make_minion(
-        minion_class=NoOpMinion,
-        store=store,
-        logger=logger,
-        metrics=metrics,
-        workflow_persistence_failure_policy="continue-on-failure",
-    )
-    context = _make_workflow_context(minion)
-    assert await minion._mn_run_workflow_persistence_operation(
-        context,
-        persistence_point="workflow_start",
-    )
-    store.save_failures.enable()
-
-    assert not await minion._mn_run_workflow_persistence_operation(
-        context,
-        persistence_point="before_step",
-        step_name="first_step",
-    )
-
-    state = await _get_workflow_state(minion, context.workflow_id)
-    assert state.persisted_next_step_index == 0
-    assert state.next_step_index == 0
-    assert state.risk == "none"
 
 
 @pytest.mark.asyncio

@@ -369,12 +369,17 @@ class ScenarioVerifier:
         unresolved_workflows = self._count_unresolved_persisted_workflows(spies)
         resolved_workflows = max(workflows_started - unresolved_workflows, 0)
         replayed_step_counts_by_class = self._compute_replayed_step_counts(spies)
-        workflow_steps = 0
+        later_step_checkpoints = 0
         for m in spies.minions.values():
             workflow = self._require_workflow_spec(m)
-            workflow_steps += len(workflow) * expectations.expected_workflows_by_class.get(m, 0)
-            workflow_steps += sum(replayed_step_counts_by_class.get(m, {}).values())
-        total_save_operations = workflows_started + workflow_steps
+            later_step_checkpoints += max(len(workflow) - 1, 0) * (
+                expectations.expected_workflows_by_class.get(m, 0)
+            )
+            replayed_step_counts = replayed_step_counts_by_class.get(m, {})
+            later_step_checkpoints += sum(
+                replayed_step_counts.get(step_name, 0) for step_name in workflow[1:]
+            )
+        total_save_operations = workflows_started + later_step_checkpoints
         checkpoint_reads = len(self._result.checkpoints)
         total_decode_operations = minion_starts
 

@@ -64,7 +64,8 @@ Short-lived retries are expected during transient store problems. What matters i
   user code has already reached a terminal outcome, but Minions is still resolving the workflow because checkpoint deletion has not succeeded yet.
 
 - `persistence_point="before_step"`:
-  the workflow is blocked between steps.
+  the workflow is blocked between steps before the next step can run. The initial
+  checkpoint before the first step uses `persistence_point="workflow_start"`.
 
 - `persistence_point="workflow_resolve"`:
   the workflow is blocked during terminal cleanup, not during user step execution.

@@ -1448,11 +1448,12 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         await self._mn_register_workflow_step_inflight(step_name=step_name)
 
         try:
-            await self._mn_run_workflow_persistence_operation(
-                ctx,
-                persistence_point="before_step",
-                step_name=step_name,
-            )
+            if step_index > 0:
+                await self._mn_run_workflow_persistence_operation(
+                    ctx,
+                    persistence_point="before_step",
+                    step_name=step_name,
+                )
             await step()
         except asyncio.CancelledError:
             step_status = "interrupted"

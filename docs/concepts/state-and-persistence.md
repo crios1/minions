@@ -200,7 +200,7 @@ Use `minion_workflow_persistence_blocked_gauge` and sustained persistence failur
 The most important labels are:
 
 - `minion_workflow_persistence_operation`: `save` means Minions is trying to durably checkpoint workflow progress; `delete` means user code has already reached a terminal outcome and the runtime is resolving the workflow by removing its checkpoint.
-- `minion_workflow_persistence_point`: `workflow_start`, `before_step`, or `workflow_resolve` tells you where the runtime is in the workflow lifecycle.
+- `minion_workflow_persistence_point`: `workflow_start` is the initial checkpoint before the first step, `before_step` checkpoints progress before each later step, and `workflow_resolve` removes the checkpoint after a terminal outcome.
 - `minion_workflow_persistence_failure_stage`: distinguishes codec/serialization problems from StateStore save/delete failures.
 - `minion_workflow_persistence_retryable`: `false` means the workflow data itself is not persistable and retrying will not help; `true` means the failure is operational and the runtime may retry.
 - `minion_workflow_persistence_policy`: tells you whether the workflow is configured to continue after save failure or idle until the checkpoint is durably persisted.

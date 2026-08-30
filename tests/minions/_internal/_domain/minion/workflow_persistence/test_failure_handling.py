@@ -120,10 +120,10 @@ async def test_continue_on_failure_policy_advances_after_save_failure_and_persis
     assert failure_log.kwargs[LABEL_STATE_STORE] == "FailableStateStore"
     assert failure_log.kwargs["event_type"] == "EmptyEvent"
     assert failure_log.kwargs["context_type"] == "EmptyContext"
-    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 5
-    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == 4
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 4
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == 3
     assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL) == 1
-    assert metrics.snapshot_histogram_count_total(MINION_WORKFLOW_PERSISTENCE_DURATION_SECONDS) == 5
+    assert metrics.snapshot_histogram_count_total(MINION_WORKFLOW_PERSISTENCE_DURATION_SECONDS) == 4
     assert MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE not in metrics.snapshot_gauges()
 
 
@@ -178,8 +178,8 @@ async def test_idle_until_persisted_policy_idles_workflow_until_save_retry_succe
     assert store.save_failures.count == 1
     assert logger.has_log("Workflow idled waiting for persistence")
     assert logger.has_log("Workflow persistence resumed")
-    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 5
-    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == 4
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 4
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == 3
     assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL) == 1
     blocked_value = metrics.snapshot_gauge_value(
         MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
@@ -610,8 +610,8 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds(
     assert "checkpoint" not in delete_idle_log.kwargs
     assert logger.has_log("Workflow succeeded")
     assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_SUCCEEDED_TOTAL) == 1
-    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 5
-    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == 3
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 4
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == 2
     assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL) == 2
     blocked_value = metrics.snapshot_gauge_value(
         MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
@@ -676,8 +676,8 @@ async def test_serialization_failure_is_non_retryable_and_preserves_prior_checkp
     assert failure_log.kwargs["suggestion"] == (
         "Ensure workflow event and context values are supported by the Minions persistence codec."
     )
-    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 3
-    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == 2
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 2
+    assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == 1
     assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL) == 1
     failure_value = metrics.snapshot_counter_value(
         MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL,
