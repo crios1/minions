@@ -21,6 +21,7 @@ from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.minion_noop import NoOpMinion
 from tests.assets.support.state_store_failable import FailableStateStore
+from tests.support.race_window import GatedLock
 
 
 def _make_minion(
@@ -67,6 +68,40 @@ async def _get_workflow_state(
     workflow_id: str,
 ) -> WorkflowPersistenceState:
     return (await minion._mn_workflow_persistence_state_snapshot())[workflow_id]
+
+
+@pytest.mark.asyncio
+async def test_event_acceptance_registers_missing_checkpoint_before_workflow_task_creation(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+):
+    store = FailableStateStore(logger=logger)
+    minion = _make_minion(
+        minion_class=NoOpMinion,
+        store=store,
+        logger=logger,
+        metrics=metrics,
+    )
+    minion._mn_mark_running()
+    tasks_gate = GatedLock()
+    minion._mn_tasks_gate = tasks_gate
+
+    acceptance_task = asyncio.create_task(minion._mn_accept_event(EmptyEvent()))
+    await tasks_gate.wait_until_held()
+
+    states = await minion._mn_workflow_persistence_state_snapshot()
+    assert len(states) == 1
+    state = next(iter(states.values()))
+    assert state.persisted_next_step_index is None
+    assert state.next_step_index == 0
+    assert state.risk == "missing_checkpoint"
+    assert not minion._mn_workflow_tasks
+
+    acceptance_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await acceptance_task
+
+    assert await minion._mn_workflow_persistence_state_snapshot() == {}
 
 
 @pytest.mark.asyncio
@@ -159,6 +194,7 @@ async def test_workflow_start_save_failure_creates_missing_checkpoint_risk(
     )
     context = _make_workflow_context(minion)
     store.save_failures.enable()
+    await minion._mn_register_new_workflow_persistence_state(context)
 
     assert not await minion._mn_run_workflow_persistence_operation(
         context,
@@ -185,6 +221,7 @@ async def test_save_failure_after_workflow_advances_creates_stale_checkpoint_ris
         workflow_persistence_failure_policy="continue-on-failure",
     )
     context = _make_workflow_context(minion)
+    await minion._mn_register_new_workflow_persistence_state(context)
     assert await minion._mn_run_workflow_persistence_operation(
         context,
         persistence_point="workflow_start",
@@ -218,6 +255,7 @@ async def test_save_success_after_stale_checkpoint_risk_clears_risk(
         workflow_persistence_failure_policy="continue-on-failure",
     )
     context = _make_workflow_context(minion)
+    await minion._mn_register_new_workflow_persistence_state(context)
     assert await minion._mn_run_workflow_persistence_operation(
         context,
         persistence_point="workflow_start",
@@ -256,6 +294,7 @@ async def test_delete_failure_creates_unresolved_delete_risk(
         metrics=metrics,
     )
     context = _make_workflow_context(minion)
+    await minion._mn_register_new_workflow_persistence_state(context)
     assert await minion._mn_run_workflow_persistence_operation(
         context,
         persistence_point="workflow_start",
@@ -328,6 +367,7 @@ async def test_shutdown_before_workflow_task_admission_removes_workflow_persiste
         metrics=metrics,
     )
     context = _make_workflow_context(minion)
+    await minion._mn_register_new_workflow_persistence_state(context)
     assert await minion._mn_run_workflow_persistence_operation(
         context,
         persistence_point="workflow_start",

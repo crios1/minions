@@ -197,6 +197,7 @@ async def test_retry_delays_follow_exponential_backoff_and_remain_capped(
 
     monkeypatch.setattr(asyncio, "sleep", record_sleep)
     monkeypatch.setattr(random, "uniform", fail_if_jitter_is_applied)
+    await m._mn_register_new_workflow_persistence_state(ctx)
 
     persisted = await m._mn_run_workflow_persistence_operation(
         ctx,
@@ -246,6 +247,7 @@ async def test_retry_jitter_respects_configured_bounds(
 
     monkeypatch.setattr(asyncio, "sleep", record_sleep)
     monkeypatch.setattr(random, "uniform", sample_each_bound)
+    await m._mn_register_new_workflow_persistence_state(ctx)
 
     persisted = await m._mn_run_workflow_persistence_operation(
         ctx,
@@ -289,7 +291,9 @@ async def test_cancellation_propagates_after_one_active_attempt_finishes(
         jitter_ratio=0.0,
     )
     ctx = _make_empty_workflow_context(m._mn_orchestration_id)
-    if operation == "delete":
+    if operation == "save":
+        await m._mn_register_new_workflow_persistence_state(ctx)
+    else:
         await m._mn_register_resumed_workflow_persistence_state_if_absent(ctx)
         await store._mn_serialize_and_save_context(ctx)
 
@@ -328,10 +332,14 @@ async def test_cancellation_propagates_after_one_active_attempt_finishes(
     assert MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE not in metrics.snapshot_gauges()
 
     states = await m._mn_workflow_persistence_state_snapshot()
-    if operation == "delete" and fail:
-        assert states[ctx.workflow_id].risk == "unresolved_delete"
-    else:
+    if operation == "delete" and not fail:
         assert ctx.workflow_id not in states
+    elif operation == "delete":
+        assert states[ctx.workflow_id].risk == "unresolved_delete"
+    elif fail:
+        assert states[ctx.workflow_id].risk == "missing_checkpoint"
+    else:
+        assert states[ctx.workflow_id].risk == "none"
 
 
 @pytest.mark.asyncio
@@ -367,6 +375,7 @@ async def test_unexpected_active_attempt_error_is_logged_without_replacing_cance
         "_mn_run_workflow_persistence_attempt",
         raise_attempt_error,
     )
+    await m._mn_register_new_workflow_persistence_state(ctx)
     persistence_task = asyncio.create_task(
         m._mn_run_workflow_persistence_operation(
             ctx,
