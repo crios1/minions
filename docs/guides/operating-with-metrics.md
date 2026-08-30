@@ -26,6 +26,13 @@ same orchestration starts again. Consequently, an in-flight value of zero does
 not mean that the StateStore contains no unfinished workflows. Minions does not
 currently publish a separate gauge for saved unfinished workflows.
 
+`minion_workflow_duration_seconds` measures wall-clock time from immediately
+before a workflow's initial checkpoint to each observed outcome. That timestamp
+is persisted, so an eventual terminal duration includes initial persistence
+waits and time spent unfinished between interruption and resume. A value of
+`-1.0` means the loaded workflow context did not contain its original
+workflow-start timestamp.
+
 ## Read the important labels first
 
 When investigating persistence behavior, start with these labels:

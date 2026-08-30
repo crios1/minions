@@ -290,6 +290,22 @@ def test_deserialize_workflow_context_accepts_integer_started_at():
     assert isinstance(loaded_ctx.started_at, float)
 
 
+def test_deserialize_workflow_context_blob_treats_omitted_started_at_field_as_unknown():
+    payload = serialize_workflow_context(
+        MinionWorkflowContext(
+            orchestration_id="dummy-orchestration-id",
+            workflow_id="wf-missing-started-at",
+            event={"v": 1},
+            context={"c": 1},
+        )
+    )
+    del payload["started_at"]
+
+    loaded_ctx = deserialize_workflow_context_blob(serialize(payload))
+
+    assert loaded_ctx.started_at is None
+
+
 def test_deserialize_workflow_context_rejects_unknown_leftover_fields():
     payload = serialize_workflow_context(
         MinionWorkflowContext(

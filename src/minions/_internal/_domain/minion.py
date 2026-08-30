@@ -1275,8 +1275,6 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         )
 
                     for i in range(ctx.next_step_index, len(self._mn_workflow)):
-                        if i == 0:
-                            ctx.started_at = time.time()
                         ctx.next_step_index = i
                         await self._mn_execute_workflow_step(
                             ctx,
@@ -1379,13 +1377,11 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
 
                     # measure workflow duration
 
-                    started_at = ctx.started_at
-                    if started_at is not None:
-                        duration = time.time() - started_at
-                    else:
-                        # use sentinel since cancellation can happen before step 0 sets started_at
-                        duration = -1.0
-
+                    duration = (
+                        time.time() - ctx.started_at
+                        if ctx.started_at is not None
+                        else -1.0  # use sentinel in case of external modification
+                    )
                     await self._mn_metrics._mn_observe(
                         metric_name=MINION_WORKFLOW_DURATION_SECONDS,
                         value=duration,
@@ -1425,7 +1421,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     ) -> None:
         step = self._mn_workflow[step_index]
         step_name = step.__name__
-        step_start = ctx.started_at if step_index == 0 else time.time()
+        step_start = time.time()
         step_status: ExecutionStatus = "undefined"
 
         await self._mn_shielded_gather(
@@ -1532,11 +1528,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 ),
             )
         finally:
-            if step_start:
-                duration = time.time() - step_start
-            else:
-                # use sentinel if loaded context is missing started_at (e.g. external modification)
-                duration = -1.0
+            duration = time.time() - step_start
             await self._mn_shielded_gather(
                 self._mn_metrics._mn_observe(
                     metric_name=MINION_WORKFLOW_STEP_DURATION_SECONDS,
@@ -1604,6 +1596,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             workflow_id=workflow_id,
             event=t_event,
             context=type(self)._mn_workflow_ctx_cls(),
+            started_at=time.time(),
         )
 
         await self._mn_run_workflow_persistence_operation(

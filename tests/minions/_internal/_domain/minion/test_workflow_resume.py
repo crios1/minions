@@ -3,6 +3,12 @@ import pytest
 
 from minions import Minion, minion_step
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
+from minions._internal._framework.metrics_constants import (
+    LABEL_MINION,
+    LABEL_ORCHESTRATION_ID,
+    LABEL_STATUS,
+    MINION_WORKFLOW_DURATION_SECONDS,
+)
 from minions._internal._framework.minion_workflow_context_codec import (
     PersistedMinionWorkflowContext,
     WorkflowContextTypeMismatchError,
@@ -170,6 +176,59 @@ async def test_resumed_workflow_step_can_access_event_and_context_from_state_sto
     await type(state_store).wait_for_call("delete_context", count=1, timeout=2)
 
     assert observed == [("step_2", 7, 8)]
+
+
+@pytest.mark.asyncio
+async def test_resumed_workflow_duration_uses_persisted_workflow_start_timestamp(
+    monkeypatch: pytest.MonkeyPatch,
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+):
+    class ResumeMinion(Minion[EmptyEvent, EmptyContext]):
+        @minion_step
+        async def first_step(self):
+            pytest.fail("first_step should not execute when workflow resumes at next_step_index=1")
+
+        @minion_step
+        async def second_step(self): ...
+
+    orchestration_id = "dummy-orchestration-id"
+    minion = ResumeMinion(
+        "dummy-minion-instance-id",
+        orchestration_id,
+        "dummy-minion-module-path",
+        None,
+        state_store,
+        metrics,
+        logger,
+        minion_id="dummy-minion-id",
+        minion_config_id="",
+        pipeline_id="dummy-pipeline-id",
+    )
+    await state_store._mn_serialize_and_save_context(
+        MinionWorkflowContext(
+            orchestration_id=orchestration_id,
+            workflow_id="dummy-workflow-id",
+            event=EmptyEvent(),
+            context=EmptyContext(),
+            next_step_index=1,
+            started_at=100.0,
+        )
+    )
+    monkeypatch.setattr("minions._internal._domain.minion.time.time", lambda: 150.0)
+
+    await minion._mn_startup()
+    await minion._mn_wait_until_workflows_idle(timeout=1.0)
+
+    assert metrics.snapshot_histogram_sum(
+        MINION_WORKFLOW_DURATION_SECONDS,
+        {
+            LABEL_ORCHESTRATION_ID: orchestration_id,
+            LABEL_MINION: minion._mn_minion_id,
+            LABEL_STATUS: "succeeded",
+        },
+    ) == 50.0
 
 
 @pytest.mark.asyncio

@@ -21,6 +21,9 @@ from minions._internal._framework.metrics_constants import (
     MINION_WORKFLOW_STEP_INFLIGHT_GAUGE,
 )
 from minions._internal._framework.metrics_noop import NoOpMetrics
+from minions._internal._framework.minion_workflow_context_codec import (
+    deserialize_workflow_context_blob,
+)
 from minions._internal._framework.state_store_noop import NoOpStateStore
 from minions.types import MinionWorkflowHandle
 from tests.assets.contexts.empty import EmptyContext
@@ -148,6 +151,81 @@ async def test_failure_is_terminal_deletes_checkpoint_and_increments_failed_coun
             },
         )
         == 0
+    )
+
+
+@pytest.mark.asyncio
+async def test_workflow_duration_includes_initial_persistence_but_first_step_duration_does_not(
+    monkeypatch: pytest.MonkeyPatch,
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+):
+    current_time = 100.0
+    saved_contexts: list[bytes] = []
+
+    class TimedMinion(Minion[EmptyEvent, EmptyContext]):
+        @minion_step
+        async def step(self):
+            nonlocal current_time
+            current_time = 130.0
+
+    save_context = state_store.save_context
+
+    async def save_initial_checkpoint(
+        workflow_id: str,
+        orchestration_id: str,
+        context: bytes,
+    ) -> None:
+        nonlocal current_time
+        await save_context(workflow_id, orchestration_id, context)
+        saved_contexts.append(context)
+        current_time = 120.0
+
+    monkeypatch.setattr(state_store, "save_context", save_initial_checkpoint)
+    monkeypatch.setattr(
+        "minions._internal._domain.minion.time.time",
+        lambda: current_time,
+    )
+    minion = TimedMinion(
+        "dummy-minion-instance-id",
+        "dummy-orchestration-id",
+        "dummy-minion-module-path",
+        None,
+        state_store,
+        metrics,
+        logger,
+        minion_id="dummy-minion-id",
+        minion_config_id="",
+        pipeline_id="dummy-pipeline-id",
+    )
+    minion._mn_mark_running()
+
+    await minion._mn_handle_event(EmptyEvent())
+    await minion._mn_wait_until_workflows_idle(timeout=1.0)
+
+    assert deserialize_workflow_context_blob(saved_contexts[0]).started_at == 100.0
+    base_labels = {
+        LABEL_ORCHESTRATION_ID: minion._mn_orchestration_id,
+        LABEL_MINION: minion._mn_minion_id,
+        LABEL_STATUS: "succeeded",
+    }
+    assert (
+        metrics.snapshot_histogram_sum(
+            MINION_WORKFLOW_DURATION_SECONDS,
+            base_labels,
+        )
+        == 30.0
+    )
+    assert (
+        metrics.snapshot_histogram_sum(
+            MINION_WORKFLOW_STEP_DURATION_SECONDS,
+            {
+                **base_labels,
+                LABEL_MINION_WORKFLOW_STEP: "step",
+            },
+        )
+        == 10.0
     )
 
 
