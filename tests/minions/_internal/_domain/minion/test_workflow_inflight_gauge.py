@@ -14,6 +14,7 @@ from tests.assets.contexts.empty import EmptyContext
 from tests.assets.events.empty import EmptyEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
+from tests.assets.support.state_store_failable import FailableStateStore
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.support.race_window import GatedLock
 
@@ -64,6 +65,50 @@ def _make_minion(
         minion_config_id="",
         pipeline_id="dummy-pipeline-id",
     )
+
+
+@pytest.mark.asyncio
+async def test_tracks_accepted_workflow_during_initial_persistence_and_step_execution(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+):
+    step_started = asyncio.Event()
+    allow_step_to_finish = asyncio.Event()
+
+    class WaitingMinion(Minion[EmptyEvent, EmptyContext]):
+        @minion_step
+        async def step(self) -> None:
+            step_started.set()
+            await allow_step_to_finish.wait()
+
+    state_store = FailableStateStore(logger=logger)
+    state_store.save_failures.enable()
+    minion = _make_minion(
+        WaitingMinion,
+        logger=logger,
+        metrics=metrics,
+        state_store=state_store,
+    )
+    minion._mn_workflow_persistence_retry_delay_seconds = 0.01
+    minion._mn_workflow_persistence_retry_jitter_ratio = 0.0
+    minion._mn_mark_running()
+
+    await minion._mn_accept_event(EmptyEvent())
+    await state_store.save_failures.wait_for(1)
+
+    assert len(minion._mn_workflow_tasks) == 1
+    workflow_task = next(iter(minion._mn_workflow_tasks))
+    assert _workflow_inflight_gauge_value(minion, metrics) == 1
+
+    state_store.save_failures.disable()
+    await asyncio.wait_for(step_started.wait(), timeout=1.0)
+
+    assert minion._mn_workflow_tasks == {workflow_task}
+
+    allow_step_to_finish.set()
+    await minion._mn_wait_until_workflows_idle(timeout=1.0)
+
+    assert _workflow_inflight_gauge_value(minion, metrics) == 0
 
 
 @pytest.mark.asyncio
@@ -143,10 +188,10 @@ async def test_tracks_concurrent_live_workflows(
     minion._mn_mark_running()
 
     assert _workflow_inflight_gauge_value(minion, metrics) == 0
-    await minion._mn_handle_event(EmptyEvent())
+    await minion._mn_accept_event(EmptyEvent())
     assert _workflow_inflight_gauge_value(minion, metrics) == 1
 
-    await minion._mn_handle_event(EmptyEvent())
+    await minion._mn_accept_event(EmptyEvent())
     await asyncio.wait_for(both_workflows_started.wait(), timeout=1)
 
     assert _workflow_inflight_gauge_value(minion, metrics) == 2
@@ -233,7 +278,7 @@ async def test_tracks_workflow_execution_lifecycle(
     minion._mn_mark_running()
 
     assert _workflow_inflight_gauge_value(minion, metrics) == 0
-    await minion._mn_handle_event(EmptyEvent())
+    await minion._mn_accept_event(EmptyEvent())
     await asyncio.wait_for(step_started.wait(), timeout=1)
     assert _workflow_inflight_gauge_value(minion, metrics) == 1
 
@@ -271,7 +316,7 @@ async def test_publishes_zero_on_shutdown(
         state_store=state_store,
     )
     minion._mn_mark_running()
-    await minion._mn_handle_event(EmptyEvent())
+    await minion._mn_accept_event(EmptyEvent())
     await asyncio.wait_for(step_started.wait(), timeout=1)
     assert _workflow_inflight_gauge_value(minion, metrics) == 1
 

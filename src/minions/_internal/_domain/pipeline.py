@@ -215,8 +215,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
         async with self._mn_subs_lock:
             subs = tuple(self._mn_subs)
             for minion in subs:
-                # Track event-handling tasks on the minion itself for clean shutdown.
-                minion.safe_create_task(minion._mn_handle_event(event))
+                await minion._mn_accept_event(event)
                 await self._mn_metrics._mn_inc(
                     metric_name=PIPELINE_EVENT_FANOUT_TOTAL,
                     labels={

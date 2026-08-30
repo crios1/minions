@@ -99,7 +99,7 @@ async def test_persists_at_workflow_start_before_first_step_and_before_later_ste
     )
     minion._mn_mark_running()
 
-    await minion._mn_handle_event(EmptyEvent())
+    await minion._mn_accept_event(EmptyEvent())
     await asyncio.wait_for(first_step_started.wait(), timeout=1.0)
 
     assert len(store.saved_context_history) == 1
@@ -302,7 +302,7 @@ async def test_workflow_completion_removes_workflow_persistence_state(
     )
     minion._mn_mark_running()
 
-    await minion._mn_handle_event(EmptyEvent())
+    await minion._mn_accept_event(EmptyEvent())
     await asyncio.wait_for(step_entered.wait(), timeout=1.0)
 
     states = await minion._mn_workflow_persistence_state_snapshot()
@@ -371,7 +371,7 @@ async def test_workflow_inflight_gauge_failure_cancels_workflow_and_removes_pers
     monkeypatch.setattr(metrics, "_mn_set", fail_inflight_gauge_publication)
 
     with pytest.raises(RuntimeError, match="controlled workflow inflight gauge failure"):
-        await minion._mn_handle_event(EmptyEvent())
+        await minion._mn_accept_event(EmptyEvent())
 
     assert not minion._mn_workflow_tasks
     assert not minion._mn_service_tasks
@@ -405,7 +405,7 @@ async def test_workflow_duration_metric_failure_removes_workflow_persistence_sta
 
     monkeypatch.setattr(metrics, "_mn_observe", fail_workflow_duration_observation)
 
-    await minion._mn_handle_event(EmptyEvent())
+    await minion._mn_accept_event(EmptyEvent())
     await minion._mn_wait_until_all_tasks_idle(timeout=1.0)
 
     assert not minion._mn_workflow_tasks

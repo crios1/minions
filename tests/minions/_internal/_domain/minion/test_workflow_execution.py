@@ -61,7 +61,7 @@ async def test_abort_increments_aborted_counter(
         pipeline_id="dummy-pipeline-id",
     )
     m._mn_mark_running()
-    await m._mn_handle_event(EmptyEvent())
+    await m._mn_accept_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
 
     # wait until the state store has recorded deletion (workflow finished)
@@ -111,7 +111,7 @@ async def test_failure_is_terminal_deletes_checkpoint_and_increments_failed_coun
         workflow_failure_policy="delete",
     )
     m._mn_mark_running()
-    await m._mn_handle_event(EmptyEvent())
+    await m._mn_accept_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
 
     await type(state_store).wait_for_call("delete_context", count=1, timeout=2)
@@ -201,7 +201,7 @@ async def test_workflow_duration_includes_initial_persistence_but_first_step_dur
     )
     minion._mn_mark_running()
 
-    await minion._mn_handle_event(EmptyEvent())
+    await minion._mn_accept_event(EmptyEvent())
     await minion._mn_wait_until_workflows_idle(timeout=1.0)
 
     assert deserialize_workflow_context_blob(saved_contexts[0]).started_at == 100.0
@@ -257,7 +257,7 @@ async def test_cancellation_records_interrupted_duration_status_and_keeps_contex
         pipeline_id="dummy-pipeline-id",
     )
     m._mn_mark_running()
-    await m._mn_handle_event(EmptyEvent())
+    await m._mn_accept_event(EmptyEvent())
     await asyncio.wait_for(step_started.wait(), timeout=1.0)
     async with m._mn_tasks_gate:
         workflow_tasks = list(m._mn_workflow_tasks)
@@ -331,8 +331,8 @@ async def test_step_inflight_gauge_tracks_concurrent_executions_of_same_step(
         pipeline_id="dummy-pipeline-id",
     )
     m._mn_mark_running()
-    await m._mn_handle_event(EmptyEvent())
-    await m._mn_handle_event(EmptyEvent())
+    await m._mn_accept_event(EmptyEvent())
+    await m._mn_accept_event(EmptyEvent())
     await asyncio.wait_for(both_steps_started.wait(), timeout=1.0)
 
     labels = {
@@ -387,10 +387,10 @@ async def test_step_inflight_gauge_tracks_each_step_independently(
         pipeline_id="dummy-pipeline-id",
     )
     m._mn_mark_running()
-    await m._mn_handle_event(EmptyEvent())
+    await m._mn_accept_event(EmptyEvent())
     await asyncio.wait_for(first_workflow_at_step_1.wait(), timeout=1.0)
 
-    await m._mn_handle_event(EmptyEvent())
+    await m._mn_accept_event(EmptyEvent())
     await asyncio.wait_for(second_workflow_at_step_2.wait(), timeout=1.0)
 
     base_labels = {
@@ -462,7 +462,7 @@ async def test_runtime_guard_rejects_nested_step_invocation_via_indirect_call(
     )
 
     m._mn_mark_running()
-    await m._mn_handle_event(EmptyEvent())
+    await m._mn_accept_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
     await type(state_store).wait_for_call("delete_context", count=1, timeout=2)
 
@@ -514,7 +514,7 @@ async def test_different_steps_share_event_and_context(
         pipeline_id="dummy-pipeline-id",
     )
     m._mn_mark_running()
-    await m._mn_handle_event(IntValueEvent(value=10))
+    await m._mn_accept_event(IntValueEvent(value=10))
     await m._mn_wait_until_workflows_idle(timeout=2)
     await type(state_store).wait_for_call("delete_context", count=1, timeout=2)
 
@@ -548,7 +548,7 @@ class TestMinionWorkflowHandle:
         )
         m._mn_mark_running()
 
-        await m._mn_handle_event(EmptyEvent())
+        await m._mn_accept_event(EmptyEvent())
         await m._mn_wait_until_tasks_idle(timeout=1.0, timeout_msg="workflow did not finish")
 
         assert len(captured_handles) == 1
@@ -585,7 +585,7 @@ class TestMinionWorkflowHandle:
         )
         m._mn_mark_running()
 
-        await m._mn_handle_event(EmptyEvent())
+        await m._mn_accept_event(EmptyEvent())
         await m._mn_wait_until_tasks_idle(timeout=1.0, timeout_msg="workflow did not finish")
 
         assert len(captured_handles) == 1

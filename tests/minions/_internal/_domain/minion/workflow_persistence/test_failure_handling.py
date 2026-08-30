@@ -90,7 +90,7 @@ async def test_continue_on_failure_policy_advances_after_save_failure_and_persis
     )
 
     m._mn_mark_running()
-    await m._mn_handle_event(EmptyEvent())
+    await m._mn_accept_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
 
     assert step_calls == [
@@ -164,7 +164,7 @@ async def test_idle_until_persisted_policy_idles_workflow_until_save_retry_succe
     )
 
     m._mn_mark_running()
-    await m._mn_handle_event(EmptyEvent())
+    await m._mn_accept_event(EmptyEvent())
     await store.save_failures.wait_for(1)
 
     assert step_calls == ["enable_save_failures"]
@@ -244,7 +244,7 @@ async def test_workflow_cancellation_during_retry_wait_preserves_checkpoint_and_
     }
 
     m._mn_mark_running()
-    await m._mn_handle_event(EmptyEvent())
+    await m._mn_accept_event(EmptyEvent())
     await store.save_failures.wait_for(1)
     await _wait_until(
         lambda: (
@@ -425,8 +425,8 @@ async def test_persistence_blocked_gauge_tracks_concurrent_workflows_for_same_la
 
     m._mn_mark_running()
     await asyncio.gather(
-        m._mn_handle_event(EmptyEvent()),
-        m._mn_handle_event(EmptyEvent()),
+        m._mn_accept_event(EmptyEvent()),
+        m._mn_accept_event(EmptyEvent()),
     )
     await store.save_failures.wait_for(2)
 
@@ -502,7 +502,7 @@ async def test_idle_until_persisted_policy_reports_retry_progress_and_escalates_
     )
 
     m._mn_mark_running()
-    await m._mn_handle_event(EmptyEvent())
+    await m._mn_accept_event(EmptyEvent())
     await asyncio.wait_for(save_failures_enabled.wait(), timeout=1.0)
     assert not workflow_continued.is_set()
 
@@ -566,7 +566,7 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds(
     )
 
     m._mn_mark_running()
-    await m._mn_handle_event(EmptyEvent())
+    await m._mn_accept_event(EmptyEvent())
     await asyncio.wait_for(step_1_done.wait(), timeout=1.0)
     await store.delete_failures.wait_for(2)
 
@@ -656,7 +656,7 @@ async def test_serialization_failure_is_non_retryable_and_preserves_prior_checkp
     )
 
     m._mn_mark_running()
-    await m._mn_handle_event(EmptyEvent())
+    await m._mn_accept_event(EmptyEvent())
     await m._mn_wait_until_workflows_idle(timeout=2)
 
     assert step_calls == ["make_context_unserializable"]

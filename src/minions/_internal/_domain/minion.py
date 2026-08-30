@@ -569,7 +569,12 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             )
             if contexts:
                 await asyncio.gather(
-                    *(self._mn_run_workflow(ctx) for ctx in contexts),
+                    *(
+                        self._mn_create_and_register_workflow_task_and_publish_inflight_gauge(
+                            lambda ctx=ctx: self._mn_run_workflow(ctx)
+                        )
+                        for ctx in contexts
+                    ),
                     return_exceptions=True
                 )
             async with self._mn_tasks_gate:
@@ -1129,11 +1134,21 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         self,
         workflow_runner: Callable[[], Coroutine[Any, Any, None]],
     ) -> asyncio.Task[None]:
+        async def run_and_unregister_workflow_task() -> None:
+            try:
+                await workflow_runner()
+            finally:
+                task = asyncio.current_task()
+                if task is not None:
+                    await self._mn_unregister_workflow_task_and_publish_inflight_gauge(
+                        task
+                    )
+
         task: asyncio.Task[None] | None = None
         workflow_coro: Coroutine[Any, Any, None] | None = None
         try:
             async with self._mn_tasks_gate:
-                workflow_coro = workflow_runner()
+                workflow_coro = run_and_unregister_workflow_task()
                 task = self.safe_create_task(workflow_coro)
                 self._mn_workflow_tasks.add(task)
                 await self._mn_publish_workflow_inflight_gauge()
@@ -1391,24 +1406,17 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         },
                     )
             finally:
-                task = asyncio.current_task()
                 try:
-                    if task is not None:
-                        await self._mn_unregister_workflow_task_and_publish_inflight_gauge(task)
+                    await self._mn_remove_workflow_persistence_state(ctx.workflow_id)
                 finally:
-                    try:
-                        await self._mn_remove_workflow_persistence_state(ctx.workflow_id)
-                    finally:
-                        self._mn_event_var.reset(event_token)
-                        self._mn_context_var.reset(context_token)
-                        self._mn_workflow_handle_var.reset(workflow_handle_token)
-                        metric_context.close()
+                    self._mn_event_var.reset(event_token)
+                    self._mn_context_var.reset(context_token)
+                    self._mn_workflow_handle_var.reset(workflow_handle_token)
+                    metric_context.close()
 
         try:
             await self._mn_register_resumed_workflow_persistence_state_if_absent(ctx)
-            await self._mn_create_and_register_workflow_task_and_publish_inflight_gauge(
-                run_workflow
-            )
+            await run_workflow()
         except BaseException:
             await self._mn_remove_workflow_persistence_state(ctx.workflow_id)
             raise
@@ -1584,26 +1592,29 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             # contexts remain represented by the state store for future resumption.
             await self._mn_clear_workflow_tasks_and_publish_inflight_gauge()
 
-    async def _mn_handle_event(self, t_event: T_Event):
-        # Live events must wait for startup workflow resume to finish; otherwise
-        # an event can be persisted before startup completes and then resumed.
-        await self._mn_wait_until_running()
+    async def _mn_accept_event(self, event: T_Event) -> None:
+        async def run_workflow_from_event() -> None:
+            # Live events must wait for startup workflow resume to finish; otherwise
+            # an event can be persisted before startup completes and then resumed.
+            await self._mn_wait_until_running()
 
-        workflow_id = uuid.uuid4().hex
+            ctx: MinionWorkflowContext[T_Event, T_Ctx] = MinionWorkflowContext(
+                orchestration_id=self._mn_orchestration_id,
+                workflow_id=uuid.uuid4().hex,
+                event=event,
+                context=type(self)._mn_workflow_ctx_cls(),
+                started_at=time.time(),
+            )
 
-        ctx: MinionWorkflowContext[T_Event, T_Ctx] = MinionWorkflowContext(
-            orchestration_id=self._mn_orchestration_id,
-            workflow_id=workflow_id,
-            event=t_event,
-            context=type(self)._mn_workflow_ctx_cls(),
-            started_at=time.time(),
+            await self._mn_run_workflow_persistence_operation(
+                ctx,
+                persistence_point="workflow_start",
+            )
+            await self._mn_run_workflow(ctx)
+
+        await self._mn_create_and_register_workflow_task_and_publish_inflight_gauge(
+            run_workflow_from_event
         )
-
-        await self._mn_run_workflow_persistence_operation(
-            ctx,
-            persistence_point="workflow_start",
-        )
-        await self._mn_run_workflow(ctx)
 
     # Task Idleness
 
