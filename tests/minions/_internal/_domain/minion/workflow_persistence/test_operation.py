@@ -290,6 +290,7 @@ async def test_cancellation_propagates_after_one_active_attempt_finishes(
     )
     ctx = _make_empty_workflow_context(m._mn_orchestration_id)
     if operation == "delete":
+        await m._mn_register_resumed_workflow_persistence_state_if_absent(ctx)
         await store._mn_serialize_and_save_context(ctx)
 
     persistence_task = asyncio.create_task(
@@ -325,6 +326,12 @@ async def test_cancellation_propagates_after_one_active_attempt_finishes(
         1 if fail else 0
     )
     assert MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE not in metrics.snapshot_gauges()
+
+    states = await m._mn_workflow_persistence_state_snapshot()
+    if operation == "delete" and fail:
+        assert states[ctx.workflow_id].risk == "unresolved_delete"
+    else:
+        assert ctx.workflow_id not in states
 
 
 @pytest.mark.asyncio

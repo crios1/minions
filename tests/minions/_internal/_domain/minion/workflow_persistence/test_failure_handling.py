@@ -256,6 +256,12 @@ async def test_workflow_cancellation_during_retry_wait_preserves_checkpoint_and_
             == 1
         )
     )
+    states = await m._mn_workflow_persistence_state_snapshot()
+    assert len(states) == 1
+    state = next(iter(states.values()))
+    assert state.persisted_next_step_index == 0
+    assert state.next_step_index == 1
+    assert state.risk == "stale_checkpoint"
     async with m._mn_tasks_gate:
         workflow_task = next(iter(m._mn_workflow_tasks))
 
@@ -273,6 +279,7 @@ async def test_workflow_cancellation_during_retry_wait_preserves_checkpoint_and_
     assert not m._mn_workflow_tasks
     assert not m._mn_service_tasks
     assert not m._mn_workflow_persistence_blocked_counts
+    assert await m._mn_workflow_persistence_state_snapshot() == {}
     assert metrics.snapshot_gauge_value(
         MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
         blocked_labels,

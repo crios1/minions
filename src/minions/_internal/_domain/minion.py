@@ -10,6 +10,7 @@ import traceback
 import uuid
 from collections.abc import Awaitable, Coroutine
 from contextlib import ExitStack
+from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
 from typing import (
@@ -101,6 +102,34 @@ _ALLOWED_WORKFLOW_PERSISTENCE_POINTS: tuple[WorkflowPersistencePoint, ...] = (
     "before_step",
     "workflow_resolve",
 )
+
+WorkflowPersistenceRisk = Literal[
+    "none",
+    "missing_checkpoint",
+    "stale_checkpoint",
+    "unresolved_delete",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowPersistenceState:
+    persisted_next_step_index: int | None
+    next_step_index: int
+    delete_pending: bool = False
+
+    @property
+    def risk(self) -> WorkflowPersistenceRisk:
+        if self.delete_pending:
+            return (
+                "unresolved_delete"
+                if self.persisted_next_step_index is not None
+                else "none"
+            )
+        if self.persisted_next_step_index is None:
+            return "missing_checkpoint"
+        if self.persisted_next_step_index != self.next_step_index:
+            return "stale_checkpoint"
+        return "none"
 
 
 class WorkflowPersistenceNonRetryableError(RuntimeError):
@@ -365,6 +394,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         self._mn_metrics = metrics
         self._mn_workflow_persistence_blocked_counts: dict[tuple[tuple[str, str], ...], int] = {}
         self._mn_workflow_persistence_blocked_counts_lock = asyncio.Lock()
+        self._mn_workflow_persistence_states: dict[str, WorkflowPersistenceState] = {}
+        self._mn_workflow_persistence_states_lock = asyncio.Lock()
         self._mn_workflow_step_inflight_counts: dict[str, int] = {}
         self._mn_workflow_step_inflight_counts_lock = asyncio.Lock()
         self._mn_workflow_failure_policy = self._mn_validate_workflow_failure_policy(
@@ -592,6 +623,84 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
 
     # Workflow Persistence
 
+    async def _mn_register_new_workflow_persistence_state(
+        self,
+        ctx: MinionWorkflowContext[T_Event, T_Ctx],
+    ) -> None:
+        async with self._mn_workflow_persistence_states_lock:
+            if ctx.workflow_id in self._mn_workflow_persistence_states:
+                raise RuntimeError(
+                    "workflow persistence state is already registered for "
+                    f"workflow {ctx.workflow_id!r}"
+                )
+            self._mn_workflow_persistence_states[ctx.workflow_id] = (
+                WorkflowPersistenceState(
+                    persisted_next_step_index=None,
+                    next_step_index=ctx.next_step_index,
+                )
+            )
+
+    async def _mn_register_resumed_workflow_persistence_state_if_absent(
+        self,
+        ctx: MinionWorkflowContext[T_Event, T_Ctx],
+    ) -> None:
+        async with self._mn_workflow_persistence_states_lock:
+            if ctx.workflow_id in self._mn_workflow_persistence_states:
+                return
+            self._mn_workflow_persistence_states[ctx.workflow_id] = (
+                WorkflowPersistenceState(
+                    persisted_next_step_index=ctx.next_step_index,
+                    next_step_index=ctx.next_step_index,
+                )
+            )
+
+    async def _mn_update_workflow_persistence_state_for_operation(
+        self,
+        ctx: MinionWorkflowContext[T_Event, T_Ctx],
+        *,
+        operation: Literal["save", "delete"],
+    ) -> None:
+        async with self._mn_workflow_persistence_states_lock:
+            current = self._mn_workflow_persistence_states[ctx.workflow_id]
+            self._mn_workflow_persistence_states[ctx.workflow_id] = (
+                WorkflowPersistenceState(
+                    persisted_next_step_index=current.persisted_next_step_index,
+                    next_step_index=ctx.next_step_index,
+                    delete_pending=(operation == "delete"),
+                )
+            )
+
+    async def _mn_update_workflow_persistence_state_from_operation_result(
+        self,
+        ctx: MinionWorkflowContext[T_Event, T_Ctx],
+        *,
+        operation: Literal["save", "delete"],
+        result: PersistenceOperationResult,
+    ) -> None:
+        if not result.persisted:
+            return
+        async with self._mn_workflow_persistence_states_lock:
+            current = self._mn_workflow_persistence_states[ctx.workflow_id]
+            if operation == "delete":
+                del self._mn_workflow_persistence_states[ctx.workflow_id]
+                return
+            self._mn_workflow_persistence_states[ctx.workflow_id] = (
+                WorkflowPersistenceState(
+                    persisted_next_step_index=current.next_step_index,
+                    next_step_index=current.next_step_index,
+                )
+            )
+
+    async def _mn_remove_workflow_persistence_state(self, workflow_id: str) -> None:
+        async with self._mn_workflow_persistence_states_lock:
+            self._mn_workflow_persistence_states.pop(workflow_id, None)
+
+    async def _mn_workflow_persistence_state_snapshot(
+        self,
+    ) -> dict[str, WorkflowPersistenceState]:
+        async with self._mn_workflow_persistence_states_lock:
+            return dict(self._mn_workflow_persistence_states)
+
     @staticmethod
     def _mn_validate_workflow_persistence_point(
         persistence_point: WorkflowPersistencePoint,
@@ -618,6 +727,11 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             result = await self._mn_state_store._mn_serialize_and_save_context(ctx)
         else:
             result = await self._mn_state_store._mn_delete_context(ctx.workflow_id)
+        await self._mn_update_workflow_persistence_state_from_operation_result(
+            ctx,
+            operation=operation,
+            result=result,
+        )
         attempt_duration_seconds = time.perf_counter() - attempt_started_at
         await self._mn_record_workflow_persistence_attempt_metrics(
             persistence_point=persistence_point,
@@ -638,6 +752,8 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             persistence_point,
             step_name,
         )
+        if persistence_point == "workflow_start":
+            await self._mn_register_new_workflow_persistence_state(ctx)
         persistence_location_log_kwargs: dict[str, object] = {
             "persistence_point": persistence_point,
         }
@@ -657,6 +773,10 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         retry_delay_seconds = self._mn_workflow_persistence_retry_delay_seconds
         blocked_labels: dict[str, str] | None = None
         try:
+            await self._mn_update_workflow_persistence_state_for_operation(
+                ctx,
+                operation=operation,
+            )
             while True:
                 attempts += 1
                 # An in-progress persistence attempt must finish before cancellation propagates.
@@ -813,6 +933,10 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     self._mn_workflow_persistence_retry_max_delay_seconds,
                     retry_delay_seconds * self._mn_workflow_persistence_retry_backoff_multiplier,
                 )
+        except BaseException:
+            if persistence_point == "workflow_start":
+                await self._mn_remove_workflow_persistence_state(ctx.workflow_id)
+            raise
         finally:
             if blocked_labels is not None:
                 await self._mn_decrement_workflow_persistence_blocked_count(blocked_labels)
@@ -1005,11 +1129,26 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         self,
         workflow_runner: Callable[[], Coroutine[Any, Any, None]],
     ) -> asyncio.Task[None]:
-        async with self._mn_tasks_gate:
-            task = self.safe_create_task(workflow_runner())
-            self._mn_workflow_tasks.add(task)
-            await self._mn_publish_workflow_inflight_gauge()
-            return task
+        task: asyncio.Task[None] | None = None
+        workflow_coro: Coroutine[Any, Any, None] | None = None
+        try:
+            async with self._mn_tasks_gate:
+                workflow_coro = workflow_runner()
+                task = self.safe_create_task(workflow_coro)
+                self._mn_workflow_tasks.add(task)
+                await self._mn_publish_workflow_inflight_gauge()
+                return task
+        except BaseException:
+            if task is not None:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+                if workflow_coro is not None and inspect.getcoroutinestate(
+                    workflow_coro
+                ) == inspect.CORO_CREATED:
+                    workflow_coro.close()
+                async with self._mn_tasks_gate:
+                    self._mn_workflow_tasks.discard(task)
+            raise
 
     async def _mn_unregister_workflow_task_and_publish_inflight_gauge(
         self,
@@ -1082,6 +1221,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
 
     async def _mn_run_workflow(self, ctx: MinionWorkflowContext[T_Event, T_Ctx]) -> None:
         if self._mn_shutting_down:
+            await self._mn_remove_workflow_persistence_state(ctx.workflow_id)
             return
 
         async def run_workflow() -> None:
@@ -1102,6 +1242,35 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                     caller=self._mn_minion_id,
                 )
             )
+
+            cleanup_started = False
+
+            async def cleanup() -> None:
+                nonlocal cleanup_started
+                if cleanup_started:
+                    return
+                cleanup_started = True
+                task = asyncio.current_task()
+                try:
+                    if task is not None:
+                        await self._mn_unregister_workflow_task_and_publish_inflight_gauge(task)
+                finally:
+                    try:
+                        await self._mn_remove_workflow_persistence_state(ctx.workflow_id)
+                    finally:
+                        self._mn_event_var.reset(event_token)
+                        self._mn_context_var.reset(context_token)
+                        self._mn_workflow_handle_var.reset(workflow_handle_token)
+                        metric_context.close()
+
+            async def await_with_cleanup_on_base_exception(
+                awaitable: Awaitable[Any],
+            ) -> Any:
+                try:
+                    return await awaitable
+                except BaseException:
+                    await cleanup()
+                    raise
 
             workflow_status: ExecutionStatus = "undefined"
             delete_persisted_context_on_exit = True
@@ -1179,13 +1348,17 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         terminal_workflow_log_level = None
                         terminal_workflow_log_message = None
                         terminal_workflow_error = None
+                        await cleanup()
+                        raise
+                    except BaseException:
+                        await cleanup()
                         raise
 
                 # log and measure terminal workflow outcome
 
                 if workflow_status == "aborted" and terminal_workflow_log_message is not None:
-                    await self._mn_shielded_gather(
-                        *[
+                    await await_with_cleanup_on_base_exception(
+                        self._mn_shielded_gather(
                             self._mn_logger._mn_log(
                                 terminal_workflow_log_level or INFO,
                                 terminal_workflow_log_message,
@@ -1196,14 +1369,14 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 metric_name=MINION_WORKFLOW_ABORTED_TOTAL,
                                 labels=self._mn_workflow_base_metric_labels(),
                             ),
-                        ]
+                        )
                     )
                 elif workflow_status == "failed" and terminal_workflow_log_message is not None:
                     failure_error = terminal_workflow_error
                     if failure_error is None:
                         failure_error = RuntimeError("workflow failed")
-                    await self._mn_shielded_gather(
-                        *[
+                    await await_with_cleanup_on_base_exception(
+                        self._mn_shielded_gather(
                             self._mn_logger._mn_log_exception(
                                 terminal_workflow_log_level or ERROR,
                                 terminal_workflow_log_message,
@@ -1218,11 +1391,11 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                     LABEL_ERROR_TYPE: type(failure_error).__name__,
                                 },
                             ),
-                        ]
+                        )
                     )
                 elif workflow_status == "succeeded" and terminal_workflow_log_message is not None:
-                    await self._mn_shielded_gather(
-                        *[
+                    await await_with_cleanup_on_base_exception(
+                        self._mn_shielded_gather(
                             self._mn_logger._mn_log(
                                 terminal_workflow_log_level or INFO,
                                 terminal_workflow_log_message,
@@ -1233,7 +1406,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 metric_name=MINION_WORKFLOW_SUCCEEDED_TOTAL,
                                 labels=self._mn_workflow_base_metric_labels(),
                             ),
-                        ]
+                        )
                     )
 
                 # measure workflow duration
@@ -1253,23 +1426,20 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                         LABEL_STATUS: workflow_status,
                     },
                 )
-                await metric_obs
+                await await_with_cleanup_on_base_exception(metric_obs)
 
                 # clean up
 
-                task = asyncio.current_task()
-                if task is not None:
-                    await self._mn_unregister_workflow_task_and_publish_inflight_gauge(task)
+                await cleanup()
 
-                self._mn_event_var.reset(event_token)
-                self._mn_context_var.reset(context_token)
-                self._mn_workflow_handle_var.reset(workflow_handle_token)
-
-                metric_context.close()
-
-        await self._mn_create_and_register_workflow_task_and_publish_inflight_gauge(
-            run_workflow
-        )
+        try:
+            await self._mn_register_resumed_workflow_persistence_state_if_absent(ctx)
+            await self._mn_create_and_register_workflow_task_and_publish_inflight_gauge(
+                run_workflow
+            )
+        except BaseException:
+            await self._mn_remove_workflow_persistence_state(ctx.workflow_id)
+            raise
 
     async def _mn_execute_workflow_step(
         self,
