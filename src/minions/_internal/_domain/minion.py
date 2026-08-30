@@ -1235,130 +1235,97 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             )
 
             metric_context = ExitStack()
-            metric_context.enter_context(
-                ResourceMetricContext(
-                    orchestration_id=self._mn_orchestration_id,
-                    caller_kind="minion",
-                    caller=self._mn_minion_id,
-                )
-            )
-
-            cleanup_started = False
-
-            async def cleanup() -> None:
-                nonlocal cleanup_started
-                if cleanup_started:
-                    return
-                cleanup_started = True
-                task = asyncio.current_task()
-                try:
-                    if task is not None:
-                        await self._mn_unregister_workflow_task_and_publish_inflight_gauge(task)
-                finally:
-                    try:
-                        await self._mn_remove_workflow_persistence_state(ctx.workflow_id)
-                    finally:
-                        self._mn_event_var.reset(event_token)
-                        self._mn_context_var.reset(context_token)
-                        self._mn_workflow_handle_var.reset(workflow_handle_token)
-                        metric_context.close()
-
-            async def await_with_cleanup_on_base_exception(
-                awaitable: Awaitable[Any],
-            ) -> Any:
-                try:
-                    return await awaitable
-                except BaseException:
-                    await cleanup()
-                    raise
-
-            workflow_status: ExecutionStatus = "undefined"
-            delete_persisted_context_on_exit = True
-            terminal_workflow_log_level: int | None = None
-            terminal_workflow_log_message: str | None = None
-            terminal_workflow_error: Exception | None = None
-
             try:
-                if ctx.next_step_index == 0:
-                    await self._mn_shielded_gather(
-                        *[
-                            self._mn_logger._mn_log(
-                                INFO,
-                                "Workflow started",
-                                workflow_id=ctx.workflow_id,
-                                **self._mn_orchestration_log_kwargs(),
-                            ),
-                            self._mn_metrics._mn_inc(
-                                metric_name=MINION_WORKFLOW_STARTED_TOTAL,
-                                labels=self._mn_workflow_base_metric_labels(),
-                            ),
-                        ]
+                metric_context.enter_context(
+                    ResourceMetricContext(
+                        orchestration_id=self._mn_orchestration_id,
+                        caller_kind="minion",
+                        caller=self._mn_minion_id,
                     )
-                else:
-                    await self._mn_logger._mn_log(
-                        INFO,
-                        "Workflow resumed",
-                        workflow_id=ctx.workflow_id,
-                        **self._mn_orchestration_log_kwargs(),
-                    )
+                )
 
-                for i in range(ctx.next_step_index, len(self._mn_workflow)):
-                    if i == 0:
-                        ctx.started_at = time.time()
-                    ctx.next_step_index = i
-                    await self._mn_execute_workflow_step(
-                        ctx,
-                        step_index=i,
-                    )
-            except asyncio.CancelledError:
-                workflow_status: ExecutionStatus = "interrupted"
-                raise
-            except AbortWorkflow:
-                workflow_status: ExecutionStatus = "aborted"
-                terminal_workflow_log_level = INFO
-                terminal_workflow_log_message = "Workflow aborted"
-            except Exception as e:
-                workflow_status: ExecutionStatus = "failed"
-                if isinstance(e, WorkflowPersistenceNonRetryableError):
-                    delete_persisted_context_on_exit = False
-                else:
-                    delete_persisted_context_on_exit = (
-                        self._mn_workflow_failure_policy == "delete"
-                    )
-                terminal_workflow_log_level = ERROR
-                terminal_workflow_log_message = "Workflow failed"
-                terminal_workflow_error = e
-            else:
-                workflow_status: ExecutionStatus = "succeeded"
-                terminal_workflow_log_level = INFO
-                terminal_workflow_log_message = "Workflow succeeded"
-            finally:
-                # remove resolved workflow context from the state store
-                if (
-                    workflow_status in ("succeeded", "failed", "aborted")
-                    and delete_persisted_context_on_exit
-                ):
-                    try:
-                        await self._mn_run_workflow_persistence_operation(
-                            ctx,
-                            persistence_point="workflow_resolve",
+                workflow_status: ExecutionStatus = "undefined"
+                delete_persisted_context_on_exit = True
+                terminal_workflow_log_level: int | None = None
+                terminal_workflow_log_message: str | None = None
+                terminal_workflow_error: Exception | None = None
+
+                try:
+                    if ctx.next_step_index == 0:
+                        await self._mn_shielded_gather(
+                            *[
+                                self._mn_logger._mn_log(
+                                    INFO,
+                                    "Workflow started",
+                                    workflow_id=ctx.workflow_id,
+                                    **self._mn_orchestration_log_kwargs(),
+                                ),
+                                self._mn_metrics._mn_inc(
+                                    metric_name=MINION_WORKFLOW_STARTED_TOTAL,
+                                    labels=self._mn_workflow_base_metric_labels(),
+                                ),
+                            ]
                         )
-                    except asyncio.CancelledError:
-                        workflow_status = "interrupted"
-                        terminal_workflow_log_level = None
-                        terminal_workflow_log_message = None
-                        terminal_workflow_error = None
-                        await cleanup()
-                        raise
-                    except BaseException:
-                        await cleanup()
-                        raise
+                    else:
+                        await self._mn_logger._mn_log(
+                            INFO,
+                            "Workflow resumed",
+                            workflow_id=ctx.workflow_id,
+                            **self._mn_orchestration_log_kwargs(),
+                        )
 
-                # log and measure terminal workflow outcome
+                    for i in range(ctx.next_step_index, len(self._mn_workflow)):
+                        if i == 0:
+                            ctx.started_at = time.time()
+                        ctx.next_step_index = i
+                        await self._mn_execute_workflow_step(
+                            ctx,
+                            step_index=i,
+                        )
+                except asyncio.CancelledError:
+                    workflow_status = "interrupted"
+                    raise
+                except AbortWorkflow:
+                    workflow_status = "aborted"
+                    terminal_workflow_log_level = INFO
+                    terminal_workflow_log_message = "Workflow aborted"
+                except Exception as e:
+                    workflow_status = "failed"
+                    if isinstance(e, WorkflowPersistenceNonRetryableError):
+                        delete_persisted_context_on_exit = False
+                    else:
+                        delete_persisted_context_on_exit = (
+                            self._mn_workflow_failure_policy == "delete"
+                        )
+                    terminal_workflow_log_level = ERROR
+                    terminal_workflow_log_message = "Workflow failed"
+                    terminal_workflow_error = e
+                else:
+                    workflow_status = "succeeded"
+                    terminal_workflow_log_level = INFO
+                    terminal_workflow_log_message = "Workflow succeeded"
+                finally:
+                    # remove resolved workflow context from the state store
+                    if (
+                        workflow_status in ("succeeded", "failed", "aborted")
+                        and delete_persisted_context_on_exit
+                    ):
+                        try:
+                            await self._mn_run_workflow_persistence_operation(
+                                ctx,
+                                persistence_point="workflow_resolve",
+                            )
+                        except asyncio.CancelledError:
+                            workflow_status = "interrupted"
+                            terminal_workflow_log_level = None
+                            terminal_workflow_log_message = None
+                            terminal_workflow_error = None
+                            raise
 
-                if workflow_status == "aborted" and terminal_workflow_log_message is not None:
-                    await await_with_cleanup_on_base_exception(
-                        self._mn_shielded_gather(
+                    # log and measure terminal workflow outcome
+
+                    if workflow_status == "aborted" and terminal_workflow_log_message is not None:
+                        await self._mn_shielded_gather(
                             self._mn_logger._mn_log(
                                 terminal_workflow_log_level or INFO,
                                 terminal_workflow_log_message,
@@ -1370,13 +1337,14 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 labels=self._mn_workflow_base_metric_labels(),
                             ),
                         )
-                    )
-                elif workflow_status == "failed" and terminal_workflow_log_message is not None:
-                    failure_error = terminal_workflow_error
-                    if failure_error is None:
-                        failure_error = RuntimeError("workflow failed")
-                    await await_with_cleanup_on_base_exception(
-                        self._mn_shielded_gather(
+                    elif (
+                        workflow_status == "failed"
+                        and terminal_workflow_log_message is not None
+                    ):
+                        failure_error = terminal_workflow_error
+                        if failure_error is None:
+                            failure_error = RuntimeError("workflow failed")
+                        await self._mn_shielded_gather(
                             self._mn_logger._mn_log_exception(
                                 terminal_workflow_log_level or ERROR,
                                 terminal_workflow_log_message,
@@ -1392,10 +1360,11 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 },
                             ),
                         )
-                    )
-                elif workflow_status == "succeeded" and terminal_workflow_log_message is not None:
-                    await await_with_cleanup_on_base_exception(
-                        self._mn_shielded_gather(
+                    elif (
+                        workflow_status == "succeeded"
+                        and terminal_workflow_log_message is not None
+                    ):
+                        await self._mn_shielded_gather(
                             self._mn_logger._mn_log(
                                 terminal_workflow_log_level or INFO,
                                 terminal_workflow_log_message,
@@ -1407,30 +1376,37 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                                 labels=self._mn_workflow_base_metric_labels(),
                             ),
                         )
+
+                    # measure workflow duration
+
+                    started_at = ctx.started_at
+                    if started_at is not None:
+                        duration = time.time() - started_at
+                    else:
+                        # use sentinel since cancellation can happen before step 0 sets started_at
+                        duration = -1.0
+
+                    await self._mn_metrics._mn_observe(
+                        metric_name=MINION_WORKFLOW_DURATION_SECONDS,
+                        value=duration,
+                        labels={
+                            **self._mn_workflow_base_metric_labels(),
+                            LABEL_STATUS: workflow_status,
+                        },
                     )
-
-                # measure workflow duration
-
-                started_at = ctx.started_at
-                if started_at is not None:
-                    duration = time.time() - started_at
-                else:
-                    # use sentinel since cancellation can happen before step 0 sets started_at
-                    duration = -1.0
-
-                metric_obs = self._mn_metrics._mn_observe(
-                    metric_name=MINION_WORKFLOW_DURATION_SECONDS,
-                    value=duration,
-                    labels={
-                        **self._mn_workflow_base_metric_labels(),
-                        LABEL_STATUS: workflow_status,
-                    },
-                )
-                await await_with_cleanup_on_base_exception(metric_obs)
-
-                # clean up
-
-                await cleanup()
+            finally:
+                task = asyncio.current_task()
+                try:
+                    if task is not None:
+                        await self._mn_unregister_workflow_task_and_publish_inflight_gauge(task)
+                finally:
+                    try:
+                        await self._mn_remove_workflow_persistence_state(ctx.workflow_id)
+                    finally:
+                        self._mn_event_var.reset(event_token)
+                        self._mn_context_var.reset(context_token)
+                        self._mn_workflow_handle_var.reset(workflow_handle_token)
+                        metric_context.close()
 
         try:
             await self._mn_register_resumed_workflow_persistence_state_if_absent(ctx)
