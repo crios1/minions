@@ -68,11 +68,12 @@ async def test_pipeline_runtime_metric_labels_match_contract(
         def __init__(self):
             self.tasks: list[asyncio.Task[None]] = []
 
-        async def _mn_accept_event(self, event: EmptyEvent) -> None:
+        async def _mn_accept_event(self, event: EmptyEvent) -> bool:
             async def accept_event() -> None:
                 return None
 
             self.safe_create_task(accept_event())
+            return True
 
         def safe_create_task(self, coro: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
             task = asyncio.create_task(coro)

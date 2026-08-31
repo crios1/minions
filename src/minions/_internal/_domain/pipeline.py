@@ -214,8 +214,11 @@ class Pipeline(AsyncService, Generic[T_Event]):
         )
         async with self._mn_subs_lock:
             subs = tuple(self._mn_subs)
+            accepted_subs: list[Minion[T_Event, Any]] = []
             for minion in subs:
-                await minion._mn_accept_event(event)
+                if not await minion._mn_accept_event(event):
+                    continue
+                accepted_subs.append(minion)
                 await self._mn_metrics._mn_inc(
                     metric_name=PIPELINE_EVENT_FANOUT_TOTAL,
                     labels={
@@ -230,7 +233,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
                         "Pipeline Fanout: dispatched event to minion",
                         **self._mn_fanout_log_kwargs(minion),
                     )
-                    for minion in subs
+                    for minion in accepted_subs
                 ],
                 return_exceptions=True,
             )

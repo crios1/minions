@@ -261,7 +261,7 @@ async def test_workflow_cancellation_during_retry_wait_preserves_checkpoint_and_
     state = next(iter(states.values()))
     assert state.persisted_next_step_index == 0
     assert state.next_step_index == 1
-    assert state.risk == "stale_checkpoint"
+    assert state.risk_kind == "stale_checkpoint"
     async with m._mn_tasks_gate:
         workflow_task = next(iter(m._mn_workflow_tasks))
 
@@ -362,9 +362,26 @@ async def test_stopping_orchestration_during_retry_wait_preserves_unfinished_wor
             )
         )
 
-        stopped = await gru.stop_orchestration(started.orchestration_id)
+        rejected_stop = await gru.stop_orchestration(started.orchestration_id)
 
-        assert stopped.success
+        assert not rejected_stop.success
+        assert rejected_stop.blocked_by_persistence_risk
+        assert len(rejected_stop.persistence_risks) == 1
+        assert rejected_stop.persistence_risks[0].kind == "stale_checkpoint"
+        assert step_calls == ["change_context_and_enable_save_failures"]
+        assert minion._mn_workflow_tasks
+
+        forced_stop = await gru.stop_orchestration(
+            started.orchestration_id,
+            force=True,
+        )
+
+        assert forced_stop.success
+        assert not forced_stop.blocked_by_persistence_risk
+        assert forced_stop.persistence_risks == rejected_stop.persistence_risks
+        stopped_log = next(log for log in logger.logs if log.msg == "Orchestration stopped")
+        assert stopped_log.kwargs["force_requested"] is True
+        assert stopped_log.kwargs["persistence_risks"][0]["kind"] == "stale_checkpoint"
         persisted_contexts = await store.get_all_contexts()
         assert len(persisted_contexts) == 1
         persisted = deserialize_workflow_context_blob(persisted_contexts[0].context)

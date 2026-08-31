@@ -94,7 +94,7 @@ async def test_event_acceptance_registers_missing_checkpoint_before_workflow_tas
     state = next(iter(states.values()))
     assert state.persisted_next_step_index is None
     assert state.next_step_index == 0
-    assert state.risk == "missing_checkpoint"
+    assert state.risk_kind == "missing_checkpoint"
     assert not minion._mn_workflow_tasks
 
     acceptance_task.cancel()
@@ -204,7 +204,7 @@ async def test_workflow_start_save_failure_creates_missing_checkpoint_risk(
     state = await _get_workflow_state(minion, context.workflow_id)
     assert state.persisted_next_step_index is None
     assert state.next_step_index == 0
-    assert state.risk == "missing_checkpoint"
+    assert state.risk_kind == "missing_checkpoint"
 
 
 @pytest.mark.asyncio
@@ -238,7 +238,7 @@ async def test_save_failure_after_workflow_advances_creates_stale_checkpoint_ris
     state = await _get_workflow_state(minion, context.workflow_id)
     assert state.persisted_next_step_index == 0
     assert state.next_step_index == 1
-    assert state.risk == "stale_checkpoint"
+    assert state.risk_kind == "stale_checkpoint"
 
 
 @pytest.mark.asyncio
@@ -278,7 +278,7 @@ async def test_save_success_after_stale_checkpoint_risk_clears_risk(
     state = await _get_workflow_state(minion, context.workflow_id)
     assert state.persisted_next_step_index == 1
     assert state.next_step_index == 1
-    assert state.risk == "none"
+    assert state.risk_kind is None
 
 
 @pytest.mark.asyncio
@@ -311,7 +311,7 @@ async def test_delete_failure_creates_unresolved_delete_risk(
     state = await _get_workflow_state(minion, context.workflow_id)
     assert state.persisted_next_step_index == 0
     assert state.delete_pending
-    assert state.risk == "unresolved_delete"
+    assert state.risk_kind == "unresolved_delete"
 
     delete_task.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -346,7 +346,7 @@ async def test_workflow_completion_removes_workflow_persistence_state(
 
     states = await minion._mn_workflow_persistence_state_snapshot()
     assert len(states) == 1
-    assert next(iter(states.values())).risk == "none"
+    assert next(iter(states.values())).risk_kind is None
 
     allow_step_to_finish.set()
     await minion._mn_wait_until_workflows_idle(timeout=1.0)

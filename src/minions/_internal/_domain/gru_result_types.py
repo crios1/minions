@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 
+from .minion import WorkflowPersistenceRisk
+
 # === Supporting Types ===
 
 
@@ -36,6 +38,8 @@ class GruResult:
 @dataclass
 class StopResult(GruResult):
     conflicts: list[ConflictingMinion] = field(default_factory=list[ConflictingMinion])
+    blocked_by_persistence_risk: bool = False
+    persistence_risks: tuple[WorkflowPersistenceRisk, ...] = ()
 
 
 @dataclass

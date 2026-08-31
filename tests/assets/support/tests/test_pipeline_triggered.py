@@ -39,12 +39,13 @@ class RecordingSubscriber:
         self.tasks.append(task)
         return task
 
-    async def _mn_accept_event(self, event: RecordEvent) -> None:
+    async def _mn_accept_event(self, event: RecordEvent) -> bool:
         async def record_event() -> None:
             self.events.append(event)
             self.event_received.set()
 
         self.safe_create_task(record_event())
+        return True
 
     def _mn_identity_log_kwargs(self) -> dict[str, object]:
         return {

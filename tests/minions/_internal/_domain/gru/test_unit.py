@@ -322,7 +322,7 @@ class TestUnit:
     ):
         gru = object.__new__(Gru)
         start_calls: list[tuple[object, object, object | None, object | None]] = []
-        stop_calls: list[str] = []
+        stop_calls: list[tuple[str, bool]] = []
 
         async def fake_start_orchestration(
             self: Gru,
@@ -335,8 +335,13 @@ class TestUnit:
             start_calls.append((pipeline, minion, minion_config, minion_config_path))
             return StartResult(success=True, orchestration_id="dummy-orchestration-id")
 
-        async def fake_stop_orchestration(self: Gru, id: str) -> StopResult:
-            stop_calls.append(id)
+        async def fake_stop_orchestration(
+            self: Gru,
+            id: str,
+            *,
+            force: bool = False,
+        ) -> StopResult:
+            stop_calls.append((id, force))
             return StopResult(success=True)
 
         monkeypatch.setattr(Gru, "start_orchestration", fake_start_orchestration)
@@ -347,12 +352,12 @@ class TestUnit:
             "dummy-minion",
             minion_config_path="dummy-minion-config-path",
         )
-        stop_result = await gru.stop("dummy-orchestration-id")
+        stop_result = await gru.stop("dummy-orchestration-id", force=True)
 
         assert start_result.success
         assert stop_result.success
         assert start_calls == [("dummy-pipeline", "dummy-minion", None, "dummy-minion-config-path")]
-        assert stop_calls == ["dummy-orchestration-id"]
+        assert stop_calls == [("dummy-orchestration-id", True)]
 
     def patch_sleep_cancel_after(self, monkeypatch: pytest.MonkeyPatch, n: int) -> None:
         """

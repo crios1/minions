@@ -53,6 +53,24 @@ The right model is fail-closed:
 
 The operator should not be expected to manage orphaned internal components as a normal workflow. If cleanup fails, the useful operator actions are to inspect logs, continue if acceptable, retry broader shutdown, or restart the Gru process for a hard cleanup boundary.
 
+### Persistence-risk authorization
+
+The `stop_orchestration(...)` method interrupts unfinished workflows.
+When any workflow has no checkpoint, a stale checkpoint, or an unresolved
+checkpoint delete, an unforced stop is not applied. Its `StopResult` has
+`success=False`, `blocked_by_persistence_risk=True`, and structured
+`persistence_risks` describing the current risk for each affected workflow.
+
+This rejected request does not close workflow admission or freeze execution.
+The risk may improve or worsen before another request. Calling
+`stop_orchestration(..., force=True)` re-evaluates the current risk and applies
+the stop under consent to whatever persistence risk exists at that command
+boundary. The applied result and lifecycle logs retain those risk details.
+
+The configured workflow persistence failure policy does not itself block an
+unforced stop. Rejection depends on unresolved persistence state observed at
+the stop boundary.
+
 ## Unexpected Runtime Failure Semantics
 
 If a minion or resource becomes unavailable after its orchestration has

@@ -335,11 +335,11 @@ async def test_cancellation_propagates_after_one_active_attempt_finishes(
     if operation == "delete" and not fail:
         assert ctx.workflow_id not in states
     elif operation == "delete":
-        assert states[ctx.workflow_id].risk == "unresolved_delete"
+        assert states[ctx.workflow_id].risk_kind == "unresolved_delete"
     elif fail:
-        assert states[ctx.workflow_id].risk == "missing_checkpoint"
+        assert states[ctx.workflow_id].risk_kind == "missing_checkpoint"
     else:
-        assert states[ctx.workflow_id].risk == "none"
+        assert states[ctx.workflow_id].risk_kind is None
 
 
 @pytest.mark.asyncio

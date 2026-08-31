@@ -2406,7 +2406,12 @@ class Gru:
             reason="pipeline and minion must both be classes or both be strings",
         )
 
-    async def stop_orchestration(self, orchestration_id: str) -> StopResult:
+    async def stop_orchestration(
+        self,
+        orchestration_id: str,
+        *,
+        force: bool = False,
+    ) -> StopResult:
         self._ensure_started()
         orchestration_id = orchestration_id.strip()
 
@@ -2444,14 +2449,41 @@ class Gru:
                     return result
 
                 minion = orchestration.minion
+                persistence_risks = ()
 
                 try:
-                    await self._logger._mn_log(
-                        DEBUG,
-                        "Stopping orchestration...",
-                        **minion._mn_orchestration_log_kwargs(),
+                    stop_accepted, persistence_risks = (
+                        await minion._mn_request_stop(force=force)
                     )
+                    if not stop_accepted:
+                        result = StopResult(
+                            success=False,
+                            reason="Orchestration stop rejected due to workflow persistence risk.",
+                            suggestion=(
+                                "If the workflow persistence risk is acceptable, you "
+                                "can force a stop with force=True."
+                            ),
+                            blocked_by_persistence_risk=True,
+                            persistence_risks=persistence_risks,
+                        )
+                        await self._logger._mn_log(
+                            INFO,
+                            "Orchestration stop rejected due to workflow persistence risk",
+                            **minion._mn_orchestration_log_kwargs(),
+                            reason=result.reason,
+                            suggestion=result.suggestion,
+                            persistence_risks=[
+                                asdict(risk) for risk in persistence_risks
+                            ],
+                        )
+                        return result
 
+                    persistence_risk_log_kwargs = {
+                        "force_requested": force,
+                        "persistence_risks": [
+                            asdict(risk) for risk in persistence_risks
+                        ],
+                    }
                     await self._deactivate_orchestration(
                         orchestration=orchestration,
                     )
@@ -2460,9 +2492,13 @@ class Gru:
                         INFO,
                         "Orchestration stopped",
                         **minion._mn_orchestration_log_kwargs(),
+                        **persistence_risk_log_kwargs,
                     )
 
-                    return StopResult(success=True)
+                    return StopResult(
+                        success=True,
+                        persistence_risks=persistence_risks,
+                    )
 
                 except Exception as e:
                     orchestration_log_kwargs = {
@@ -2473,6 +2509,10 @@ class Gru:
                         ERROR,
                         "Failed to stop orchestration",
                         e,
+                        force_requested=force,
+                        persistence_risks=[
+                            asdict(risk) for risk in persistence_risks
+                        ],
                         **orchestration_log_kwargs,
                     )
                     return StopResult(
@@ -2484,10 +2524,16 @@ class Gru:
                             if isinstance(e, TaskCancellationError)
                             else None
                         ),
+                        persistence_risks=persistence_risks,
                     )
 
-    async def stop(self, orchestration_id: str) -> StopResult:
-        return await self.stop_orchestration(orchestration_id)
+    async def stop(
+        self,
+        orchestration_id: str,
+        *,
+        force: bool = False,
+    ) -> StopResult:
+        return await self.stop_orchestration(orchestration_id, force=force)
 
     async def shutdown(self) -> ShutdownResult:
         global _gru_instance

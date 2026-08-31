@@ -103,8 +103,7 @@ _ALLOWED_WORKFLOW_PERSISTENCE_POINTS: tuple[WorkflowPersistencePoint, ...] = (
     "workflow_resolve",
 )
 
-WorkflowPersistenceRisk = Literal[
-    "none",
+WorkflowPersistenceRiskKind = Literal[
     "missing_checkpoint",
     "stale_checkpoint",
     "unresolved_delete",
@@ -118,18 +117,26 @@ class WorkflowPersistenceState:
     delete_pending: bool = False
 
     @property
-    def risk(self) -> WorkflowPersistenceRisk:
+    def risk_kind(self) -> WorkflowPersistenceRiskKind | None:
         if self.delete_pending:
             return (
                 "unresolved_delete"
                 if self.persisted_next_step_index is not None
-                else "none"
+                else None
             )
         if self.persisted_next_step_index is None:
             return "missing_checkpoint"
         if self.persisted_next_step_index != self.next_step_index:
             return "stale_checkpoint"
-        return "none"
+        return None
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowPersistenceRisk:
+    workflow_id: str
+    kind: WorkflowPersistenceRiskKind
+    persisted_next_step_index: int | None
+    next_step_index: int
 
 
 class WorkflowPersistenceNonRetryableError(RuntimeError):
@@ -450,6 +457,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             )
         )
         self._mn_workflow_tasks: set[asyncio.Task[None]] = set()
+        self._mn_event_acceptance_lock = asyncio.Lock()
         self._mn_shutting_down = False
 
         cls = type(self)
@@ -1575,7 +1583,9 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         post: LifecycleCallback | None = None,
         post_args: list[object] | None = None,
     ) -> None:
-        self._mn_shutting_down = True
+        # Close event acceptance atomically with the shutdown transition.
+        async with self._mn_event_acceptance_lock:
+            self._mn_shutting_down = True
 
         try:
             return await super()._mn_shutdown(
@@ -1586,38 +1596,72 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             # contexts remain represented by the state store for future resumption.
             await self._mn_clear_workflow_tasks_and_publish_inflight_gauge()
 
-    async def _mn_accept_event(self, event: T_Event) -> None:
-        # Live events must wait for startup workflow resume to finish; otherwise
-        # an event can be persisted before startup completes and then resumed.
-        await self._mn_wait_until_running()
+    async def _mn_accept_event(self, event: T_Event) -> bool:
+        """Return a bool indicating whether the event was accepted."""
 
-        ctx: MinionWorkflowContext[T_Event, T_Ctx] = MinionWorkflowContext(
-            orchestration_id=self._mn_orchestration_id,
-            workflow_id=uuid.uuid4().hex,
-            event=event,
-            context=type(self)._mn_workflow_ctx_cls(),
-            started_at=time.time(),
-        )
-        await self._mn_register_new_workflow_persistence_state(ctx)
+        async with self._mn_event_acceptance_lock:
+            if self._mn_shutting_down:
+                return False
 
-        async def run_workflow_from_event() -> None:
+            # Live events must wait for startup workflow resume to finish; otherwise
+            # an event can be persisted before startup completes and then resumed.
+            await self._mn_wait_until_running()
+
+            ctx: MinionWorkflowContext[T_Event, T_Ctx] = MinionWorkflowContext(
+                orchestration_id=self._mn_orchestration_id,
+                workflow_id=uuid.uuid4().hex,
+                event=event,
+                context=type(self)._mn_workflow_ctx_cls(),
+                started_at=time.time(),
+            )
+            await self._mn_register_new_workflow_persistence_state(ctx)
+
+            async def run_workflow_from_event() -> None:
+                try:
+                    await self._mn_run_workflow_persistence_operation(
+                        ctx,
+                        persistence_point="workflow_start",
+                    )
+                except BaseException:
+                    await self._mn_remove_workflow_persistence_state(ctx.workflow_id)
+                    raise
+                await self._mn_run_workflow(ctx)
+
             try:
-                await self._mn_run_workflow_persistence_operation(
-                    ctx,
-                    persistence_point="workflow_start",
+                await self._mn_create_and_register_workflow_task_and_publish_inflight_gauge(
+                    run_workflow_from_event
                 )
             except BaseException:
                 await self._mn_remove_workflow_persistence_state(ctx.workflow_id)
                 raise
-            await self._mn_run_workflow(ctx)
 
-        try:
-            await self._mn_create_and_register_workflow_task_and_publish_inflight_gauge(
-                run_workflow_from_event
-            )
-        except BaseException:
-            await self._mn_remove_workflow_persistence_state(ctx.workflow_id)
-            raise
+            return True
+
+    async def _mn_request_stop(
+        self,
+        *,
+        force: bool = False,
+    ) -> tuple[bool, tuple[WorkflowPersistenceRisk, ...]]:
+        """Return whether the stop request was accepted and its persistence risks."""
+        async with self._mn_event_acceptance_lock:
+            async with self._mn_workflow_persistence_states_lock:
+                risks = tuple(
+                    WorkflowPersistenceRisk(
+                        workflow_id=workflow_id,
+                        kind=state.risk_kind,
+                        persisted_next_step_index=state.persisted_next_step_index,
+                        next_step_index=state.next_step_index,
+                    )
+                    for workflow_id, state in sorted(
+                        self._mn_workflow_persistence_states.items()
+                    )
+                    if state.risk_kind is not None
+                )
+                if risks and not force:
+                    return False, risks
+
+                self._mn_shutting_down = True
+                return True, risks
 
     # Task Idleness
 
