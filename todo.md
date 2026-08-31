@@ -392,10 +392,10 @@
       - if degraded start is supported, add explicit runtime state such as `recovery_pending` / `state_store_unavailable` / `partial_recovery`
       - decide whether new workflow admission should be allowed before persisted recovery completes, and how to avoid duplicate or out-of-order work if recovery later succeeds
     - stop_orchestration design questions:
-      - make `pause` / `drain` and higher-level redeploy cutover persistence-aware
+      - make `interrupt` / `drain` and higher-level redeploy cutover persistence-aware
       - `drain` can usually proceed with warnings because live in-memory workflows are allowed to finish
-      - `pause` / persisted handoff should require durable checkpoint confidence or report degraded persistence risk
-      - redeploy cutover composes pause-style interruption with immediate restart;
+      - `interrupt` / persisted handoff should require durable checkpoint confidence or report degraded persistence risk
+      - redeploy cutover composes interrupt-style stop with immediate restart;
         warn strongly or require `force=True` when state-store health is bad or
         unfinished workflows are not durably current
       - decide how stop results should report unresolved failed checkpoints under `continue-on-failure`
@@ -423,7 +423,7 @@
       - log state-store availability transitions and command-level persistence risk with stable kwargs
       - add metrics for recovery-pending/degraded starts and stop commands that proceed with persistence risk
       - make the future attach surface render runtime-provided risk details and
-        require explicit confirmation before pause-style stop or redeploy cutover
+        require explicit confirmation before interrupt-style stop or redeploy cutover
         when unfinished workflow state is not durably current
       - provide a noninteractive `--force` equivalent, but do not prompt or warn
         solely because `continue-on-failure` is configured when no unresolved
@@ -433,11 +433,11 @@
     - tests:
       - keep the current regression that read failure during `start_orchestration` fails closed and cleans up runtime state
       - if degraded start is added, prove start returns applied-with-warning, recovery retries continue, and persisted workflows are not silently abandoned
-      - prove stop `drain` / `pause` and redeploy cutover report different persistence risks when the state store is unavailable
-      - prove pause and cutover require confirmation for actual missing/stale
+      - prove stop `drain` / `interrupt` and redeploy cutover report different persistence risks when the state store is unavailable
+      - prove interrupt and cutover require confirmation for actual missing/stale
         checkpoints, proceed without confirmation when persistence is current,
         and revalidate risk atomically before applying a confirmed command
-      - prove forced pause/cutover is explicit and observable when persistence risk is present
+      - prove forced interrupt/cutover is explicit and observable when persistence risk is present
     - docs:
       - explain the distinction between live-process control and durable recovery guarantees
       - document how `WorkflowPersistenceFailurePolicy` relates to command behavior without overloading it to mean recovery-read policy
@@ -661,36 +661,36 @@
     - why it matters:
       - diagnostics help debug user-owned cleanup leaks without changing Gru's core cleanup guarantee
 
-- todo: add pause and drain modes to gru.stop_orchestration and map them to
+- todo: add interrupt and drain modes to gru.stop_orchestration and map them to
   higher-level redeploy strategies
-  - default mode: pause
+  - default mode: interrupt
   - modes and behavior:
-    - pause: close workflow admission; interrupt in-flight workflows; retain the
+    - interrupt: close workflow admission; cancel in-flight workflows; retain the
       last successfully persisted pre-step checkpoint for resume on restart
     - drain: close workflow admission; await every accepted workflow to resolve;
       then stop
     - cutover is not a distinct stop mode: it is a future redeploy strategy that
-      composes pause-style stop with immediate restart under replacement code
+      composes interrupt-style stop with immediate restart under replacement code
   - interruptibility:
     - represent one active stop operation per orchestration
-    - if drain is in progress and a caller requests pause, stop waiting and
+    - if drain is in progress and a caller requests interrupt, stop waiting and
       interrupt unfinished workflows
     - repeated drain callers join the existing operation
     - do not retain stopped-orchestration tombstones solely to distinguish a
       previously stopped id from an unknown id
   - api sketch:
-    - gru.stop_orchestration(orchestration_id, mode="pause"|"drain")
+    - gru.stop_orchestration(orchestration_id, mode="interrupt"|"drain")
     - grushell redeploy maps:
       - redeploy drain -> stop_orchestration(mode="drain")
-      - redeploy cutover -> stop_orchestration(mode="pause"), then restart
+      - redeploy cutover -> stop_orchestration(mode="interrupt"), then restart
   - shutdown:
-    - keep Gru.shutdown() bounded and pause-style initially
+    - keep Gru.shutdown() bounded and interrupt-style initially
     - callers that require a full drain can drain their orchestrations before
       terminal shutdown
   - timing:
-    - pause has no implicit workflow-drain grace period
+    - interrupt has no implicit workflow-drain grace period
     - omit automatic drain timeout/fallback from the first implementation;
-      callers can explicitly request pause to override an active drain
+      callers can explicitly request interrupt to override an active drain
     - separate the stable component-owned task cancellation timeout from
       workflow drain behavior
   - tests:
@@ -700,7 +700,7 @@
       detachment but not yet registered as workflow tasks
   - open questions:
     - Should `continue-on-failure` track outstanding failed checkpoints instead of only retrying when the workflow reaches the next checkpoint?
-    - A pause preserves the last successfully persisted safe step boundary, which
+    - An interrupt preserves the last successfully persisted safe step boundary, which
       may be older than in-memory context when `continue-on-failure` allowed a
       workflow to advance after a failed save.
   - persistence policy scope:
@@ -714,7 +714,7 @@
       error escalation Gru-level; reconsider finer-grained tuning only for a
       concrete workload that cannot use the shared StateStore policy
   - why it matters:
-    - failed checkpoint state affects the exact semantics of pause and drain,
+    - failed checkpoint state affects the exact semantics of interrupt and drain,
       especially when a workflow has progressed beyond its last durable checkpoint
 
 - todo: add Minion `max_inflight_workflows` class attr for bounded lossy workflow admission control
