@@ -458,6 +458,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         )
         self._mn_workflow_tasks: set[asyncio.Task[None]] = set()
         self._mn_event_acceptance_lock = asyncio.Lock()
+        self._mn_accepting_events = True
         self._mn_shutting_down = False
 
         cls = type(self)
@@ -1585,6 +1586,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     ) -> None:
         # Close event acceptance atomically with the shutdown transition.
         async with self._mn_event_acceptance_lock:
+            self._mn_accepting_events = False
             self._mn_shutting_down = True
 
         try:
@@ -1600,7 +1602,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
         """Return a bool indicating whether the event was accepted."""
 
         async with self._mn_event_acceptance_lock:
-            if self._mn_shutting_down:
+            if not self._mn_accepting_events:
                 return False
 
             # Live events must wait for startup workflow resume to finish; otherwise
@@ -1660,50 +1662,40 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 if risks and not force:
                     return False, risks
 
+                self._mn_accepting_events = False
                 self._mn_shutting_down = True
+
                 return True, risks
+
+    async def _mn_close_event_acceptance(self) -> None:
+        """Close event acceptance."""
+        async with self._mn_event_acceptance_lock:
+            self._mn_accepting_events = False
+
+    async def _mn_open_event_acceptance(self) -> None:
+        """Open event acceptance unless an irreversible stop has begun."""
+        async with self._mn_event_acceptance_lock:
+            if not self._mn_shutting_down:
+                self._mn_accepting_events = True
 
     # Task Idleness
 
-    async def _mn_wait_until_tasks_idle(
-        self,
-        timeout: float,
-        *,
-        include_service_tasks: bool = False,
-        timeout_msg: str,
+    async def _mn_wait_until_workflows_idle(
+        self, timeout: float | None = None
     ) -> None:
-        deadline = asyncio.get_running_loop().time() + timeout
-
-        while True:
-            async with self._mn_tasks_gate:
-                tasks = tuple(
-                    self._mn_workflow_tasks | self._mn_service_tasks
-                    if include_service_tasks
-                    else self._mn_workflow_tasks
-                )
-            if not tasks:
-                return
-
-            remaining = deadline - asyncio.get_running_loop().time()
-            if remaining <= 0:
-                raise TimeoutError(timeout_msg)
-
-            done, pending = await asyncio.wait(tasks, timeout=remaining)
-            if pending and not done:
-                raise TimeoutError(timeout_msg)
-
-    async def _mn_wait_until_workflows_idle(self, timeout: float = 2.0) -> None:
         """Wait until this Minion has no live workflow tasks."""
         await self._mn_wait_until_tasks_idle(
-            timeout,
+            timeout=timeout,
+            task_subset=self._mn_workflow_tasks,
             timeout_msg=(
-                f"{type(self).__name__} workflows did not become idle within {timeout:.2f}s"
+                f"{type(self).__name__} workflows did not become idle before timeout"
             ),
         )
 
-    async def _mn_wait_until_all_tasks_idle(self, timeout: float = 2.0) -> None:
+    async def _mn_wait_until_workflows_drained(
+        self, timeout: float | None = None
+    ) -> None:
         await self._mn_wait_until_tasks_idle(
-            timeout,
-            include_service_tasks=True,
-            timeout_msg=f"{type(self).__name__} tasks did not become idle within {timeout:.2f}s",
+            timeout=timeout,
+            task_subset=self._mn_workflow_tasks,
         )

@@ -53,11 +53,12 @@ The right model is fail-closed:
 
 The operator should not be expected to manage orphaned internal components as a normal workflow. If cleanup fails, the useful operator actions are to inspect logs, continue if acceptable, retry broader shutdown, or restart the Gru process for a hard cleanup boundary.
 
-### Persistence-risk authorization
+### Stop modes and persistence-risk authorization
 
-The `stop_orchestration(...)` method interrupts unfinished workflows.
-When any workflow has no checkpoint, a stale checkpoint, or an unresolved
-checkpoint delete, an unforced stop is not applied. Its `StopResult` has
+`stop_orchestration(...)` defaults to `mode="interrupt"`, which closes event
+acceptance and interrupts unfinished workflows. When any workflow has no
+checkpoint, a stale checkpoint, or an unresolved checkpoint delete, an
+unforced interrupt is not applied. Its `StopResult` has
 `success=False`, `blocked_by_persistence_risk=True`, and structured
 `persistence_risks` describing the current risk for each affected workflow.
 
@@ -70,6 +71,14 @@ boundary. The applied result and lifecycle logs retain those risk details.
 The configured workflow persistence failure policy does not itself block an
 unforced stop. Rejection depends on unresolved persistence state observed at
 the stop boundary.
+
+`mode="drain"` closes event acceptance, waits for
+every previously accepted workflow to resolve, and then stops the orchestration.
+Because drain does not interrupt unfinished workflows, it does not accept
+`force=True`. Cancelling the drain while it is waiting reopens event acceptance
+and leaves the orchestration running. Events produced while acceptance was
+closed remain unaccepted by that orchestration; Minions does not buffer or
+replay them.
 
 ## Unexpected Runtime Failure Semantics
 

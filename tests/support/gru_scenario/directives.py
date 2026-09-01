@@ -42,6 +42,8 @@ class OrchestrationStart(Directive):
 class OrchestrationStop(Directive):
     id: str | OrchestrationStart
     expect_success: bool
+    mode: Literal["interrupt", "drain"] = "interrupt"
+    force: bool = False
 
     def as_kwargs(self) -> dict[str, object]:
         return {k: v for k, v in self.__dict__.items() if k in _ORCHESTRATION_STOP_PARAMS}

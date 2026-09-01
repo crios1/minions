@@ -549,7 +549,7 @@ class TestMinionWorkflowHandle:
         m._mn_mark_running()
 
         await m._mn_accept_event(EmptyEvent())
-        await m._mn_wait_until_tasks_idle(timeout=1.0, timeout_msg="workflow did not finish")
+        await m._mn_wait_until_workflows_idle(timeout=1.0)
 
         assert len(captured_handles) == 1
         assert captured_handles[0].orchestration_id == "dummy-orchestration-id"
@@ -586,7 +586,7 @@ class TestMinionWorkflowHandle:
         m._mn_mark_running()
 
         await m._mn_accept_event(EmptyEvent())
-        await m._mn_wait_until_tasks_idle(timeout=1.0, timeout_msg="workflow did not finish")
+        await m._mn_wait_until_workflows_idle(timeout=1.0)
 
         assert len(captured_handles) == 1
         handle = captured_handles[0]

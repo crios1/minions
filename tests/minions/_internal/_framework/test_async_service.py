@@ -11,6 +11,7 @@ from minions._internal._domain.exceptions import (
 )
 from minions._internal._framework.async_service import AsyncService, _AsyncServiceState
 from minions._internal._framework.logger_noop import NoOpLogger
+from tests.support.race_window import GatedTask
 from tests.support.task_with_stalled_cancellation import (
     task_with_stalled_cancellation,
 )
@@ -19,6 +20,59 @@ from tests.support.task_with_stalled_cancellation import (
 class NoOpService(AsyncService):
     def __init__(self) -> None:
         super().__init__(NoOpLogger())
+
+
+@pytest.mark.asyncio
+async def test_wait_until_tasks_idle_waits_for_service_tasks():
+    service = NoOpService()
+    gated_task = GatedTask()
+
+    async with service._mn_tasks_gate:
+        service._mn_service_tasks.add(gated_task)
+    gated_task.add_done_callback(service._mn_service_tasks.discard)
+
+    try:
+        with pytest.raises(TimeoutError):
+            await service._mn_wait_until_tasks_idle(timeout=0.01)
+
+        gated_task.release()
+        await gated_task
+        await service._mn_wait_until_tasks_idle(timeout=0.01)
+    finally:
+        if not gated_task.done():
+            gated_task.release()
+            await asyncio.gather(gated_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_wait_until_tasks_idle_waits_only_for_subset():
+    service = NoOpService()
+
+    task_in_subset = GatedTask()
+    task_outside_subset = GatedTask()
+
+    async with service._mn_tasks_gate:
+        service._mn_service_tasks.update({task_in_subset, task_outside_subset})
+
+    tasks_subset = {task_in_subset}
+
+    try:
+        with pytest.raises(TimeoutError):
+            await service._mn_wait_until_tasks_idle(
+                timeout=0.01,
+                task_subset=tasks_subset,
+            )
+        task_in_subset.release()
+        await task_in_subset
+
+        await service._mn_wait_until_tasks_idle(
+            timeout=0.01,
+            task_subset=set(),
+        )
+        assert not task_outside_subset.done()
+    finally:
+        task_outside_subset.release()
+        await task_outside_subset
 
 
 class StateTrackingService(NoOpService):

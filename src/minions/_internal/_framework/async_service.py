@@ -1,6 +1,6 @@
 import asyncio
 import inspect
-from collections.abc import Coroutine
+from collections.abc import Collection, Coroutine
 from enum import Enum, auto
 from typing import Any, ClassVar, final
 
@@ -79,6 +79,42 @@ class AsyncService(LoggerBackedAsyncComponent):
             exception,
             task_name=task_name,
         )
+
+    async def _mn_wait_until_tasks_idle(
+        self,
+        timeout: float | None = None,
+        *,
+        task_subset: Collection[asyncio.Task[None]] | None = None,
+        timeout_msg: str | None = None,
+    ) -> None:
+        """Wait until the service tasks, or a subset of them, are idle."""
+        deadline = (
+            None
+            if timeout is None
+            else asyncio.get_running_loop().time() + timeout
+        )
+
+        while True:
+            async with self._mn_tasks_gate:
+                tasks = tuple(
+                    self._mn_service_tasks
+                    if task_subset is None
+                    else task_subset
+                )
+            if not tasks:
+                return
+
+            remaining = (
+                None
+                if deadline is None
+                else deadline - asyncio.get_running_loop().time()
+            )
+            if remaining is not None and remaining <= 0:
+                raise TimeoutError(timeout_msg or "tasks did not become idle before timeout")
+
+            done, pending = await asyncio.wait(tasks, timeout=remaining)
+            if pending and not done:
+                raise TimeoutError(timeout_msg or "tasks did not become idle before timeout")
 
     def _mn_mark_starting(self) -> None:
         self._mn_state = _AsyncServiceState.STARTING

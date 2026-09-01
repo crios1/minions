@@ -404,7 +404,7 @@ async def test_wait_minion_tasks_times_out_instead_of_blocking_indefinitely(
             self._mn_service_tasks: set[asyncio.Task[None]] = set()
             self._mn_workflow_tasks: set[asyncio.Task[None]] = set()
 
-        async def _mn_wait_until_all_tasks_idle(self, timeout: float = 2.0) -> None:
+        async def _mn_wait_until_tasks_idle(self, timeout: float) -> None:
             deadline = asyncio.get_running_loop().time() + timeout
             while True:
                 async with self._mn_tasks_gate:
@@ -454,7 +454,7 @@ async def test_wait_minion_tasks_waits_for_minions_concurrently(gru: Gru):
             self._started_event = started_event
             self._peer_started_event = peer_started_event
 
-        async def _mn_wait_until_all_tasks_idle(self, timeout: float = 2.0) -> None:
+        async def _mn_wait_until_tasks_idle(self, timeout: float) -> None:
             self._started_event.set()
             await asyncio.wait_for(self._peer_started_event.wait(), timeout=timeout)
 

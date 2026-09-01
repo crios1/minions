@@ -446,7 +446,7 @@ async def test_workflow_duration_metric_failure_removes_workflow_persistence_sta
     monkeypatch.setattr(metrics, "_mn_observe", fail_workflow_duration_observation)
 
     await minion._mn_accept_event(EmptyEvent())
-    await minion._mn_wait_until_all_tasks_idle(timeout=1.0)
+    await minion._mn_wait_until_tasks_idle(timeout=1.0)
 
     assert not minion._mn_workflow_tasks
     assert await minion._mn_workflow_persistence_state_snapshot() == {}

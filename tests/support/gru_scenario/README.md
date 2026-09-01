@@ -89,6 +89,9 @@ Directives fall into two broad roles:
   - Use `minion_config` with class-based starts.
 - `OrchestrationStop(id=...)` stops an orchestration by orchestration ID.
 - `OrchestrationStop(id=<OrchestrationStart>)` stops the orchestration started by that earlier `OrchestrationStart` directive.
+  - `mode="interrupt"` interrupts unfinished workflows and remains the default.
+  - `mode="drain"` closes event acceptance and waits for accepted workflows to resolve.
+  - `force=True` applies only to interrupt mode.
 - `Concurrent(...)` runs child directives concurrently.
 - `WaitWorkflowCompletions(...)` waits for workflow completion.
 - `AfterWorkflowStepStarts(expected, directive)` waits for explicit start-directive/step counts, then immediately executes a wrapped directive.

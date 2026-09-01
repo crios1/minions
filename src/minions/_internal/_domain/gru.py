@@ -71,6 +71,7 @@ class _UnsetType:
 _UNSET = _UnsetType()
 
 ORCHESTRATION_ID_VERSION = 1
+_ORCHESTRATION_STOP_MODES = ("interrupt", "drain")
 
 _gru_instance: Gru | None = None
 
@@ -2410,10 +2411,16 @@ class Gru:
         self,
         orchestration_id: str,
         *,
+        mode: Literal["interrupt", "drain"] = "interrupt",
         force: bool = False,
     ) -> StopResult:
         self._ensure_started()
         orchestration_id = orchestration_id.strip()
+        if mode not in _ORCHESTRATION_STOP_MODES:
+            allowed_modes = ", ".join(repr(value) for value in _ORCHESTRATION_STOP_MODES)
+            raise ValueError(f"mode must be one of: {allowed_modes}")
+        if mode == "drain" and force:
+            raise ValueError("force cannot be used with mode='drain'")
 
         async with self._runtime_state_lock:
             orchestration_existed_at_request = orchestration_id in self._orchestrations
@@ -2452,9 +2459,24 @@ class Gru:
                 persistence_risks = ()
 
                 try:
-                    stop_accepted, persistence_risks = (
-                        await minion._mn_request_stop(force=force)
-                    )
+                    if mode == "interrupt":
+                        stop_accepted, persistence_risks = (
+                            await minion._mn_request_stop(force=force)
+                        )
+                    elif mode == "drain":
+                        await minion._mn_close_event_acceptance()
+                        try:
+                            await minion._mn_wait_until_workflows_drained()
+                            stop_accepted, persistence_risks = (
+                                await minion._mn_request_stop()
+                            )
+                        except BaseException:
+                            await minion._mn_open_event_acceptance()
+                            raise
+                        if not stop_accepted:
+                            await minion._mn_open_event_acceptance()
+                    else:
+                        raise RuntimeError(f"unrecognized stop mode: {mode!r}")
                     if not stop_accepted:
                         result = StopResult(
                             success=False,
@@ -2470,6 +2492,7 @@ class Gru:
                             INFO,
                             "Orchestration stop rejected due to workflow persistence risk",
                             **minion._mn_orchestration_log_kwargs(),
+                            stop_mode=mode,
                             reason=result.reason,
                             suggestion=result.suggestion,
                             persistence_risks=[
@@ -2479,6 +2502,7 @@ class Gru:
                         return result
 
                     persistence_risk_log_kwargs = {
+                        "stop_mode": mode,
                         "force_requested": force,
                         "persistence_risks": [
                             asdict(risk) for risk in persistence_risks
@@ -2509,6 +2533,7 @@ class Gru:
                         ERROR,
                         "Failed to stop orchestration",
                         e,
+                        stop_mode=mode,
                         force_requested=force,
                         persistence_risks=[
                             asdict(risk) for risk in persistence_risks
@@ -2531,9 +2556,14 @@ class Gru:
         self,
         orchestration_id: str,
         *,
+        mode: Literal["interrupt", "drain"] = "interrupt",
         force: bool = False,
     ) -> StopResult:
-        return await self.stop_orchestration(orchestration_id, force=force)
+        return await self.stop_orchestration(
+            orchestration_id,
+            mode=mode,
+            force=force,
+        )
 
     async def shutdown(self) -> ShutdownResult:
         global _gru_instance

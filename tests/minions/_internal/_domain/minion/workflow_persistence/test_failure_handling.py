@@ -266,7 +266,7 @@ async def test_workflow_cancellation_during_retry_wait_preserves_checkpoint_and_
         workflow_task = next(iter(m._mn_workflow_tasks))
 
     workflow_task.cancel()
-    await m._mn_wait_until_all_tasks_idle(timeout=1.0)
+    await m._mn_wait_until_tasks_idle(timeout=1.0)
 
     persisted_contexts = await store.get_all_contexts()
     assert len(persisted_contexts) == 1

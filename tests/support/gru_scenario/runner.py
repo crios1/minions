@@ -505,7 +505,11 @@ class ScenarioRunner:
         target_id = self._resolve_stop_target_id(d.id)
         if target_id is None:
             pytest.fail(f"stop target could not be resolved from {d.id!r}")
-        r = await self._gru.stop_orchestration(orchestration_id=target_id)
+        r = await self._gru.stop_orchestration(
+            orchestration_id=target_id,
+            mode=d.mode,
+            force=d.force,
+        )
         if r.success != d.expect_success:
             pytest.fail(f"stop_orchestration mismatch: {d} -> {r}")
         if r.success:
@@ -1038,7 +1042,7 @@ class ScenarioWaiter:
 
         minions_tup = tuple(minions)
         results = await asyncio.gather(
-            *(m._mn_wait_until_all_tasks_idle(timeout=self._timeout) for m in minions_tup),
+            *(m._mn_wait_until_tasks_idle(timeout=self._timeout) for m in minions_tup),
             return_exceptions=True,
         )
 

@@ -98,6 +98,16 @@ def test_iter_directives_flattens_wait_workflow_step_starts_then_wrapped_directi
     assert list(iter_directives_flat(directives)) == [d1, d2, d3]
 
 
+def test_orchestration_stop_exposes_stop_options_as_kwargs():
+    directive = OrchestrationStop(
+        id="dummy-orchestration-id",
+        expect_success=True,
+        mode="drain",
+    )
+
+    assert directive.as_kwargs() == {"mode": "drain", "force": False}
+
+
 def test_expect_runtime_defaults():
     directive = ExpectRuntime()
     assert directive.at == "latest"

@@ -661,45 +661,15 @@
     - why it matters:
       - diagnostics help debug user-owned cleanup leaks without changing Gru's core cleanup guarantee
 
-- todo: add interrupt and drain modes to gru.stop_orchestration and map them to
-  higher-level redeploy strategies
-  - default mode: interrupt
-  - modes and behavior:
-    - interrupt: close workflow admission; cancel in-flight workflows; retain the
-      last successfully persisted pre-step checkpoint for resume on restart
-    - drain: close workflow admission; await every accepted workflow to resolve;
-      then stop
-    - cutover is not a distinct stop mode: it is a future redeploy strategy that
-      composes interrupt-style stop with immediate restart under replacement code
-  - interruptibility:
-    - represent one active stop operation per orchestration
-    - if drain is in progress and a caller requests interrupt, stop waiting and
-      interrupt unfinished workflows
-    - repeated drain callers join the existing operation
-    - do not retain stopped-orchestration tombstones solely to distinguish a
-      previously stopped id from an unknown id
-  - api sketch:
-    - gru.stop_orchestration(orchestration_id, mode="interrupt"|"drain")
-    - grushell redeploy maps:
-      - redeploy drain -> stop_orchestration(mode="drain")
-      - redeploy cutover -> stop_orchestration(mode="interrupt"), then restart
-  - shutdown:
-    - keep Gru.shutdown() bounded and interrupt-style initially
-    - callers that require a full drain can drain their orchestrations before
-      terminal shutdown
-  - timing:
-    - interrupt has no implicit workflow-drain grace period
-    - omit automatic drain timeout/fallback from the first implementation;
-      callers can explicitly request interrupt to override an active drain
-    - separate the stable component-owned task cancellation timeout from
-      workflow drain behavior
-  - tests:
-    - add an orchestration helper directive for mode="drain"
-    - add runtime tests for in-flight workflow behavior per mode
-    - prove admission closure covers event-handler tasks accepted before Pipeline
-      detachment but not yet registered as workflow tasks
-  - open questions:
-    - Should `continue-on-failure` track outstanding failed checkpoints instead of only retrying when the workflow reaches the next checkpoint?
+- todo: map orchestration stop modes to higher-level GruShell redeploy strategies
+  - redeploy drain -> stop_orchestration(mode="drain")
+  - redeploy cutover -> stop_orchestration(mode="interrupt"), then restart under
+    replacement code
+
+- todo: finish persistence-policy decisions exposed by orchestration stop modes
+  - `continue-on-failure`:
+    - decide whether to track outstanding failed checkpoints instead of only
+      retrying when the workflow reaches the next checkpoint
     - An interrupt preserves the last successfully persisted safe step boundary, which
       may be older than in-memory context when `continue-on-failure` allowed a
       workflow to advance after a failed save.
