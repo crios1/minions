@@ -1,10 +1,7 @@
-import asyncio
-from collections.abc import Coroutine
-from typing import Any
-
 import pytest
 
 from minions import Minion, Pipeline, Resource, minion_step
+from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_constants import (
     LABEL_ORCHESTRATION_ID,
     LABEL_RESOURCE,
@@ -13,11 +10,13 @@ from minions._internal._framework.metrics_constants import (
     LABEL_RESOURCE_METHOD,
     RESOURCE_SERVES_TOTAL,
 )
+from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_noop import NoOpStateStore
 from tests.assets.contexts.empty import EmptyContext
 from tests.assets.events.empty import EmptyEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
+from tests.assets.support.minion_noop import NoOpMinion
 
 
 @pytest.mark.asyncio
@@ -25,63 +24,13 @@ async def test_pipeline_runtime_metric_labels_match_contract(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
 ):
-    class EventValueResource(Resource):
-        async def read_value(self) -> int:
-            return 1
-
-    class PipelineEventResource(Resource):
-        value_source: EventValueResource
-
-        async def build_event(self) -> EmptyEvent:
-            await self.value_source.read_value()
-            return EmptyEvent()
-
-    value_resource = EventValueResource(
-        logger,
-        metrics,
-        "tests.metrics_contract.EventValueResource",
-        resource_id="contract-event-value-resource",
-    )
-    event_resource = PipelineEventResource(
-        logger,
-        metrics,
-        "tests.metrics_contract.PipelineEventResource",
-        resource_id="contract-pipeline-event-resource",
-    )
-    event_resource.value_source = value_resource
-    value_resource._mn_validate_and_wrap_public_async_methods()
-    event_resource._mn_validate_and_wrap_public_async_methods()
-
     class SuccessPipeline(Pipeline[EmptyEvent]):
         async def produce_event(self) -> EmptyEvent:
-            return await event_resource.build_event()
+            return EmptyEvent()
 
     class ErrorPipeline(Pipeline[EmptyEvent]):
         async def produce_event(self) -> EmptyEvent:
             raise RuntimeError("boom")
-
-    # Minimal pipeline subscriber double, intentionally not a Minion: this test
-    # isolates pipeline fanout/resource caller labels from minion workflow metrics.
-    class FakeMinion:
-        _mn_orchestration_id = "contract-minion-key"
-
-        def __init__(self):
-            self.tasks: list[asyncio.Task[None]] = []
-
-        async def _mn_accept_event(self, event: EmptyEvent) -> bool:
-            async def accept_event() -> None:
-                return None
-
-            self.safe_create_task(accept_event())
-            return True
-
-        def safe_create_task(self, coro: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
-            task = asyncio.create_task(coro)
-            self.tasks.append(task)
-            return task
-
-        def _mn_identity_log_kwargs(self) -> dict[str, object]:
-            return {}
 
     success_pipeline = SuccessPipeline(
         "contract-pipeline",
@@ -89,11 +38,23 @@ async def test_pipeline_runtime_metric_labels_match_contract(
         metrics,
         logger,
     )
-    fake_minion = FakeMinion()
-    success_pipeline._mn_subs.add(fake_minion)  # type: ignore[arg-type]
+    minion = NoOpMinion(
+        minion_instance_id="dummy-minion-instance-id",
+        orchestration_id="dummy-orchestration-id",
+        minion_module_path="dummy-minion-module-path",
+        config_path=None,
+        state_store=NoOpStateStore(),
+        metrics=NoOpMetrics(),
+        logger=NoOpLogger(),
+        minion_id="dummy-minion-id",
+        minion_config_id="dummy-minion-config-id",
+        pipeline_id="contract-pipeline",
+    )
+    minion._mn_mark_running()
+    await success_pipeline._mn_subscribe(minion)
 
     await success_pipeline._mn_produce_and_fan_out_event()
-    await asyncio.gather(*fake_minion.tasks)
+    await minion._mn_wait_until_workflows_idle()
 
     error_pipeline = ErrorPipeline(
         "contract-error-pipeline",
@@ -104,29 +65,74 @@ async def test_pipeline_runtime_metric_labels_match_contract(
     await error_pipeline._mn_produce_and_fan_out_event()
 
     metrics.assert_recorded_labels_match_contract()
-    # Resource metrics preserve the immediate caller: pipeline -> resource -> transitive resource.
-    serve_value = metrics.snapshot_counter_value(
+
+
+@pytest.mark.asyncio
+async def test_resource_runtime_metric_labels_preserve_transitive_callers(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+):
+    class TransitiveResource(Resource):
+        async def read_value(self) -> int:
+            return 1
+
+    class PipelineResource(Resource):
+        transitive_resource: TransitiveResource
+
+        async def load_value(self) -> int:
+            return await self.transitive_resource.read_value()
+
+    transitive_resource = TransitiveResource(
+        logger,
+        metrics,
+        "tests.metrics_contract.TransitiveResource",
+        resource_id="contract-transitive-resource",
+    )
+    pipeline_resource = PipelineResource(
+        logger,
+        metrics,
+        "tests.metrics_contract.PipelineResource",
+        resource_id="contract-pipeline-resource",
+    )
+    pipeline_resource.transitive_resource = transitive_resource
+    transitive_resource._mn_validate_and_wrap_public_async_methods()
+    pipeline_resource._mn_validate_and_wrap_public_async_methods()
+
+    class PipelineUsingResource(Pipeline[EmptyEvent]):
+        async def produce_event(self) -> EmptyEvent:
+            await pipeline_resource.load_value()
+            return EmptyEvent()
+
+    pipeline = PipelineUsingResource(
+        "contract-pipeline",
+        "tests.metrics_contract.PipelineUsingResource",
+        metrics,
+        logger,
+    )
+    await pipeline._mn_produce_and_fan_out_event()
+
+    pipeline_resource_value = metrics.snapshot_counter_value(
         RESOURCE_SERVES_TOTAL,
         {
-            LABEL_RESOURCE: "contract-pipeline-event-resource",
-            LABEL_RESOURCE_METHOD: "build_event",
+            LABEL_RESOURCE: "contract-pipeline-resource",
+            LABEL_RESOURCE_METHOD: "load_value",
             LABEL_RESOURCE_CALLER_KIND: "pipeline",
             LABEL_RESOURCE_CALLER: "contract-pipeline",
             LABEL_ORCHESTRATION_ID: "",
         },
     )
-    assert serve_value == 1
-    nested_serve_value = metrics.snapshot_counter_value(
+    assert pipeline_resource_value == 1
+    transitive_resource_value = metrics.snapshot_counter_value(
         RESOURCE_SERVES_TOTAL,
         {
-            LABEL_RESOURCE: "contract-event-value-resource",
+            LABEL_RESOURCE: "contract-transitive-resource",
             LABEL_RESOURCE_METHOD: "read_value",
             LABEL_RESOURCE_CALLER_KIND: "resource",
-            LABEL_RESOURCE_CALLER: "contract-pipeline-event-resource",
+            LABEL_RESOURCE_CALLER: "contract-pipeline-resource",
             LABEL_ORCHESTRATION_ID: "",
         },
     )
-    assert nested_serve_value == 1
+    assert transitive_resource_value == 1
 
 
 @pytest.mark.asyncio

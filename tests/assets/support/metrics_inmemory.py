@@ -30,6 +30,8 @@ LabelKey = tuple[tuple[str, str], ...]  # sorted (name, value) pairs for hashing
 SampleT = TypeVar("SampleT", CounterSample, GaugeSample, HistogramSample)
 
 
+# === Label Contract Types and Validation ===
+
 @dataclass(frozen=True)
 class MetricLabelEmission:
     metric_name: str
@@ -72,6 +74,8 @@ def validate_metric_label_contract(
         actual=labels,
     )
 
+
+# === In-Memory Metric Backend ===
 
 def _normalize_labels(metric_name: str, labels: dict[str, Any]) -> LabelKey:
     """
@@ -186,8 +190,7 @@ class _InMemoryMetric:
 
 class InMemoryMetrics(SpiedMetrics):
     """
-    In-memory metrics backend.
-    Thread-safe, test-friendly; stores per-label values and provides snapshot helpers.
+    Thread-safe in-memory metrics backend for tests, including label-emission tracking.
     """
 
     def __init__(self, logger: Logger | None = None):
@@ -200,6 +203,13 @@ class InMemoryMetrics(SpiedMetrics):
         }
         self._metric_label_emissions: list[MetricLabelEmission] = []
         self._metric_label_emissions_lock = threading.Lock()
+
+    def _record_metric_labels(
+        self,
+        emission: MetricLabelEmission,
+    ) -> None:
+        with self._metric_label_emissions_lock:
+            self._metric_label_emissions.append(emission)
 
     @overload
     def create_metric(
@@ -235,14 +245,7 @@ class InMemoryMetrics(SpiedMetrics):
         self._metrics[kind][metric_name] = metric
         return metric
 
-    # ----------------- Test helpers (read-only) -----------------
-
-    def _record_metric_labels(
-        self,
-        emission: MetricLabelEmission,
-    ) -> None:
-        with self._metric_label_emissions_lock:
-            self._metric_label_emissions.append(emission)
+    # ----------------- Label contract test helpers -----------------
 
     def metric_label_emissions(self) -> list[MetricLabelEmission]:
         with self._metric_label_emissions_lock:
@@ -251,6 +254,8 @@ class InMemoryMetrics(SpiedMetrics):
     def clear_metric_label_emissions(self) -> None:
         with self._metric_label_emissions_lock:
             self._metric_label_emissions.clear()
+
+    # ----------------- Test assertions -----------------
 
     def assert_recorded_labels_match_contract(self) -> None:
         violations = [
@@ -276,6 +281,8 @@ class InMemoryMetrics(SpiedMetrics):
             for v in violations
         )
         raise AssertionError(f"metric label contract violations:\n{details}")
+
+    # ----------------- Snapshot test helpers -----------------
 
     @staticmethod
     def find_sample(
