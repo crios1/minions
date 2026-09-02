@@ -70,7 +70,7 @@ class _UnsetType:
 
 _UNSET = _UnsetType()
 
-ORCHESTRATION_ID_VERSION = 1
+_ORCHESTRATION_ID_VERSION = 1
 _ORCHESTRATION_STOP_MODES = ("interrupt", "drain")
 
 _gru_instance: Gru | None = None
@@ -589,8 +589,8 @@ class Gru:
         minion_config_id: str,
     ) -> str:
         payload = {
-            # Version the payload in case ther is a need to migrate IDs in the future.
-            "version": ORCHESTRATION_ID_VERSION,
+            # Version the payload in case there is a need to migrate IDs in the future.
+            "version": _ORCHESTRATION_ID_VERSION,
             "minion_id": minion_id,
             "minion_config_id": minion_config_id,
             "pipeline_id": pipeline_id,

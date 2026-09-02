@@ -12,7 +12,7 @@ import pytest
 
 from minions import Minion, Pipeline, Resource, minion_id, minion_step, pipeline_id, resource_id
 from minions._internal._domain.component_identity import get_component_id
-from minions._internal._domain.gru import ORCHESTRATION_ID_VERSION, Gru
+from minions._internal._domain.gru import _ORCHESTRATION_ID_VERSION, Gru
 from minions._internal._domain.gru_result_types import StartResult, StopResult
 from minions._internal._framework.async_component import AsyncComponent
 from minions._internal._framework.logger import CRITICAL, INFO, WARNING
@@ -83,7 +83,7 @@ class TestUnit:
         pipeline_id: str,
     ) -> str:
         payload = {
-            "version": ORCHESTRATION_ID_VERSION,
+            "version": _ORCHESTRATION_ID_VERSION,
             "minion_id": minion_id,
             "minion_config_id": minion_config_id,
             "pipeline_id": pipeline_id,
