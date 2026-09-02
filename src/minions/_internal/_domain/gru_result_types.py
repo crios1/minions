@@ -30,9 +30,9 @@ class GruResult:
     reason: str | None = None
     suggestion: str | None = None
 
-    # def __post_init__(self):
-    #     if not self.success and not self.reason:
-    #         raise ValueError("`reason` must be set if `success` is False")
+    def __post_init__(self) -> None:
+        if not self.success and not self.reason:
+            raise ValueError("`reason` must be set if `success` is False")
 
 
 @dataclass
