@@ -349,7 +349,7 @@ async def test_stopping_orchestration_during_retry_wait_preserves_unfinished_wor
             LABEL_STATE_STORE: "FailableStateStore",
         }
 
-        await pipeline.trigger_event()
+        await pipeline.wait_for_subscribers_then_emit_event()
         await store.save_failures.wait_for(1)
         await _wait_until(
             lambda: (

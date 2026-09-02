@@ -13,6 +13,6 @@ class TriggeredPipeline(
 
     total_events = 0
 
-    async def trigger_event(self) -> None:
+    async def wait_for_subscribers_then_emit_event(self) -> None:
         await self.wait_for_expected_subscribers()
         await self._mn_produce_and_fan_out_event()

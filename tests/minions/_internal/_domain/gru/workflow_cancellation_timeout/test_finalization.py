@@ -68,7 +68,7 @@ async def _running_stalled_workflow(
         assert type(pipeline).__module__ == PIPELINE
         assert type(pipeline).__qualname__ == "AssetPipeline"
 
-        await pipeline.trigger_event()
+        await pipeline.wait_for_subscribers_then_emit_event()
         await asyncio.wait_for(
             signals.step_entered.wait(),
             timeout=1.0,

@@ -41,7 +41,7 @@ async def _run_stalled_workflow_process() -> None:
 
     pipeline = gru._pipelines[_PIPELINE]
     assert isinstance(pipeline, TriggeredPipeline), type(pipeline)
-    await pipeline.trigger_event()
+    await pipeline.wait_for_subscribers_then_emit_event()
     await asyncio.wait_for(step_entered.wait(), timeout=1.0)
 
     stopped = await gru.stop_orchestration(started.orchestration_id)

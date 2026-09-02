@@ -280,7 +280,7 @@ async def _trigger_workflow_and_stop_orchestration_while_inflight(
     )
     recording_started, _ = _require_recording_events(resource)
 
-    await pipeline.trigger_event()
+    await pipeline.wait_for_subscribers_then_emit_event()
     await asyncio.wait_for(recording_started.wait(), timeout=2.0)
 
     stopped = await gru.stop_orchestration(orchestration_id)

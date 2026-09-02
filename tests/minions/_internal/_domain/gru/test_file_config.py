@@ -197,7 +197,7 @@ async def test_unchanged_id_resumes_persisted_workflow_with_reloaded_contents(
 
         first_pipeline = gru._orchestrations[first_start.orchestration_id].pipeline
         assert isinstance(first_pipeline, SimpleEventPipeline)
-        await first_pipeline.trigger_event()
+        await first_pipeline.wait_for_subscribers_then_emit_event()
         await asyncio.wait_for(
             observation_reached.wait(),
             timeout=5.0,

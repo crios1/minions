@@ -85,7 +85,7 @@ async def test_drain_waits_for_accepted_workflows_and_rejects_later_events(
         minion = orchestration.minion
         assert isinstance(pipeline, EmptyEventPipeline)
 
-        await pipeline.trigger_event()
+        await pipeline.wait_for_subscribers_then_emit_event()
         await asyncio.wait_for(workflow_started.wait(), timeout=1.0)
 
         stop_task = asyncio.create_task(
@@ -94,7 +94,7 @@ async def test_drain_waits_for_accepted_workflows_and_rejects_later_events(
         await _wait_until_event_acceptance_closes(minion)
 
         assert not stop_task.done()
-        await pipeline.trigger_event()
+        await pipeline.wait_for_subscribers_then_emit_event()
         await asyncio.sleep(0)
         assert workflow_calls == 1
 
@@ -151,7 +151,7 @@ async def test_cancelling_drain_reopens_event_acceptance(
         minion = orchestration.minion
         assert isinstance(pipeline, EmptyEventPipeline)
 
-        await pipeline.trigger_event()
+        await pipeline.wait_for_subscribers_then_emit_event()
         await wait_for_workflow_calls(1)
 
         drain_task = asyncio.create_task(
@@ -166,7 +166,7 @@ async def test_cancelling_drain_reopens_event_acceptance(
         assert minion._mn_accepting_events
         await assert_orchestration_running(gru, started.orchestration_id)
 
-        await pipeline.trigger_event()
+        await pipeline.wait_for_subscribers_then_emit_event()
         await wait_for_workflow_calls(2)
 
         stopped = await gru.stop_orchestration(started.orchestration_id)
