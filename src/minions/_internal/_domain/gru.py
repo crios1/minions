@@ -655,15 +655,17 @@ class Gru:
         inline_minion_config: object | None,
         minion_cls: type[Minion[Any, Any]] | None,
         pipeline_cls: type[Pipeline[Any]] | None,
+        minion_identity_fallback: str | None,
+        pipeline_identity_fallback: str | None,
     ) -> _OrchestrationStartSpec:
         minion_instance_id = self._make_minion_instance_id()
         minion_identity = (
-            self._get_component_identity(minion_cls, minion_module_path)
+            self._get_component_identity(minion_cls, minion_identity_fallback)
             if minion_cls is not None
             else minion_module_path
         )
         pipeline_identity = (
-            self._get_component_identity(pipeline_cls, pipeline_module_path)
+            self._get_component_identity(pipeline_cls, pipeline_identity_fallback)
             if pipeline_cls is not None
             else pipeline_module_path
         )
@@ -2183,6 +2185,8 @@ class Gru:
             effective_minion_config_path: str | None = None
             minion_config_identity = ""
             inline_config_snapshot: object | None = None
+            minion_identity_fallback: str | None = None
+            pipeline_identity_fallback: str | None = None
 
             # string based start
             if isinstance(minion, str):
@@ -2202,6 +2206,8 @@ class Gru:
                     )
                 minion_module_path = minion.strip()
                 pipeline_module_path = pipeline.strip()
+                minion_identity_fallback = minion_module_path
+                pipeline_identity_fallback = pipeline_module_path
                 if minion_config_path:
                     (
                         effective_minion_config_path,
@@ -2274,6 +2280,8 @@ class Gru:
                 inline_minion_config=inline_config_snapshot,
                 minion_cls=minion_cls,
                 pipeline_cls=pipeline_cls,
+                minion_identity_fallback=minion_identity_fallback,
+                pipeline_identity_fallback=pipeline_identity_fallback,
             )
             orchestration_log_kwargs = spec.log_kwargs()
 

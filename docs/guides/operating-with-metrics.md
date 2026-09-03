@@ -44,7 +44,7 @@ When investigating persistence behavior, start with these labels:
 - `minion_workflow_persistence_policy`: `continue-on-failure` or `idle-until-persisted`
 - `state_store`: backend implementation name
 - `orchestration_id`: affected minion instance/config/pipeline orchestration
-- `minion`: stable minion component identity, using `@minion_id(...)` when present and the module-path fallback otherwise
+- `minion`: stable minion component identity, using `@minion_id(...)` when present and the class-address or supplied module-path fallback otherwise
 
 Those labels tell you whether you are looking at application data that cannot be persisted, an operational store outage, a workflow that is already done with user code and is now waiting to resolve checkpoint cleanup, or a recurring issue across all orchestrations of the same minion component.
 

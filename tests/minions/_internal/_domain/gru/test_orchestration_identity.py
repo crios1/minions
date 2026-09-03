@@ -10,7 +10,9 @@ from minions import Minion, minion_id, minion_step, pipeline_id
 from minions._internal._domain.gru import Gru
 from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_noop import NoOpStateStore
+from tests.assets.contexts.empty import EmptyContext
 from tests.assets.contexts.simple import SimpleContext
+from tests.assets.events.empty import EmptyEvent
 from tests.assets.events.simple import SimpleEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.pipeline_triggered import TriggeredPipeline
@@ -19,6 +21,51 @@ from tests.minions._internal._domain.gru.assertions import assert_orchestration_
 MINION_COMPONENT_ID = "77777777-7777-4777-8777-77777777777a"
 PIPELINE_COMPONENT_ID = "88888888-8888-4888-8888-88888888888b"
 CONFIG_ID = "99999999-9999-4999-8999-99999999999c"
+
+
+@pytest.mark.asyncio
+async def test_class_based_start_uses_distinct_fallback_identities_for_same_module_classes(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+):
+    class SharedPipeline(TriggeredPipeline[EmptyEvent]):
+        async def produce_event(self) -> EmptyEvent:
+            return EmptyEvent()
+
+    class FirstMinion(Minion[EmptyEvent, EmptyContext]):
+        @minion_step
+        async def step_1(self) -> None:
+            return
+
+    class SecondMinion(Minion[EmptyEvent, EmptyContext]):
+        @minion_step
+        async def step_1(self) -> None:
+            return
+
+    async with managed_gru_context(
+        state_store=NoOpStateStore(),
+        logger=logger,
+        metrics=NoOpMetrics(),
+    ) as gru:
+        first = await gru.start_orchestration(SharedPipeline, FirstMinion)
+        second = await gru.start_orchestration(SharedPipeline, SecondMinion)
+
+        assert first.success
+        assert second.success
+        assert first.orchestration_id is not None
+        assert second.orchestration_id is not None
+        assert first.orchestration_id != second.orchestration_id
+        snapshot = await gru.runtime_state_snapshot()
+        assert snapshot.orchestrations == {
+            first.orchestration_id,
+            second.orchestration_id,
+        }
+        assert snapshot.pipelines == frozenset(
+            {f"{SharedPipeline.__module__}.{SharedPipeline.__name__}"}
+        )
+
+        assert (await gru.stop_orchestration(first.orchestration_id)).success
+        assert (await gru.stop_orchestration(second.orchestration_id)).success
 
 
 @pytest.mark.asyncio

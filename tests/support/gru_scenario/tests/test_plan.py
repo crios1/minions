@@ -50,7 +50,7 @@ def test_normalizes_pipeline_class_event_count_key_to_component_id():
     }
 
 
-def test_normalizes_pipeline_class_event_count_key_to_module_path():
+def test_normalizes_pipeline_class_event_count_key_to_module_and_class_name():
     from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
 
     d1 = OrchestrationStart(pipeline=AssetPipeline, minion="m1")
@@ -58,7 +58,7 @@ def test_normalizes_pipeline_class_event_count_key_to_module_path():
     plan = ScenarioPlan([d1], pipeline_event_counts={AssetPipeline: 1})
 
     assert plan.pipeline_event_targets == {
-        "tests.assets.pipelines.emit_one.simple.default": 1,
+        "tests.assets.pipelines.emit_one.simple.default.AssetPipeline": 1,
     }
 
 

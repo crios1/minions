@@ -882,9 +882,8 @@ async def test_gru_starts_resource_with_multiple_resource_dependencies(
         assert compound.first is gru._resources[first_id]
         assert compound.second is gru._resources[second_id]
         snapshot = await gru.runtime_state_snapshot()
-        assert snapshot.resources_for_pipeline(CompoundDependencyPipeline.__module__) == {
-            compound_id
-        }
+        pipeline_id = gru._get_pipeline_identity(CompoundDependencyPipeline)
+        assert snapshot.resources_for_pipeline(pipeline_id) == {compound_id}
         assert snapshot.dependencies_for_resource(compound_id) == {first_id, second_id}
         assert snapshot.resource_refcount(compound_id) == 1
         assert snapshot.resource_refcount(first_id) == 1

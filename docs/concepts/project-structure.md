@@ -1,6 +1,6 @@
 # Recommended Project Structure
 
-Minions systems stay simple when the project layout is simple. Id-less components use module paths as fallback identity, so stable module paths are enough while prototyping. For durable systems, stamp component UUIDs so minions, pipelines, and resources keep the same identity across normal file moves and renames.
+Minions systems stay simple when the project layout is simple. Id-less components use their class module and name, or a supplied module path for module-based starts, as fallback identity. Those addresses are enough while prototyping. For durable systems, stamp component UUIDs so minions, pipelines, and resources keep the same identity across normal file moves and renames.
 
 ```
 my-project/
@@ -45,7 +45,7 @@ class TradeExecutor(Minion[TradeEvent, TradeCtx]):
     ...
 ```
 
-Minion files should be importable as modules like `minions.trade_executor`. If the class has `@minion_id(...)`, Gru uses that UUID as the durable component identity; otherwise it falls back to the module path for prototype/non-durable usage.
+Minion files should be importable as modules like `minions.trade_executor`. If the class has `@minion_id(...)`, Gru uses that UUID as the durable component identity; otherwise inline starts fall back to the class module and name, while module-based starts use the supplied module path.
 
 **pipelines/**  
 Event-producing components. Each pipeline defines the “input stream” for a minion:
@@ -90,7 +90,7 @@ This is where operators add, remove, or redeploy components.
 
 ## Why this structure works well
 
-1. **Explicit component UUIDs → refactor-stable deploys**: stamped component IDs move with the source class, while id-less components keep the low-friction module-path fallback for exploration.  
+1. **Explicit component UUIDs → refactor-stable deploys**: stamped component IDs move with the source class, while id-less components keep low-friction class-address or module-path fallbacks for exploration.
 2. **Deployment data stays together**: configs, module paths, component IDs,
    and local state can live inside the project and move as one unit; the
    destination environment and external dependencies are provisioned separately.

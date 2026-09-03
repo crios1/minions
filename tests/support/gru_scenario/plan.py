@@ -55,7 +55,9 @@ class ScenarioPlan:
                 f"or Pipeline subclasses; got {pipeline!r}."
             )
         pipeline_cls = cast(type[Any], pipeline)
-        return get_component_id(pipeline_cls) or pipeline_cls.__module__
+        return get_component_id(pipeline_cls) or (
+            f"{pipeline_cls.__module__}.{pipeline_cls.__name__}"
+        )
 
     def directive_index(self, directive: Directive) -> int:
         return self.directive_index_map[id(directive)]

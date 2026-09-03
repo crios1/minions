@@ -48,7 +48,7 @@ class GruIntrospector:
         return self._gru._get_minion_identity_from_module_path(minion_module_path)
 
     @staticmethod
-    def get_component_identity(typ: type[Any], fallback: str) -> str:
+    def get_component_identity(typ: type[Any], fallback: str | None = None) -> str:
         return Gru._get_component_identity(typ, fallback)
 
     def get_all_resource_dependencies(
