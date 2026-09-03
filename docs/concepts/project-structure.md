@@ -21,8 +21,7 @@ my-project/
 ├── resources/
 │   └── http_client.py
 │
-├── state/
-│   └── minions.sqlite3        # runtime persistence (default location)
+├── minions.db                 # runtime persistence (default location)
 │
 ├── orchestrations/
 │   └── launch.py              # declares which minions to start
@@ -64,8 +63,10 @@ Keeping pipelines separate mirrors how real systems have distinct ingress points
 **resources/**  
 Reusable shared utilities (DB clients, HTTP clients, RPC connections, etc.). Resources are loaded once and shared across minions. Keeping them together keeps imports predictable and avoids circular-import traps.
 
-**state/**  
-Where Minions stores runtime persistence. Default: `state/minions.sqlite3`.
+**runtime persistence**
+By default, Minions stores runtime persistence in `minions.db` in the process
+working directory. Configure a different path when the database should live
+under a project directory.
 Moving this state with the matching code, configuration, and stamped identities
 preserves the local workflow data needed for resume.
 
