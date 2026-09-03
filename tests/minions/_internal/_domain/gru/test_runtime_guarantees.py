@@ -27,6 +27,44 @@ from tests.support.race_window import GatedAsyncCallable, GatedLock
 
 
 @pytest.mark.asyncio
+async def test_initial_minion_receives_immediately_available_first_pipeline_event(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+):
+    first_event_produced = False
+    first_event_handled = asyncio.Event()
+    handled: list[int] = []
+
+    class ImmediatePipeline(Pipeline[CounterEvent]):
+        async def produce_event(self) -> CounterEvent:
+            nonlocal first_event_produced
+            if first_event_produced:
+                await asyncio.Event().wait()
+            first_event_produced = True
+            return CounterEvent(seq=0)
+
+    class RecordingMinion(Minion[CounterEvent, CounterContext]):
+        @minion_step
+        async def record_event(self) -> None:
+            handled.append(self.event.seq)
+            first_event_handled.set()
+
+    async with managed_gru_context(
+        logger=logger,
+        metrics=metrics,
+        state_store=state_store,
+    ) as gru:
+        result = await gru.start_orchestration(ImmediatePipeline, RecordingMinion)
+        assert result.success
+
+        await asyncio.wait_for(first_event_handled.wait(), timeout=1.0)
+
+        assert handled == [0]
+
+
+@pytest.mark.asyncio
 async def test_gru_does_not_resume_same_workflow_id_twice_during_startup(
     managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,

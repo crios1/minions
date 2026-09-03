@@ -186,6 +186,7 @@ async def test_continues_after_produce_event_failure(
         metrics,
         logger,
     )
+    pipeline._mn_enable_event_production()
 
     run_task = asyncio.create_task(pipeline.run())
     await asyncio.wait_for(second_attempt_started.wait(), timeout=1.0)

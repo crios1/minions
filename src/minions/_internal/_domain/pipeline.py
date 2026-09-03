@@ -120,6 +120,7 @@ class Pipeline(AsyncService, Generic[T_Event]):
         self._mn_logger = logger
         self._mn_subs: set[Minion[T_Event, Any]] = set()
         self._mn_subs_lock = asyncio.Lock()
+        self._mn_event_production_enabled = asyncio.Event()
         self._mn_event_cls = type(self)._mn_event_cls
 
     def _mn_identity_log_kwargs(self) -> dict[str, object]:
@@ -176,8 +177,12 @@ class Pipeline(AsyncService, Generic[T_Event]):
         )
 
     async def run(self) -> None:
+        await self._mn_event_production_enabled.wait()
         while True:
             await self._mn_produce_and_fan_out_event()
+
+    def _mn_enable_event_production(self) -> None:
+        self._mn_event_production_enabled.set()
 
     async def _mn_produce_and_fan_out_event(self) -> None:
         try:

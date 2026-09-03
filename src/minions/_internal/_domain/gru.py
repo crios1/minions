@@ -1354,6 +1354,7 @@ class Gru:
             )
             async with self._runtime_state_lock:
                 self._orchestrations[spec.orchestration_id] = orchestration
+            activation.pipeline._mn_enable_event_production()
             return orchestration
         except (Exception, asyncio.CancelledError):
             try:
