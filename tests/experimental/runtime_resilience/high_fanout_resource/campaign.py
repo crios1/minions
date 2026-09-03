@@ -110,7 +110,7 @@ async def _run_scenario(subscribers: int, events: int) -> FanoutSample:
     assert len(metrics.snapshot_counters()[RESOURCE_SERVES_TOTAL]) == subscribers
     assert metrics.snapshot_histogram_count_total(RESOURCE_LATENCY_SECONDS) == expected_workflows
     assert len(metrics.snapshot_histograms()[RESOURCE_LATENCY_SECONDS]) == subscribers
-    metrics.assert_recorded_labels_match_contract()
+    metrics.assert_metric_label_observations_match_contract()
     assert await state_store.get_all_contexts() == []
     metric_label_sets = _label_set_count(metrics)
     assert metric_label_sets <= subscribers * 20

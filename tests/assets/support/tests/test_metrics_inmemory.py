@@ -41,6 +41,23 @@ class TestInMemoryMetrics:
         assert m.snapshot_gauge_value("cpu_gauge", {"region": ""}) == 10.5
         assert m.snapshot_gauge_value("cpu_gauge", {"region": "us-east"}) == 8.0
 
+    def test_label_mismatch_is_rejected_only_when_contract_is_asserted(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setitem(METRIC_LABEL_NAMES, "requests_total", ["route"])
+        metrics = InMemoryMetrics()
+        counter = metrics._mn_get_metric_unsafe("counter", "requests_total")
+
+        counter.labels(unexpected="value").inc()
+
+        assert metrics.snapshot_counter_value("requests_total", {"route": ""}) == 1
+        with pytest.raises(
+            AssertionError,
+            match=r"missing=\['route'\] extra=\['unexpected'\]",
+        ):
+            metrics.assert_metric_label_observations_match_contract()
+
     def test_histogram_observe_aggregates(self, monkeypatch: pytest.MonkeyPatch):
         """
         Histogram aggregates count/sum/min/max for a label set.

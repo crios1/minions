@@ -64,7 +64,7 @@ async def test_pipeline_runtime_metric_labels_match_contract(
     )
     await error_pipeline._mn_produce_and_fan_out_event()
 
-    metrics.assert_recorded_labels_match_contract()
+    metrics.assert_metric_label_observations_match_contract()
 
 
 @pytest.mark.asyncio
@@ -157,7 +157,7 @@ async def test_resource_runtime_metric_labels_match_contract(
     with pytest.raises(ValueError):
         await resource._mn_run_with_tracking("fail", fail)
 
-    metrics.assert_recorded_labels_match_contract()
+    metrics.assert_metric_label_observations_match_contract()
     serve_value = metrics.snapshot_counter_value(
         RESOURCE_SERVES_TOTAL,
         {
@@ -216,4 +216,4 @@ async def test_minion_runtime_metric_labels_match_contract(
     failure_minion._mn_mark_running()
     await failure_minion._mn_accept_event(EmptyEvent())
 
-    metrics.assert_recorded_labels_match_contract()
+    metrics.assert_metric_label_observations_match_contract()

@@ -321,7 +321,7 @@ class ScenarioVerifier:
 
     def _assert_metrics_label_contract(self) -> None:
         try:
-            self._metrics.assert_recorded_labels_match_contract()
+            self._metrics.assert_metric_label_observations_match_contract()
         except AssertionError as e:
             pytest.fail(f"Metrics label contract mismatch: {e}")
 

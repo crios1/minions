@@ -150,7 +150,7 @@ async def _run_interruption_and_resume(
         expected_workflows,
     )
     assert await state_store.get_all_contexts() == []
-    metrics.assert_recorded_labels_match_contract()
+    metrics.assert_metric_label_observations_match_contract()
 
     stops = await asyncio.gather(
         *(gru.stop_orchestration(orchestration_id) for orchestration_id in orchestration_ids)

@@ -54,7 +54,7 @@ def metrics(logger: InMemoryLogger) -> Generator[InMemoryMetrics, None, None]:
     InMemoryMetrics.reset_spy()
     metrics = InMemoryMetrics(logger=logger)
     yield metrics
-    metrics.assert_recorded_labels_match_contract()
+    metrics.assert_metric_label_observations_match_contract()
 
 
 @pytest.fixture

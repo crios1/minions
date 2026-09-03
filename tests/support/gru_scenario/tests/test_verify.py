@@ -138,7 +138,7 @@ def test_assert_metrics_label_contract_reports_recorded_mismatches(
 
     assert isinstance(verifier._metrics, InMemoryMetrics)
 
-    verifier._metrics.clear_metric_label_emissions()
+    verifier._metrics.clear_metric_label_observations()
 
 
 def test_compute_minion_expectations_accumulates_starts_from_successful_receipts(

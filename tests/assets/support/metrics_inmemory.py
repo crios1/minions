@@ -22,6 +22,7 @@ from minions._internal._framework.metrics_interface import (
     LabelledMetric,
 )
 
+from .metrics_label_contract import validate_metric_label_contract
 from .metrics_spied import SpiedMetrics
 
 LabelKey = tuple[tuple[str, str], ...]  # sorted (name, value) pairs for hashing
@@ -30,49 +31,10 @@ LabelKey = tuple[tuple[str, str], ...]  # sorted (name, value) pairs for hashing
 SampleT = TypeVar("SampleT", CounterSample, GaugeSample, HistogramSample)
 
 
-# === Label Contract Types and Validation ===
-
 @dataclass(frozen=True)
-class MetricLabelEmission:
+class _MetricLabelObservation:
     metric_name: str
     labels: frozenset[str]
-
-
-@dataclass(frozen=True)
-class MetricLabelContractViolation:
-    metric_name: str
-    expected: frozenset[str]
-    actual: frozenset[str]
-    unknown_metric: bool = False
-
-    @property
-    def missing(self) -> frozenset[str]:
-        return self.expected - self.actual
-
-    @property
-    def extra(self) -> frozenset[str]:
-        return self.actual - self.expected
-
-
-def validate_metric_label_contract(
-    metric_name: str,
-    labels: frozenset[str],
-) -> MetricLabelContractViolation | None:
-    if metric_name not in METRIC_LABEL_NAMES:
-        return MetricLabelContractViolation(
-            metric_name=metric_name,
-            expected=frozenset(),
-            actual=labels,
-            unknown_metric=True,
-        )
-    expected = frozenset(METRIC_LABEL_NAMES.get(metric_name, []))
-    if expected == labels:
-        return None
-    return MetricLabelContractViolation(
-        metric_name=metric_name,
-        expected=expected,
-        actual=labels,
-    )
 
 
 # === In-Memory Metric Backend ===
@@ -147,18 +109,18 @@ class _InMemoryMetric:
         name: str,
         label_names: list[str],
         kind: Kind,
-        record_metric_labels: Callable[[MetricLabelEmission], None],
+        record_metric_label_observation: Callable[[_MetricLabelObservation], None],
     ):
         self.name = name
         self.label_names = label_names
         self.kind = kind
-        self._record_metric_labels = record_metric_labels
+        self._record_metric_label_observation = record_metric_label_observation
         self._values: dict[LabelKey, Any] = {}
         self._lock = threading.Lock()
 
     def labels(self, **kwargs: str) -> _InMemoryMetricChild:
-        self._record_metric_labels(
-            MetricLabelEmission(
+        self._record_metric_label_observation(
+            _MetricLabelObservation(
                 metric_name=self.name,
                 labels=frozenset(kwargs),
             )
@@ -189,9 +151,7 @@ class _InMemoryMetric:
 
 
 class InMemoryMetrics(SpiedMetrics):
-    """
-    Thread-safe in-memory metrics backend for tests, including label-emission tracking.
-    """
+    """Thread-safe in-memory metrics backend for tests."""
 
     def __init__(self, logger: Logger | None = None):
         super().__init__(logger or NoOpLogger())
@@ -201,15 +161,15 @@ class InMemoryMetrics(SpiedMetrics):
             "gauge": {},
             "histogram": {},
         }
-        self._metric_label_emissions: list[MetricLabelEmission] = []
-        self._metric_label_emissions_lock = threading.Lock()
+        self._metric_label_observations: list[_MetricLabelObservation] = []
+        self._metric_label_observations_lock = threading.Lock()
 
-    def _record_metric_labels(
+    def _record_metric_label_observation(
         self,
-        emission: MetricLabelEmission,
+        observation: _MetricLabelObservation,
     ) -> None:
-        with self._metric_label_emissions_lock:
-            self._metric_label_emissions.append(emission)
+        with self._metric_label_observations_lock:
+            self._metric_label_observations.append(observation)
 
     @overload
     def create_metric(
@@ -240,31 +200,27 @@ class InMemoryMetrics(SpiedMetrics):
             metric_name,
             label_names,
             kind,
-            self._record_metric_labels,
+            self._record_metric_label_observation,
         )
         self._metrics[kind][metric_name] = metric
         return metric
 
-    # ----------------- Label contract test helpers -----------------
+    # ----------------- Metric label observations -----------------
 
-    def metric_label_emissions(self) -> list[MetricLabelEmission]:
-        with self._metric_label_emissions_lock:
-            return list(self._metric_label_emissions)
+    def clear_metric_label_observations(self) -> None:
+        with self._metric_label_observations_lock:
+            self._metric_label_observations.clear()
 
-    def clear_metric_label_emissions(self) -> None:
-        with self._metric_label_emissions_lock:
-            self._metric_label_emissions.clear()
-
-    # ----------------- Test assertions -----------------
-
-    def assert_recorded_labels_match_contract(self) -> None:
+    def assert_metric_label_observations_match_contract(self) -> None:
+        with self._metric_label_observations_lock:
+            observations = tuple(self._metric_label_observations)
         violations = [
             violation
-            for emission in self.metric_label_emissions()
+            for observation in observations
             if (
                 violation := validate_metric_label_contract(
-                    emission.metric_name,
-                    emission.labels,
+                    observation.metric_name,
+                    observation.labels,
                 )
             )
             is not None
@@ -273,12 +229,13 @@ class InMemoryMetrics(SpiedMetrics):
             return
         details = "\n".join(
             (
-                f"{v.metric_name}: expected={sorted(v.expected)!r} "
-                f"actual={sorted(v.actual)!r} "
-                f"missing={sorted(v.missing)!r} extra={sorted(v.extra)!r} "
-                f"unknown_metric={v.unknown_metric!r}"
+                f"{violation.metric_name}: expected={sorted(violation.expected)!r} "
+                f"actual={sorted(violation.actual)!r} "
+                f"missing={sorted(violation.missing)!r} "
+                f"extra={sorted(violation.extra)!r} "
+                f"unknown_metric={violation.unknown_metric!r}"
             )
-            for v in violations
+            for violation in violations
         )
         raise AssertionError(f"metric label contract violations:\n{details}")
 
