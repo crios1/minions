@@ -2209,12 +2209,23 @@ class Gru:
                 minion_identity_fallback = minion_module_path
                 pipeline_identity_fallback = pipeline_module_path
                 if minion_config_path:
-                    (
-                        effective_minion_config_path,
-                        minion_config_identity,
-                    ) = await self._resolve_file_config_path_and_identity(
-                        minion_config_path,
-                    )
+                    try:
+                        (
+                            effective_minion_config_path,
+                            minion_config_identity,
+                        ) = await self._resolve_file_config_path_and_identity(
+                            minion_config_path,
+                        )
+                    except (OSError, TypeError, ValueError) as error:
+                        return StartResult(
+                            success=False,
+                            reason="Minion config could not be resolved.",
+                            cause=str(error),
+                            suggestion=(
+                                "Check that minion_config_path exists, is readable, and "
+                                "contains a valid optional _minions_config_id."
+                            ),
+                        )
                 try:
                     minion_cls: type[Minion[Any, Any]] | None = self._get_minion_class(
                         minion_module_path

@@ -65,6 +65,125 @@ async def test_binds_loaded_config_to_minion(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("config_name", "contents", "expected_cause"),
+    [
+        ("missing.toml", None, "No such file or directory"),
+        ("malformed.toml", "[", "Invalid initial character for a key part"),
+        (
+            "invalid-id.toml",
+            '_minions_config_id = "not-a-uuid"\n',
+            "config id must be a canonical UUID string",
+        ),
+    ],
+    ids=("missing", "malformed", "invalid-identity"),
+)
+async def test_start_returns_failure_when_file_config_cannot_be_resolved(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    tmp_path: Path,
+    config_name: str,
+    contents: str | None,
+    expected_cause: str,
+):
+    config_path = tmp_path / config_name
+    if contents is not None:
+        config_path.write_text(contents)
+
+    async with managed_gru_context(
+        state_store=state_store,
+        logger=logger,
+        metrics=metrics,
+    ) as gru:
+        result = await gru.start_orchestration(
+            minion="tests.assets.minions.two_steps.counter.with_file_config",
+            minion_config_path=str(config_path),
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+        )
+
+        assert not result.success
+        assert result.reason == "Minion config could not be resolved."
+        assert result.cause is not None
+        assert expected_cause in result.cause
+        assert result.suggestion == (
+            "Check that minion_config_path exists, is readable, and contains a valid "
+            "optional _minions_config_id."
+        )
+        await assert_runtime_empty(gru)
+
+
+@pytest.mark.asyncio
+async def test_start_returns_failure_when_file_config_cannot_be_read(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def raise_permission_error(_config_path: str) -> tuple[str, str]:
+        raise PermissionError("config access denied")
+
+    async with managed_gru_context(
+        state_store=state_store,
+        logger=logger,
+        metrics=metrics,
+    ) as gru:
+        monkeypatch.setattr(
+            gru,
+            "_resolve_file_config_path_and_identity",
+            raise_permission_error,
+        )
+        result = await gru.start_orchestration(
+            minion="tests.assets.minions.two_steps.counter.with_file_config",
+            minion_config_path="unreadable.toml",
+            pipeline="tests.assets.pipelines.emit_one.counter.default",
+        )
+
+        assert not result.success
+        assert result.reason == "Minion config could not be resolved."
+        assert result.cause == "config access denied"
+        assert result.suggestion == (
+            "Check that minion_config_path exists, is readable, and contains a valid "
+            "optional _minions_config_id."
+        )
+        await assert_runtime_empty(gru)
+
+
+@pytest.mark.asyncio
+async def test_start_propagates_cancellation_during_file_config_resolution(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async with managed_gru_context(
+        state_store=state_store,
+        logger=logger,
+        metrics=metrics,
+    ) as gru:
+        async def cancelled_resolution(_config_path: str) -> tuple[str, str]:
+            raise asyncio.CancelledError
+
+        monkeypatch.setattr(
+            gru,
+            "_resolve_file_config_path_and_identity",
+            cancelled_resolution,
+        )
+
+        with pytest.raises(asyncio.CancelledError):
+            await gru.start_orchestration(
+                minion="tests.assets.minions.two_steps.counter.with_file_config",
+                minion_config_path="cancelled.toml",
+                pipeline="tests.assets.pipelines.emit_one.counter.default",
+            )
+
+        await assert_runtime_empty(gru)
+
+
+@pytest.mark.asyncio
 async def test_start_without_load_config_override_returns_cause_and_cleans_up(
     managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
