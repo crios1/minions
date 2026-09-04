@@ -414,6 +414,7 @@ class Gru:
         self._runtime_failure_finalizer_tasks: set[asyncio.Task[None]] = set()
         self._runtime_integrity_failure: BaseException | None = None
         self._runtime_integrity_shutdown_task: asyncio.Task[None] | None = None
+        self._shutdown_task: asyncio.Task[ShutdownResult] | None = None
 
         # Lifecycle admission locks.
         # Orchestration locks serialize activation/deactivation for one orchestration id.
@@ -2586,6 +2587,27 @@ class Gru:
         )
 
     async def shutdown(self) -> ShutdownResult:
+        """Run one shared terminal shutdown operation.
+
+        Shutdown is terminal and continues if a caller is cancelled.
+
+        The caller may be cancelled while the terminal cleanup continues for
+        other callers waiting on the same shutdown task.
+        """
+        if self._is_shutdown:
+            return ShutdownResult(success=True)
+        if self._shutdown_task is None:
+            # Advertise shutdown synchronously, before yielding to the shared
+            # implementation task, so new lifecycle operations cannot begin.
+            if self._is_started:
+                self._is_shutting_down = True
+            self._shutdown_task = asyncio.create_task(
+                self._shutdown_impl(),
+                name="Gru:shutdown",
+            )
+        return await asyncio.shield(self._shutdown_task)
+
+    async def _shutdown_impl(self) -> ShutdownResult:
         global _gru_instance
         if self._is_shutdown:
             return ShutdownResult(success=True)
@@ -2598,13 +2620,6 @@ class Gru:
         # Wait until all in-flight lifecycle operations drain.
         # Condition.wait_for() releases _lifecycle_ops_state_lock while waiting,
         # then re-acquires it before returning.
-        if self._is_shutting_down:
-            async with self._lifecycle_ops_state_lock:
-                await self._lifecycle_ops_drained.wait_for(lambda: self._is_shutdown)
-            return ShutdownResult(success=True)
-
-        self._is_shutting_down = True
-
         async with self._lifecycle_ops_state_lock:
             await self._lifecycle_ops_drained.wait_for(
                 lambda: (

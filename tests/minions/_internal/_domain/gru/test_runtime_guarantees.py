@@ -1029,6 +1029,36 @@ async def test_gru_shutdown_advertises_shutdown_before_waiting(
 
 
 @pytest.mark.asyncio
+async def test_cancelled_shutdown_request_still_completes_terminal_shutdown(
+    managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    state_store: InMemoryStateStore,
+):
+    async with managed_gru_context(
+        logger=logger,
+        metrics=metrics,
+        state_store=state_store,
+    ) as gru:
+        # Keep shutdown pending until its caller is cancelled.
+        async with gru._lifecycle_ops_state_lock:
+            shutdown_task = asyncio.create_task(gru.shutdown())
+            await asyncio.sleep(0)
+            assert gru._is_shutting_down
+            assert not shutdown_task.done()
+            terminal_shutdown_task = gru._shutdown_task
+            assert terminal_shutdown_task is not None
+
+            shutdown_task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await shutdown_task
+
+        shutdown_result = await terminal_shutdown_task
+        assert shutdown_result.success
+        assert gru._is_shutdown
+
+
+@pytest.mark.asyncio
 async def test_gru_shutdown_waits_for_in_flight_start_orchestration(
     managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     monkeypatch: pytest.MonkeyPatch,
