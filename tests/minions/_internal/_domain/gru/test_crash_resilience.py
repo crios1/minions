@@ -340,6 +340,9 @@ async def test_minion_runtime_failure_deactivates_only_its_orchestration(
         await assert_orchestration_running(gru, healthy.orchestration_id)
         await assert_runtime_component_counts_exact(gru, minions=1, pipelines=1)
 
+        healthy_minion = gru._orchestrations[healthy.orchestration_id].minion
+        await healthy_minion._mn_wait_until_tasks_idle(timeout=1.0)
+
         stop = await gru.stop_orchestration(healthy.orchestration_id)
         assert stop.success
         await assert_runtime_empty(gru)
