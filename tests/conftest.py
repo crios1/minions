@@ -4,16 +4,20 @@ import importlib
 import sys
 from collections.abc import AsyncGenerator, Callable, Generator
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import pytest
 import pytest_asyncio
 
-from minions import Resource
+import minions._internal._domain.component_identity as component_identity
+from minions import Minion, Resource
 from minions._internal._domain.gru import Gru
+from minions._internal._framework.async_service import AsyncService
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
+
+T_AsyncService = TypeVar("T_AsyncService", bound=AsyncService)
 
 
 @pytest.fixture
@@ -36,6 +40,16 @@ def scrub_asset_modules() -> Generator[None, None, None]:
 
     for name in [n for n in list(sys.modules) if is_asset_module(n)]:
         sys.modules.pop(name, None)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_component_id_registry() -> Generator[None, None, None]:
+    registry_snapshot = dict(component_identity._COMPONENT_ID_REGISTRY)
+    try:
+        yield
+    finally:
+        component_identity._COMPONENT_ID_REGISTRY.clear()
+        component_identity._COMPONENT_ID_REGISTRY.update(registry_snapshot)
 
 
 # Prefer these fixtures over direct InMemory* construction so spy reset,
@@ -90,23 +104,45 @@ def managed_gru_context() -> Callable[..., contextlib.AbstractAsyncContextManage
     return _factory
 
 
+@contextlib.asynccontextmanager
+async def _running_async_service_context(
+    service: T_AsyncService,
+) -> AsyncGenerator[T_AsyncService, None]:
+    service_task = asyncio.create_task(service._mn_serve())
+    try:
+        await service._mn_wait_until_running()
+        yield service
+    finally:
+        service_task.cancel()
+        try:
+            await service_task
+        except asyncio.CancelledError:
+            pass
+        await service._mn_ensure_shutdown()
+
+
+@pytest.fixture
+def running_minion_context() -> Callable[
+    [Minion[Any, Any]], contextlib.AbstractAsyncContextManager[Minion[Any, Any]]
+]:
+    @contextlib.asynccontextmanager
+    async def _factory(
+        minion: Minion[Any, Any],
+    ) -> AsyncGenerator[Minion[Any, Any], None]:
+        async with _running_async_service_context(minion) as running_minion:
+            yield running_minion
+
+    return _factory
+
+
 @pytest.fixture
 def running_resource_context() -> Callable[
     [Resource], contextlib.AbstractAsyncContextManager[Resource]
 ]:
     @contextlib.asynccontextmanager
     async def _factory(resource: Resource) -> AsyncGenerator[Resource, None]:
-        service_task = asyncio.create_task(resource._mn_serve())
-        try:
-            await resource._mn_wait_until_running()
-            yield resource
-        finally:
-            service_task.cancel()
-            try:
-                await service_task
-            except asyncio.CancelledError:
-                pass
-            await resource._mn_ensure_shutdown()
+        async with _running_async_service_context(resource) as running_resource:
+            yield running_resource
 
     return _factory
 

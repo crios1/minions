@@ -1,5 +1,7 @@
 import asyncio
 import contextlib
+from collections.abc import Callable
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -37,7 +39,12 @@ def _make_minion(
 
 
 @pytest.mark.asyncio
-async def test_trigger_waits_for_live_minion_before_emitting():
+async def test_trigger_waits_for_live_minion_before_emitting(
+    running_minion_context: Callable[
+        [Minion[Any, Any]],
+        contextlib.AbstractAsyncContextManager[Minion[Any, Any]],
+    ],
+):
     events: list[EmptyEvent] = []
 
     class RecordingMinion(Minion[EmptyEvent, EmptyContext]):
@@ -52,21 +59,21 @@ async def test_trigger_waits_for_live_minion_before_emitting():
         logger=NoOpLogger(),
     )
     minion = _make_minion(RecordingMinion)
-    minion._mn_mark_running()
 
-    emit_event_task = asyncio.create_task(
-        pipeline.wait_for_subscribers_then_emit_event()
-    )
-    await asyncio.sleep(0)
+    async with running_minion_context(minion):
+        emit_event_task = asyncio.create_task(
+            pipeline.wait_for_subscribers_then_emit_event()
+        )
+        await asyncio.sleep(0)
 
-    assert not emit_event_task.done()
-    assert not events
+        assert not emit_event_task.done()
+        assert not events
 
-    await pipeline._mn_subscribe(minion)
-    await asyncio.wait_for(emit_event_task, timeout=1.0)
-    await minion._mn_wait_until_workflows_idle()
+        await pipeline._mn_subscribe(minion)
+        await asyncio.wait_for(emit_event_task, timeout=1.0)
+        await minion._mn_wait_until_workflows_idle()
 
-    assert events == [EmptyEvent()]
+        assert events == [EmptyEvent()]
 
 
 @pytest.mark.asyncio
