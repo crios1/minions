@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import importlib
 import sys
@@ -8,6 +9,7 @@ from typing import Any
 import pytest
 import pytest_asyncio
 
+from minions import Resource
 from minions._internal._domain.gru import Gru
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
@@ -84,6 +86,27 @@ def managed_gru_context() -> Callable[..., contextlib.AbstractAsyncContextManage
                 await gru.shutdown()
         finally:
             active_context = False
+
+    return _factory
+
+
+@pytest.fixture
+def running_resource_context() -> Callable[
+    [Resource], contextlib.AbstractAsyncContextManager[Resource]
+]:
+    @contextlib.asynccontextmanager
+    async def _factory(resource: Resource) -> AsyncGenerator[Resource, None]:
+        service_task = asyncio.create_task(resource._mn_serve())
+        try:
+            await resource._mn_wait_until_running()
+            yield resource
+        finally:
+            service_task.cancel()
+            try:
+                await service_task
+            except asyncio.CancelledError:
+                pass
+            await resource._mn_ensure_shutdown()
 
     return _factory
 

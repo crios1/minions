@@ -29,6 +29,9 @@ Public async methods are wrapped automatically:
 - Errors logged with context and counted in `RESOURCE_ERROR_TOTAL`.
 - Successful calls counted in `RESOURCE_SERVES_TOTAL`.
 
+See {doc}`/concepts/resources` for the failure-log fields and argument-privacy
+boundary.
+
 Mark methods that should skip tracking with `{py:func}``Resource.untracked``.
 
 ## 2) Declare dependencies

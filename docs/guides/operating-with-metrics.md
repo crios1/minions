@@ -1,6 +1,12 @@
 # Operating with Metrics
 
-Minions exposes Prometheus-style metrics for runtime health, workflow progress, resource activity, and persistence behavior. This guide focuses on the metrics operators can use to understand whether the runtime is healthy and whether workflows are preserving their durability guarantees.
+Minions exposes runtime metrics for health, workflow progress, resource
+activity, and persistence behavior. The default backend is Prometheus-backed,
+but `Metrics` is a pluggable interface, so custom backends may expose these
+framework-defined metric names and kinds differently. This guide uses the
+framework metric names and counter, gauge, and histogram terminology while
+focusing on the signals operators can use to understand runtime health and
+workflow durability.
 
 ## Start with persistence metrics
 
@@ -144,5 +150,18 @@ Resource metrics carry the stable callee `resource` identity, the immediate call
 - `resource_error_total`
 
 Use `resource` / `resource_method` to see how a shared resource behaves overall. Use `resource_caller_kind` and `resource_caller` to identify the immediate caller (`minion`, `pipeline`, `resource`, or `unknown`). Include `orchestration_id` to see which deployed composition is affected. As a defensive fallback, calls made without caller or workflow context use `resource_caller_kind="unknown"`, `resource_caller=""`, and `orchestration_id=""`.
+
+## Logging boundary
+
+Logs use structured fields, including component identities and correlation
+fields. Resource method failure logs include argument count, parameter names,
+and runtime type names. They do not include the values passed in `args` or
+`kwargs`.
+
+Minions does not redact exception content. Exception messages, chained-cause
+messages, tracebacks, and custom exception context are logged as provided by
+the application. Keep secrets out of those fields and use identifiers or
+redacted summaries instead. See {doc}`/concepts/resources` for the
+Resource-specific failure-log contract.
 
 For the underlying persistence semantics, see {doc}`/concepts/state-and-persistence`.

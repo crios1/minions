@@ -23,6 +23,23 @@ class PriceAPI(Resource):
         return True
 ```
 
+## Failure logs and argument privacy
+
+When a tracked Resource method fails, Minions increments the counter metric
+named `resource_error_total` and emits a structured `Resource method failed`
+log. The log includes Resource identity, method name, error type, exception
+details, and safe invocation metadata: argument count, parameter names, and
+runtime type names.
+
+Invocation metadata does not include the values passed through the method's
+`args` or `kwargs`, so Minions can identify the failing operation without
+recording those values. This protection applies only to metadata Minions adds:
+exception messages, chained-cause messages, tracebacks, and custom exception
+context are recorded as supplied. Do not put secrets in those fields; use
+identifiers or redacted summaries when raising or enriching exceptions.
+Applications with stricter requirements should enforce them in their exception
+and logger implementations.
+
 ## Dependency graph
 
 Resources can depend on other resources via type hints. Gru traverses the graph, starts everything once, reference-counts usage, and shuts down unused nodes when minions or pipelines stop.

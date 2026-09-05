@@ -56,6 +56,63 @@ class Resource(AsyncService):
             "resource_module_path": self._mn_resource_module_path,
         }
 
+    @staticmethod
+    def _mn_invocation_log_metadata(
+        method: Callable[..., object],
+        args: tuple[object, ...],
+        kwargs: dict[str, object],
+    ) -> dict[str, object]:
+        """Build safe structured-log metadata for a Resource invocation."""
+        try:
+            parameters = tuple(inspect.signature(method).parameters.values())
+        except (TypeError, ValueError):
+            parameters = ()
+
+        positional_parameters = tuple(
+            parameter
+            for parameter in parameters
+            if parameter.kind
+            in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            )
+        )
+        variadic_positional_parameter = next(
+            (
+                parameter
+                for parameter in parameters
+                if parameter.kind is inspect.Parameter.VAR_POSITIONAL
+            ),
+            None,
+        )
+
+        resource_arguments: list[dict[str, object]] = []
+        for index, argument in enumerate(args):
+            parameter = (
+                positional_parameters[index]
+                if index < len(positional_parameters)
+                else variadic_positional_parameter
+            )
+            resource_arguments.append(
+                {
+                    "kind": "positional",
+                    "name": parameter.name if parameter else None,
+                    "type": type(argument).__name__,
+                }
+            )
+        for name in sorted(kwargs):
+            resource_arguments.append(
+                {
+                    "kind": "keyword",
+                    "name": name,
+                    "type": type(kwargs[name]).__name__,
+                }
+            )
+
+        return {
+            "resource_arguments": resource_arguments,
+        }
+
     async def _mn_startup(
         self,
         *,
@@ -159,8 +216,7 @@ class Resource(AsyncService):
                     e,
                     **self._mn_identity_log_kwargs(),
                     resource_method=resource_method,
-                    args=args,
-                    kwargs=kwargs,
+                    **self._mn_invocation_log_metadata(method, args, kwargs),
                 )
                 raise
             else:
