@@ -488,9 +488,6 @@ class TestValidUsageDSL:
     async def test_user_guarantee_persisted_event_and_context_shapes_resume(
         self,
         gru: Gru,
-        logger: InMemoryLogger,
-        metrics: InMemoryMetrics,
-        state_store: InMemoryStateStore,
         minion_module_path: str,
         pipeline_module_path: str,
     ):
@@ -532,9 +529,6 @@ class TestValidUsageDSL:
     async def test_gru_start_stop_orchestration(
         self,
         gru: Gru,
-        logger: InMemoryLogger,
-        metrics: InMemoryMetrics,
-        state_store: InMemoryStateStore,
     ):
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         start = OrchestrationStart(
@@ -566,9 +560,6 @@ class TestValidUsageDSL:
     async def test_gru_start_3_minions_3_pipelines_3_resources_no_sharing(
         self,
         gru: Gru,
-        logger: InMemoryLogger,
-        metrics: InMemoryMetrics,
-        state_store: InMemoryStateStore,
     ):
         pipeline1 = "tests.assets.pipelines.emit_one.counter.default"
         pipeline2 = "tests.assets.pipelines.emit_one.counter.default_b"
@@ -620,9 +611,6 @@ class TestValidUsageDSL:
     async def test_gru_start_3_minions_1_pipeline_1_resource_sharing(
         self,
         gru: Gru,
-        logger: InMemoryLogger,
-        metrics: InMemoryMetrics,
-        state_store: InMemoryStateStore,
     ):
         pipeline_module_path = (
             "tests.assets.pipelines.emit_one.counter.after_three_subscribers"
@@ -670,9 +658,6 @@ class TestValidUsageDSL:
     async def test_minion_and_pipeline_share_resource_dependency(
         self,
         gru: Gru,
-        logger: InMemoryLogger,
-        metrics: InMemoryMetrics,
-        state_store: InMemoryStateStore,
     ):
         pipeline_module_path = (
             "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
@@ -706,9 +691,6 @@ class TestValidUsageDSL:
     async def test_minion_and_pipeline_share_resource_without_duplicate_owner_ref(
         self,
         gru: Gru,
-        logger: InMemoryLogger,
-        metrics: InMemoryMetrics,
-        state_store: InMemoryStateStore,
     ):
         pipeline_module_path = (
             "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
@@ -738,9 +720,6 @@ class TestValidUsageDSL:
     async def test_gru_start_orchestration_shutdown_without_stop(
         self,
         gru: Gru,
-        logger: InMemoryLogger,
-        metrics: InMemoryMetrics,
-        state_store: InMemoryStateStore,
     ):
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         start = OrchestrationStart(

@@ -503,8 +503,7 @@ async def test_wait_workflow_step_starts_then_rejects_unsupported_wrapped_direct
         await runner.run()
 
 
-@pytest.mark.asyncio
-async def test_wait_workflow_step_starts_then_rejects_external_start(gru: Gru):
+def test_wait_workflow_step_starts_then_rejects_external_start():
     start = OrchestrationStart(pipeline="missing", minion="missing")
     directives = [
         AfterWorkflowStepStarts(

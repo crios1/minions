@@ -4,9 +4,6 @@ import pytest
 
 from minions._internal._domain.component_identity import get_component_id
 from minions._internal._domain.gru import Gru
-from tests.assets.support.logger_inmemory import InMemoryLogger
-from tests.assets.support.metrics_inmemory import InMemoryMetrics
-from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.support.gru_scenario import (
     AfterWorkflowStepStarts,
     Concurrent,
@@ -24,9 +21,6 @@ from tests.support.gru_scenario import (
 @pytest.mark.asyncio
 async def test_uses_durable_pipeline_id_for_event_targets(
     gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
 ):
     from tests.assets.pipelines.emit_one.counter.identified import (
         AssetPipeline as IdentifiedEmitOneCounterPipeline,
@@ -53,9 +47,6 @@ async def test_uses_durable_pipeline_id_for_event_targets(
 @pytest.mark.asyncio
 async def test_supports_start_wait_shutdown_flow(
     gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
 ):
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
 
@@ -77,9 +68,6 @@ async def test_supports_start_wait_shutdown_flow(
 @pytest.mark.asyncio
 async def test_class_start_with_inline_config_records_successful_resolution_and_exact_steps(
     gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
 ):
     from tests.assets.minions.two_steps.simple.with_config import (
         AssetMinion as ConfiguredMinion,
@@ -119,9 +107,6 @@ async def test_class_start_with_inline_config_records_successful_resolution_and_
 @pytest.mark.asyncio
 async def test_supports_after_workflow_step_starts_wrapping_orchestration_stop(
     gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
 ):
     minion_ref = "tests.assets.minions.failure.abort_step"
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
@@ -149,9 +134,6 @@ async def test_supports_after_workflow_step_starts_wrapping_orchestration_stop(
 @pytest.mark.asyncio
 async def test_supports_expect_runtime_for_persistence_after_stop(
     gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
 ):
     minion_ref = "tests.assets.minions.failure.slow_step"
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
@@ -182,9 +164,6 @@ async def test_supports_expect_runtime_for_persistence_after_stop(
 @pytest.mark.asyncio
 async def test_supports_mixed_wait_workflow_step_modes_end_to_end(
     gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
 ):
     minion_ref_a = "tests.assets.minions.two_steps.simple.default"
     minion_ref_b = "tests.assets.minions.two_steps.simple.with_simple_b_resource"
@@ -230,9 +209,6 @@ async def test_supports_mixed_wait_workflow_step_modes_end_to_end(
 @pytest.mark.asyncio
 async def test_supports_expect_runtime_at_checkpoint_index(
     gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
 ):
     minion_ref = "tests.assets.minions.failure.slow_step"
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
@@ -261,9 +237,6 @@ async def test_supports_expect_runtime_at_checkpoint_index(
 @pytest.mark.asyncio
 async def test_supports_mixed_directives_in_concurrent_group(
     gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
 ):
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
     from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
@@ -300,9 +273,6 @@ async def test_supports_mixed_directives_in_concurrent_group(
 @pytest.mark.asyncio
 async def test_restart_same_pipeline_preserves_persistence_and_resolutions(
     gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
 ):
     minion_ref = "tests.assets.minions.failure.slow_step"
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
@@ -345,9 +315,6 @@ async def test_restart_same_pipeline_preserves_persistence_and_resolutions(
 @pytest.mark.asyncio
 async def test_explicit_step_boundary_resume_excludes_completed_step_replay(
     gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
 ):
     minion_ref = "tests.assets.minions.two_steps.counter.slow_second_step"
     pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
@@ -390,9 +357,6 @@ async def test_explicit_step_boundary_resume_excludes_completed_step_replay(
 @pytest.mark.asyncio
 async def test_resumes_identified_minion_without_persisted_minion_metadata(
     gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
 ):
     from tests.assets.pipelines.emit_one.counter.identified import (
         AssetPipeline as IdentifiedEmitOneCounterPipeline,
@@ -456,9 +420,6 @@ async def test_resumes_identified_minion_without_persisted_minion_metadata(
 @pytest.mark.asyncio
 async def test_event_type_mismatch_rejects_start_before_minion_construction(
     gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
 ):
     pipeline_ref = "tests.assets.pipelines.emit_one.record.default"
     minion_ref = "tests.assets.minions.two_steps.simple.default"
@@ -482,9 +443,6 @@ async def test_event_type_mismatch_rejects_start_before_minion_construction(
 @pytest.mark.asyncio
 async def test_unknown_stop_fails(
     gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
 ):
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
 
@@ -508,9 +466,6 @@ async def test_unknown_stop_fails(
 @pytest.mark.asyncio
 async def test_runs_starts_in_parallel(
     gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
 ):
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
     from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
@@ -544,9 +499,6 @@ async def test_runs_starts_in_parallel(
 @pytest.mark.asyncio
 async def test_wait_workflow_completions_targets_selected_orchestrations(
     gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
 ):
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
     from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
@@ -581,9 +533,6 @@ async def test_wait_workflow_completions_targets_selected_orchestrations(
 @pytest.mark.asyncio
 async def test_exact_runtime_expectation_reports_mismatch(
     gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
 ):
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
     from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
@@ -632,9 +581,6 @@ async def test_exact_runtime_expectation_reports_mismatch(
 async def test_strict_wait_reports_workflow_window_overlap_mismatch(
     gru: Gru,
     tests_dir: Path,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
 ):
     cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
     cfg2 = str(tests_dir / "assets" / "config/minions/b.toml")
@@ -678,9 +624,6 @@ async def test_strict_wait_reports_workflow_window_overlap_mismatch(
 @pytest.mark.asyncio
 async def test_wait_for_empty_workflow_set_is_noop(
     gru: Gru,
-    logger: InMemoryLogger,
-    metrics: InMemoryMetrics,
-    state_store: InMemoryStateStore,
 ):
     pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
     start = OrchestrationStart(

@@ -10,9 +10,6 @@ from minions._internal._framework.logger_console import ConsoleLogger
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_noop import NoOpStateStore
-from tests.assets.support.logger_inmemory import InMemoryLogger
-from tests.assets.support.metrics_inmemory import InMemoryMetrics
-from tests.assets.support.state_store_inmemory import InMemoryStateStore
 from tests.minions._internal._domain.gru.assertions import assert_orchestration_running
 from tests.support.gru_scenario import (
     Directive,
@@ -305,9 +302,6 @@ class TestInvalidUsageDSL:
     async def test_gru_returns_error_when_starting_running_orchestration(
         self,
         gru: Gru,
-        logger: InMemoryLogger,
-        metrics: InMemoryMetrics,
-        state_store: InMemoryStateStore,
     ):
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
 
@@ -335,9 +329,6 @@ class TestInvalidUsageDSL:
     async def test_gru_returns_error_when_stopping_nonexistant_orchestration(
         self,
         gru: Gru,
-        logger: InMemoryLogger,
-        metrics: InMemoryMetrics,
-        state_store: InMemoryStateStore,
     ):
         directives: list[Directive] = [
             OrchestrationStop(id="dummy-orchestration-id", expect_success=False),
@@ -354,9 +345,6 @@ class TestInvalidUsageDSL:
     async def test_gru_returns_error_when_mismatched_minion_and_pipeline_event_types(
         self,
         gru: Gru,
-        logger: InMemoryLogger,
-        metrics: InMemoryMetrics,
-        state_store: InMemoryStateStore,
     ):
 
         directives: list[Directive] = [
