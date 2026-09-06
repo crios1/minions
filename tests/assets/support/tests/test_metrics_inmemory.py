@@ -226,25 +226,20 @@ class TestInMemoryMetrics:
             h.observe(10)
 
     @pytest.mark.asyncio
-    async def test_unknown_metric_label_sorting(self):
+    async def test_undeclared_metric_is_rejected_without_creating_metric(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
         """
-        For metrics not listed in METRIC_LABEL_NAMES, labels are accepted and sorted by key.
+        Metrics not listed in METRIC_LABEL_NAMES are rejected before framework registration.
         """
-        # Ensure our metric is not pre-declared in METRIC_LABEL_NAMES
-        METRIC_NAME = "unlisted_metric"
-        if METRIC_NAME in METRIC_LABEL_NAMES:
-            del METRIC_LABEL_NAMES[METRIC_NAME]
+        metric_name = "undeclared_metric"
+        monkeypatch.delitem(METRIC_LABEL_NAMES, metric_name, raising=False)
 
         m = InMemoryMetrics()
-        # Provide labels in reverse order; snapshot keys should be sorted ('a','b')
-        await m._mn_inc(METRIC_NAME, labels={"b": "2", "a": "1"})
+        await m._mn_inc(metric_name, labels={"route": "/v1"})
 
-        samples = m.snapshot_counters()[METRIC_NAME]
-        assert len(samples) == 1
-        sample = samples[0]
-        assert sample["labels"] == {"a": "1", "b": "2"}
-        assert list(sample["labels"].keys()) == ["a", "b"]
-        assert sample["value"] == 1.0
+        assert metric_name not in m.snapshot_counters()
 
     def test_counter_multiple_label_sets(self, monkeypatch: pytest.MonkeyPatch):
         """

@@ -57,7 +57,10 @@ SYSTEM_CPU_USED_PERCENT = "system_cpu_used_percent"
 PROCESS_MEMORY_USED_PERCENT = "process_memory_used_percent"
 PROCESS_CPU_USED_PERCENT = "process_cpu_used_percent"
 
-# Metrics Label Names
+# Metric schema for the Metrics base class.
+# Every metric name used through its metric-operation methods must be listed here.
+# An empty list explicitly declares a metric with no labels.
+# If a metric name is not listed here, Metrics rejects the operation.
 METRIC_LABEL_NAMES = {
     PIPELINE_EVENT_PRODUCED_TOTAL: [LABEL_PIPELINE],
     PIPELINE_EVENT_FANOUT_TOTAL: [LABEL_PIPELINE, LABEL_ORCHESTRATION_ID],

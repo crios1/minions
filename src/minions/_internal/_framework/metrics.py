@@ -82,21 +82,23 @@ class Metrics(LoggerBackedAsyncComponent):
             "gauge": threading.Lock(),
             "histogram": threading.Lock(),
         }
-        self._mn_unknown_metrics: set[str] = set()
+        self._mn_undeclared_metrics: set[str] = set()
 
     def _mn_get_label_names_for_metric(self, metric_name: str) -> list[str]:
         labels = METRIC_LABEL_NAMES.get(metric_name)
         if labels is None:
-            if metric_name not in self._mn_unknown_metrics:
-                self._mn_unknown_metrics.add(metric_name)
+            if metric_name not in self._mn_undeclared_metrics:
+                self._mn_undeclared_metrics.add(metric_name)
                 safe_create_task(
                     self._mn_logger._mn_log(
                         WARNING,
-                        f"metrics: unknown metric '{metric_name}', using no labels",
+                        f"metrics: undeclared metric '{metric_name}'; no declared label schema",
                     ),
                     on_failure=report_task_failure_to_stderr,
                 )
-            return []
+            raise ValueError(
+                f"Undeclared metric '{metric_name}': no declared label schema"
+            )
         return labels
 
     @overload

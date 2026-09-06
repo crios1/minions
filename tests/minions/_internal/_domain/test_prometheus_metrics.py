@@ -181,24 +181,25 @@ async def test_zero_label_metrics_update_without_unknown_warning(
     else:
         raise Exception("unhandled metric kind")
 
-    assert not logger.has_log(f"unknown metric '{metric_name}'")
+    assert not logger.has_log(f"undeclared metric '{metric_name}'")
 
 
 @pytest.mark.asyncio
-async def test_unknown_metric_warns_and_uses_no_labels(logger: InMemoryLogger):
-    metric_name = "test_unknown_metric"
+async def test_undeclared_metric_warns_and_is_rejected(logger: InMemoryLogger):
+    metric_name = "test_undeclared_metric"
     registry = CollectorRegistry()
     metrics = PrometheusMetrics(logger=logger, registry=registry)
 
-    await metrics._mn_set(metric_name, 42.5)
+    await metrics._mn_set(metric_name, 42.5, labels={"route": "/v1"})
 
-    assert await logger.wait_for_log(f"unknown metric '{metric_name}'", min_level=WARNING)
-    unknown_metric_logs = [
-        log for log in logger.logs if f"unknown metric '{metric_name}'" in log.msg
+    assert await logger.wait_for_log(f"undeclared metric '{metric_name}'", min_level=WARNING)
+    undeclared_metric_logs = [
+        log for log in logger.logs if f"undeclared metric '{metric_name}'" in log.msg
     ]
-    assert len(unknown_metric_logs) == 1
-    assert unknown_metric_logs[0].level == WARNING
-    assert metrics.snapshot_gauges()[metric_name] == [{"labels": {}, "value": 42.5}]
+    assert len(undeclared_metric_logs) == 1
+    assert undeclared_metric_logs[0].level == WARNING
+    assert "no declared label schema" in undeclared_metric_logs[0].msg
+    assert metric_name not in metrics.snapshot_gauges()
 
 
 # Failure Cases
