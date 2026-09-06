@@ -8,16 +8,20 @@ import msgspec
 import pytest
 
 from minions import Pipeline
+from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_constants import (
     LABEL_ERROR_TYPE,
     LABEL_PIPELINE,
     PIPELINE_ERROR_TOTAL,
 )
+from minions._internal._framework.metrics_noop import NoOpMetrics
+from minions._internal._framework.state_store_noop import NoOpStateStore
 from minions._internal._utils.serialization import SERIALIZABLE_PRIMITIVE_TYPES
 from tests.assets.events.empty import EmptyEvent
 from tests.assets.events.simple import SimpleEvent
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
+from tests.assets.support.minion_noop import NoOpMinion
 
 
 class TestPipelineSubclassingValid:
@@ -195,3 +199,70 @@ async def test_continues_after_produce_event_failure(
         await run_task
 
     assert produce_event_calls == 2
+
+
+@pytest.mark.asyncio
+async def test_isolates_subscriber_failure_during_event_fanout(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class EmptyEventPipeline(Pipeline[EmptyEvent]):
+        async def produce_event(self) -> EmptyEvent:
+            return EmptyEvent()
+
+    pipeline = EmptyEventPipeline(
+        "empty-event-pipeline-id",
+        "tests.pipeline.EmptyEventPipeline",
+        metrics,
+        logger,
+    )
+
+    def make_minion(instance_id: str, orchestration_id: str, minion_id: str) -> NoOpMinion:
+        return NoOpMinion(
+            minion_instance_id=instance_id,
+            orchestration_id=orchestration_id,
+            minion_module_path=f"tests.minions.{minion_id}",
+            config_path=None,
+            state_store=NoOpStateStore(),
+            metrics=NoOpMetrics(),
+            logger=NoOpLogger(),
+            minion_id=minion_id,
+            minion_config_id="",
+            pipeline_id="empty-event-pipeline-id",
+        )
+
+    failing_minion = make_minion(
+        "failing-minion-instance",
+        "failing-orchestration",
+        "failing-minion",
+    )
+    healthy_minion = make_minion(
+        "healthy-minion-instance",
+        "healthy-orchestration",
+        "healthy-minion",
+    )
+    healthy_events: list[EmptyEvent] = []
+
+    async def fail_to_accept_event(_event: EmptyEvent) -> bool:
+        raise RuntimeError("subscriber unavailable")
+
+    async def accept_event(event: EmptyEvent) -> bool:
+        healthy_events.append(event)
+        return True
+
+    monkeypatch.setattr(failing_minion, "_mn_accept_event", fail_to_accept_event)
+    monkeypatch.setattr(healthy_minion, "_mn_accept_event", accept_event)
+    await pipeline._mn_subscribe(failing_minion)
+    await pipeline._mn_subscribe(healthy_minion)
+
+    await pipeline._mn_produce_and_fan_out_event()
+
+    assert healthy_events == [EmptyEvent()]
+    assert logger.has_log(
+        "Pipeline failed to fan out event to minion",
+        log_kwargs={
+            "pipeline_id": "empty-event-pipeline-id",
+            "minion_id": "failing-minion",
+        },
+    )
