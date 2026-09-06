@@ -8,8 +8,8 @@ import textwrap
 import time
 import traceback
 import uuid
-from collections.abc import Awaitable, Coroutine
-from contextlib import ExitStack
+from collections.abc import AsyncGenerator, Awaitable, Coroutine
+from contextlib import ExitStack, asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
@@ -1598,17 +1598,33 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             # contexts remain represented by the state store for future resumption.
             await self._mn_clear_workflow_tasks_and_publish_inflight_gauge()
 
-    async def _mn_accept_event(self, event: T_Event) -> bool:
-        """Return a bool indicating whether the event was accepted."""
+    @asynccontextmanager
+    async def _mn_reserve_event_admission(self) -> AsyncGenerator[bool, None]:
+        """Reserve admission to register one live event.
+
+        Wait for startup outside the acceptance lock so the ``Gru`` instance
+        managing this orchestration can close admission while startup is in
+        progress. When this yields ``True``, the lock remains held through the
+        body, so a ``Gru`` stop or shutdown cannot interleave between the final
+        check and registration.
+        """
+        async with self._mn_event_acceptance_lock:
+            if not self._mn_accepting_events:
+                yield False
+                return
+
+        await self._mn_wait_until_running()
 
         async with self._mn_event_acceptance_lock:
             if not self._mn_accepting_events:
-                return False
+                yield False
+                return
+            yield True
 
-            # Live events must wait for startup workflow resume to finish; otherwise
-            # an event can be persisted before startup completes and then resumed.
-            await self._mn_wait_until_running()
+    async def _mn_accept_event(self, event: T_Event) -> bool:
+        """Return a bool indicating whether the event was accepted."""
 
+        async def _register_event() -> bool:
             ctx: MinionWorkflowContext[T_Event, T_Ctx] = MinionWorkflowContext(
                 orchestration_id=self._mn_orchestration_id,
                 workflow_id=uuid.uuid4().hex,
@@ -1638,6 +1654,11 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
                 raise
 
             return True
+
+        async with self._mn_reserve_event_admission() as admitted:
+            if not admitted:
+                return False
+            return await _register_event()
 
     async def _mn_request_stop(
         self,
