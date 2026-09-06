@@ -6,11 +6,13 @@ import urllib.request
 import pytest
 from prometheus_client import CollectorRegistry
 
+from minions._internal._framework.logger import WARNING
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_constants import (
     LABEL_MINION,
     LABEL_MINION_WORKFLOW_STEP,
     LABEL_ORCHESTRATION_ID,
+    METRIC_LABEL_NAMES,
     MINION_WORKFLOW_STARTED_TOTAL,
     MINION_WORKFLOW_STEP_DURATION_SECONDS,
     SYSTEM_MEMORY_USED_PERCENT,
@@ -114,6 +116,52 @@ async def test_gauge_exposed_on_http():
     page = await poll_read_metrics_from_http(port)
     value = extract_metric_value(page, SYSTEM_MEMORY_USED_PERCENT, {})
     assert value == 42.5
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["counter", "gauge", "histogram"])
+async def test_zero_label_metrics_update_without_unknown_warning(
+    kind: str,
+    monkeypatch: pytest.MonkeyPatch,
+    logger: InMemoryLogger,
+):
+    metric_name = f"test_zero_label_{kind}"
+    monkeypatch.setitem(METRIC_LABEL_NAMES, metric_name, [])
+    registry = CollectorRegistry()
+    metrics = PrometheusMetrics(logger=logger, registry=registry)
+
+    if kind == "counter":
+        await metrics._mn_inc(metric_name)
+        assert metrics.snapshot_counters()[metric_name] == [{"labels": {}, "value": 1.0}]
+    elif kind == "gauge":
+        await metrics._mn_set(metric_name, 42.5)
+        assert metrics.snapshot_gauges()[metric_name] == [{"labels": {}, "value": 42.5}]
+    elif kind == "histogram":
+        await metrics._mn_observe(metric_name, 0.75)
+        assert {"labels": {}, "count": 1.0, "sum": 0.75} in metrics.snapshot_histograms()[
+            metric_name
+        ]
+    else:
+        raise Exception("unhandled metric kind")
+
+    assert not logger.has_log(f"unknown metric '{metric_name}'")
+
+
+@pytest.mark.asyncio
+async def test_unknown_metric_warns_and_uses_no_labels(logger: InMemoryLogger):
+    metric_name = "test_unknown_metric"
+    registry = CollectorRegistry()
+    metrics = PrometheusMetrics(logger=logger, registry=registry)
+
+    await metrics._mn_set(metric_name, 42.5)
+
+    assert await logger.wait_for_log(f"unknown metric '{metric_name}'", min_level=WARNING)
+    unknown_metric_logs = [
+        log for log in logger.logs if f"unknown metric '{metric_name}'" in log.msg
+    ]
+    assert len(unknown_metric_logs) == 1
+    assert unknown_metric_logs[0].level == WARNING
+    assert metrics.snapshot_gauges()[metric_name] == [{"labels": {}, "value": 42.5}]
 
 
 @pytest.mark.asyncio

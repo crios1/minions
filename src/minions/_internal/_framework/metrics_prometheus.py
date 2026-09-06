@@ -23,33 +23,42 @@ from .metrics_interface import LabelledCounter, LabelledGauge, LabelledHistogram
 
 
 class _PrometheusCounter:
-    def __init__(self, metric: Counter):
+    def __init__(self, metric: Counter, label_names: list[str]):
         self._metric = metric
+        self._label_names = tuple(label_names)
 
     def labels(self, **kwargs: str) -> LabelledCounter:
-        return _PrometheusCounter(self._metric.labels(**kwargs))
+        if not self._label_names and not kwargs:
+            return self
+        return _PrometheusCounter(self._metric.labels(**kwargs), list(self._label_names))
 
     def inc(self, amount: float = 1):
         return self._metric.inc(amount=amount)
 
 
 class _PrometheusGauge:
-    def __init__(self, metric: Gauge):
+    def __init__(self, metric: Gauge, label_names: list[str]):
         self._metric = metric
+        self._label_names = tuple(label_names)
 
     def labels(self, **kwargs: str) -> LabelledGauge:
-        return _PrometheusGauge(self._metric.labels(**kwargs))
+        if not self._label_names and not kwargs:
+            return self
+        return _PrometheusGauge(self._metric.labels(**kwargs), list(self._label_names))
 
     def set(self, value: float):
         return self._metric.set(value)
 
 
 class _PrometheusHistogram:
-    def __init__(self, metric: Histogram):
+    def __init__(self, metric: Histogram, label_names: list[str]):
         self._metric = metric
+        self._label_names = tuple(label_names)
 
     def labels(self, **kwargs: str) -> LabelledHistogram:
-        return _PrometheusHistogram(self._metric.labels(**kwargs))
+        if not self._label_names and not kwargs:
+            return self
+        return _PrometheusHistogram(self._metric.labels(**kwargs), list(self._label_names))
 
     def observe(self, value: float):
         return self._metric.observe(value)
@@ -124,7 +133,8 @@ class PrometheusMetrics(Metrics):
                     f"{metric_name} ({kind})",
                     labelnames=label_names,
                     registry=self._registry,
-                )
+                ),
+                label_names,
             )
         if kind == "gauge":
             return _PrometheusGauge(
@@ -133,7 +143,8 @@ class PrometheusMetrics(Metrics):
                     f"{metric_name} ({kind})",
                     labelnames=label_names,
                     registry=self._registry,
-                )
+                ),
+                label_names,
             )
         if kind == "histogram":
             return _PrometheusHistogram(
@@ -142,7 +153,8 @@ class PrometheusMetrics(Metrics):
                     f"{metric_name} ({kind})",
                     labelnames=label_names,
                     registry=self._registry,
-                )
+                ),
+                label_names,
             )
 
         raise ValueError(f"[Prometheus] Unknown metric kind: {kind}")

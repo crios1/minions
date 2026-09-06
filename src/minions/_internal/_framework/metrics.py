@@ -85,16 +85,18 @@ class Metrics(LoggerBackedAsyncComponent):
         self._mn_unknown_metrics: set[str] = set()
 
     def _mn_get_label_names_for_metric(self, metric_name: str) -> list[str]:
-        labels = METRIC_LABEL_NAMES.get(metric_name, [])
-        if not labels and metric_name not in self._mn_unknown_metrics:
-            self._mn_unknown_metrics.add(metric_name)
-            safe_create_task(
-                self._mn_logger._mn_log(
-                    WARNING,
-                    f"metrics: unknown metric '{metric_name}', using no labels",
-                ),
-                on_failure=report_task_failure_to_stderr,
-            )
+        labels = METRIC_LABEL_NAMES.get(metric_name)
+        if labels is None:
+            if metric_name not in self._mn_unknown_metrics:
+                self._mn_unknown_metrics.add(metric_name)
+                safe_create_task(
+                    self._mn_logger._mn_log(
+                        WARNING,
+                        f"metrics: unknown metric '{metric_name}', using no labels",
+                    ),
+                    on_failure=report_task_failure_to_stderr,
+                )
+            return []
         return labels
 
     @overload
