@@ -702,6 +702,9 @@ async def test_failed_start_preserves_existing_gru_runtime_state(
             "__init__", 0
         ) == 0
 
+        baseline_minion = gru._orchestrations[baseline.orchestration_id].minion
+        await baseline_minion._mn_wait_until_workflows_idle(timeout=1.0)
+
         stopped = await gru.stop_orchestration(baseline.orchestration_id)
         assert stopped.success
         await assert_runtime_empty(gru)
