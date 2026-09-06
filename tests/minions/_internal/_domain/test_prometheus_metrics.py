@@ -71,7 +71,7 @@ def find_unused_port():
         return s.getsockname()[1]
 
 
-# Success Cases
+# Metric Exposure
 
 
 @pytest.mark.asyncio
@@ -119,6 +119,43 @@ async def test_gauge_exposed_on_http():
 
 
 @pytest.mark.asyncio
+async def test_histogram_exposed_on_http():
+    port = find_unused_port()
+    registry = CollectorRegistry()
+    metrics = PrometheusMetrics(logger=NoOpLogger(), port=port, registry=registry)
+    await metrics.startup()
+
+    histogram = metrics.create_metric(
+        MINION_WORKFLOW_STEP_DURATION_SECONDS,
+        [LABEL_ORCHESTRATION_ID, LABEL_MINION, LABEL_MINION_WORKFLOW_STEP],
+        "histogram",
+    )
+    histogram.labels(
+        **{
+            LABEL_ORCHESTRATION_ID: "orchestration123",
+            LABEL_MINION: "minion123",
+            LABEL_MINION_WORKFLOW_STEP: "step_xyz",
+        }
+    ).observe(0.75)
+
+    page = await poll_read_metrics_from_http(port)
+    labels = {
+        LABEL_ORCHESTRATION_ID: "orchestration123",
+        LABEL_MINION: "minion123",
+        LABEL_MINION_WORKFLOW_STEP: "step_xyz",
+    }
+
+    sum_val = extract_metric_value(page, MINION_WORKFLOW_STEP_DURATION_SECONDS + "_sum", labels)
+    count_val = extract_metric_value(page, MINION_WORKFLOW_STEP_DURATION_SECONDS + "_count", labels)
+
+    assert count_val == 1.0
+    assert sum_val == 0.75
+
+
+# Metric Registry Behavior
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["counter", "gauge", "histogram"])
 async def test_zero_label_metrics_update_without_unknown_warning(
     kind: str,
@@ -162,40 +199,6 @@ async def test_unknown_metric_warns_and_uses_no_labels(logger: InMemoryLogger):
     assert len(unknown_metric_logs) == 1
     assert unknown_metric_logs[0].level == WARNING
     assert metrics.snapshot_gauges()[metric_name] == [{"labels": {}, "value": 42.5}]
-
-
-@pytest.mark.asyncio
-async def test_histogram_exposed_on_http():
-    port = find_unused_port()
-    registry = CollectorRegistry()
-    metrics = PrometheusMetrics(logger=NoOpLogger(), port=port, registry=registry)
-    await metrics.startup()
-
-    histogram = metrics.create_metric(
-        MINION_WORKFLOW_STEP_DURATION_SECONDS,
-        [LABEL_ORCHESTRATION_ID, LABEL_MINION, LABEL_MINION_WORKFLOW_STEP],
-        "histogram",
-    )
-    histogram.labels(
-        **{
-            LABEL_ORCHESTRATION_ID: "orchestration123",
-            LABEL_MINION: "minion123",
-            LABEL_MINION_WORKFLOW_STEP: "step_xyz",
-        }
-    ).observe(0.75)
-
-    page = await poll_read_metrics_from_http(port)
-    labels = {
-        LABEL_ORCHESTRATION_ID: "orchestration123",
-        LABEL_MINION: "minion123",
-        LABEL_MINION_WORKFLOW_STEP: "step_xyz",
-    }
-
-    sum_val = extract_metric_value(page, MINION_WORKFLOW_STEP_DURATION_SECONDS + "_sum", labels)
-    count_val = extract_metric_value(page, MINION_WORKFLOW_STEP_DURATION_SECONDS + "_count", labels)
-
-    assert count_val == 1.0
-    assert sum_val == 0.75
 
 
 # Failure Cases
