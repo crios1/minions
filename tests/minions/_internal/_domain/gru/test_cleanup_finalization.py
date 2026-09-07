@@ -17,10 +17,9 @@ from tests.minions._internal._domain.gru.assertions import (
     assert_orchestration_running,
     assert_runtime_component_counts_exact,
     assert_runtime_empty,
+    wait_for_orchestration_workflows_idle,
 )
 
-HEALTHY_MINION = "tests.assets.minions.one_step.counter.default"
-HEALTHY_PIPELINE = "tests.assets.pipelines.emit_one.counter.default"
 FIXED_RESOURCE_ID = "tests.assets.resources.fixed.default.AssetResource"
 
 
@@ -31,21 +30,55 @@ async def test_shutdown_failure_removes_target_without_affecting_other_runtime_s
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ):
-    shared_pipeline = "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
+    from tests.assets.crash.minions.counter.boom_shutdown import (
+        AssetMinion as ShutdownFailingCounterMinion,
+    )
+    from tests.assets.minions.one_step.counter.default import (
+        AssetMinion as OneStepCounterMinion,
+    )
+    from tests.assets.pipelines.emit_one.counter.with_fixed_resource import (
+        AssetPipeline as FixedResourceCounterPipeline,
+    )
+
+    FixedResourceCounterPipeline.enable_spy()
+    FixedResourceCounterPipeline.reset_spy()
+    FixedResourceCounterPipeline.configure_gate(expected_subs=2)
+    OneStepCounterMinion.enable_spy()
+    OneStepCounterMinion.reset_spy()
+    ShutdownFailingCounterMinion.enable_spy()
+    ShutdownFailingCounterMinion.reset_spy()
 
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        healthy_start = await gru.start_orchestration(shared_pipeline, HEALTHY_MINION)
+        healthy_start = await gru.start_orchestration(
+            FixedResourceCounterPipeline,
+            OneStepCounterMinion,
+        )
         assert healthy_start.success
         assert healthy_start.orchestration_id is not None
         healthy_runtime_state = await gru.runtime_state_snapshot()
 
         fail_on_shutdown_start = await gru.start_orchestration(
-            shared_pipeline,
-            "tests.assets.crash.minions.counter.boom_shutdown",
+            FixedResourceCounterPipeline,
+            ShutdownFailingCounterMinion,
         )
         assert fail_on_shutdown_start.success
         assert fail_on_shutdown_start.orchestration_id is not None
 
+        await FixedResourceCounterPipeline.wait_for_calls(
+            expected={"produce_event": 1}
+        )
+        await asyncio.gather(
+            OneStepCounterMinion.wait_for_calls(expected={"step_1": 1}),
+            ShutdownFailingCounterMinion.wait_for_calls(expected={"step_1": 1}),
+        )
+        await asyncio.gather(
+            wait_for_orchestration_workflows_idle(
+                gru, healthy_start.orchestration_id
+            ),
+            wait_for_orchestration_workflows_idle(
+                gru, fail_on_shutdown_start.orchestration_id
+            ),
+        )
         failed_stop = await gru.stop_orchestration(fail_on_shutdown_start.orchestration_id)
 
         assert not failed_stop.success
@@ -69,14 +102,30 @@ async def test_cancellation_timeout_fails_closed_and_recommends_process_restart(
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    from tests.assets.minions.one_step.counter.default import (
+        AssetMinion as OneStepCounterMinion,
+    )
+    from tests.assets.pipelines.emit_one.counter.default import (
+        AssetPipeline as EmitOneCounterPipeline,
+    )
+
+    EmitOneCounterPipeline.enable_spy()
+    EmitOneCounterPipeline.reset_spy()
     async with managed_gru_context(
         logger=logger,
         metrics=metrics,
         state_store=state_store,
     ) as gru:
-        started = await gru.start_orchestration(HEALTHY_PIPELINE, HEALTHY_MINION)
+        started = await gru.start_orchestration(
+            EmitOneCounterPipeline,
+            OneStepCounterMinion,
+        )
         assert started.success
         assert started.orchestration_id is not None
+        await EmitOneCounterPipeline.wait_for_calls(
+            expected={"produce_event": 1}
+        )
+        await wait_for_orchestration_workflows_idle(gru, started.orchestration_id)
 
         original_safe_cancel_task = gru_module.safe_cancel_task
 
@@ -105,45 +154,98 @@ async def test_cancellation_timeout_fails_closed_and_recommends_process_restart(
 
 
 @pytest.mark.asyncio
-async def test_stop_unsubscribe_failure_discards_runtime_state_after_subscription_is_removed(
+async def test_stop_discards_target_state_after_unsubscribe_raises_post_removal(
     managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    from tests.assets.minions.two_steps.counter.with_fixed_resource import (
+        AssetMinion as FixedResourceCounterMinion,
+    )
+    from tests.assets.minions.two_steps.counter.with_fixed_resource_b import (
+        AssetMinion as FixedResourceCounterMinionB,
+    )
+    from tests.assets.pipelines.emit_one.counter.default import (
+        AssetPipeline as EmitOneCounterPipeline,
+    )
+
+    EmitOneCounterPipeline.enable_spy()
+    EmitOneCounterPipeline.reset_spy()
+
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        result = await gru.start_orchestration(HEALTHY_PIPELINE, HEALTHY_MINION)
-        assert result.success
-        assert result.orchestration_id is not None
-        pipeline = gru._pipelines[HEALTHY_PIPELINE]
+        target = await gru.start_orchestration(
+            EmitOneCounterPipeline,
+            FixedResourceCounterMinion,
+        )
+        survivor = await gru.start_orchestration(
+            EmitOneCounterPipeline,
+            FixedResourceCounterMinionB,
+        )
+        assert target.success
+        assert survivor.success
+        assert target.orchestration_id is not None
+        assert survivor.orchestration_id is not None
+        await EmitOneCounterPipeline.wait_for_calls(
+            expected={"produce_event": 1}
+        )
+        await asyncio.gather(
+            wait_for_orchestration_workflows_idle(gru, target.orchestration_id),
+            wait_for_orchestration_workflows_idle(gru, survivor.orchestration_id),
+        )
+
+        pipeline = gru._orchestrations[target.orchestration_id].pipeline
+        assert isinstance(pipeline, EmitOneCounterPipeline)
+        target_minion = gru._orchestrations[target.orchestration_id].minion
         original_unsubscribe = pipeline._mn_unsubscribe
 
-        async def failing_unsubscribe(detached_minion: Minion[Any, Any]) -> None:
+        async def unsubscribe_then_raise_for_target(
+            detached_minion: Minion[Any, Any],
+        ) -> None:
             await original_unsubscribe(detached_minion)
-            raise RuntimeError("unsubscribe boom")
+            if detached_minion is target_minion:
+                raise RuntimeError("unsubscribe boom")
 
-        monkeypatch.setattr(pipeline, "_mn_unsubscribe", failing_unsubscribe)
-        stop = await gru.stop_orchestration(result.orchestration_id or "")
+        monkeypatch.setattr(pipeline, "_mn_unsubscribe", unsubscribe_then_raise_for_target)
+        stop = await gru.stop_orchestration(target.orchestration_id)
 
         assert not stop.success
         assert stop.reason == "unsubscribe boom"
-        assert not await pipeline._mn_has_subscribers()
+        assert await pipeline._mn_has_subscribers()
+        snapshot = await gru.runtime_state_snapshot()
+        assert target.orchestration_id not in snapshot.orchestrations
+        assert survivor.orchestration_id in snapshot.orchestrations
+        assert FIXED_RESOURCE_ID in snapshot.resources
+        assert snapshot.resource_refcount(FIXED_RESOURCE_ID) == 1
+        await assert_orchestration_running(gru, survivor.orchestration_id)
+        await assert_runtime_component_counts_exact(
+            gru,
+            minions=1,
+            pipelines=1,
+            resources=1,
+        )
+
+        monkeypatch.setattr(pipeline, "_mn_unsubscribe", original_unsubscribe)
+        survivor_stop = await gru.stop_orchestration(survivor.orchestration_id)
+        assert survivor_stop.success
         await assert_runtime_empty(gru)
 
 
 @pytest.mark.asyncio
-async def test_failed_start_discards_pipeline_resources_when_pipeline_stop_fails(
+async def test_failed_start_discards_partial_runtime_state_when_pipeline_cleanup_fails(
     managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    pipeline_ref = "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
-
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
+        pipeline_cleanup_attempted = False
+
         async def failing_stop_pipeline_if_unused(_pipeline_id: str) -> None:
+            nonlocal pipeline_cleanup_attempted
+            pipeline_cleanup_attempted = True
             raise RuntimeError("pipeline stop boom")
 
         monkeypatch.setattr(
@@ -153,11 +255,12 @@ async def test_failed_start_discards_pipeline_resources_when_pipeline_stop_fails
         )
 
         failed_start = await gru.start_orchestration(
-            pipeline_ref,
+            "tests.assets.pipelines.emit_one.counter.with_fixed_resource",
             "tests.assets.crash.minions.counter.boom_startup",
         )
 
         assert not failed_start.success
+        assert pipeline_cleanup_attempted
         await assert_runtime_empty(gru)
 
 
@@ -213,8 +316,6 @@ async def test_cancelled_start_rolls_back_runtime_state(
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    pipeline_ref = "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
-
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         original_acquire = gru._acquire_pipeline_resources
 
@@ -229,7 +330,10 @@ async def test_cancelled_start_rolls_back_runtime_state(
         )
 
         with pytest.raises(asyncio.CancelledError):
-            await gru.start_orchestration(pipeline_ref, HEALTHY_MINION)
+            await gru.start_orchestration(
+                "tests.assets.pipelines.emit_one.counter.with_fixed_resource",
+                "tests.assets.minions.one_step.counter.default",
+            )
 
         await assert_runtime_empty(gru)
 
@@ -242,10 +346,27 @@ async def test_cancelled_stop_finalizes_runtime_state(
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    from tests.assets.minions.one_step.counter.default import (
+        AssetMinion as OneStepCounterMinion,
+    )
+    from tests.assets.pipelines.emit_one.counter.default import (
+        AssetPipeline as EmitOneCounterPipeline,
+    )
+
+    EmitOneCounterPipeline.enable_spy()
+    EmitOneCounterPipeline.reset_spy()
+
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
-        result = await gru.start_orchestration(HEALTHY_PIPELINE, HEALTHY_MINION)
+        result = await gru.start_orchestration(
+            EmitOneCounterPipeline,
+            OneStepCounterMinion,
+        )
         assert result.success
         assert result.orchestration_id is not None
+        await EmitOneCounterPipeline.wait_for_calls(
+            expected={"produce_event": 1}
+        )
+        await wait_for_orchestration_workflows_idle(gru, result.orchestration_id)
 
         async def cancelled_minion_stop(_minion: Minion[Any, Any]) -> None:
             raise asyncio.CancelledError
@@ -282,7 +403,7 @@ async def test_start_resource_startup_failure_discards_runtime_state_when_cleanu
         monkeypatch.setattr(gru._logger, "_mn_log", failing_cleanup_log)
 
         result = await gru.start_orchestration(
-            HEALTHY_PIPELINE,
+            "tests.assets.pipelines.emit_one.counter.default",
             "tests.assets.crash.minions.counter.with_boom_startup_resource",
         )
 
@@ -303,18 +424,33 @@ async def test_stop_resource_cleanup_failure_discards_runtime_state_when_no_shar
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    from tests.assets.crash.minions.counter.with_boom_shutdown_resource import (
+        AssetMinion as ShutdownResourceCleanupCounterMinion,
+    )
+    from tests.assets.pipelines.emit_one.counter.default import (
+        AssetPipeline as EmitOneCounterPipeline,
+    )
+
+    EmitOneCounterPipeline.enable_spy()
+    EmitOneCounterPipeline.reset_spy()
+
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_orchestration(
-            HEALTHY_PIPELINE,
-            "tests.assets.crash.minions.counter.with_boom_shutdown_resource",
+            EmitOneCounterPipeline,
+            ShutdownResourceCleanupCounterMinion,
         )
         assert result.success
+        assert result.orchestration_id is not None
+        await EmitOneCounterPipeline.wait_for_calls(
+            expected={"produce_event": 1}
+        )
+        await wait_for_orchestration_workflows_idle(gru, result.orchestration_id)
 
         async def failing_cleanup_resources(_resource_ids: set[str]) -> None:
             raise RuntimeError("resource cleanup boom")
 
         monkeypatch.setattr(gru, "_cleanup_resources", failing_cleanup_resources)
-        stop = await gru.stop_orchestration(result.orchestration_id or "")
+        stop = await gru.stop_orchestration(result.orchestration_id)
 
         assert not stop.success
         assert stop.reason == "resource cleanup boom"
@@ -329,33 +465,51 @@ async def test_stop_resource_cleanup_failure_preserves_shared_runtime_state_for_
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    from tests.assets.minions.two_steps.counter.with_fixed_resource import (
+        AssetMinion as FixedResourceCounterMinion,
+    )
+    from tests.assets.minions.two_steps.counter.with_fixed_resource_b import (
+        AssetMinion as FixedResourceCounterMinionB,
+    )
+    from tests.assets.pipelines.emit_one.counter.default import (
+        AssetPipeline as EmitOneCounterPipeline,
+    )
+
+    EmitOneCounterPipeline.enable_spy()
+    EmitOneCounterPipeline.reset_spy()
+
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         first = await gru.start_orchestration(
-            "tests.assets.pipelines.emit_one.counter.default",
-            "tests.assets.minions.two_steps.counter.with_fixed_resource",
+            EmitOneCounterPipeline,
+            FixedResourceCounterMinion,
         )
         second = await gru.start_orchestration(
-            "tests.assets.pipelines.emit_one.counter.default",
-            "tests.assets.minions.two_steps.counter.with_fixed_resource_b",
+            EmitOneCounterPipeline,
+            FixedResourceCounterMinionB,
         )
         assert first.success
         assert second.success
+        assert first.orchestration_id is not None
+        assert second.orchestration_id is not None
         assert (
             await gru.runtime_state_snapshot()
         ).resource_refcount(FIXED_RESOURCE_ID) == 2
+        await EmitOneCounterPipeline.wait_for_calls(
+            expected={"produce_event": 1}
+        )
+        await wait_for_orchestration_workflows_idle(gru, first.orchestration_id)
 
         async def failing_cleanup_resources(_resource_ids: set[str]) -> None:
             raise RuntimeError("resource cleanup boom")
 
         monkeypatch.setattr(gru, "_cleanup_resources", failing_cleanup_resources)
-        stop = await gru.stop_orchestration(first.orchestration_id or "")
+        stop = await gru.stop_orchestration(first.orchestration_id)
 
         assert not stop.success
         assert stop.reason == "resource cleanup boom"
         snapshot = await gru.runtime_state_snapshot()
         assert FIXED_RESOURCE_ID in snapshot.resources
         assert snapshot.resource_refcount(FIXED_RESOURCE_ID) == 1
-        assert second.orchestration_id is not None
         await assert_orchestration_running(gru, second.orchestration_id)
         await assert_runtime_component_counts_exact(gru, minions=1)
 
@@ -368,18 +522,33 @@ async def test_stop_pipeline_resource_cleanup_failure_discards_runtime_state_whe
     state_store: InMemoryStateStore,
     monkeypatch: pytest.MonkeyPatch,
 ):
+    from tests.assets.minions.two_steps.simple.with_simple_resource import (
+        AssetMinion as SimpleResourceMinion,
+    )
+    from tests.assets.pipelines.emit_one.simple.with_simple_resource import (
+        AssetPipeline as SimpleResourcePipeline,
+    )
+
+    SimpleResourcePipeline.enable_spy()
+    SimpleResourcePipeline.reset_spy()
+
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_orchestration(
-            "tests.assets.pipelines.emit_one.simple.with_simple_resource",
-            "tests.assets.minions.two_steps.simple.with_simple_resource",
+            SimpleResourcePipeline,
+            SimpleResourceMinion,
         )
         assert result.success
+        assert result.orchestration_id is not None
+        await SimpleResourcePipeline.wait_for_calls(
+            expected={"produce_event": 1}
+        )
+        await wait_for_orchestration_workflows_idle(gru, result.orchestration_id)
 
         async def failing_cleanup_resources(_resource_ids: set[str]) -> None:
             raise RuntimeError("resource cleanup boom")
 
         monkeypatch.setattr(gru, "_cleanup_resources", failing_cleanup_resources)
-        stop = await gru.stop_orchestration(result.orchestration_id or "")
+        stop = await gru.stop_orchestration(result.orchestration_id)
 
         assert not stop.success
         assert stop.reason == "resource cleanup boom"
