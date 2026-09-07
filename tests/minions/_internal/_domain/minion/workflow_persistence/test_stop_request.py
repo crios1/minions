@@ -1,6 +1,4 @@
 import asyncio
-from collections.abc import Callable, Coroutine
-from typing import Any
 
 import pytest
 
@@ -12,6 +10,7 @@ from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.minion_noop import NoOpMinion
 from tests.assets.support.state_store_failable import FailableStateStore
+from tests.support.race_window import GatedAsyncCallable
 
 
 def _make_minion(
@@ -160,18 +159,12 @@ async def test_stop_request_waits_for_in_progress_event_acceptance(
     )
     minion._mn_mark_running()
 
-    acceptance_entered = asyncio.Event()
-    allow_acceptance_finish = asyncio.Event()
     original_create_workflow_task = (
         minion._mn_create_and_register_workflow_task_and_publish_inflight_gauge
     )
-
-    async def gated_create_workflow_task(
-        workflow_runner: Callable[[], Coroutine[Any, Any, None]],
-    ) -> asyncio.Task[None]:
-        acceptance_entered.set()
-        await allow_acceptance_finish.wait()
-        return await original_create_workflow_task(workflow_runner)
+    gated_create_workflow_task = GatedAsyncCallable[asyncio.Task[None]](
+        delegate=original_create_workflow_task,
+    )
 
     monkeypatch.setattr(
         minion,
@@ -180,12 +173,12 @@ async def test_stop_request_waits_for_in_progress_event_acceptance(
     )
 
     acceptance_task = asyncio.create_task(minion._mn_accept_event(EmptyEvent()))
-    await acceptance_entered.wait()
+    await gated_create_workflow_task.wait_until_called()
     stop_request_task = asyncio.create_task(minion._mn_request_stop())
     await asyncio.sleep(0)
 
     assert not stop_request_task.done()
-    allow_acceptance_finish.set()
+    gated_create_workflow_task.allow_return()
 
     assert await acceptance_task
     stop_accepted, stop_risks = await stop_request_task
