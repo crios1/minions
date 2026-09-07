@@ -27,9 +27,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "coverage>=7,<8",
   "pyright[nodejs]==1.1.411",
   "pytest>=8.4,<9.0",
   "pytest-asyncio>=1.0,<2.0",
+  "pytest-cov>=7,<8",
   "ruff>=0.6,<1.0",
   "sphinx>=7,<8",
   "myst-parser>=3,<4",
