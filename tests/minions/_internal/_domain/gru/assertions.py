@@ -5,6 +5,18 @@ from collections.abc import Mapping, Set
 from minions._internal._domain.gru import Gru
 
 
+async def wait_for_orchestration_workflows_idle(
+    gru: Gru,
+    orchestration_id: str,
+    *,
+    timeout: float = 10.0,
+) -> None:
+    """Wait until an orchestration has no live workflow tasks."""
+    await gru._orchestrations[orchestration_id].minion._mn_wait_until_workflows_idle(
+        timeout=timeout
+    )
+
+
 async def assert_runtime_empty(gru: Gru) -> None:
     await assert_runtime_component_maps_consistent(gru)
     assert (await gru.runtime_state_snapshot()).is_empty
