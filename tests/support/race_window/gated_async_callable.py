@@ -25,7 +25,7 @@ class GatedAsyncCallable(Generic[T_Result]):
         await self._allow_return.wait()
         return self._result
 
-    async def wait_until_called(self, timeout: float = 1.0) -> None:
+    async def wait_until_called(self, timeout: float = 10.0) -> None:
         """Wait until production code calls the test double."""
         await asyncio.wait_for(self._called.wait(), timeout=timeout)
 

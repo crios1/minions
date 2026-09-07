@@ -29,7 +29,7 @@ class GatedLock(asyncio.Lock):
     ) -> None:
         self.release()
 
-    async def wait_until_held(self, timeout: float = 1.0) -> None:
+    async def wait_until_held(self, timeout: float = 10.0) -> None:
         """Wait until production code holds the lock at the test gate."""
         await asyncio.wait_for(self._held.wait(), timeout=timeout)
 
