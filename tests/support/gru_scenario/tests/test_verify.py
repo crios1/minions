@@ -11,10 +11,10 @@ from tests.assets.contexts.counter import CounterContext
 from tests.assets.events.counter import CounterEvent
 from tests.assets.minions.two_steps.counter.default import AssetMinion as TwoStepCounterMinion
 from tests.assets.minions.two_steps.counter.identified_with_fixed_resource import (
-    AssetMinion as IdentifiedMinion,
+    AssetMinion as IdentifiedCounterMinion,
 )
 from tests.assets.minions.two_steps.counter.with_fixed_resource import (
-    AssetMinion as FixedResourceMinion,
+    AssetMinion as FixedResourceCounterMinion,
 )
 from tests.assets.pipelines.emit_one.counter.default import (
     AssetPipeline as EmitOneCounterPipeline,
@@ -335,7 +335,7 @@ def test_build_expected_call_counts_excludes_pipelines_from_exact_call_counts(
         pipeline_event_counts={pipeline_ref: 1},
     )
     spies = SpyRegistry(
-        minions={minion_ref: FixedResourceMinion},
+        minions={minion_ref: FixedResourceCounterMinion},
         pipelines={pipeline_ref: EmitOneCounterPipeline},
         resources={FixedResource},
     )
@@ -347,7 +347,7 @@ def test_build_expected_call_counts_excludes_pipelines_from_exact_call_counts(
                 minion_module_path=minion_ref,
                 pipeline_module_path=pipeline_ref,
                 instance_id="id-ok",
-                minion_cls=FixedResourceMinion,
+                minion_cls=FixedResourceCounterMinion,
                 success=True,
                 orchestration_id=None,
                 pipeline_id=pipeline_ref,
@@ -581,7 +581,9 @@ def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnost
     spies = SpyRegistry(
         minions={
             "tests.assets.minions.two_steps.counter.default": TwoStepCounterMinion,
-            "tests.assets.minions.two_steps.counter.with_fixed_resource": FixedResourceMinion,
+            "tests.assets.minions.two_steps.counter.with_fixed_resource": (
+                FixedResourceCounterMinion
+            ),
         },
         pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
     )
@@ -604,7 +606,7 @@ def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnost
                 minion_module_path="tests.assets.minions.two_steps.counter.with_fixed_resource",
                 pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-b",
-                minion_cls=FixedResourceMinion,
+                minion_cls=FixedResourceCounterMinion,
                 success=True,
                 orchestration_id=None,
                 pipeline_id="tests.assets.pipelines.emit_one.counter.default",
@@ -620,7 +622,7 @@ def test_assert_minion_fanout_delivery_reports_per_minion_mismatch_with_diagnost
         _stub_get_call_counts({"step_1": 2, "step_2": 2}),
     )
     monkeypatch.setattr(
-        FixedResourceMinion,
+        FixedResourceCounterMinion,
         "get_call_counts",
         _stub_get_call_counts({"step_1": 1, "step_2": 2}),
     )
@@ -2531,8 +2533,10 @@ def test_assert_runtime_expectations_workflow_steps_at_least_allows_overage(
 def test_assert_runtime_expectations_persistence_at_checkpoint_index(
     verifier_factory: VerifierFactory,
 ):
-    identified_counter_minion_id = get_component_id(IdentifiedMinion)
-    assert identified_counter_minion_id is not None, "IdentifiedMinion must have a component id"
+    identified_counter_minion_id = get_component_id(IdentifiedCounterMinion)
+    assert (
+        identified_counter_minion_id is not None
+    ), "IdentifiedCounterMinion must have a component id"
 
     directives = [
         start := OrchestrationStart(
@@ -2551,7 +2555,7 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index(
     spies = SpyRegistry(
         minions={
             "tests.assets.minions.two_steps.counter.identified_with_fixed_resource": (
-                IdentifiedMinion
+                IdentifiedCounterMinion
             ),
         },
         pipelines={"tests.assets.pipelines.emit_one.counter.default": EmitOneCounterPipeline},
@@ -2566,7 +2570,7 @@ def test_assert_runtime_expectations_persistence_at_checkpoint_index(
                 ),
                 pipeline_module_path="tests.assets.pipelines.emit_one.counter.default",
                 instance_id="id-ok",
-                minion_cls=IdentifiedMinion,
+                minion_cls=IdentifiedCounterMinion,
                 success=True,
                 orchestration_id="instance-1",
                 pipeline_id="tests.assets.pipelines.emit_one.counter.default",

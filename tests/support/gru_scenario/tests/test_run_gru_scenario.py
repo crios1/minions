@@ -22,6 +22,9 @@ from tests.support.gru_scenario import (
 async def test_uses_durable_pipeline_id_for_event_targets(
     gru: Gru,
 ):
+    from tests.assets.minions.two_steps.counter.default import (
+        AssetMinion as CounterMinion,
+    )
     from tests.assets.pipelines.emit_one.counter.identified import (
         AssetPipeline as IdentifiedEmitOneCounterPipeline,
     )
@@ -30,8 +33,8 @@ async def test_uses_durable_pipeline_id_for_event_targets(
 
     directives: list[Directive] = [
         OrchestrationStart(
-            pipeline="tests.assets.pipelines.emit_one.counter.identified",
-            minion="tests.assets.minions.two_steps.counter.default",
+            pipeline=IdentifiedEmitOneCounterPipeline.__module__,
+            minion=CounterMinion.__module__,
         ),
         WaitWorkflowCompletions(workflow_steps_mode="exact"),
         GruShutdown(expect_success=True),
@@ -70,7 +73,7 @@ async def test_class_start_with_inline_config_records_successful_resolution_and_
     gru: Gru,
 ):
     from tests.assets.minions.two_steps.simple.with_config import (
-        AssetMinion as ConfiguredMinion,
+        AssetMinion as ConfiguredSimpleMinion,
     )
     from tests.assets.pipelines.emit_one.simple.default import (
         AssetPipeline as EmitOneSimplePipeline,
@@ -79,7 +82,7 @@ async def test_class_start_with_inline_config_records_successful_resolution_and_
 
     start = OrchestrationStart(
         pipeline=EmitOneSimplePipeline,
-        minion=ConfiguredMinion,
+        minion=ConfiguredSimpleMinion,
         minion_config=AssetMinionConfig(name="inline"),
     )
 
@@ -238,18 +241,26 @@ async def test_supports_expect_runtime_at_checkpoint_index(
 async def test_supports_mixed_directives_in_concurrent_group(
     gru: Gru,
 ):
-    pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
-    from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
+    from tests.assets.minions.two_steps.simple.default import (
+        AssetMinion as SimpleMinion,
+    )
+    from tests.assets.minions.two_steps.simple.with_simple_b_resource import (
+        AssetMinion as SimpleResourceBMinion,
+    )
+    from tests.assets.pipelines.emit_one.simple.default import (
+        AssetPipeline as EmitOneSimplePipeline,
+    )
 
-    AssetPipeline.configure_gate(expected_subs=2)
+    pipeline_ref = EmitOneSimplePipeline.__module__
+    EmitOneSimplePipeline.configure_gate(expected_subs=2)
 
     start_1 = OrchestrationStart(
         pipeline=pipeline_ref,
-        minion="tests.assets.minions.two_steps.simple.default"
+        minion=SimpleMinion.__module__,
     )
     start_2 = OrchestrationStart(
         pipeline=pipeline_ref,
-        minion="tests.assets.minions.two_steps.simple.with_simple_b_resource"
+        minion=SimpleResourceBMinion.__module__,
     )
 
     directives: list[Directive] = [
@@ -358,6 +369,9 @@ async def test_explicit_step_boundary_resume_excludes_completed_step_replay(
 async def test_resumes_identified_minion_without_persisted_minion_metadata(
     gru: Gru,
 ):
+    from tests.assets.minions.two_steps.counter import (
+        identified_with_fixed_resource_slow_second_step as SlowSecondStepMinionModule,
+    )
     from tests.assets.pipelines.emit_one.counter.identified import (
         AssetPipeline as IdentifiedEmitOneCounterPipeline,
     )
@@ -365,12 +379,8 @@ async def test_resumes_identified_minion_without_persisted_minion_metadata(
     pipeline_id = get_component_id(IdentifiedEmitOneCounterPipeline)
     assert pipeline_id is not None
 
-    minion_ref = (
-        "tests.assets.minions.two_steps.counter."
-        "identified_with_fixed_resource_slow_second_step"
-    )
-
-    pipeline_ref = "tests.assets.pipelines.emit_one.counter.identified"
+    minion_ref = SlowSecondStepMinionModule.AssetMinion.__module__
+    pipeline_ref = IdentifiedEmitOneCounterPipeline.__module__
     first_start = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
     second_start = OrchestrationStart(pipeline=pipeline_ref, minion=minion_ref)
 
@@ -467,18 +477,26 @@ async def test_unknown_stop_fails(
 async def test_runs_starts_in_parallel(
     gru: Gru,
 ):
-    pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
-    from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
+    from tests.assets.minions.two_steps.simple.default import (
+        AssetMinion as SimpleMinion,
+    )
+    from tests.assets.minions.two_steps.simple.with_simple_b_resource import (
+        AssetMinion as SimpleResourceBMinion,
+    )
+    from tests.assets.pipelines.emit_one.simple.default import (
+        AssetPipeline as EmitOneSimplePipeline,
+    )
 
-    AssetPipeline.configure_gate(expected_subs=2)
+    pipeline_ref = EmitOneSimplePipeline.__module__
+    EmitOneSimplePipeline.configure_gate(expected_subs=2)
 
     start_1 = OrchestrationStart(
         pipeline=pipeline_ref,
-        minion="tests.assets.minions.two_steps.simple.default"
+        minion=SimpleMinion.__module__,
     )
     start_2 = OrchestrationStart(
         pipeline=pipeline_ref,
-        minion="tests.assets.minions.two_steps.simple.with_simple_b_resource"
+        minion=SimpleResourceBMinion.__module__,
     )
 
     directives: list[Directive] = [
@@ -500,18 +518,26 @@ async def test_runs_starts_in_parallel(
 async def test_wait_workflow_completions_targets_selected_orchestrations(
     gru: Gru,
 ):
-    pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
-    from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
+    from tests.assets.minions.two_steps.simple.default import (
+        AssetMinion as SimpleMinion,
+    )
+    from tests.assets.minions.two_steps.simple.with_simple_b_resource import (
+        AssetMinion as SimpleResourceBMinion,
+    )
+    from tests.assets.pipelines.emit_one.simple.default import (
+        AssetPipeline as EmitOneSimplePipeline,
+    )
 
-    AssetPipeline.configure_gate(expected_subs=2)
+    pipeline_ref = EmitOneSimplePipeline.__module__
+    EmitOneSimplePipeline.configure_gate(expected_subs=2)
 
     start_1 = OrchestrationStart(
         pipeline=pipeline_ref,
-        minion="tests.assets.minions.two_steps.simple.default"
+        minion=SimpleMinion.__module__,
     )
     start_2 = OrchestrationStart(
         pipeline=pipeline_ref,
-        minion="tests.assets.minions.two_steps.simple.with_simple_b_resource"
+        minion=SimpleResourceBMinion.__module__,
     )
 
     directives: list[Directive] = [
@@ -534,18 +560,26 @@ async def test_wait_workflow_completions_targets_selected_orchestrations(
 async def test_exact_runtime_expectation_reports_mismatch(
     gru: Gru,
 ):
-    pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
-    from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
+    from tests.assets.minions.two_steps.simple.default import (
+        AssetMinion as SimpleMinion,
+    )
+    from tests.assets.minions.two_steps.simple.with_simple_b_resource import (
+        AssetMinion as SimpleResourceBMinion,
+    )
+    from tests.assets.pipelines.emit_one.simple.default import (
+        AssetPipeline as EmitOneSimplePipeline,
+    )
 
-    AssetPipeline.configure_gate(expected_subs=2)
+    pipeline_ref = EmitOneSimplePipeline.__module__
+    EmitOneSimplePipeline.configure_gate(expected_subs=2)
 
     start = OrchestrationStart(
         pipeline=pipeline_ref,
-        minion="tests.assets.minions.two_steps.simple.default",
+        minion=SimpleMinion.__module__,
     )
     start_other = OrchestrationStart(
         pipeline=pipeline_ref,
-        minion="tests.assets.minions.two_steps.simple.with_simple_b_resource",
+        minion=SimpleResourceBMinion.__module__,
     )
 
     directives: list[Directive] = [

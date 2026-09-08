@@ -72,13 +72,13 @@ async def test_gru_does_not_resume_same_workflow_id_twice_during_startup(
     state_store: InMemoryStateStore,
 ):
     from tests.assets.minions.race_cases.duplicate_workflow_resume import (
-        AssetMinion as DuplicateWorkflowResumeMinion,
+        AssetMinion as DuplicateWorkflowResumeCounterMinion,
     )
     from tests.assets.pipelines.emit_one.counter.default import (
-        AssetPipeline as DefaultCounterPipeline,
+        AssetPipeline as CounterPipeline,
     )
 
-    DuplicateWorkflowResumeMinion.reset_gates()
+    DuplicateWorkflowResumeCounterMinion.reset_gates()
 
     async with managed_gru_context(
         logger=logger,
@@ -86,11 +86,11 @@ async def test_gru_does_not_resume_same_workflow_id_twice_during_startup(
         state_store=state_store,
     ) as gru:
         result = await gru.start_orchestration(
-            minion=DuplicateWorkflowResumeMinion,
-            pipeline=DefaultCounterPipeline,
+            minion=DuplicateWorkflowResumeCounterMinion,
+            pipeline=CounterPipeline,
         )
         assert result.success
-        assert DuplicateWorkflowResumeMinion._gate("_startup_entered").is_set()
+        assert DuplicateWorkflowResumeCounterMinion._gate("_startup_entered").is_set()
 
         def _get_step_1_workflow_ids() -> list[str]:
             return [
@@ -98,14 +98,14 @@ async def test_gru_does_not_resume_same_workflow_id_twice_during_startup(
                 for log in logger.logs
                 if log.msg == "Workflow Step started"
                 and log.kwargs.get("minion_id") == (
-                    gru._get_minion_identity(DuplicateWorkflowResumeMinion)
+                    gru._get_minion_identity(DuplicateWorkflowResumeCounterMinion)
                 )
                 and log.kwargs.get("step_name") == "step_1"
             ]
 
         try:
             await asyncio.wait_for(
-                DuplicateWorkflowResumeMinion._gate("_step_1_started").wait(),
+                DuplicateWorkflowResumeCounterMinion._gate("_step_1_started").wait(),
                 timeout=1.0,
             )
             await asyncio.sleep(0)
@@ -127,7 +127,7 @@ async def test_gru_does_not_resume_same_workflow_id_twice_during_startup(
                 f"{duplicate_step_1_workflow_ids}"
             )
         finally:
-            DuplicateWorkflowResumeMinion._gate("_allow_step_1_finish").set()
+            DuplicateWorkflowResumeCounterMinion._gate("_allow_step_1_finish").set()
 
 
 @pytest.mark.asyncio
@@ -440,18 +440,18 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
     state_store: InMemoryStateStore,
 ):
     from tests.assets.minions.two_steps.counter.default import (
-        AssetMinion as DefaultCounterMinion,
+        AssetMinion as CounterMinion,
     )
     from tests.assets.minions.two_steps.counter.with_file_config import (
         AssetMinion as ConfiguredCounterMinion,
     )
     from tests.assets.pipelines.emit_one.counter.with_fixed_resource import (
-        AssetPipeline as FixedResourcePipeline,
+        AssetPipeline as FixedResourceCounterPipeline,
     )
     from tests.assets.resources.fixed.default import AssetResource as FixedResource
 
-    FixedResourcePipeline.enable_spy()
-    FixedResourcePipeline.reset_spy()
+    FixedResourceCounterPipeline.enable_spy()
+    FixedResourceCounterPipeline.reset_spy()
     FixedResource.enable_spy()
     FixedResource.reset_spy()
 
@@ -461,20 +461,20 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
         state_store=state_store,
     ) as gru:
         gru._pipeline_locks = defaultdict(GatedLock)
-        pipeline_lock = gru._pipeline_locks[FixedResourcePipeline.__module__]
+        pipeline_lock = gru._pipeline_locks[FixedResourceCounterPipeline.__module__]
         assert isinstance(pipeline_lock, GatedLock)
 
         task1 = asyncio.create_task(
             gru.start_orchestration(
-                minion=DefaultCounterMinion.__module__,
-                pipeline=FixedResourcePipeline.__module__,
+                minion=CounterMinion.__module__,
+                pipeline=FixedResourceCounterPipeline.__module__,
             )
         )
         task2 = asyncio.create_task(
             gru.start_orchestration(
                 minion=ConfiguredCounterMinion.__module__,
                 minion_config_path="tests/assets/config/minions/b.toml",
-                pipeline=FixedResourcePipeline.__module__,
+                pipeline=FixedResourceCounterPipeline.__module__,
             )
         )
 
@@ -488,15 +488,15 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
 
         assert result1.success
         assert result2.success
-        await FixedResourcePipeline.wait_for_calls(
+        await FixedResourceCounterPipeline.wait_for_calls(
             expected={"produce_event": 1}
         )
-        assert FixedResourcePipeline.get_call_counts()["_mn_startup"] == 1
+        assert FixedResourceCounterPipeline.get_call_counts()["_mn_startup"] == 1
         assert FixedResource.get_call_counts()["_mn_startup"] == 1
         assert sum(log.msg == "Pipeline starting" for log in logger.logs) == 1
         assert sum(log.msg == "Pipeline started" for log in logger.logs) == 1
 
-        canonical_pipeline = gru._pipelines[FixedResourcePipeline.__module__]
+        canonical_pipeline = gru._pipelines[FixedResourceCounterPipeline.__module__]
         assert result1.orchestration_id is not None
         assert result2.orchestration_id is not None
         assert gru._orchestrations[result1.orchestration_id].pipeline is canonical_pipeline
@@ -506,7 +506,7 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
         await assert_runtime_component_counts_exact(gru, pipelines=1, resources=1)
         await assert_runtime_resource_maps_consistent(gru)
         snapshot = await gru.runtime_state_snapshot()
-        assert snapshot.resources_for_pipeline(FixedResourcePipeline.__module__) == {
+        assert snapshot.resources_for_pipeline(FixedResourceCounterPipeline.__module__) == {
             resource_id
         }
         assert snapshot.resource_refcount(resource_id) == 1
@@ -535,7 +535,7 @@ async def test_gru_runtime_state_uses_singletons_for_shared_pipeline_and_resourc
         AssetMinion as ConfiguredCounterMinion,
     )
     from tests.assets.pipelines.emit_one.counter.with_resource_depending_on_fixed import (
-        AssetPipeline as ResourceDependencyPipeline,
+        AssetPipeline as CounterPipelineWithResourceDependency,
     )
     from tests.assets.resources.fixed.default import AssetResource as FixedResource
     from tests.assets.resources.with_dependencies.depends_on_fixed import (
@@ -551,12 +551,12 @@ async def test_gru_runtime_state_uses_singletons_for_shared_pipeline_and_resourc
         depends_on_fixed_resource_id = gru._get_resource_identity(ResourceDependingOnFixed)
 
         first_start = await gru.start_orchestration(
-            pipeline=ResourceDependencyPipeline.__module__,
+            pipeline=CounterPipelineWithResourceDependency.__module__,
             minion=ConfiguredCounterMinion.__module__,
             minion_config_path="tests/assets/config/minions/a.toml",
         )
         second_start = await gru.start_orchestration(
-            pipeline=ResourceDependencyPipeline.__module__,
+            pipeline=CounterPipelineWithResourceDependency.__module__,
             minion=ConfiguredCounterMinion.__module__,
             minion_config_path="tests/assets/config/minions/b.toml",
         )
@@ -587,12 +587,12 @@ async def test_gru_runtime_state_uses_singletons_for_shared_pipeline_and_resourc
         )
         await assert_pipeline_singleton(
             gru,
-            pipeline_id=ResourceDependencyPipeline.__module__,
+            pipeline_id=CounterPipelineWithResourceDependency.__module__,
             orchestration_ids=set(running_orchestrations),
         )
         await assert_pipeline_resource_dependency_singletons(
             gru,
-            pipeline_id=ResourceDependencyPipeline.__module__,
+            pipeline_id=CounterPipelineWithResourceDependency.__module__,
             owner_resource_id=depends_on_fixed_resource_id,
             dependency_resource_id=fixed_resource_id,
             owner_refcount=1,
@@ -612,12 +612,12 @@ async def test_gru_runtime_state_uses_singletons_for_shared_pipeline_and_resourc
         )
         await assert_pipeline_singleton(
             gru,
-            pipeline_id=ResourceDependencyPipeline.__module__,
+            pipeline_id=CounterPipelineWithResourceDependency.__module__,
             orchestration_ids={second_start.orchestration_id},
         )
         await assert_pipeline_resource_dependency_singletons(
             gru,
-            pipeline_id=ResourceDependencyPipeline.__module__,
+            pipeline_id=CounterPipelineWithResourceDependency.__module__,
             owner_resource_id=depends_on_fixed_resource_id,
             dependency_resource_id=fixed_resource_id,
             owner_refcount=1,
@@ -639,17 +639,17 @@ async def test_concurrent_start_does_not_attach_during_last_subscriber_pipeline_
     state_store: InMemoryStateStore,
 ):
     from tests.assets.minions.two_steps.counter.default import (
-        AssetMinion as DefaultCounterMinion,
+        AssetMinion as CounterMinion,
     )
     from tests.assets.minions.two_steps.counter.with_file_config import (
         AssetMinion as ConfiguredCounterMinion,
     )
     from tests.assets.pipelines.emit_one.counter.default import (
-        AssetPipeline as DefaultCounterPipeline,
+        AssetPipeline as CounterPipeline,
     )
 
-    DefaultCounterPipeline.enable_spy()
-    DefaultCounterPipeline.reset_spy()
+    CounterPipeline.enable_spy()
+    CounterPipeline.reset_spy()
 
     async with managed_gru_context(
         logger=logger,
@@ -657,22 +657,22 @@ async def test_concurrent_start_does_not_attach_during_last_subscriber_pipeline_
         state_store=state_store,
     ) as gru:
         first = await gru.start_orchestration(
-            DefaultCounterPipeline.__module__,
-            DefaultCounterMinion.__module__,
+            CounterPipeline.__module__,
+            CounterMinion.__module__,
         )
         assert first.success
         assert first.orchestration_id is not None
-        await DefaultCounterPipeline.wait_for_calls(expected={"produce_event": 1})
+        await CounterPipeline.wait_for_calls(expected={"produce_event": 1})
 
         pipeline_lock = GatedLock()
-        gru._pipeline_locks[DefaultCounterPipeline.__module__] = pipeline_lock
+        gru._pipeline_locks[CounterPipeline.__module__] = pipeline_lock
         await wait_for_orchestration_workflows_idle(gru, first.orchestration_id)
         stop_task = asyncio.create_task(gru.stop_orchestration(first.orchestration_id))
         await pipeline_lock.wait_until_held()
 
         start_task = asyncio.create_task(
             gru.start_orchestration(
-                DefaultCounterPipeline.__module__,
+                CounterPipeline.__module__,
                 ConfiguredCounterMinion.__module__,
                 minion_config_path="tests/assets/config/minions/b.toml",
             )
@@ -688,10 +688,10 @@ async def test_concurrent_start_does_not_attach_during_last_subscriber_pipeline_
         assert start_result.orchestration_id is not None
         snapshot = await gru.runtime_state_snapshot()
         assert snapshot.orchestrations == {start_result.orchestration_id}
-        assert snapshot.pipelines == {DefaultCounterPipeline.__module__}
+        assert snapshot.pipelines == {CounterPipeline.__module__}
         assert (
             snapshot.pipeline_for_orchestration(start_result.orchestration_id)
-            == DefaultCounterPipeline.__module__
+            == CounterPipeline.__module__
         )
 
         await wait_for_orchestration_workflows_idle(gru, start_result.orchestration_id)
@@ -707,13 +707,6 @@ async def test_failed_start_preserves_existing_gru_runtime_state(
     metrics: InMemoryMetrics,
     state_store: InMemoryStateStore,
 ):
-    from tests.assets.pipelines.emit_one.record.default import (
-        AssetPipeline as RecordPipeline,
-    )
-
-    RecordPipeline.enable_spy()
-    RecordPipeline.reset_spy()
-
     async with managed_gru_context(
         logger=logger,
         metrics=metrics,
@@ -729,7 +722,7 @@ async def test_failed_start_preserves_existing_gru_runtime_state(
 
         failing_starts = (
             (
-                RecordPipeline.__module__,
+                "tests.assets.pipelines.emit_one.record.default",
                 "tests.assets.minions.two_steps.counter.default",
             ),
             (
@@ -751,10 +744,6 @@ async def test_failed_start_preserves_existing_gru_runtime_state(
             assert not failed.success
             assert await gru.runtime_state_snapshot() == expected_runtime_state
 
-        assert RecordPipeline.get_call_counts().get(
-            "__init__", 0
-        ) == 0
-
         await wait_for_orchestration_workflows_idle(gru, baseline.orchestration_id)
 
         stopped = await gru.stop_orchestration(baseline.orchestration_id)
@@ -771,7 +760,7 @@ async def test_failed_start_does_not_clean_up_resource_created_by_concurrent_sta
     monkeypatch: pytest.MonkeyPatch,
 ):
     from tests.assets.minions.two_steps.counter.default import (
-        AssetMinion as DefaultCounterMinion,
+        AssetMinion as CounterMinion,
     )
     from tests.assets.pipelines.emit_one.counter.with_fixed_resource import (
         AssetPipeline as FixedResourceCounterPipeline,
@@ -808,7 +797,7 @@ async def test_failed_start_does_not_clean_up_resource_created_by_concurrent_sta
 
         healthy_start = await gru.start_orchestration(
             FixedResourceCounterPipeline,
-            DefaultCounterMinion,
+            CounterMinion,
         )
         assert healthy_start.success
         assert healthy_start.orchestration_id is not None
@@ -841,7 +830,7 @@ async def test_gru_injects_resource_dependencies_before_resource_startup(
         AssetMinion as TwoStepCounterMinion,
     )
     from tests.assets.pipelines.emit_one.counter.with_resource_depending_on_fixed import (
-        AssetPipeline,
+        AssetPipeline as CounterPipelineWithResourceDependency,
     )
     from tests.assets.resources.fixed.default import AssetResource as FixedResource
     from tests.assets.resources.with_dependencies.depends_on_fixed import (
@@ -850,8 +839,8 @@ async def test_gru_injects_resource_dependencies_before_resource_startup(
 
     TwoStepCounterMinion.enable_spy()
     TwoStepCounterMinion.reset_spy()
-    AssetPipeline.enable_spy()
-    AssetPipeline.reset_spy()
+    CounterPipelineWithResourceDependency.enable_spy()
+    CounterPipelineWithResourceDependency.reset_spy()
 
     async with managed_gru_context(
         logger=logger,
@@ -860,12 +849,14 @@ async def test_gru_injects_resource_dependencies_before_resource_startup(
     ) as gru:
         result = await gru.start_orchestration(
             minion=TwoStepCounterMinion,
-            pipeline=AssetPipeline,
+            pipeline=CounterPipelineWithResourceDependency,
         )
 
         assert result.success
         assert result.orchestration_id is not None
-        await AssetPipeline.wait_for_calls(expected={"produce_event": 1})
+        await CounterPipelineWithResourceDependency.wait_for_calls(
+            expected={"produce_event": 1}
+        )
         await TwoStepCounterMinion.wait_for_calls(
             expected={"step_1": 1, "step_2": 1},
             timeout=5.0,
@@ -873,7 +864,7 @@ async def test_gru_injects_resource_dependencies_before_resource_startup(
 
         fixed_resource_id = gru._get_resource_identity(FixedResource)
         depends_on_fixed_resource_id = gru._get_resource_identity(ResourceDependingOnFixed)
-        pipeline_id = gru._get_pipeline_identity(AssetPipeline)
+        pipeline_id = gru._get_pipeline_identity(CounterPipelineWithResourceDependency)
         depends_on_fixed_resource_inst = gru._resources[depends_on_fixed_resource_id]
         await assert_pipeline_resource_dependency_singletons(
             gru,

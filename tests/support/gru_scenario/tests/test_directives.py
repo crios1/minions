@@ -39,7 +39,7 @@ def test_wait_workflow_completions_accepts_orchestrations_and_mode():
 
 def test_orchestration_start_accepts_class_inputs_and_inline_config():
     from tests.assets.minions.two_steps.simple.with_config import (
-        AssetMinion as ConfiguredMinion,
+        AssetMinion as ConfiguredSimpleMinion,
     )
     from tests.assets.pipelines.emit_one.simple.default import (
         AssetPipeline as EmitOneSimplePipeline,
@@ -49,16 +49,14 @@ def test_orchestration_start_accepts_class_inputs_and_inline_config():
     config = AssetMinionConfig(name="inline")
     directive = OrchestrationStart(
         pipeline=EmitOneSimplePipeline,
-        minion=ConfiguredMinion,
+        minion=ConfiguredSimpleMinion,
         minion_config=config,
     )
 
-    assert directive.minion_module_path == "tests.assets.minions.two_steps.simple.with_config"
-    assert directive.pipeline_module_path == (
-        "tests.assets.pipelines.emit_one.simple.default"
-    )
+    assert directive.minion_module_path == ConfiguredSimpleMinion.__module__
+    assert directive.pipeline_module_path == EmitOneSimplePipeline.__module__
     assert directive.as_kwargs() == {
-        "minion": ConfiguredMinion,
+        "minion": ConfiguredSimpleMinion,
         "pipeline": EmitOneSimplePipeline,
         "minion_config_path": None,
         "minion_config": config,

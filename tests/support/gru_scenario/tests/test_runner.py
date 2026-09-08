@@ -244,26 +244,31 @@ async def test_records_receipts_for_success_and_expected_failure(
 async def test_concurrent_starts_capture_started_minions_and_spy_instance_identities(
     gru: Gru,
 ):
-    default_minion_ref = "tests.assets.minions.two_steps.simple.default"
-    resourced_minion_ref = (
-        "tests.assets.minions.two_steps.simple.with_simple_b_resource"
+    from tests.assets.minions.two_steps.simple.default import (
+        AssetMinion as SimpleMinion,
+    )
+    from tests.assets.minions.two_steps.simple.with_simple_b_resource import (
+        AssetMinion as SimpleResourceBMinion,
+    )
+    from tests.assets.pipelines.emit_one.simple.default import (
+        AssetPipeline as EmitOneSimplePipeline,
     )
 
-    pipeline_ref = "tests.assets.pipelines.emit_one.simple.default"
+    simple_minion_ref = SimpleMinion.__module__
+    simple_resource_b_minion_ref = SimpleResourceBMinion.__module__
+    pipeline_ref = EmitOneSimplePipeline.__module__
     pipeline_id = pipeline_ref
-    from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
-
-    AssetPipeline.configure_gate(expected_subs=2)
+    EmitOneSimplePipeline.configure_gate(expected_subs=2)
 
     directives = [
         Concurrent(
             OrchestrationStart(
                 pipeline=pipeline_ref,
-                minion=default_minion_ref,
+                minion=simple_minion_ref,
             ),
             OrchestrationStart(
                 pipeline=pipeline_ref,
-                minion=resourced_minion_ref,
+                minion=simple_resource_b_minion_ref,
             ),
         ),
         WaitWorkflowCompletions(),
@@ -280,8 +285,8 @@ async def test_concurrent_starts_capture_started_minions_and_spy_instance_identi
 
     started_locations = {m._mn_minion_module_path for m in result.started_minions}
     assert started_locations == {
-        default_minion_ref,
-        resourced_minion_ref,
+        simple_minion_ref,
+        simple_resource_b_minion_ref,
     }
 
     assert result.spies is not None
@@ -303,7 +308,7 @@ async def test_tracks_durable_minion_pipeline_and_resources(
     gru: Gru,
 ):
     from tests.assets.minions.two_steps.counter.identified_with_fixed_resource import (
-        AssetMinion as IdentifiedFixedResourceMinion,
+        AssetMinion as IdentifiedFixedResourceCounterMinion,
     )
     from tests.assets.pipelines.emit_one.counter.identified import (
         AssetPipeline as IdentifiedEmitOneCounterPipeline,
@@ -312,7 +317,7 @@ async def test_tracks_durable_minion_pipeline_and_resources(
         AssetResource as IdentifiedFixedResource,
     )
 
-    minion_id = get_component_id(IdentifiedFixedResourceMinion)
+    minion_id = get_component_id(IdentifiedFixedResourceCounterMinion)
     pipeline_id = get_component_id(IdentifiedEmitOneCounterPipeline)
     resource_id = get_component_id(IdentifiedFixedResource)
     assert minion_id is not None
@@ -320,8 +325,8 @@ async def test_tracks_durable_minion_pipeline_and_resources(
     assert resource_id is not None
 
     start = OrchestrationStart(
-        pipeline="tests.assets.pipelines.emit_one.counter.identified",
-        minion="tests.assets.minions.two_steps.counter.identified_with_fixed_resource",
+        pipeline=IdentifiedEmitOneCounterPipeline.__module__,
+        minion=IdentifiedFixedResourceCounterMinion.__module__,
     )
     plan = ScenarioPlan(
         [start, WaitWorkflowCompletions(workflow_steps_mode="exact")],
@@ -349,7 +354,7 @@ async def test_tracks_durable_minion_pipeline_and_resources(
     assert (
         result.spies.pipelines[pipeline_id].__name__ == "AssetPipeline"
     )
-    assert result.spies.minions[minion_id] is IdentifiedFixedResourceMinion
+    assert result.spies.minions[minion_id] is IdentifiedFixedResourceCounterMinion
     assert IdentifiedFixedResource in result.spies.resources
 
     shutdown = await gru.shutdown()
@@ -753,12 +758,17 @@ async def test_restart_same_orchestration_id_after_stop_succeeds(gru: Gru):
 async def test_records_expect_runtime_checkpoint_with_persistence_snapshot(
     gru: Gru,
 ):
-    from tests.assets.minions.failure.slow_step import AssetMinion as SlowStepMinion
+    from tests.assets.minions.failure.slow_step import (
+        AssetMinion as SlowStepCounterMinion,
+    )
+    from tests.assets.pipelines.emit_one.counter.default import (
+        AssetPipeline as EmitOneCounterPipeline,
+    )
 
-    minion_ref = "tests.assets.minions.failure.slow_step"
-    pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
+    minion_ref = SlowStepCounterMinion.__module__
+    pipeline_ref = EmitOneCounterPipeline.__module__
 
-    minion_id = get_component_id(SlowStepMinion)
+    minion_id = get_component_id(SlowStepCounterMinion)
     assert minion_id is not None
 
     start = OrchestrationStart(

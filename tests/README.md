@@ -78,8 +78,12 @@ This suite is intentionally layered. Each layer has a different purpose and conf
 - Scenario-oriented orchestration tests should usually reference test assets by string module path.
 - Test asset paths encode fixture context such as event type, step shape, resource behavior, sharing behavior, and failure mode; that context is often clearer than importing a short class name.
 - Class references are preferred for inline test components, business-domain examples, and tests that specifically cover class-based orchestration semantics.
+- In a scenario test, use a descriptive class alias when the test needs to spy on, gate, or inspect the same asset it starts; this keeps setup and startup tied to one Python reference and makes the definition editor-navigable.
+- When a test imports one concrete asset for setup, spying, gating, or assertions, prefer imported aliases for the other concrete assets used by the same start operation; derive their module paths from those aliases when module-path addressing is required. Avoid mixing equivalent literal module paths and imported references unless the literal path itself is part of what the test verifies.
+- Use module-path references when the test covers module loading, entrypoint resolution, file-based minion configuration, or path-based scenario behavior.
 - Keep focused contract coverage for both string-based and class-based `Gru.start_orchestration(...)` invocation forms.
 - Do not convert scenario tests from string paths to class references solely for uniformity; choose the representation that best communicates the behavior under test.
+- `Gru.stop_orchestration(...)` always addresses an orchestration by ID; the reference form used to start it does not change how it is stopped.
 
 ## Test Value Naming Policy
 

@@ -235,7 +235,7 @@ class TestInvalidUsage:
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ):
         from tests.assets.minions.two_steps.counter.with_file_config import (
-            AssetMinion as FileConfigMinion,
+            AssetMinion as FileConfigCounterMinion,
         )
         from tests.assets.pipelines.emit_one.counter.default import (
             AssetPipeline as EmitOneCounterPipeline,
@@ -248,7 +248,7 @@ class TestInvalidUsage:
         ) as gru:
             result = await gru.start_orchestration(
                 pipeline=EmitOneCounterPipeline,
-                minion=FileConfigMinion,
+                minion=FileConfigCounterMinion,
                 minion_config={"name": "dict"},
             )
 

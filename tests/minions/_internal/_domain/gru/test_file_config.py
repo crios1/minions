@@ -27,37 +27,36 @@ async def test_binds_loaded_config_to_minion(
     state_store: InMemoryStateStore,
     tests_dir: Path,
 ):
-    minion_module_path = "tests.assets.minions.two_steps.counter.with_file_config"
-    pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
-    config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
-
     from tests.assets.minions.two_steps.counter.with_file_config import (
-        AssetMinion as FileConfigMinion,
+        AssetMinion as FileConfigCounterMinion,
+    )
+    from tests.assets.pipelines.emit_one.counter.default import (
+        AssetPipeline as EmitOneCounterPipeline,
     )
 
-    FileConfigMinion.enable_spy()
-    FileConfigMinion.reset_spy()
+    FileConfigCounterMinion.enable_spy()
+    FileConfigCounterMinion.reset_spy()
     async with managed_gru_context(
         state_store=state_store,
         logger=logger,
         metrics=metrics,
     ) as gru:
         result = await gru.start_orchestration(
-            minion=minion_module_path,
-            minion_config_path=config_path,
-            pipeline=pipeline_module_path,
+            minion=FileConfigCounterMinion.__module__,
+            minion_config_path=str(tests_dir / "assets" / "config" / "minions" / "a.toml"),
+            pipeline=EmitOneCounterPipeline.__module__,
         )
 
         assert result.success
         assert result.orchestration_id is not None
 
-        await FileConfigMinion.wait_for_calls(
+        await FileConfigCounterMinion.wait_for_calls(
             expected={"step_1": 1, "step_2": 1},
             timeout=5.0,
         )
 
         minion = gru._orchestrations[result.orchestration_id].minion
-        assert isinstance(minion, FileConfigMinion)
+        assert isinstance(minion, FileConfigCounterMinion)
         assert isinstance(minion.config, AssetMinionConfig)
         assert minion.config.name == "alpha"
 
