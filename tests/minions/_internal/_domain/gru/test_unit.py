@@ -600,6 +600,15 @@ class TestUnit:
             AssetResource as IdentifiedFixedResource,
         )
 
+        IdentifiedEmitOneCounterPipeline.enable_spy()
+        IdentifiedEmitOneCounterPipeline.reset_spy()
+        EmitOneCounterPipeline.enable_spy()
+        EmitOneCounterPipeline.reset_spy()
+        IdentifiedFixedResourceCounterMinion.enable_spy()
+        IdentifiedFixedResourceCounterMinion.reset_spy()
+        CounterMinion.enable_spy()
+        CounterMinion.reset_spy()
+
         identified_pipeline_id = get_component_id(IdentifiedEmitOneCounterPipeline)
         identified_resource_id = get_component_id(IdentifiedFixedResource)
         assert identified_pipeline_id is not None
@@ -680,6 +689,20 @@ class TestUnit:
             }
             assert snapshot.pipeline_by_orchestration == snapshot_pipeline_map
 
+            await asyncio.gather(
+                IdentifiedEmitOneCounterPipeline.wait_for_calls(
+                    expected={"produce_event": 1}
+                ),
+                EmitOneCounterPipeline.wait_for_calls(
+                    expected={"produce_event": 1}
+                ),
+                IdentifiedFixedResourceCounterMinion.wait_for_calls(
+                    expected={"step_1": 1, "step_2": 1}
+                ),
+                CounterMinion.wait_for_calls(
+                    expected={"step_1": 1, "step_2": 1}
+                ),
+            )
             await asyncio.gather(
                 wait_for_orchestration_workflows_idle(gru, result.orchestration_id),
                 wait_for_orchestration_workflows_idle(gru, second.orchestration_id),
