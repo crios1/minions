@@ -31,6 +31,7 @@ from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.minions._internal._domain.gru.assertions import (
     assert_runtime_component_maps_consistent,
     assert_runtime_empty,
+    wait_for_orchestration_workflows_idle,
 )
 
 
@@ -583,8 +584,14 @@ class TestUnit:
         logger: InMemoryLogger,
         metrics: InMemoryMetrics,
     ):
+        from tests.assets.minions.two_steps.counter.default import (
+            AssetMinion as CounterMinion,
+        )
         from tests.assets.minions.two_steps.counter.identified_with_fixed_resource import (
-            AssetMinion as IdentifiedFixedResourceMinion,
+            AssetMinion as IdentifiedFixedResourceCounterMinion,
+        )
+        from tests.assets.pipelines.emit_one.counter.default import (
+            AssetPipeline as EmitOneCounterPipeline,
         )
         from tests.assets.pipelines.emit_one.counter.identified import (
             AssetPipeline as IdentifiedEmitOneCounterPipeline,
@@ -605,7 +612,7 @@ class TestUnit:
         ) as gru:
             result = await gru.start_orchestration(
                 IdentifiedEmitOneCounterPipeline,
-                IdentifiedFixedResourceMinion,
+                IdentifiedFixedResourceCounterMinion,
             )
             assert result.success
             assert result.orchestration_id is not None
@@ -660,8 +667,8 @@ class TestUnit:
             # A later valid lifecycle transition must not change the point-in-time snapshot.
             snapshot_pipeline_map = dict(snapshot.pipeline_by_orchestration)
             second = await gru.start_orchestration(
-                "tests.assets.pipelines.emit_one.counter.default",
-                "tests.assets.minions.two_steps.counter.default",
+                EmitOneCounterPipeline.__module__,
+                CounterMinion.__module__,
             )
             assert second.success
             assert second.orchestration_id is not None
@@ -673,6 +680,10 @@ class TestUnit:
             }
             assert snapshot.pipeline_by_orchestration == snapshot_pipeline_map
 
+            await asyncio.gather(
+                wait_for_orchestration_workflows_idle(gru, result.orchestration_id),
+                wait_for_orchestration_workflows_idle(gru, second.orchestration_id),
+            )
             first_stop = await gru.stop_orchestration(result.orchestration_id)
             second_stop = await gru.stop_orchestration(second.orchestration_id)
             assert first_stop.success

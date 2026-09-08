@@ -44,6 +44,7 @@ from tests.minions._internal._domain.gru.assertions import (
     assert_runtime_component_counts_exact,
     assert_runtime_empty,
     assert_runtime_resource_maps_consistent,
+    wait_for_orchestration_workflows_idle,
 )
 
 
@@ -85,6 +86,7 @@ async def assert_gru_can_start_and_stop_known_good_orchestration(gru: Gru) -> No
     assert result.orchestration_id is not None
     assert isinstance(gru._logger, InMemoryLogger)
     assert await gru._logger.wait_for_log("Workflow succeeded", timeout=1.0)
+    await wait_for_orchestration_workflows_idle(gru, result.orchestration_id)
     stop = await gru.stop_orchestration(result.orchestration_id)
     assert stop.success
     await assert_runtime_empty(gru)
@@ -262,6 +264,7 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
             "tests.assets.crash.minions.counter.boom_step",
         )
         assert result.success
+        assert result.orchestration_id is not None
 
         assert await logger.wait_for_log(
             "Workflow failed",
@@ -285,7 +288,8 @@ async def test_minion_step_failure_is_logged_measured_and_contained(
                 LABEL_ERROR_TYPE: "BoomError",
             },
         ) >= 1
-        stop = await gru.stop_orchestration(result.orchestration_id or "")
+        await wait_for_orchestration_workflows_idle(gru, result.orchestration_id)
+        stop = await gru.stop_orchestration(result.orchestration_id)
         assert stop.success
         await assert_runtime_empty(gru)
 
@@ -298,23 +302,23 @@ async def test_minion_runtime_failure_deactivates_only_its_orchestration(
     state_store: InMemoryStateStore,
 ):
     from tests.assets.crash.minions.counter.gated_boom_run import (
-        AssetMinion as FailingMinion,
+        AssetMinion as FailingCounterMinion,
     )
     from tests.assets.minions.one_step.counter.default import (
-        AssetMinion as HealthyMinion,
+        AssetMinion as HealthyCounterMinion,
     )
     from tests.assets.pipelines.emit_one.counter.default import (
-        AssetPipeline as SharedPipeline,
+        AssetPipeline as SharedCounterPipeline,
     )
 
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         healthy = await gru.start_orchestration(
-            SharedPipeline,
-            HealthyMinion,
+            SharedCounterPipeline,
+            HealthyCounterMinion,
         )
         failing = await gru.start_orchestration(
-            SharedPipeline,
-            FailingMinion,
+            SharedCounterPipeline,
+            FailingCounterMinion,
         )
         assert healthy.success
         assert healthy.orchestration_id is not None
@@ -327,7 +331,7 @@ async def test_minion_runtime_failure_deactivates_only_its_orchestration(
         )
         assert failing_minion_instance_id is not None
         failing_minion = gru._minions_by_instance_id[failing_minion_instance_id]
-        assert isinstance(failing_minion, FailingMinion)
+        assert isinstance(failing_minion, FailingCounterMinion)
         failing_minion.trigger_run_failure()
 
         assert await logger.wait_for_log(
@@ -340,8 +344,7 @@ async def test_minion_runtime_failure_deactivates_only_its_orchestration(
         await assert_orchestration_running(gru, healthy.orchestration_id)
         await assert_runtime_component_counts_exact(gru, minions=1, pipelines=1)
 
-        healthy_minion = gru._orchestrations[healthy.orchestration_id].minion
-        await healthy_minion._mn_wait_until_tasks_idle(timeout=1.0)
+        await wait_for_orchestration_workflows_idle(gru, healthy.orchestration_id)
 
         stop = await gru.stop_orchestration(healthy.orchestration_id)
         assert stop.success
@@ -357,10 +360,10 @@ async def test_stop_waits_for_runtime_failure_finalization(
     monkeypatch: pytest.MonkeyPatch,
 ):
     from tests.assets.crash.minions.counter.gated_boom_run import (
-        AssetMinion as FailingMinion,
+        AssetMinion as FailingCounterMinion,
     )
     from tests.assets.pipelines.emit_one.counter.default import (
-        AssetPipeline as Pipeline,
+        AssetPipeline as CounterPipeline,
     )
 
     finalizer_entered = asyncio.Event()
@@ -368,8 +371,8 @@ async def test_stop_waits_for_runtime_failure_finalization(
 
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         failing = await gru.start_orchestration(
-            Pipeline,
-            FailingMinion,
+            CounterPipeline,
+            FailingCounterMinion,
         )
         assert failing.success
         assert failing.orchestration_id is not None
@@ -379,7 +382,7 @@ async def test_stop_waits_for_runtime_failure_finalization(
         )
         assert failing_minion_instance_id is not None
         failing_minion = gru._minions_by_instance_id[failing_minion_instance_id]
-        assert isinstance(failing_minion, FailingMinion)
+        assert isinstance(failing_minion, FailingCounterMinion)
 
         deactivate = gru._deactivate_runtime_failure_orchestrations
 
@@ -424,7 +427,10 @@ async def test_shutdown_waits_for_runtime_failure_finalization(
     monkeypatch: pytest.MonkeyPatch,
 ):
     from tests.assets.crash.minions.counter.gated_boom_run import (
-        AssetMinion as FailingMinion,
+        AssetMinion as FailingCounterMinion,
+    )
+    from tests.assets.pipelines.emit_one.counter.default import (
+        AssetPipeline as CounterPipeline,
     )
 
     finalizer_entered = asyncio.Event()
@@ -432,8 +438,8 @@ async def test_shutdown_waits_for_runtime_failure_finalization(
 
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         failing = await gru.start_orchestration(
-            "tests.assets.pipelines.emit_one.counter.default",
-            "tests.assets.crash.minions.counter.gated_boom_run",
+            CounterPipeline.__module__,
+            FailingCounterMinion.__module__,
         )
         assert failing.success
         assert failing.orchestration_id is not None
@@ -443,7 +449,7 @@ async def test_shutdown_waits_for_runtime_failure_finalization(
         )
         assert failing_minion_instance_id is not None
         failing_minion = gru._minions_by_instance_id[failing_minion_instance_id]
-        assert isinstance(failing_minion, FailingMinion)
+        assert isinstance(failing_minion, FailingCounterMinion)
 
         deactivate = gru._deactivate_runtime_failure_orchestrations
 
@@ -664,6 +670,7 @@ async def test_resource_runtime_failure_deactivates_only_dependent_orchestration
         )
         await assert_runtime_resource_maps_consistent(gru)
 
+        await wait_for_orchestration_workflows_idle(gru, healthy.orchestration_id)
         stop = await gru.stop_orchestration(healthy.orchestration_id)
         assert stop.success
         await assert_runtime_empty(gru)
@@ -677,30 +684,30 @@ async def test_pipeline_runtime_failure_deactivates_all_subscribers_only(
     state_store: InMemoryStateStore,
 ):
     from tests.assets.pipelines.emit_one.counter.default import (  # noqa: I001
-        AssetPipeline as HealthyPipeline,
+        AssetPipeline as HealthyCounterPipeline,
     )
     from tests.assets.crash.pipelines.counter.gated_boom_run import (
-        AssetPipeline as FailingPipeline,
+        AssetPipeline as FailingCounterPipeline,
     )
     from tests.assets.minions.one_step.counter.default import (
-        AssetMinion as OneStepMinion,
+        AssetMinion as OneStepCounterMinion,
     )
     from tests.assets.minions.two_steps.counter.default import (
-        AssetMinion as TwoStepMinion,
+        AssetMinion as TwoStepCounterMinion,
     )
 
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         healthy = await gru.start_orchestration(
-            HealthyPipeline,
-            OneStepMinion,
+            HealthyCounterPipeline,
+            OneStepCounterMinion,
         )
         failing_a = await gru.start_orchestration(
-            FailingPipeline,
-            OneStepMinion,
+            FailingCounterPipeline,
+            OneStepCounterMinion,
         )
         failing_b = await gru.start_orchestration(
-            FailingPipeline,
-            TwoStepMinion,
+            FailingCounterPipeline,
+            TwoStepCounterMinion,
         )
         assert healthy.success
         assert healthy.orchestration_id is not None
@@ -719,7 +726,7 @@ async def test_pipeline_runtime_failure_deactivates_all_subscribers_only(
             == failing_pipeline_id
         )
         failing_pipeline = gru._pipelines[failing_pipeline_id]
-        assert isinstance(failing_pipeline, FailingPipeline)
+        assert isinstance(failing_pipeline, FailingCounterPipeline)
         failing_pipeline.trigger_run_failure()
 
         assert await logger.wait_for_log(
@@ -736,6 +743,7 @@ async def test_pipeline_runtime_failure_deactivates_all_subscribers_only(
         await assert_runtime_component_counts_exact(gru, minions=1, pipelines=1)
         await assert_runtime_resource_maps_consistent(gru)
 
+        await wait_for_orchestration_workflows_idle(gru, healthy.orchestration_id)
         stop = await gru.stop_orchestration(healthy.orchestration_id)
         assert stop.success
         await assert_runtime_empty(gru)
@@ -802,6 +810,7 @@ async def test_shared_transitive_resource_failure_deactivates_all_dependent_orch
         )
         await assert_runtime_resource_maps_consistent(gru)
 
+        await wait_for_orchestration_workflows_idle(gru, healthy.orchestration_id)
         stop = await gru.stop_orchestration(healthy.orchestration_id)
         assert stop.success
         await assert_runtime_empty(gru)
@@ -834,6 +843,7 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
             "tests.assets.crash.minions.counter.with_boom_method_resource",
         )
         assert result.success
+        assert result.orchestration_id is not None
 
         assert await logger.wait_for_log(
             "Workflow failed",
@@ -855,7 +865,8 @@ async def test_resource_method_failure_is_logged_measured_and_contained(
                 LABEL_ERROR_TYPE: "BoomError",
             },
         ) >= 1
-        stop = await gru.stop_orchestration(result.orchestration_id or "")
+        await wait_for_orchestration_workflows_idle(gru, result.orchestration_id)
+        stop = await gru.stop_orchestration(result.orchestration_id)
         assert stop.success
         await assert_runtime_empty(gru)
 
@@ -889,7 +900,9 @@ async def test_shutdown_failures_are_reported_and_singleton_is_released(
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_orchestration(pipeline_module_path, minion_module_path)
         assert result.success
-        stop = await gru.stop_orchestration(result.orchestration_id or "")
+        assert result.orchestration_id is not None
+        await wait_for_orchestration_workflows_idle(gru, result.orchestration_id)
+        stop = await gru.stop_orchestration(result.orchestration_id)
 
         assert not stop.success
         assert logger.has_log("Failed to stop orchestration")

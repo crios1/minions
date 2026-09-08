@@ -1704,7 +1704,12 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
     async def _mn_wait_until_workflows_idle(
         self, timeout: float | None = None
     ) -> None:
-        """Wait until this Minion has no live workflow tasks."""
+        """Wait until this Minion has no live workflow tasks.
+
+        A workflow task is no longer live after it returns, raises, or is
+        cancelled; this does not close event acceptance or prevent later
+        workflows from starting.
+        """
         await self._mn_wait_until_tasks_idle(
             timeout=timeout,
             task_subset=self._mn_workflow_tasks,

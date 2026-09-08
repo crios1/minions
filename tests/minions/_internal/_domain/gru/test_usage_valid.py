@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 from collections.abc import Callable
 from pathlib import Path
@@ -20,6 +21,7 @@ from tests.minions._internal._domain.gru.assertions import (
     assert_orchestration_running,
     assert_runtime_component_counts_at_least,
     assert_runtime_component_counts_exact,
+    wait_for_orchestration_workflows_idle,
 )
 from tests.support.gru_scenario import (
     AfterWorkflowStepStarts,
@@ -140,17 +142,16 @@ class TestValidUsage:
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ):
-        minion_module_path = "tests.assets.minions.two_steps.simple.default"
-        pipeline_module_path = (
-            "tests.assets.pipelines.emit_one.simple.default"
+        from tests.assets.minions.two_steps.simple.default import (
+            AssetMinion as TwoStepSimpleMinion,
+        )
+        from tests.assets.pipelines.emit_one.simple.default import (
+            AssetPipeline as EmitOneSimplePipeline,
         )
 
-        from tests.assets.minions.two_steps.simple.default import AssetMinion
-        from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
-
-        AssetMinion.enable_spy()
-        AssetMinion.reset_spy()
-        AssetPipeline.configure_gate(expected_subs=1)
+        TwoStepSimpleMinion.enable_spy()
+        TwoStepSimpleMinion.reset_spy()
+        EmitOneSimplePipeline.configure_gate(expected_subs=1)
 
         async with managed_gru_context(
             state_store=NoOpStateStore(),
@@ -158,19 +159,20 @@ class TestValidUsage:
             metrics=NoOpMetrics()
         ) as gru:
             result = await gru.start_orchestration(
-                pipeline=pipeline_module_path,
-                minion=minion_module_path
+                pipeline=EmitOneSimplePipeline.__module__,
+                minion=TwoStepSimpleMinion.__module__,
             )
 
             assert result.success
             assert result.orchestration_id is not None
             await assert_orchestration_running(gru, result.orchestration_id)
 
-            await AssetMinion.wait_for_calls(
+            await TwoStepSimpleMinion.wait_for_calls(
                 expected={"step_1": 1, "step_2": 1},
                 timeout=5.0,
             )
 
+            await wait_for_orchestration_workflows_idle(gru, result.orchestration_id)
             await gru.stop_orchestration(result.orchestration_id)
 
     @pytest.mark.asyncio
@@ -199,6 +201,7 @@ class TestValidUsage:
             assert start_result.orchestration_id is not None
             await assert_orchestration_running(gru, start_result.orchestration_id)
 
+            await wait_for_orchestration_workflows_idle(gru, start_result.orchestration_id)
             stop_result = await gru.stop_orchestration(start_result.orchestration_id)
             assert stop_result.success
 
@@ -214,13 +217,6 @@ class TestValidUsage:
         Start three minions each with their own pipeline and their own Resource type
         so there is no sharing of pipelines or resources between minions.
         """
-        minion1 = "tests.assets.minions.two_steps.simple.with_simple_resource"
-        minion2 = "tests.assets.minions.two_steps.simple.with_simple_b_resource"
-        minion3 = "tests.assets.minions.two_steps.simple.with_simple_c_resource"
-
-        pipeline1 = "tests.assets.pipelines.emit_one.simple.default"
-        pipeline2 = "tests.assets.pipelines.emit_one.simple.default_b"
-        pipeline3 = "tests.assets.pipelines.emit_one.simple.default_c"
         async with managed_gru_context(
             state_store=state_store,
             logger=logger,
@@ -235,6 +231,15 @@ class TestValidUsage:
             from tests.assets.minions.two_steps.simple.with_simple_resource import (
                 AssetMinion as Simple1ResourceMinion,
             )
+            from tests.assets.pipelines.emit_one.simple.default import (
+                AssetPipeline as SimplePipeline,
+            )
+            from tests.assets.pipelines.emit_one.simple.default_b import (
+                AssetPipeline as SimplePipelineB,
+            )
+            from tests.assets.pipelines.emit_one.simple.default_c import (
+                AssetPipeline as SimplePipelineC,
+            )
 
             for cls in (
                 Simple1ResourceMinion,
@@ -244,11 +249,23 @@ class TestValidUsage:
                 cls.enable_spy()
                 cls.reset_spy()
 
-            r1 = await gru.start_orchestration(minion=minion1, pipeline=pipeline1)
-            r2 = await gru.start_orchestration(minion=minion2, pipeline=pipeline2)
-            r3 = await gru.start_orchestration(minion=minion3, pipeline=pipeline3)
+            r1 = await gru.start_orchestration(
+                minion=Simple1ResourceMinion.__module__,
+                pipeline=SimplePipeline.__module__,
+            )
+            r2 = await gru.start_orchestration(
+                minion=Simple2ResourceMinion.__module__,
+                pipeline=SimplePipelineB.__module__,
+            )
+            r3 = await gru.start_orchestration(
+                minion=Simple3ResourceMinion.__module__,
+                pipeline=SimplePipelineC.__module__,
+            )
 
             assert r1.success and r2.success and r3.success
+            assert r1.orchestration_id is not None
+            assert r2.orchestration_id is not None
+            assert r3.orchestration_id is not None
 
             # Expect three distinct pipeline IDs
             await assert_runtime_component_counts_at_least(gru, pipelines=3)
@@ -267,11 +284,13 @@ class TestValidUsage:
             )
 
             # stop them
-            assert r1.orchestration_id is not None
+            await asyncio.gather(
+                wait_for_orchestration_workflows_idle(gru, r1.orchestration_id),
+                wait_for_orchestration_workflows_idle(gru, r2.orchestration_id),
+                wait_for_orchestration_workflows_idle(gru, r3.orchestration_id),
+            )
             await gru.stop_orchestration(r1.orchestration_id)
-            assert r2.orchestration_id is not None
             await gru.stop_orchestration(r2.orchestration_id)
-            assert r3.orchestration_id is not None
             await gru.stop_orchestration(r3.orchestration_id)
 
     @pytest.mark.asyncio
@@ -287,18 +306,16 @@ class TestValidUsage:
         Start three minions that share the same pipeline and a single Resource type.
         Verify pipeline and resource are shared and cleaned up after stopping all minions.
         """
-        minion_module_path = "tests.assets.minions.two_steps.simple.with_simple_resource"
-        pipeline_module_path = (
-            "tests.assets.pipelines.emit_one.simple.default"
-        )
         from tests.assets.minions.two_steps.simple.with_simple_resource import (
             AssetMinion as Simple1ResourceMinion,
         )
-        from tests.assets.pipelines.emit_one.simple.default import AssetPipeline
+        from tests.assets.pipelines.emit_one.simple.default import (
+            AssetPipeline as EmitOneSimplePipeline,
+        )
 
         Simple1ResourceMinion.enable_spy()
         Simple1ResourceMinion.reset_spy()
-        AssetPipeline.configure_gate(expected_subs=3)
+        EmitOneSimplePipeline.configure_gate(expected_subs=3)
 
         # TODO: I'm testing resource sharing between minions spawned from the
         # same minion class but different configs.
@@ -321,22 +338,25 @@ class TestValidUsage:
             metrics=metrics,
         ) as gru:
             r1 = await gru.start_orchestration(
-                pipeline=pipeline_module_path,
-                minion=minion_module_path,
+                pipeline=EmitOneSimplePipeline.__module__,
+                minion=Simple1ResourceMinion.__module__,
                 minion_config_path=cfg1,
             )
             r2 = await gru.start_orchestration(
-                pipeline=pipeline_module_path,
-                minion=minion_module_path,
+                pipeline=EmitOneSimplePipeline.__module__,
+                minion=Simple1ResourceMinion.__module__,
                 minion_config_path=cfg2,
             )
             r3 = await gru.start_orchestration(
-                pipeline=pipeline_module_path,
-                minion=minion_module_path,
+                pipeline=EmitOneSimplePipeline.__module__,
+                minion=Simple1ResourceMinion.__module__,
                 minion_config_path=cfg3,
             )
 
             assert r1.success and r2.success and r3.success
+            assert r1.orchestration_id is not None
+            assert r2.orchestration_id is not None
+            assert r3.orchestration_id is not None
 
             # pipeline should be shared (single id)
             await assert_runtime_component_counts_exact(gru, pipelines=1)
@@ -350,13 +370,15 @@ class TestValidUsage:
             )
 
             # stop minions and assert cleanup
-            assert r1.orchestration_id is not None
+            await asyncio.gather(
+                wait_for_orchestration_workflows_idle(gru, r1.orchestration_id),
+                wait_for_orchestration_workflows_idle(gru, r2.orchestration_id),
+                wait_for_orchestration_workflows_idle(gru, r3.orchestration_id),
+            )
             await gru.stop_orchestration(r1.orchestration_id)
             await assert_runtime_component_counts_exact(gru, pipelines=1)
-            assert r2.orchestration_id is not None
             await gru.stop_orchestration(r2.orchestration_id)
             await assert_runtime_component_counts_exact(gru, pipelines=1)
-            assert r3.orchestration_id is not None
             await gru.stop_orchestration(r3.orchestration_id)
 
             # after all stopped, pipeline and resources cleaned
@@ -392,7 +414,7 @@ class TestValidUsage:
         inline_config_kind: str,
     ):
         from tests.assets.minions.one_step.counter.with_inline_config import (
-            AssetMinion as InlineConfigMinion,
+            AssetMinion as InlineConfigCounterMinion,
         )
         from tests.assets.minions.one_step.counter.with_inline_config import (
             InlineDataclassConfig,
@@ -416,7 +438,7 @@ class TestValidUsage:
         ) as gru:
             result = await gru.start_orchestration(
                 pipeline=EmitOneCounterPipeline,
-                minion=InlineConfigMinion,
+                minion=InlineConfigCounterMinion,
                 minion_config=inline_config,
             )
 
@@ -424,7 +446,7 @@ class TestValidUsage:
             assert result.orchestration_id is not None
 
             minion = gru._orchestrations[result.orchestration_id].minion
-            assert isinstance(minion, InlineConfigMinion)
+            assert isinstance(minion, InlineConfigCounterMinion)
             assert minion.config == inline_config
             assert minion.config is not inline_config
 
@@ -433,6 +455,7 @@ class TestValidUsage:
             assert minion.config.name == original_name
             assert minion.config.values == ["original"]
 
+            await wait_for_orchestration_workflows_idle(gru, result.orchestration_id)
             stop = await gru.stop_orchestration(result.orchestration_id)
             assert stop.success
 
@@ -463,6 +486,7 @@ class TestValidUsage:
             await assert_runtime_component_counts_exact(gru, pipelines=1, resources=1)
 
             assert isinstance(r1.orchestration_id, str)
+            await wait_for_orchestration_workflows_idle(gru, r1.orchestration_id)
             await gru.stop_orchestration(r1.orchestration_id)
 
             await assert_runtime_component_counts_exact(gru, pipelines=0, resources=0)
@@ -692,16 +716,24 @@ class TestValidUsageDSL:
         self,
         gru: Gru,
     ):
-        pipeline_module_path = (
-            "tests.assets.pipelines.emit_one.counter.with_fixed_resource"
+        from tests.assets.minions.two_steps.counter.with_fixed_resource import (
+            AssetMinion as FixedResourceCounterMinion,
         )
+        from tests.assets.minions.two_steps.counter.with_fixed_resource_b import (
+            AssetMinion as FixedResourceCounterMinionB,
+        )
+        from tests.assets.pipelines.emit_one.counter.with_fixed_resource import (
+            AssetPipeline as FixedResourceCounterPipeline,
+        )
+
+        FixedResourceCounterPipeline.configure_gate(expected_subs=2)
         first = OrchestrationStart(
-            pipeline=pipeline_module_path,
-            minion="tests.assets.minions.two_steps.counter.with_fixed_resource",
+            pipeline=FixedResourceCounterPipeline.__module__,
+            minion=FixedResourceCounterMinion.__module__,
         )
         second = OrchestrationStart(
-            pipeline=pipeline_module_path,
-            minion="tests.assets.minions.two_steps.counter.with_fixed_resource_b",
+            pipeline=FixedResourceCounterPipeline.__module__,
+            minion=FixedResourceCounterMinionB.__module__,
         )
         await run_gru_scenario(
             gru,
@@ -713,7 +745,7 @@ class TestValidUsageDSL:
                 OrchestrationStop(id=second, expect_success=True),
                 GruShutdown(expect_success=True),
             ],
-            pipeline_event_counts={pipeline_module_path: 1},
+            pipeline_event_counts={FixedResourceCounterPipeline.__module__: 1},
         )
 
     @pytest.mark.asyncio
