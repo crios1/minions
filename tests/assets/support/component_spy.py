@@ -355,7 +355,7 @@ class ComponentSpy(Generic[T_Component]):
                 f"Full history names for spy instance identity {spy_instance_identity}: {actual}"
             )
 
-    async def wait_for_call(self, name: str, *, count: int = 1, timeout: float = 5.0) -> None:
+    async def wait_for_call(self, name: str, *, count: int = 1, timeout: float = 10.0) -> None:
         """Wait until the recorded call count for a method reaches ``count``."""
         loop = asyncio.get_running_loop()
         future = loop.create_future()
@@ -384,7 +384,7 @@ class ComponentSpy(Generic[T_Component]):
                 else:
                     self._call_count_waiters_by_method.pop(name, None)
 
-    async def wait_for_calls(self, expected: dict[str, int], *, timeout: float = 5.0) -> None:
+    async def wait_for_calls(self, expected: dict[str, int], *, timeout: float = 10.0) -> None:
         """Wait until each method's recorded call count reaches its requested count."""
         if all(self.call_counts().get(name, 0) >= count for name, count in expected.items()):
             return

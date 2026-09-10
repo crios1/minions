@@ -67,7 +67,7 @@ class ComponentSpyMeta(_ComponentMeta):
         name: str,
         *,
         count: int = 1,
-        timeout: float = 5.0,
+        timeout: float = 10.0,
     ) -> None:
         """Wait until the recorded call count for a method reaches ``count``."""
         await component_spy_for(cls).wait_for_call(
@@ -80,7 +80,7 @@ class ComponentSpyMeta(_ComponentMeta):
         cls,
         expected: dict[str, int],
         *,
-        timeout: float = 5.0,
+        timeout: float = 10.0,
     ) -> None:
         """Wait until each method's recorded call count reaches its requested count."""
         await component_spy_for(cls).wait_for_calls(

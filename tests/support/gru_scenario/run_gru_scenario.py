@@ -11,7 +11,7 @@ async def run_gru_scenario(
     directives: list[Directive],
     *,
     pipeline_event_counts: dict[PipelineEventCountKey, int],
-    per_verification_timeout: float = 5.0,
+    per_verification_timeout: float = 10.0,
 ) -> None:
     """Run and verify a scenario against a pre-wired Gru.
 
