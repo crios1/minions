@@ -117,7 +117,8 @@ async def _discover_id(gru: Gru, composition: Composition) -> str:
     )
     assert started.success
     assert started.orchestration_id is not None
-    stopped = await gru.stop_orchestration(started.orchestration_id)
+    # This campaign models lifecycle coordination, not checkpoint admission.
+    stopped = await gru.stop_orchestration(started.orchestration_id, force=True)
     assert stopped.success
     return started.orchestration_id
 
@@ -135,7 +136,7 @@ async def _run_gated(
             pipeline=composition.pipeline,
             minion=composition.minion,
         )
-    return await gru.stop_orchestration(orchestration_id)
+    return await gru.stop_orchestration(orchestration_id, force=True)
 
 
 async def _assert_runtime_matches(
@@ -172,7 +173,10 @@ async def _run_shutdown_race_call(
             pipeline=composition.pipeline,
             minion=composition.minion,
         )
-    return operation, await gru.stop_orchestration(states[composition].orchestration_id)
+    return operation, await gru.stop_orchestration(
+        states[composition].orchestration_id,
+        force=True,
+    )
 
 
 @pytest.mark.asyncio

@@ -149,7 +149,8 @@ async def _stop_random_orchestration(
     orchestration_id = rng.choice(candidate_ids)
     expected_success = orchestration_id in model.active_composition_by_orchestration
 
-    result = await gru.stop_orchestration(orchestration_id)
+    # This campaign models lifecycle ownership, not checkpoint admission.
+    result = await gru.stop_orchestration(orchestration_id, force=True)
 
     assert result.success is expected_success, context
     if expected_success:

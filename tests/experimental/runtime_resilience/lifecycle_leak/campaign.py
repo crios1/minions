@@ -69,7 +69,8 @@ async def _run_lifecycle_cycle() -> tuple[weakref.ReferenceType[object], ...]:
 
     for start in reversed(starts):
         assert start.orchestration_id is not None
-        stopped = await gru.stop_orchestration(start.orchestration_id)
+        # This campaign measures lifecycle cleanup, not checkpoint admission.
+        stopped = await gru.stop_orchestration(start.orchestration_id, force=True)
         assert stopped.success
 
     assert (await gru.runtime_state_snapshot()).is_empty
