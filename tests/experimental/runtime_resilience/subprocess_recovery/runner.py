@@ -134,7 +134,7 @@ class GatedSQLiteStateStore(SQLiteStateStore):
 
         gated_save_count = {
             "after_checkpoint": 1,
-            "between_steps": 3,
+            "between_steps": 2,
         }.get(self._scenario)
         if (
             self._role == "initial"
