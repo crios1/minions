@@ -30,12 +30,13 @@ from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics import Metrics
 from minions._internal._framework.metrics_constants import (
     LABEL_ERROR_TYPE,
-    LABEL_MINION_COMPOSITE_KEY,
-    LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE,
+    LABEL_MINION,
     LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE,
     LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION,
+    LABEL_MINION_WORKFLOW_PERSISTENCE_POINT,
     LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY,
     LABEL_MINION_WORKFLOW_PERSISTENCE_RETRYABLE,
+    LABEL_ORCHESTRATION_ID,
     LABEL_STATE_STORE,
     LABEL_STATUS,
     MINION_WORKFLOW_DURATION_SECONDS,
@@ -120,7 +121,10 @@ def counter_low(iteration: int, cardinality: int) -> Iterable[Operation]:
     yield Operation(
         kind="counter",
         metric_name=MINION_WORKFLOW_STARTED_TOTAL,
-        labels={LABEL_MINION_COMPOSITE_KEY: "orchestration-0"},
+        labels={
+            LABEL_MINION: "benchmark-minion",
+            LABEL_ORCHESTRATION_ID: "orchestration-0",
+        },
     )
 
 
@@ -128,7 +132,10 @@ def counter_many(iteration: int, cardinality: int) -> Iterable[Operation]:
     yield Operation(
         kind="counter",
         metric_name=MINION_WORKFLOW_STARTED_TOTAL,
-        labels={LABEL_MINION_COMPOSITE_KEY: label_value("orchestration", iteration, cardinality)},
+        labels={
+            LABEL_MINION: "benchmark-minion",
+            LABEL_ORCHESTRATION_ID: label_value("orchestration", iteration, cardinality),
+        },
     )
 
 
@@ -138,7 +145,8 @@ def histogram_low(iteration: int, cardinality: int) -> Iterable[Operation]:
         kind="histogram",
         metric_name=MINION_WORKFLOW_DURATION_SECONDS,
         labels={
-            LABEL_MINION_COMPOSITE_KEY: "orchestration-0",
+            LABEL_MINION: "benchmark-minion",
+            LABEL_ORCHESTRATION_ID: "orchestration-0",
             LABEL_STATUS: "succeeded",
         },
         value=(iteration % 100) / 1000.0,
@@ -150,7 +158,8 @@ def histogram_many(iteration: int, cardinality: int) -> Iterable[Operation]:
         kind="histogram",
         metric_name=MINION_WORKFLOW_DURATION_SECONDS,
         labels={
-            LABEL_MINION_COMPOSITE_KEY: label_value("orchestration", iteration, cardinality),
+            LABEL_MINION: "benchmark-minion",
+            LABEL_ORCHESTRATION_ID: label_value("orchestration", iteration, cardinality),
             LABEL_STATUS: "succeeded",
         },
         value=(iteration % 100) / 1000.0,
@@ -163,8 +172,9 @@ def persistence_mixed(iteration: int, cardinality: int) -> Iterable[Operation]:
     policy = "idle-until-persisted" if iteration % 2 else "continue-on-failure"
     state_store = "SQLiteStateStore" if iteration % 3 else "InMemoryStateStore"
     base_labels = {
-        LABEL_MINION_COMPOSITE_KEY: orchestration_id,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_CHECKPOINT_TYPE: checkpoint_type,
+        LABEL_MINION: "benchmark-minion",
+        LABEL_ORCHESTRATION_ID: orchestration_id,
+        LABEL_MINION_WORKFLOW_PERSISTENCE_POINT: checkpoint_type,
         LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
         LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: policy,
         LABEL_STATE_STORE: state_store,
@@ -200,7 +210,8 @@ def persistence_mixed(iteration: int, cardinality: int) -> Iterable[Operation]:
             kind="counter",
             metric_name=MINION_WORKFLOW_FAILED_TOTAL,
             labels={
-                LABEL_MINION_COMPOSITE_KEY: orchestration_id,
+                LABEL_MINION: "benchmark-minion",
+                LABEL_ORCHESTRATION_ID: orchestration_id,
                 LABEL_ERROR_TYPE: "WorkflowPersistenceNonRetryableError",
             },
         )
@@ -217,15 +228,15 @@ SCENARIOS: dict[ScenarioName, Callable[[int, int], Iterable[Operation]]] = {
 
 def emit_unsafe(metrics: Metrics, operation: Operation) -> None:
     if operation.kind == "counter":
-        metrics._inc_unsafe(
+        metrics._mn_inc_unsafe(
             operation.metric_name, amount=operation.value, labels=operation.labels
         )
     elif operation.kind == "gauge":
-        metrics._set_unsafe(
+        metrics._mn_set_unsafe(
             operation.metric_name, value=operation.value, labels=operation.labels
         )
     elif operation.kind == "histogram":
-        metrics._observe_unsafe(
+        metrics._mn_observe_unsafe(
             operation.metric_name, value=operation.value, labels=operation.labels
         )
     else:
@@ -234,15 +245,15 @@ def emit_unsafe(metrics: Metrics, operation: Operation) -> None:
 
 async def emit_async(metrics: Metrics, operation: Operation) -> None:
     if operation.kind == "counter":
-        await metrics._inc(
+        await metrics._mn_inc(
             operation.metric_name, amount=operation.value, labels=operation.labels
         )
     elif operation.kind == "gauge":
-        await metrics._set(
+        await metrics._mn_set(
             operation.metric_name, value=operation.value, labels=operation.labels
         )
     elif operation.kind == "histogram":
-        await metrics._observe(
+        await metrics._mn_observe(
             operation.metric_name, value=operation.value, labels=operation.labels
         )
     else:
