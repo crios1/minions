@@ -280,11 +280,11 @@ async def _run(
                 if started.success:
                     raise RuntimeError("incompatible payload should reject orchestration startup")
                 if (
-                    started.reason is None
+                    started.cause is None
                     or "could not be decoded with the current Minion event "
-                    "and workflow context types" not in started.reason
+                    "and workflow context types" not in started.cause
                 ):
-                    raise RuntimeError("incompatible payload has no type-mismatch reason")
+                    raise RuntimeError("incompatible payload has no type-mismatch cause")
                 if (
                     started.suggestion is None
                     or "drain the orchestration" not in started.suggestion
