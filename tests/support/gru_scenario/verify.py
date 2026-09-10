@@ -1266,6 +1266,12 @@ class ScenarioVerifier:
                 for start, expected_steps in workflow_steps.items():
                     receipt = receipt_for(start, "workflow_steps")
                     orchestration_id = receipt.orchestration_id
+                    if orchestration_id is None:
+                        pytest.fail(
+                            "ExpectRuntime.workflow_steps references a successful start "
+                            "without an orchestration ID: "
+                            f"{receipt.directive_index}."
+                        )
                     for step_name, expected_count in expected_steps.items():
                         if expected_count < 0:
                             pytest.fail(
@@ -1274,7 +1280,7 @@ class ScenarioVerifier:
                                 f"{expected_count!r}."
                             )
                         actual_count = len(
-                            workflow_step_ids.get(orchestration_id or "", {}).get(
+                            workflow_step_ids.get(orchestration_id, {}).get(
                                 step_name,
                                 (),
                             )
