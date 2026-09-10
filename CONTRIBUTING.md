@@ -33,6 +33,36 @@ If a change adds complexity without clear benefit, it is unlikely to be accepted
 * Avoid over-engineering
 * Tests (where applicable) should pass
 
+## Commit Messages
+
+Commit subjects should stand on their own. They should identify the affected scope,
+state the actual behavior or contract change, and include the triggering condition or
+reason when that distinction matters. Explicitly distinguish production code, test
+code, test support, benchmarks, documentation, and tooling when the scope could
+otherwise be ambiguous.
+
+Do not make the body carry information that is necessary to understand the subject.
+Avoid vague subjects built around words such as *update*, *improve*, *handle*,
+*support*, or *align* unless their object and resulting behavior are explicit. Use the
+body for supporting detail, implementation context, or evidence—not to rescue an
+underspecified subject.
+
+Before finalizing a commit message, check that a reader could understand the change
+without seeing the diff and could not reasonably confuse a test-only change with a
+production change.
+
+For example, prefer:
+
+```text
+Use StartResult.cause instead of its generic reason in the subprocess recovery test runner
+```
+
+over:
+
+```text
+Check StartResult.cause in subprocess recovery
+```
+
 ## Local Setup
 
 For development, use a fresh virtual environment and install Minions in editable mode so
