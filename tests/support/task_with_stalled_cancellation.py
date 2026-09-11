@@ -19,9 +19,11 @@ async def task_with_stalled_cancellation(
     task_factory: TaskFactory | None = None,
 ) -> AsyncGenerator[asyncio.Task[None]]:
     allow_completion = asyncio.Event()
+    task_started = asyncio.Event()
 
     async def stall_after_cancellation() -> None:
         try:
+            task_started.set()
             await asyncio.Event().wait()
         except asyncio.CancelledError:
             await allow_completion.wait()
@@ -32,7 +34,7 @@ async def task_with_stalled_cancellation(
         if task_factory is None
         else task_factory(coro, name=name)
     )
-    await asyncio.sleep(0)
+    await task_started.wait()
     try:
         yield task
     finally:

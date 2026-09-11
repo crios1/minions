@@ -108,7 +108,6 @@ async def test_gru_does_not_resume_same_workflow_id_twice_during_startup(
                 DuplicateWorkflowResumeCounterMinion._gate("_step_1_started").wait(),
                 timeout=1.0,
             )
-            await asyncio.sleep(0)
 
             step_1_workflow_ids = _get_step_1_workflow_ids()
             assert step_1_workflow_ids, (
@@ -419,7 +418,6 @@ async def test_gru_allows_concurrent_starts_for_different_orchestrations(
             orchestration_lock_1.wait_until_held(),
             orchestration_lock_2.wait_until_held(),
         )
-        await asyncio.sleep(0)
         assert orchestration_lock_1.enter_count == 1
         assert orchestration_lock_2.enter_count == 1
 
