@@ -22,7 +22,6 @@ from minions._internal._utils.serialization import serialize
 def mk_ctx(
     i: int = 0,
     size: int = 32,
-    module_path: str = "app.minion",
 ) -> MinionWorkflowContext[dict[str, int], dict[str, str]]:
     return MinionWorkflowContext(
         orchestration_id=f"dummy-orchestration-id-{i}",
