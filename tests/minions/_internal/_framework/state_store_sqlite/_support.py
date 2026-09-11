@@ -38,7 +38,8 @@ def blob_for(ctx: MinionWorkflowContext[Any, Any]) -> bytes:
     return serialize(persist_workflow_context(ctx))
 
 
-async def cancel_and_drain_tasks(*tasks: asyncio.Task[Any] | None) -> None:
+async def cancel_and_await_tasks(*tasks: asyncio.Task[Any] | None) -> None:
+    """Allow tasks to finish, cancel pending tasks, and suppress their exceptions."""
     active_tasks = [task for task in tasks if task is not None]
     if not active_tasks:
         return
@@ -115,9 +116,9 @@ class BlockedCommitBatchNowGate:
     def release(self) -> None:
         self._release.set()
 
-    async def release_and_cancel_and_drain_tasks(self, *tasks: asyncio.Task[Any] | None) -> None:
+    async def release_and_cancel_and_await_tasks(self, *tasks: asyncio.Task[Any] | None) -> None:
         self.release()
-        await cancel_and_drain_tasks(*tasks)
+        await cancel_and_await_tasks(*tasks)
 
 
 class StartupProbeDb:

@@ -165,7 +165,7 @@ async def test_queued_writes_warning_counts_batches_waiting_for_commit(
         commit_gate.release()
         await asyncio.wait_for(asyncio.gather(*tasks), timeout=2.0)
     finally:
-        await commit_gate.release_and_cancel_and_drain_tasks(*tasks)
+        await commit_gate.release_and_cancel_and_await_tasks(*tasks)
 
 
 async def test_commit_p95_warning(make_state_store_and_logger: MakeStateStoreAndLogger):
