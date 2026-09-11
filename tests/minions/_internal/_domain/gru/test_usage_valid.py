@@ -267,20 +267,24 @@ class TestValidUsage:
             assert r2.orchestration_id is not None
             assert r3.orchestration_id is not None
 
-            # Expect three distinct pipeline IDs
-            await assert_runtime_component_counts_at_least(gru, pipelines=3)
-
-            # Expect three distinct resource classes started
-            await assert_runtime_component_counts_at_least(gru, resources=3)
-
-            await Simple1ResourceMinion.wait_for_calls(
-                expected={"step_1": 1, "step_2": 1}, timeout=5.0
+            # Expect three distinct minions, pipelines, and resource classes.
+            await assert_runtime_component_counts_at_least(
+                gru,
+                minions=3,
+                pipelines=3,
+                resources=3,
             )
-            await Simple2ResourceMinion.wait_for_calls(
-                expected={"step_1": 1, "step_2": 1}, timeout=5.0
-            )
-            await Simple3ResourceMinion.wait_for_calls(
-                expected={"step_1": 1, "step_2": 1}, timeout=5.0
+
+            await asyncio.gather(
+                Simple1ResourceMinion.wait_for_calls(
+                    expected={"step_1": 1, "step_2": 1}, timeout=5.0
+                ),
+                Simple2ResourceMinion.wait_for_calls(
+                    expected={"step_1": 1, "step_2": 1}, timeout=5.0
+                ),
+                Simple3ResourceMinion.wait_for_calls(
+                    expected={"step_1": 1, "step_2": 1}, timeout=5.0
+                ),
             )
 
             # stop them
@@ -292,6 +296,12 @@ class TestValidUsage:
             await gru.stop_orchestration(r1.orchestration_id)
             await gru.stop_orchestration(r2.orchestration_id)
             await gru.stop_orchestration(r3.orchestration_id)
+            await assert_runtime_component_counts_exact(
+                gru,
+                minions=0,
+                pipelines=0,
+                resources=0,
+            )
 
     @pytest.mark.asyncio
     async def test_gru_start_3_minions_1_pipeline_1_resource_sharing(
@@ -317,20 +327,9 @@ class TestValidUsage:
         Simple1ResourceMinion.reset_spy()
         EmitOneSimplePipeline.configure_gate(expected_subs=3)
 
-        # TODO: I'm testing resource sharing between minions spawned from the
-        # same minion class but different configs.
-        # I should also test the case where I spawn from separate minion
-        # classes/files.
         cfg1 = str(tests_dir / "assets" / "config/minions/a.toml")
         cfg2 = str(tests_dir / "assets" / "config/minions/b.toml")
         cfg3 = str(tests_dir / "assets" / "config/minions/c.toml")
-
-        # TODO: consider refactoring gru to have the kwargs be classes instead of instances
-        # it might be cleaner and then the user wont have to manually wire things like this
-        # and cuz then gru can handle instantiation and startup
-        # but what if the user wants to bring their own and instantiate with parameters?
-        # ask copilot
-        # !! will have to do the update across this whole test file !!
 
         async with managed_gru_context(
             state_store=state_store,
@@ -358,11 +357,12 @@ class TestValidUsage:
             assert r2.orchestration_id is not None
             assert r3.orchestration_id is not None
 
-            # pipeline should be shared (single id)
-            await assert_runtime_component_counts_exact(gru, pipelines=1)
-
-            # resource should be shared across minions
-            await assert_runtime_component_counts_exact(gru, resources=1)
+            await assert_runtime_component_counts_exact(
+                gru,
+                minions=3,
+                pipelines=1,
+                resources=1,
+            )
 
             await Simple1ResourceMinion.wait_for_calls(
                 expected={"step_1": 3, "step_2": 3},
@@ -381,8 +381,103 @@ class TestValidUsage:
             await assert_runtime_component_counts_exact(gru, pipelines=1)
             await gru.stop_orchestration(r3.orchestration_id)
 
-            # after all stopped, pipeline and resources cleaned
-            await assert_runtime_component_counts_exact(gru, pipelines=0, resources=0)
+            # after all stopped, pipeline, resources, and minions are cleaned
+            await assert_runtime_component_counts_exact(
+                gru,
+                minions=0,
+                pipelines=0,
+                resources=0,
+            )
+
+    @pytest.mark.asyncio
+    async def test_gru_start_3_minions_1_pipeline_1_resource_sharing_from_separate_minion_files(
+        self,
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        logger: InMemoryLogger,
+        metrics: InMemoryMetrics,
+        state_store: InMemoryStateStore,
+    ):
+        """
+        Start minions from separate modules that share one pipeline and Resource type.
+        """
+        from tests.assets.minions.two_steps.counter.with_fixed_resource import (
+            AssetMinion as FixedResourceCounterMinion,
+        )
+        from tests.assets.minions.two_steps.counter.with_fixed_resource_b import (
+            AssetMinion as FixedResourceCounterMinionB,
+        )
+        from tests.assets.minions.two_steps.counter.with_fixed_resource_c import (
+            AssetMinion as FixedResourceCounterMinionC,
+        )
+        from tests.assets.pipelines.emit_one.counter.after_three_subscribers import (
+            AssetPipeline as ThreeSubscriberCounterPipeline,
+        )
+
+        for cls in (
+            FixedResourceCounterMinion,
+            FixedResourceCounterMinionB,
+            FixedResourceCounterMinionC,
+        ):
+            cls.enable_spy()
+            cls.reset_spy()
+
+        async with managed_gru_context(
+            state_store=state_store,
+            logger=logger,
+            metrics=metrics,
+        ) as gru:
+            r1 = await gru.start_orchestration(
+                pipeline=ThreeSubscriberCounterPipeline.__module__,
+                minion=FixedResourceCounterMinion.__module__,
+            )
+            r2 = await gru.start_orchestration(
+                pipeline=ThreeSubscriberCounterPipeline.__module__,
+                minion=FixedResourceCounterMinionB.__module__,
+            )
+            r3 = await gru.start_orchestration(
+                pipeline=ThreeSubscriberCounterPipeline.__module__,
+                minion=FixedResourceCounterMinionC.__module__,
+            )
+
+            assert r1.success and r2.success and r3.success
+            assert r1.orchestration_id is not None
+            assert r2.orchestration_id is not None
+            assert r3.orchestration_id is not None
+            await assert_runtime_component_counts_exact(
+                gru,
+                minions=3,
+                pipelines=1,
+                resources=1,
+            )
+
+            await asyncio.gather(
+                *(
+                    cls.wait_for_calls(
+                        expected={"step_1": 1, "step_2": 1},
+                        timeout=5.0,
+                    )
+                    for cls in (
+                        FixedResourceCounterMinion,
+                        FixedResourceCounterMinionB,
+                        FixedResourceCounterMinionC,
+                    )
+                )
+            )
+
+            await asyncio.gather(
+                wait_for_orchestration_workflows_idle(gru, r1.orchestration_id),
+                wait_for_orchestration_workflows_idle(gru, r2.orchestration_id),
+                wait_for_orchestration_workflows_idle(gru, r3.orchestration_id),
+            )
+            await gru.stop_orchestration(r1.orchestration_id)
+            await gru.stop_orchestration(r2.orchestration_id)
+            await gru.stop_orchestration(r3.orchestration_id)
+            await assert_runtime_component_counts_exact(
+                gru,
+                minions=0,
+                pipelines=0,
+                resources=0,
+            )
 
     @pytest.mark.asyncio
     async def test_gru_start_orchestration_shutdown_without_stop(
@@ -483,13 +578,23 @@ class TestValidUsage:
 
             assert r1.success
 
-            await assert_runtime_component_counts_exact(gru, pipelines=1, resources=1)
+            await assert_runtime_component_counts_exact(
+                gru,
+                minions=1,
+                pipelines=1,
+                resources=1,
+            )
 
             assert isinstance(r1.orchestration_id, str)
             await wait_for_orchestration_workflows_idle(gru, r1.orchestration_id)
             await gru.stop_orchestration(r1.orchestration_id)
 
-            await assert_runtime_component_counts_exact(gru, pipelines=0, resources=0)
+            await assert_runtime_component_counts_exact(
+                gru,
+                minions=0,
+                pipelines=0,
+                resources=0,
+            )
 
     # TODO: I need tests for gru's default usages to ensure i stay version 1.x.x compliant
 

@@ -501,7 +501,12 @@ async def test_gru_starts_shared_resourced_pipeline_once_for_concurrent_orchestr
         assert gru._orchestrations[result2.orchestration_id].pipeline is canonical_pipeline
 
         resource_id = gru._get_resource_identity(FixedResource)
-        await assert_runtime_component_counts_exact(gru, pipelines=1, resources=1)
+        await assert_runtime_component_counts_exact(
+            gru,
+            minions=2,
+            pipelines=1,
+            resources=1,
+        )
         await assert_runtime_resource_maps_consistent(gru)
         snapshot = await gru.runtime_state_snapshot()
         assert snapshot.resources_for_pipeline(FixedResourceCounterPipeline.__module__) == {
