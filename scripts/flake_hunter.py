@@ -4,7 +4,8 @@ Repeated pytest runner for flake hunting.
 Defaults are tuned for this repository:
 - uses the project venv's pytest binary when available
 - disables pytest's shared cache provider
-- ignores tests listed in `PARALLEL_UNSAFE_TEST_PATHS`
+- ignores tests listed in `PARALLEL_UNSAFE_TEST_PATHS` and, unless explicitly
+  targeted, `HIGH_CONTENTION_UNSUITABLE_TEST_IDS`
 - gives each run its own basetemp, log, and junitxml artifact
 - cleans up passing run artifacts by default
 
@@ -30,6 +31,16 @@ import psutil
 
 PARALLEL_UNSAFE_TEST_PATHS: tuple[str, ...] = (
     "tests/minions/_internal/_domain/test_prometheus_metrics.py",
+)
+
+# These retain their normal pytest coverage. Their wall-clock assertions cannot
+# distinguish a missed application deadline from OS scheduling starvation across
+# many concurrent pytest processes.
+HIGH_CONTENTION_UNSUITABLE_TEST_IDS: tuple[str, ...] = (
+    "tests/minions/_internal/_framework/state_store_sqlite/test_batching.py::"
+    "test_writes_inside_batch_max_interarrival_delay_ms_batch_together",
+    "tests/minions/_internal/_framework/state_store_sqlite/test_batching.py::"
+    "test_max_flush_delay_still_applies_during_continuous_arrivals",
 )
 
 MIN_FREE_RAM_BYTES = 1 * 1024 * 1024 * 1024
@@ -208,6 +219,9 @@ def build_pytest_command(
     cmd.extend(["-p", "no:cacheprovider"])
     for test_path in PARALLEL_UNSAFE_TEST_PATHS:
         cmd.append(f"--ignore={test_path}")
+    for test_id in HIGH_CONTENTION_UNSUITABLE_TEST_IDS:
+        if test_id not in targets:
+            cmd.append(f"--deselect={test_id}")
 
     cmd.append(f"--basetemp={basetemp_path}")
     cmd.append(f"--junitxml={junit_path}")
