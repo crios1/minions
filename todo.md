@@ -292,6 +292,10 @@
     - expose StateStore health and performance as backend/system telemetry, separate from workflow durability/guarantee telemetry
     - use `minion_workflow_persistence_*` metrics for workflow checkpoint impact and `state_store_*` metrics for backend cause/health
     - keep labels low-cardinality and backend-oriented
+  - evidence/decision boundary:
+    - SQLite currently calculates and logs queue-pressure and commit/rows-per-second warnings internally, but does not expose backend metrics
+    - this telemetry is the next low-risk way to distinguish healthy greedy fan-out from persistence saturation
+    - telemetry must not itself reject work, alter SQLite batch defaults, or become implicit admission control
   - metrics to add:
     - `state_store_operations_total`
     - `state_store_operation_failures_total`
@@ -323,6 +327,18 @@
     - document recommended operator usage:
       - alert on `minion_workflow_persistence_*` for workflow durability impact
       - inspect `state_store_*` for backend health and root cause
+
+- todo: add operational guidance and guardrails for high-cardinality orchestration labels
+  - evidence:
+    - the operating-envelope audit reached roughly 42,000 Prometheus series and 10.56 MB of text at 5,000 orchestration label sets
+    - this is an operational storage/scrape risk, not a confirmed runtime correctness defect
+  - guidance:
+    - preserve orchestration labels where workflow attribution requires them
+    - keep orchestration, workflow, checkpoint, and payload identifiers out of backend/system metrics such as `state_store_*`
+    - document scrape, relabel, and family-filtering options for operators with large orchestration counts
+    - add a regression or review guardrail before introducing new high-cardinality labels to stable metric families
+  - why it matters:
+    - operators need a deliberate way to control metrics cost without weakening the low-cardinality telemetry contract
 
 - todo: add family-level metrics exposure controls
   - goal:
@@ -475,6 +491,15 @@
       - explain the difference between state-store read failure, decode failure, and no persisted contexts
       - document why best-effort recovery is the intended default once recovery-failed workflows are first-class state
       - document when users should choose strict recovery instead
+
+- todo: add lifecycle troubleshooting guidance for persistence-risk stops
+  - docs:
+    - explain that interrupt/drain may be rejected when a live workflow has no current checkpoint, a stale checkpoint, or an unresolved delete
+    - explain `force=True` as explicit acceptance of the reported durability risk, not as equivalent to a successful durable drain
+    - explain that interrupted workflows may remain persisted for later recovery and that an in-flight gauge of zero does not mean no saved unfinished workflows exist
+    - distinguish live-process control from durable recovery guarantees
+  - why it matters:
+    - keeps operator expectations aligned with the documented StopResult persistence-risk contract
 
 - todo: add memory-pressure guard to manage OOM risk (high-utilization defaults)
   - goal:
@@ -687,49 +712,44 @@
     - failed checkpoint state affects the exact semantics of interrupt and drain,
       especially when a workflow has progressed beyond its last durable checkpoint
 
-- todo: add Minion `max_inflight_workflows` class attr for bounded lossy workflow admission control
+- todo: add per-orchestration max-inflight workflow admission for bounded subscription overload protection
+  - evidence/decision:
+    - the operating-envelope/recovery investigation found no confirmed production correctness defect; this is an optional overload policy, not an urgent fix
+    - SQLite persistence pressure and shared Resource pressure remain separate from this subscription-level control
   - goal:
-    - protect the process from a noisy minion/orchestration creating unbounded workflow tasks
     - keep the default runtime greedy and backwards-compatible
-    - avoid introducing queueing/event-backlog semantics in this pass
+    - bound new workflow task growth for one Minion subscription/orchestration
+    - preserve attach/detach semantics: when saturated, that orchestration does not receive new events while other subscribers continue
   - api:
-    - unlimited/default minions do not need to declare anything:
-      - `max_inflight_workflows: int | None = None`
-      - `overflow_policy: Literal["reject"] | None = None`
-    - bounded minions must declare both attrs explicitly:
-      - `max_inflight_workflows = 100`
-      - `overflow_policy = "reject"`
-  - validation:
-    - `max_inflight_workflows is None` means unlimited/current behavior
-    - if `max_inflight_workflows` is set, it must be a positive int
-    - if `max_inflight_workflows` is set, `overflow_policy` is required
-    - if `overflow_policy` is set while `max_inflight_workflows is None`, raise a user-friendly class/usage error
-    - for now, the only valid overflow policy is `"reject"`
+    - expose `max_inflight_workflows: int | None = None` as a runtime option on `Gru.start_orchestration(...)` and matching DSL `OrchestrationStart`
+    - do not make it a Minion class attr and do not put it in user `minion_config`
+    - keep it out of orchestration identity and persisted workflow compatibility
+    - `None` preserves current unlimited/listen behavior; a positive int enables rejection when saturated
   - behavior:
-    - pipelines keep producing and fanning out normally
-    - each minion enforces its own admission limit independently
-    - if the minion is at/above `max_inflight_workflows`, reject the event for that minion
-    - do not create a workflow context for rejected events
-    - do not persist rejected events
-    - do not queue rejected events
-    - do not treat rejection as a workflow failure, because no workflow started
-    - do not backpressure the pipeline or affect other minions subscribed to the same pipeline
+    - enforce per live Minion/orchestration, not process-wide and not SQLite-global
+    - if below the cap, admit the event normally
+    - at/above the cap, return non-admitted for that Minion before creating context, task, or checkpoint
+    - count this as subscription admission behavior, not workflow failure
+    - the pipeline continues producing/fanning out; rejection does not backpressure or affect other Minions
+    - do not queue or persist rejected events
+    - persisted/resumed workflows are never rejected or dropped; if recovery temporarily exceeds the cap, reject only new events until the live count falls below the cap
+    - if exact recovery concurrency limits are later required, design a separate recovery scheduler; do not use this control to drop saved workflows
   - observability:
-    - add a rejected-event/workflow-admission metric, e.g. `minion_workflow_rejected_total`
-    - include minion/orchestration labels consistent with existing minion workflow metrics
-    - emit structured logs for rejected events with the configured cap and current inflight count
+    - add `minion_event_admission_rejected_total` (or an equally precise name; no workflow was created)
+    - use only existing low-cardinality minion/orchestration dimensions
+    - count each rejection and rate-limit/summarize structured rejection logs
   - docs:
-    - document this as bounded lossy admission control / overload protection
-    - explicitly say it is not fairness, event delivery, backpressure, or durable queueing
-    - explain that resource semaphores still protect dependencies, while this cap protects the runtime from task growth
+    - describe saturation as the event not being delivered to this subscription; upstream must replay or retain events if lossless delivery is required
+    - explicitly say this is not SQLite backpressure, durable queueing, fairness, or lossless event delivery
+    - explain that Resource semaphores protect dependencies while this cap protects task growth
   - tests:
-    - unlimited minion preserves current greedy behavior
-    - bounded minion accepts events below the threshold
-    - bounded minion rejects events at threshold without creating/persisting workflow context
-    - rejection increments the metric and logs useful structured context
-    - rejection does not affect another minion subscribed to the same pipeline
-    - invalid class attrs raise clear errors
-  - codex://threads/019ca819-0afe-7591-b59f-53d06718a48b
+    - unlimited default preserves current behavior
+    - direct start and DSL configure different caps per orchestration
+    - below-cap acceptance and at-cap rejection create no context, task, or checkpoint
+    - resumed workflows are preserved and can temporarily exceed the cap while new events are rejected
+    - rejection metric/logging is observable and logs are bounded
+    - rejection does not affect another Minion on the same Pipeline
+    - invalid runtime options raise clear errors
 
 - todo: add bounded start concurrency to Gru (`max_concurrent_starts`)
   - goal:
@@ -1085,6 +1105,8 @@
     - connect correlated batch failures to workflow persistence telemetry and retry/idling behavior
   - evidence constraint:
     - use measured tuner output for the current host/workload rather than publishing universal SQLite or Postgres throughput, latency, CPU, or memory claims
+    - recent measurements are host/workload-specific; batching improved the tested workload but did not establish universal capacity or justify changing runtime defaults
+    - use the tuner/benchmark for workload-specific choices, and do not present the investigation numbers as general limits
   - why it matters:
     - operators should choose a tuning profile from workload and durability requirements rather than infer semantics from profile names alone
 
