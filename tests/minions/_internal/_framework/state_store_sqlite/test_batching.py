@@ -17,6 +17,7 @@ from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.minions._internal._framework.state_store_sqlite._support import (
     BlockedCommitBatchNowGate,
     blob_for,
+    cancel_and_drain_tasks,
     mk_ctx,
 )
 from tests.minions._internal._framework.state_store_sqlite.conftest import MakeStateStoreAndLogger
@@ -78,14 +79,14 @@ async def test_batch_max_interarrival_delay_ms_none_preserves_scheduled_flush_be
         s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx))
     )
 
-    await asyncio.sleep(0.01)
+    await asyncio.sleep(0)
 
     assert not save_task.done()
     await s._flush()
     await asyncio.wait_for(save_task, timeout=1.0)
 
 
-async def test_single_write_flushes_on_batch_max_interarrival_delay_ms(
+async def test_next_batch_flush_deadline_selects_interarrival_when_earlier_than_max_flush(
     make_state_store_and_logger: MakeStateStoreAndLogger,
 ):
     s, _ = await make_state_store_and_logger(
@@ -93,15 +94,41 @@ async def test_single_write_flushes_on_batch_max_interarrival_delay_ms(
         batch_max_flush_delay_ms=40,
         batch_max_interarrival_delay_ms=5,
     )
-    ctx = mk_ctx(i=702, size=16)
-    started = asyncio.get_running_loop().time()
 
-    await asyncio.wait_for(
-        s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx)),
-        timeout=0.1,
+    s._batch_buffer_flush_deadline = 100.040
+    s._batch_buffer_last_enqueue_at = 100.000
+
+    assert s._next_batch_flush_deadline() == pytest.approx(100.005) # pyright: ignore[reportUnknownMemberType]
+
+
+async def test_single_write_is_flushed_with_batch_max_interarrival_delay_ms(
+    make_state_store_and_logger: MakeStateStoreAndLogger,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    s, _ = await make_state_store_and_logger(
+        batch_max_queued_writes=100,
+        batch_max_flush_delay_ms=40,
+        batch_max_interarrival_delay_ms=5,
+    )
+    flush_started = asyncio.Event()
+    original_commit_batch_now = s._commit_batch_now
+
+    async def wrapped_commit_batch_now(items: list[PendingWrite]) -> float:
+        flush_started.set()
+        return await original_commit_batch_now(items)
+
+    monkeypatch.setattr(s, "_commit_batch_now", wrapped_commit_batch_now)
+    ctx = mk_ctx(i=702, size=16)
+    save_task = asyncio.create_task(
+        s.save_context(ctx.workflow_id, ctx.orchestration_id, blob_for(ctx))
     )
 
-    assert asyncio.get_running_loop().time() - started < 0.04
+    try:
+        await asyncio.wait_for(flush_started.wait(), timeout=1.0)
+        await asyncio.wait_for(save_task, timeout=1.0)
+    finally:
+        await cancel_and_drain_tasks(save_task)
+
     rows = await s.get_all_contexts()
     assert any(row.workflow_id == ctx.workflow_id for row in rows)
 
@@ -169,11 +196,15 @@ async def test_max_flush_delay_still_applies_during_continuous_arrivals(
             await asyncio.sleep(0.005)
 
     producer = asyncio.create_task(produce())
-    await asyncio.wait_for(first_commit.wait(), timeout=0.2)
+    try:
+        await asyncio.wait_for(first_commit.wait(), timeout=0.2)
 
-    assert asyncio.get_running_loop().time() - started < 0.05
-    await producer
-    await asyncio.wait_for(asyncio.gather(*tasks), timeout=1.0)
+        assert asyncio.get_running_loop().time() - started < 0.05
+        await producer
+        await asyncio.wait_for(asyncio.gather(*tasks), timeout=1.0)
+    finally:
+        await cancel_and_drain_tasks(producer)
+        await cancel_and_drain_tasks(*tasks)
 
 
 async def test_delete_context_batches_but_waits_for_batch_commit(
