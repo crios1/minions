@@ -4,34 +4,6 @@
 
 ### Test Suite:
 
-- todo: review the latest StateStore blob-contract refactor
-  - review order:
-    - `minions/_internal/_framework/state_store.py`: review the new contract surface
-      - `StoredWorkflowContext`
-      - blob-based `save_context(...)`
-      - required `get_contexts_for_orchestration(...)`
-      - framework-owned `_save_context(...)` and decode helpers
-    - `minions/_internal/_framework/minion_workflow_context_codec.py`: review the runtime serialization boundary
-      - `serialize_persisted_workflow_context(...)`
-      - `deserialize_workflow_context_blob(...)`
-      - persisted-blob schema-version validation
-    - `minions/_internal/_framework/state_store_sqlite.py`: review the main backend rewrite
-      - `workflows(workflow_id, orchestration_id, context)` schema
-      - orchestration index
-      - blob batching
-      - orchestration-scoped reads
-    - `minions/_internal/_domain/minion.py`: review startup resume integration
-      - `_get_contexts_for_orchestration(...)` replaces the old minion-scoped helper path
-    - `minions/_internal/_framework/state_store_noop.py`: review the noop contract adaptation
-    - `tests/assets/support/state_store_inmemory.py`: review the test-store move to the stored-row/blob model
-    - `tests/minions/_internal/_framework/test_state_store_contract.py`: review the end-to-end contract expectations
-    - `tests/minions/_internal/_framework/state_store_sqlite/`: review SQLite-specific backend expectations
-    - `tests/minions/_internal/_domain/minion/test_workflow_resume.py`: review the resume test update for the new persisted payload shape
-    - `tests/support/gru_scenario/verify.py`: review the verifier rename from minion-context lookup to orchestration-context lookup
-    - `tests/support/gru_scenario/tests/test_verify.py`: review the matching verifier test updates
-    - `benchmarks/minion_workflow_context_persistence.py`: review the canonical blob-path benchmark coverage
-    - `WORKFLOW_CONTEXT_PERF_PLAN.md`: review the running log and benchmark results for the refactor
-
 - todo: audit the test suite to align with the default-backend + contract-test strategy
   - for each system component base class, ensure there is a contract test file
   - check higher-level/domain tests to ensure they use the in-memory system component by default
