@@ -8,6 +8,7 @@ from prometheus_client import CollectorRegistry
 
 from minions._internal._framework.logger import WARNING
 from minions._internal._framework.logger_noop import NoOpLogger
+from minions._internal._framework.metrics import Kind
 from minions._internal._framework.metrics_constants import (
     LABEL_MINION,
     LABEL_MINION_WORKFLOW_STEP,
@@ -194,12 +195,13 @@ def test_state_store_payload_histogram_uses_byte_buckets(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["counter", "gauge", "histogram"])
 async def test_zero_label_metrics_update_without_unknown_warning(
-    kind: str,
+    kind: Kind,
     monkeypatch: pytest.MonkeyPatch,
     logger: InMemoryLogger,
 ):
     metric_name = f"test_zero_label_{kind}"
     monkeypatch.setitem(METRIC_LABEL_NAMES, metric_name, [])
+    assert METRIC_LABEL_NAMES[metric_name] == []
     registry = CollectorRegistry()
     metrics = PrometheusMetrics(logger=logger, registry=registry)
 

@@ -2,38 +2,43 @@ import asyncio
 
 import pytest
 
-from minions._internal._framework.metrics_constants import METRIC_LABEL_NAMES
+from minions._internal._framework.metrics_constants import (
+    LABEL_MINION,
+    LABEL_OPERATION,
+    LABEL_ORCHESTRATION_ID,
+    LABEL_PIPELINE,
+    LABEL_STATE_STORE_TYPE,
+    METRIC_LABEL_NAMES,
+    MINION_WORKFLOW_INFLIGHT_GAUGE,
+    PIPELINE_EVENT_PRODUCED_TOTAL,
+    STATE_STORE_OPERATION_DURATION_SECONDS,
+)
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 
 
 class TestInMemoryMetrics:
-    def test_counter_healthy_with_label_ordering(self, monkeypatch: pytest.MonkeyPatch):
+    def test_counter_healthy_with_label_ordering(self):
         """
-        Counter increments aggregate correctly; labels follow METRIC_LABEL_NAMES order.
+        Counter increments aggregate correctly; labels follow the supplied schema order.
         """
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "my_counter", ["minion", "pipeline"])
-
         m = InMemoryMetrics()
-        # Get backend metric and exercise via LabelledMetric API
-        counter = m._mn_get_metric_unsafe("counter", "my_counter")
+        counter = m.create_metric("my_counter", ["pipeline", "minion"], "counter")
         counter.labels(minion="m1", pipeline="p1").inc(2)
         counter.labels(minion="m1", pipeline="p1").inc()  # +1
 
         samples = m.snapshot_counters()["my_counter"]
         assert len(samples) == 1
         sample = samples[0]
-        assert sample["labels"] == {"minion": "m1", "pipeline": "p1"}
-        assert list(sample["labels"].keys()) == ["minion", "pipeline"]
+        assert sample["labels"] == {"pipeline": "p1", "minion": "m1"}
+        assert list(sample["labels"].keys()) == ["pipeline", "minion"]
         assert sample["value"] == 3.0
 
-    def test_gauge_set_with_missing_label_defaults(self, monkeypatch: pytest.MonkeyPatch):
+    def test_gauge_set_with_missing_label_defaults(self):
         """
         Gauge .set() overwrites, and missing expected labels default to "".
         """
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "cpu_gauge", ["region"])
-
         m = InMemoryMetrics()
-        gauge = m._mn_get_metric_unsafe("gauge", "cpu_gauge")
+        gauge = m.create_metric("cpu_gauge", ["region"], "gauge")
         gauge.labels().set(10.5)  # region defaults to ""
         gauge.labels(region="us-east").set(7.0)
         gauge.labels(region="us-east").set(8.0)  # overwrite
@@ -43,29 +48,32 @@ class TestInMemoryMetrics:
 
     def test_label_mismatch_is_rejected_only_when_contract_is_asserted(
         self,
-        monkeypatch: pytest.MonkeyPatch,
     ):
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "requests_total", ["route"])
         metrics = InMemoryMetrics()
-        counter = metrics._mn_get_metric_unsafe("counter", "requests_total")
+        counter = metrics.create_metric(
+            PIPELINE_EVENT_PRODUCED_TOTAL,
+            [LABEL_PIPELINE],
+            "counter",
+        )
 
         counter.labels(unexpected="value").inc()
 
-        assert metrics.snapshot_counter_value("requests_total", {"route": ""}) == 1
+        assert metrics.snapshot_counter_value(
+            PIPELINE_EVENT_PRODUCED_TOTAL,
+            {LABEL_PIPELINE: ""},
+        ) == 1
         with pytest.raises(
             AssertionError,
-            match=r"missing=\['route'\] extra=\['unexpected'\]",
+            match=r"missing=\['pipeline'\] extra=\['unexpected'\]",
         ):
             metrics.assert_metric_label_observations_match_contract()
 
-    def test_histogram_observe_aggregates(self, monkeypatch: pytest.MonkeyPatch):
+    def test_histogram_observe_aggregates(self):
         """
         Histogram aggregates count/sum/min/max for a label set.
         """
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "latency_seconds", ["route"])
-
         m = InMemoryMetrics()
-        h = m._mn_get_metric_unsafe("histogram", "latency_seconds")
+        h = m.create_metric("latency_seconds", ["route"], "histogram")
         h.labels(route="/v1/foo").observe(0.120)
         h.labels(route="/v1/foo").observe(0.080)
         h.labels(route="/v1/foo").observe(0.200)
@@ -80,12 +88,9 @@ class TestInMemoryMetrics:
 
     def test_snapshot_counter_value_total_across_label_sets(
         self,
-        monkeypatch: pytest.MonkeyPatch,
     ):
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "requests_total", ["route"])
-
         metrics = InMemoryMetrics()
-        counter = metrics._mn_get_metric_unsafe("counter", "requests_total")
+        counter = metrics.create_metric("requests_total", ["route"], "counter")
         counter.labels(route="/a").inc(2)
         counter.labels(route="/b").inc(3)
 
@@ -93,12 +98,9 @@ class TestInMemoryMetrics:
 
     def test_snapshot_counter_value_selects_label_set(
         self,
-        monkeypatch: pytest.MonkeyPatch,
     ):
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "requests_total", ["route"])
-
         metrics = InMemoryMetrics()
-        counter = metrics._mn_get_metric_unsafe("counter", "requests_total")
+        counter = metrics.create_metric("requests_total", ["route"], "counter")
         counter.labels(route="/a").inc(2)
         counter.labels(route="/b").inc(3)
 
@@ -106,12 +108,9 @@ class TestInMemoryMetrics:
 
     def test_snapshot_gauge_value_total_across_label_sets(
         self,
-        monkeypatch: pytest.MonkeyPatch,
     ):
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "connections", ["host"])
-
         metrics = InMemoryMetrics()
-        gauge = metrics._mn_get_metric_unsafe("gauge", "connections")
+        gauge = metrics.create_metric("connections", ["host"], "gauge")
         gauge.labels(host="a").set(4)
         gauge.labels(host="b").set(5)
 
@@ -119,24 +118,19 @@ class TestInMemoryMetrics:
 
     def test_snapshot_gauge_value_selects_label_set(
         self,
-        monkeypatch: pytest.MonkeyPatch,
     ):
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "connections", ["host"])
-
         metrics = InMemoryMetrics()
-        gauge = metrics._mn_get_metric_unsafe("gauge", "connections")
+        gauge = metrics.create_metric("connections", ["host"], "gauge")
         gauge.labels(host="a").set(4)
         gauge.labels(host="b").set(5)
 
         assert metrics.snapshot_gauge_value("connections", {"host": "b"}) == 5
 
     def test_snapshot_histogram_count_total_across_label_sets(
-        self, monkeypatch: pytest.MonkeyPatch
+        self,
     ):
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "latency_seconds", ["route"])
-
         metrics = InMemoryMetrics()
-        histogram = metrics._mn_get_metric_unsafe("histogram", "latency_seconds")
+        histogram = metrics.create_metric("latency_seconds", ["route"], "histogram")
         histogram.labels(route="/a").observe(0.1)
         histogram.labels(route="/b").observe(0.2)
         histogram.labels(route="/b").observe(0.3)
@@ -145,12 +139,9 @@ class TestInMemoryMetrics:
 
     def test_snapshot_histogram_count_selects_label_set(
         self,
-        monkeypatch: pytest.MonkeyPatch,
     ):
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "latency_seconds", ["route"])
-
         metrics = InMemoryMetrics()
-        histogram = metrics._mn_get_metric_unsafe("histogram", "latency_seconds")
+        histogram = metrics.create_metric("latency_seconds", ["route"], "histogram")
         histogram.labels(route="/a").observe(0.1)
         histogram.labels(route="/b").observe(0.2)
         histogram.labels(route="/b").observe(0.3)
@@ -159,12 +150,9 @@ class TestInMemoryMetrics:
 
     def test_snapshot_histogram_sum_total_across_label_sets(
         self,
-        monkeypatch: pytest.MonkeyPatch,
     ):
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "latency_seconds", ["route"])
-
         metrics = InMemoryMetrics()
-        histogram = metrics._mn_get_metric_unsafe("histogram", "latency_seconds")
+        histogram = metrics.create_metric("latency_seconds", ["route"], "histogram")
         histogram.labels(route="/a").observe(0.1)
         histogram.labels(route="/b").observe(0.2)
         histogram.labels(route="/b").observe(0.3)
@@ -176,12 +164,9 @@ class TestInMemoryMetrics:
 
     def test_snapshot_histogram_sum_selects_label_set(
         self,
-        monkeypatch: pytest.MonkeyPatch,
     ):
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "latency_seconds", ["route"])
-
         metrics = InMemoryMetrics()
-        histogram = metrics._mn_get_metric_unsafe("histogram", "latency_seconds")
+        histogram = metrics.create_metric("latency_seconds", ["route"], "histogram")
         histogram.labels(route="/a").observe(0.1)
         histogram.labels(route="/b").observe(0.2)
         histogram.labels(route="/b").observe(0.3)
@@ -193,62 +178,53 @@ class TestInMemoryMetrics:
 
     def test_snapshot_counter_value_raises_when_labels_are_not_found(
         self,
-        monkeypatch: pytest.MonkeyPatch,
     ):
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "requests_total", ["route"])
-
         metrics = InMemoryMetrics()
-        counter = metrics._mn_get_metric_unsafe("counter", "requests_total")
+        counter = metrics.create_metric("requests_total", ["route"], "counter")
         counter.labels(route="/a").inc()
 
         with pytest.raises(AssertionError, match="labels not found in snapshot"):
             metrics.snapshot_counter_value("requests_total", {"route": "/missing"})
 
-    def test_unbound_metric_methods_raise(self, monkeypatch: pytest.MonkeyPatch):
+    def test_unbound_metric_methods_raise(self):
         """
         Calling .inc/.set/.observe on the unbound metric (without .labels()) should raise TypeError.
         """
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "events_total", ["minion"])
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "temperature_celsius", ["sensor"])
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "payload_bytes", ["endpoint"])
         m = InMemoryMetrics()
 
-        ctr = m._mn_get_metric_unsafe("counter", "events_total")
+        ctr = m.create_metric("events_total", ["minion"], "counter")
         with pytest.raises(TypeError):
             ctr.inc(1)
 
-        g = m._mn_get_metric_unsafe("gauge", "temperature_celsius")
+        g = m.create_metric("temperature_celsius", ["sensor"], "gauge")
         with pytest.raises(TypeError):
             g.set(42)
 
-        h = m._mn_get_metric_unsafe("histogram", "payload_bytes")
+        h = m.create_metric("payload_bytes", ["endpoint"], "histogram")
         with pytest.raises(TypeError):
             h.observe(10)
 
     @pytest.mark.asyncio
-    async def test_undeclared_metric_is_rejected_without_creating_metric(
+    async def test_undeclared_metric_operation_is_rejected_without_registration(
         self,
-        monkeypatch: pytest.MonkeyPatch,
     ):
         """
         Metrics not listed in METRIC_LABEL_NAMES are rejected before framework registration.
         """
         metric_name = "undeclared_metric"
-        monkeypatch.delitem(METRIC_LABEL_NAMES, metric_name, raising=False)
+        assert metric_name not in METRIC_LABEL_NAMES
 
         m = InMemoryMetrics()
         await m._mn_inc(metric_name, labels={"route": "/v1"})
 
         assert metric_name not in m.snapshot_counters()
 
-    def test_counter_multiple_label_sets(self, monkeypatch: pytest.MonkeyPatch):
+    def test_counter_multiple_label_sets(self):
         """
         Multiple distinct label sets are tracked independently.
         """
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "jobs_total", ["queue", "status"])
-
         m = InMemoryMetrics()
-        ctr = m._mn_get_metric_unsafe("counter", "jobs_total")
+        ctr = m.create_metric("jobs_total", ["queue", "status"], "counter")
         ctr.labels(queue="alpha", status="ok").inc(5)
         ctr.labels(queue="alpha", status="fail").inc(2)
         ctr.labels(queue="beta", status="ok").inc()
@@ -267,51 +243,62 @@ class TestInMemoryMetrics:
         ) == 1.0
 
     @pytest.mark.asyncio
-    async def test_async_metric_operations_update_all_metric_types(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_async_metric_operations_update_all_metric_types(self):
         """
-        Drive the async metric operations and verify snapshots reflect the updates.
+        Drive async operations for declared framework metrics and verify snapshots.
         """
-        # Declare expected labels for stable ordering/defaults
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "jobs_total", ["queue", "status"])
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "cpu_used_percent", ["region"])
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "op_latency_seconds", ["route"])
-
         m = InMemoryMetrics()
 
         # Counters
-        await m._mn_inc("jobs_total", amount=2, labels={"queue": "alpha", "status": "ok"})
-        await m._mn_inc("jobs_total", amount=1, labels={"queue": "alpha", "status": "ok"})
-        await m._mn_inc("jobs_total", amount=5, labels={"queue": "beta", "status": "fail"})
+        await m._mn_inc(PIPELINE_EVENT_PRODUCED_TOTAL, amount=2, labels={LABEL_PIPELINE: "alpha"})
+        await m._mn_inc(PIPELINE_EVENT_PRODUCED_TOTAL, amount=1, labels={LABEL_PIPELINE: "alpha"})
+        await m._mn_inc(PIPELINE_EVENT_PRODUCED_TOTAL, amount=5, labels={LABEL_PIPELINE: "beta"})
 
         # Gauges (overwrite behavior)
-        await m._mn_set("cpu_used_percent", 11.0)  # region defaults to ""
-        await m._mn_set("cpu_used_percent", 7.5, labels={"region": "us"})  # set explicit
-        await m._mn_set("cpu_used_percent", 9.0, labels={"region": "us"})  # overwrite
+        await m._mn_set(MINION_WORKFLOW_INFLIGHT_GAUGE, 11.0)
+        await m._mn_set(
+            MINION_WORKFLOW_INFLIGHT_GAUGE,
+            7.5,
+            labels={LABEL_MINION: "m1", LABEL_ORCHESTRATION_ID: "o1"},
+        )
+        await m._mn_set(
+            MINION_WORKFLOW_INFLIGHT_GAUGE,
+            9.0,
+            labels={LABEL_MINION: "m1", LABEL_ORCHESTRATION_ID: "o1"},
+        )
 
         # Histograms (aggregate)
-        await m._mn_observe("op_latency_seconds", 0.15, labels={"route": "/v1/foo"})
-        await m._mn_observe("op_latency_seconds", 0.10, labels={"route": "/v1/foo"})
-        await m._mn_observe("op_latency_seconds", 0.25, labels={"route": "/v1/foo"})
+        histogram_labels = {
+            LABEL_STATE_STORE_TYPE: "SQLiteStateStore",
+            LABEL_OPERATION: "save",
+        }
+        await m._mn_observe(STATE_STORE_OPERATION_DURATION_SECONDS, 0.15, labels=histogram_labels)
+        await m._mn_observe(STATE_STORE_OPERATION_DURATION_SECONDS, 0.10, labels=histogram_labels)
+        await m._mn_observe(STATE_STORE_OPERATION_DURATION_SECONDS, 0.25, labels=histogram_labels)
 
         # Assert counters
         assert m.snapshot_counter_value(
-            "jobs_total",
-            {"queue": "alpha", "status": "ok"},
+            PIPELINE_EVENT_PRODUCED_TOTAL,
+            {LABEL_PIPELINE: "alpha"},
         ) == 3.0
         assert m.snapshot_counter_value(
-            "jobs_total",
-            {"queue": "beta", "status": "fail"},
+            PIPELINE_EVENT_PRODUCED_TOTAL,
+            {LABEL_PIPELINE: "beta"},
         ) == 5.0
 
         # Assert gauges
-        assert m.snapshot_gauge_value("cpu_used_percent", {"region": ""}) == 11.0
-        assert m.snapshot_gauge_value("cpu_used_percent", {"region": "us"}) == 9.0
+        assert m.snapshot_gauge_value(
+            MINION_WORKFLOW_INFLIGHT_GAUGE,
+            {LABEL_MINION: "", LABEL_ORCHESTRATION_ID: ""},
+        ) == 11.0
+        assert m.snapshot_gauge_value(
+            MINION_WORKFLOW_INFLIGHT_GAUGE,
+            {LABEL_MINION: "m1", LABEL_ORCHESTRATION_ID: "o1"},
+        ) == 9.0
 
         # Assert histograms
-        hsnap = m.snapshot_histograms()["op_latency_seconds"]
-        stats = InMemoryMetrics.find_sample(hsnap, {"route": "/v1/foo"})
+        hsnap = m.snapshot_histograms()[STATE_STORE_OPERATION_DURATION_SECONDS]
+        stats = InMemoryMetrics.find_sample(hsnap, histogram_labels)
         assert stats["count"] == 3.0
         assert stats["sum"] == pytest.approx(  # pyright: ignore[reportUnknownMemberType]
             0.50,
@@ -319,45 +306,54 @@ class TestInMemoryMetrics:
         )
 
     @pytest.mark.asyncio
-    async def test_async_metric_operations_apply_label_defaults_and_ordering(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_async_metric_operations_apply_label_defaults_and_ordering(self):
         """
-        Missing expected labels default to "" and ordering follows METRIC_LABEL_NAMES.
+        Missing expected labels default to "" and ordering follows the declared schema.
         """
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "mem_used_bytes", ["host", "region"])
         m = InMemoryMetrics()
 
-        # host present, region missing -> defaults to ""
-        await m._mn_set("mem_used_bytes", 123.0, labels={"host": "h1"})
+        # minion present, orchestration_id missing -> defaults to ""
+        await m._mn_set(
+            MINION_WORKFLOW_INFLIGHT_GAUGE,
+            123.0,
+            labels={LABEL_MINION: "m1"},
+        )
         # both present, order in kwargs shouldn't matter
-        await m._mn_set("mem_used_bytes", 456.0, labels={"region": "us-east", "host": "h1"})
+        await m._mn_set(
+            MINION_WORKFLOW_INFLIGHT_GAUGE,
+            456.0,
+            labels={LABEL_ORCHESTRATION_ID: "o1", LABEL_MINION: "m1"},
+        )
 
         assert m.snapshot_gauge_value(
-            "mem_used_bytes",
-            {"host": "h1", "region": ""},
+            MINION_WORKFLOW_INFLIGHT_GAUGE,
+            {LABEL_MINION: "m1", LABEL_ORCHESTRATION_ID: ""},
         ) == 123.0
         assert m.snapshot_gauge_value(
-            "mem_used_bytes",
-            {"host": "h1", "region": "us-east"},
+            MINION_WORKFLOW_INFLIGHT_GAUGE,
+            {LABEL_MINION: "m1", LABEL_ORCHESTRATION_ID: "o1"},
         ) == 456.0
 
     @pytest.mark.asyncio
-    async def test_async_metric_operations_preserve_all_concurrent_updates(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
+    async def test_async_metric_operations_preserve_all_concurrent_updates(self):
         """
         Ensure counter updates are safe when awaited concurrently across tasks.
         """
-        monkeypatch.setitem(METRIC_LABEL_NAMES, "events_total", ["minion"])
         m = InMemoryMetrics()
 
         async def bump(n: int) -> None:
             for _ in range(n):
-                await m._mn_inc("events_total", amount=1, labels={"minion": "m1"})
+                await m._mn_inc(
+                    PIPELINE_EVENT_PRODUCED_TOTAL,
+                    amount=1,
+                    labels={LABEL_PIPELINE: "p1"},
+                )
 
         # 5 tasks * 200 increments = 1000
         tasks = [asyncio.create_task(bump(200)) for _ in range(5)]
         await asyncio.gather(*tasks)
 
-        assert m.snapshot_counter_value("events_total", {"minion": "m1"}) == 1000.0
+        assert m.snapshot_counter_value(
+            PIPELINE_EVENT_PRODUCED_TOTAL,
+            {LABEL_PIPELINE: "p1"},
+        ) == 1000.0

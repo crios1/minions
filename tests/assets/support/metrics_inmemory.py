@@ -14,7 +14,6 @@ from minions._internal._framework.metrics import (
     SnapshotHistograms,
     SnapshotResult,
 )
-from minions._internal._framework.metrics_constants import METRIC_LABEL_NAMES
 from minions._internal._framework.metrics_interface import (
     LabelledCounter,
     LabelledGauge,
@@ -39,16 +38,15 @@ class _MetricLabelObservation:
 
 # === In-Memory Metric Backend ===
 
-def _normalize_labels(metric_name: str, labels: dict[str, Any]) -> LabelKey:
+def _normalize_labels(label_names: list[str], labels: dict[str, Any]) -> LabelKey:
     """
-    Normalize labels to a stable, hashable key:
-    - If metric is known in METRIC_LABEL_NAMES, use that order and default missing to "".
-    - Otherwise, accept whatever was provided; sort by key.
+    Normalize labels to a stable, hashable key using the metric's declared schema:
+    - Use the declared order and default missing labels to "".
+    - For a metric with no declared labels, accept whatever was provided and sort by key.
     - Coerce values to str for stability.
     """
-    expected = METRIC_LABEL_NAMES.get(metric_name, [])
-    if expected:
-        items = tuple((name, str(labels.get(name, ""))) for name in expected)
+    if label_names:
+        items = tuple((name, str(labels.get(name, ""))) for name in label_names)
     else:
         items = tuple(sorted((k, str(v)) for k, v in labels.items()))
     return items
@@ -125,7 +123,7 @@ class _InMemoryMetric:
                 labels=frozenset(kwargs),
             )
         )
-        label_key = _normalize_labels(self.name, kwargs)
+        label_key = _normalize_labels(self.label_names, kwargs)
         # Ensure slot exists for counters/gauges; histograms lazy-init on observe()
         if self.kind in ("counter", "gauge"):
             with self._lock:
