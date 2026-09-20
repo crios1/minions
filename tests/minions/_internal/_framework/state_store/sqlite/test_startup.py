@@ -1,6 +1,7 @@
 import os
 import sqlite3
 from pathlib import Path
+from types import TracebackType
 from typing import Any
 
 import pytest
@@ -9,6 +10,7 @@ from minions._internal._framework.state_store_sqlite import (
     DEFAULT_BATCH_MAX_FLUSH_DELAY_MS,
     DEFAULT_BATCH_MAX_QUEUED_WRITES,
     SQL_WORKFLOW_DELETE,
+    SQL_WORKFLOW_SELECT_BY_ID,
     SQL_WORKFLOW_UPSERT,
     SQL_WORKFLOWS_TABLE_CREATE_IF_NOT_EXISTS,
     WORKFLOW_ID_COMMIT_MEASUREMENT_PROBE,
@@ -17,10 +19,66 @@ from minions._internal._framework.state_store_sqlite import (
     SQLiteStateStore,
 )
 from tests.assets.support.logger_inmemory import InMemoryLogger
-from tests.minions._internal._framework.state_store.sqlite._support import StartupProbeDb
 from tests.minions._internal._framework.state_store.sqlite.conftest import MakeStateStoreAndLogger
 
 pytestmark = pytest.mark.asyncio
+
+
+class _StaticRowCursor:
+    def __init__(self, row: tuple[str, bytes] | None):
+        self._row = row
+
+    async def fetchone(self) -> tuple[str, bytes] | None:
+        return self._row
+
+
+class _StaticCursorContext:
+    def __init__(self, row: tuple[str, bytes] | None):
+        self._row = row
+
+    async def __aenter__(self) -> _StaticRowCursor:
+        return _StaticRowCursor(self._row)
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> bool:
+        return False
+
+
+async def _return_no_result() -> None:
+    return None
+
+
+class StartupProbeDb:
+    def __init__(
+        self, *, select_row: tuple[str, bytes] | None, delete_error: Exception | None = None
+    ):
+        self._select_row = select_row
+        self._delete_error = delete_error
+
+    def execute(self, sql: str, params: tuple[Any, ...] = ()) -> object:
+        if sql == SQL_WORKFLOW_UPSERT:
+            assert params == (
+                WORKFLOW_ID_STARTUP_PROBE,
+                WORKFLOW_ID_STARTUP_PROBE,
+                b"startup-probe",
+            )
+            return _return_no_result()
+        if sql == SQL_WORKFLOW_SELECT_BY_ID:
+            assert params == (WORKFLOW_ID_STARTUP_PROBE,)
+            return _StaticCursorContext(self._select_row)
+        if sql == SQL_WORKFLOW_DELETE:
+            assert params == (WORKFLOW_ID_STARTUP_PROBE,)
+            if self._delete_error is not None:
+                raise self._delete_error
+            return _return_no_result()
+        raise AssertionError(f"unexpected SQL: {sql!r}")
+
+    async def commit(self) -> None:
+        return None
 
 
 # Startup Contract / Schema

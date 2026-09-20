@@ -7,6 +7,7 @@ from minions._internal._framework.state_store_sqlite import SQLiteStateStore, Wa
 from tests.minions._internal._framework.state_store.sqlite._support import (
     BlockedCommitBatchNowGate,
     blob_for,
+    cancel_and_suppress_task_exceptions,
     mk_ctx,
 )
 from tests.minions._internal._framework.state_store.sqlite.conftest import MakeStateStoreAndLogger
@@ -165,7 +166,8 @@ async def test_queued_writes_warning_counts_batches_waiting_for_commit(
         commit_gate.release()
         await asyncio.wait_for(asyncio.gather(*tasks), timeout=2.0)
     finally:
-        await commit_gate.release_and_cancel_and_await_tasks(*tasks)
+        commit_gate.release()
+        await cancel_and_suppress_task_exceptions(*tasks)
 
 
 async def test_commit_p95_warning(make_state_store_and_logger: MakeStateStoreAndLogger):

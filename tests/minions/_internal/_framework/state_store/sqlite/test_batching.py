@@ -15,7 +15,7 @@ from minions._internal._framework.state_store_sqlite import (
 from tests.minions._internal._framework.state_store.sqlite._support import (
     BlockedCommitBatchNowGate,
     blob_for,
-    cancel_and_await_tasks,
+    cancel_and_suppress_task_exceptions,
     mk_ctx,
 )
 from tests.minions._internal._framework.state_store.sqlite.conftest import MakeStateStoreAndLogger
@@ -125,7 +125,7 @@ async def test_single_write_is_flushed_with_batch_max_interarrival_delay_ms(
         await asyncio.wait_for(flush_started.wait(), timeout=1.0)
         await asyncio.wait_for(save_task, timeout=1.0)
     finally:
-        await cancel_and_await_tasks(save_task)
+        await cancel_and_suppress_task_exceptions(save_task)
 
     rows = await s.get_all_contexts()
     assert any(row.workflow_id == ctx.workflow_id for row in rows)
@@ -201,8 +201,8 @@ async def test_max_flush_delay_still_applies_during_continuous_arrivals(
         await producer
         await asyncio.wait_for(asyncio.gather(*tasks), timeout=1.0)
     finally:
-        await cancel_and_await_tasks(producer)
-        await cancel_and_await_tasks(*tasks)
+        await cancel_and_suppress_task_exceptions(producer)
+        await cancel_and_suppress_task_exceptions(*tasks)
 
 
 async def test_delete_context_batches_but_waits_for_batch_commit(
@@ -272,7 +272,8 @@ async def test_flush_paths_do_not_overlap_transactions(
         assert ids == {ctx1.workflow_id, ctx2.workflow_id}
         assert commit_gate.max_active_commit_count == 1
     finally:
-        await commit_gate.release_and_cancel_and_await_tasks(save1, save2, read_all)
+        commit_gate.release()
+        await cancel_and_suppress_task_exceptions(save1, save2, read_all)
 
 
 async def test_write_arriving_during_scheduled_flush_gets_next_flush_task(
@@ -311,7 +312,8 @@ async def test_write_arriving_during_scheduled_flush_gets_next_flush_task(
         assert {ctx1.workflow_id, ctx2.workflow_id}.issubset(ids)
         assert commit_gate.commit_count >= 2
     finally:
-        await commit_gate.release_and_cancel_and_await_tasks(save1, save2)
+        commit_gate.release()
+        await cancel_and_suppress_task_exceptions(save1, save2)
 
 
 async def test_subsequent_writes_succeed_after_scheduled_flush_failure_settles_buffered_writes(
@@ -436,7 +438,8 @@ async def test_cancelled_cap_triggering_save_does_not_cancel_shared_batch_commit
         ids = {row.workflow_id for row in rows}
         assert {c1.workflow_id, c2.workflow_id}.issubset(ids)
     finally:
-        await commit_gate.release_and_cancel_and_await_tasks(save1, save2)
+        commit_gate.release()
+        await cancel_and_suppress_task_exceptions(save1, save2)
 
 
 async def test_separate_batches_commit_in_fifo_order_for_same_workflow(
@@ -470,7 +473,8 @@ async def test_separate_batches_commit_in_fifo_order_for_same_workflow(
             ("delete", ctx.workflow_id),
         ]
     finally:
-        await commit_gate.release_and_cancel_and_await_tasks(save_task, delete_task)
+        commit_gate.release()
+        await cancel_and_suppress_task_exceptions(save_task, delete_task)
 
 
 async def test_flush_waits_for_worker_after_commit_batch_is_popped_from_queue(
@@ -503,7 +507,8 @@ async def test_flush_waits_for_worker_after_commit_batch_is_popped_from_queue(
         rows = await s.get_all_contexts()
         assert any(row.workflow_id == ctx.workflow_id for row in rows)
     finally:
-        await commit_gate.release_and_cancel_and_await_tasks(save_task, flush_task)
+        commit_gate.release()
+        await cancel_and_suppress_task_exceptions(save_task, flush_task)
 
 
 async def test_same_batch_delete_then_save_keeps_row(
@@ -639,7 +644,8 @@ async def test_shutdown_waits_for_active_scheduled_flush_commit(
         await asyncio.wait_for(shutdown_task, timeout=1.0)
         await asyncio.wait_for(save_task, timeout=1.0)
     finally:
-        await commit_gate.release_and_cancel_and_await_tasks(shutdown_task, save_task)
+        commit_gate.release()
+        await cancel_and_suppress_task_exceptions(shutdown_task, save_task)
 
 
 async def test_shutdown_flushes_pending_batch_buffer(
