@@ -1,5 +1,6 @@
 import threading
 from typing import Literal, overload
+from wsgiref.simple_server import WSGIServer
 
 from prometheus_client import (
     REGISTRY,
@@ -102,12 +103,17 @@ class PrometheusMetrics(Metrics):
         self._registry = registry
         self._started = False
         self._started_lock = threading.Lock()
+        self._http_server: tuple[WSGIServer, threading.Thread] | None = None
 
     async def startup(self) -> None:
         try:
             with self._started_lock:
                 if not self._started:
-                    start_http_server(port=self._port, addr=self._addr, registry=self._registry)
+                    self._http_server = start_http_server(
+                        port=self._port,
+                        addr=self._addr,
+                        registry=self._registry,
+                    )
                     self._started = True
         except Exception as e:
             await self._mn_logger._mn_log_exception(
@@ -115,6 +121,23 @@ class PrometheusMetrics(Metrics):
                 "[Prometheus] Failed to start metrics HTTP server",
                 e,
             )
+
+    async def shutdown(self) -> None:
+        with self._started_lock:
+            http_server = self._http_server
+            self._http_server = None
+            self._started = False
+
+        if http_server is None:
+            return
+
+        server, thread = http_server
+        try:
+            server.shutdown()
+        finally:
+            server.server_close()
+            if thread is not threading.current_thread():
+                thread.join()
 
     @overload
     def create_metric(
