@@ -14,7 +14,9 @@ Each cycle:
    orchestrations;
 6. verifies the healthy and probe branches, their shared Resources, and all
    runtime maps remain consistent; and
-7. stops the probe before rebuilding the failed branch in the next cycle.
+7. stops the probe before rebuilding the failed branch in the next cycle,
+   accepting a normal stop or explicitly forcing the stop only when the runtime
+   reports a persistence risk.
 
 The workload uses `InMemoryStateStore`, `InMemoryMetrics`, and
 `InMemoryLogger`. It performs no SQLite or filesystem I/O.

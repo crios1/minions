@@ -149,8 +149,21 @@ async def test_repeated_shared_resource_failures_remain_contained():
             await assert_runtime_component_maps_consistent(gru)
             await assert_runtime_resource_maps_consistent(gru)
 
-            stopped_probe = await gru.stop_orchestration(probe.orchestration_id)
-            assert stopped_probe.success
+            normal_probe_stop = await gru.stop_orchestration(probe.orchestration_id)
+            if normal_probe_stop.success:
+                assert not normal_probe_stop.blocked_by_persistence_risk
+            else:
+                assert normal_probe_stop.blocked_by_persistence_risk
+                assert normal_probe_stop.persistence_risks
+                forced_probe_stop = await gru.stop_orchestration(
+                    probe.orchestration_id,
+                    force=True,
+                )
+                assert forced_probe_stop.success
+                assert (
+                    forced_probe_stop.persistence_risks
+                    == normal_probe_stop.persistence_risks
+                )
             probe_stopped = await gru.runtime_state_snapshot()
             assert probe_stopped.orchestrations == {healthy_id}
             assert probe_stopped.resources == healthy_resources
