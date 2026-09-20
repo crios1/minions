@@ -7,6 +7,7 @@ To create a custom metrics backend:
 
 The framework will automatically:
 - Look up metric label names from METRIC_LABEL_NAMES
+- Validate operation label keys against each metric's declared schema
 - Handle registry, locking, and lifecycle
 - Call `.labels(**labels).inc()/set()/observe()` on the returned objects
 """
@@ -65,7 +66,8 @@ class Metrics(LoggerBackedAsyncComponent):
     - snapshot_gauges()
     - snapshot_histograms()
 
-    Label names are managed by the framework; you only handle metric creation.
+    Metric label names and operation label keys are managed by the framework;
+    backend implementations only handle metric creation and value updates.
     """
 
     _mn_user_facing = True
@@ -101,6 +103,22 @@ class Metrics(LoggerBackedAsyncComponent):
             )
         return labels
 
+    def _mn_validate_metric_labels(
+        self,
+        metric_name: str,
+        labels: Labels | None,
+    ) -> None:
+        expected = frozenset(self._mn_get_label_names_for_metric(metric_name))
+        actual = frozenset((labels or {}).keys())
+        if actual == expected:
+            return
+
+        raise ValueError(
+            f"Metric '{metric_name}' label keys do not match declared schema: "
+            f"expected={sorted(expected)!r} actual={sorted(actual)!r} "
+            f"missing={sorted(expected - actual)!r} extra={sorted(actual - expected)!r}"
+        )
+
     @overload
     def _mn_get_metric_unsafe(
         self, kind: Literal["counter"], metric_name: str
@@ -129,14 +147,17 @@ class Metrics(LoggerBackedAsyncComponent):
             return metric
 
     def _mn_inc_unsafe(self, metric_name: str, amount: float = 1, labels: Labels | None = None):
+        self._mn_validate_metric_labels(metric_name, labels)
         metric = self._mn_get_metric_unsafe("counter", metric_name)
         metric.labels(**(labels or {})).inc(amount=amount)
 
     def _mn_set_unsafe(self, metric_name: str, value: float, labels: Labels | None = None):
+        self._mn_validate_metric_labels(metric_name, labels)
         metric = self._mn_get_metric_unsafe("gauge", metric_name)
         metric.labels(**(labels or {})).set(value)
 
     def _mn_observe_unsafe(self, metric_name: str, value: float, labels: Labels | None = None):
+        self._mn_validate_metric_labels(metric_name, labels)
         metric = self._mn_get_metric_unsafe("histogram", metric_name)
         metric.labels(**(labels or {})).observe(value)
 

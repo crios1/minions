@@ -255,7 +255,11 @@ class TestInMemoryMetrics:
         await m._mn_inc(PIPELINE_EVENT_PRODUCED_TOTAL, amount=5, labels={LABEL_PIPELINE: "beta"})
 
         # Gauges (overwrite behavior)
-        await m._mn_set(MINION_WORKFLOW_INFLIGHT_GAUGE, 11.0)
+        await m._mn_set(
+            MINION_WORKFLOW_INFLIGHT_GAUGE,
+            11.0,
+            labels={LABEL_MINION: "", LABEL_ORCHESTRATION_ID: ""},
+        )
         await m._mn_set(
             MINION_WORKFLOW_INFLIGHT_GAUGE,
             7.5,
@@ -306,19 +310,15 @@ class TestInMemoryMetrics:
         )
 
     @pytest.mark.asyncio
-    async def test_async_metric_operations_apply_label_defaults_and_ordering(self):
-        """
-        Missing expected labels default to "" and ordering follows the declared schema.
-        """
+    async def test_async_metric_operations_require_exact_declared_label_keys(self):
+        """Framework operations reject missing and extra declared label keys."""
         m = InMemoryMetrics()
 
-        # minion present, orchestration_id missing -> defaults to ""
         await m._mn_set(
             MINION_WORKFLOW_INFLIGHT_GAUGE,
             123.0,
-            labels={LABEL_MINION: "m1"},
+            labels={LABEL_MINION: "m1", LABEL_ORCHESTRATION_ID: "o1", "unexpected": "x"},
         )
-        # both present, order in kwargs shouldn't matter
         await m._mn_set(
             MINION_WORKFLOW_INFLIGHT_GAUGE,
             456.0,
@@ -327,12 +327,49 @@ class TestInMemoryMetrics:
 
         assert m.snapshot_gauge_value(
             MINION_WORKFLOW_INFLIGHT_GAUGE,
-            {LABEL_MINION: "m1", LABEL_ORCHESTRATION_ID: ""},
-        ) == 123.0
-        assert m.snapshot_gauge_value(
-            MINION_WORKFLOW_INFLIGHT_GAUGE,
             {LABEL_MINION: "m1", LABEL_ORCHESTRATION_ID: "o1"},
         ) == 456.0
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("operation", "metric_name", "labels"),
+        [
+            (
+                "inc",
+                PIPELINE_EVENT_PRODUCED_TOTAL,
+                {LABEL_PIPELINE: "p1", "unexpected": "x"},
+            ),
+            (
+                "set",
+                MINION_WORKFLOW_INFLIGHT_GAUGE,
+                {LABEL_MINION: "m1"},
+            ),
+            (
+                "observe",
+                STATE_STORE_OPERATION_DURATION_SECONDS,
+                {LABEL_STATE_STORE_TYPE: "InMemoryStateStore"},
+            ),
+        ],
+    )
+    async def test_async_metric_operations_reject_label_key_mismatches(
+        self,
+        operation: str,
+        metric_name: str,
+        labels: dict[str, str],
+    ):
+        m = InMemoryMetrics()
+
+        if operation == "inc":
+            await m._mn_inc(metric_name, labels=labels)
+            assert metric_name not in m.snapshot_counters()
+        elif operation == "set":
+            await m._mn_set(metric_name, 1.0, labels=labels)
+            assert metric_name not in m.snapshot_gauges()
+        elif operation == "observe":
+            await m._mn_observe(metric_name, 1.0, labels=labels)
+            assert metric_name not in m.snapshot_histograms()
+        else:
+            raise AssertionError(f"unhandled operation: {operation}")
 
     @pytest.mark.asyncio
     async def test_async_metric_operations_preserve_all_concurrent_updates(self):
