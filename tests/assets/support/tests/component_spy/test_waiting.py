@@ -135,7 +135,7 @@ async def test_wait_for_call_resolves_when_sync_method_is_called_in_another_thre
 
 
 @pytest.mark.asyncio
-async def test_cancelling_wait_for_call_during_notification_does_not_report_event_loop_error(
+async def test_wait_for_call_notification_racing_with_cancellation_does_not_report_event_loop_error(
 ):
     class SpiedComponent(metaclass=ComponentSpyMeta):
         def method(self) -> None:
@@ -157,8 +157,13 @@ async def test_cancelling_wait_for_call_during_notification_does_not_report_even
         component.method()
         waiter.cancel()
 
-        with pytest.raises(asyncio.CancelledError):
+        # Notification and cancellation are intentionally unordered across
+        # supported Python versions; either outcome is valid as long as the
+        # queued notification does not report an event-loop error.
+        try:
             await waiter
+        except asyncio.CancelledError:
+            pass
         await asyncio.sleep(0)
     finally:
         loop.set_exception_handler(previous_handler)
