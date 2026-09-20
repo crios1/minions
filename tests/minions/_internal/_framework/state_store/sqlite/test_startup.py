@@ -17,8 +17,8 @@ from minions._internal._framework.state_store_sqlite import (
     SQLiteStateStore,
 )
 from tests.assets.support.logger_inmemory import InMemoryLogger
-from tests.minions._internal._framework.state_store_sqlite._support import StartupProbeDb
-from tests.minions._internal._framework.state_store_sqlite.conftest import MakeStateStoreAndLogger
+from tests.minions._internal._framework.state_store.sqlite._support import StartupProbeDb
+from tests.minions._internal._framework.state_store.sqlite.conftest import MakeStateStoreAndLogger
 
 pytestmark = pytest.mark.asyncio
 

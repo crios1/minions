@@ -4,12 +4,12 @@ import pytest
 
 from minions._internal._framework.logger import CRITICAL, WARNING
 from minions._internal._framework.state_store_sqlite import SQLiteStateStore, WarnThreshold
-from tests.minions._internal._framework.state_store_sqlite._support import (
+from tests.minions._internal._framework.state_store.sqlite._support import (
     BlockedCommitBatchNowGate,
     blob_for,
     mk_ctx,
 )
-from tests.minions._internal._framework.state_store_sqlite.conftest import MakeStateStoreAndLogger
+from tests.minions._internal._framework.state_store.sqlite.conftest import MakeStateStoreAndLogger
 
 pytestmark = pytest.mark.asyncio
 

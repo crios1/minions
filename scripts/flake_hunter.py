@@ -37,9 +37,9 @@ PARALLEL_UNSAFE_TEST_PATHS: tuple[str, ...] = (
 # distinguish a missed application deadline from OS scheduling starvation across
 # many concurrent pytest processes.
 HIGH_CONTENTION_UNSUITABLE_TEST_IDS: tuple[str, ...] = (
-    "tests/minions/_internal/_framework/state_store_sqlite/test_batching.py::"
+    "tests/minions/_internal/_framework/state_store/sqlite/test_batching.py::"
     "test_writes_inside_batch_max_interarrival_delay_ms_batch_together",
-    "tests/minions/_internal/_framework/state_store_sqlite/test_batching.py::"
+    "tests/minions/_internal/_framework/state_store/sqlite/test_batching.py::"
     "test_max_flush_delay_still_applies_during_continuous_arrivals",
 )
 

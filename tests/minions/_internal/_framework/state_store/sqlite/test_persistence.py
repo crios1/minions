@@ -8,8 +8,8 @@ from minions._internal._framework.minion_workflow_context_codec import (
     deserialize_workflow_context_blob,
 )
 from minions._internal._framework.state_store_sqlite import SQL_WORKFLOWS_SELECT_FOR_ORCHESTRATION
-from tests.minions._internal._framework.state_store_sqlite._support import blob_for, mk_ctx
-from tests.minions._internal._framework.state_store_sqlite.conftest import MakeStateStoreAndLogger
+from tests.minions._internal._framework.state_store.sqlite._support import blob_for, mk_ctx
+from tests.minions._internal._framework.state_store.sqlite.conftest import MakeStateStoreAndLogger
 
 pytestmark = pytest.mark.asyncio
 

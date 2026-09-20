@@ -4,12 +4,6 @@
 
 ### Test Suite:
 
-- todo: reorganize StateStore tests under a dedicated test package
-  - move the generic StateStore tests into `tests/minions/_internal/_framework/state_store/`
-  - move the existing SQLite test subtree under `tests/minions/_internal/_framework/state_store/sqlite/`
-  - update test imports, fixture module paths, `scripts/flake_hunter.py`, and any documentation or path references
-  - keep this as a test-layout-only cleanup that preserves existing behavior and coverage
-
 - todo: complete the Gru scenario DSL migration for orchestration tests
   - status:
     - `tests.support.gru_scenario` is the canonical deterministic orchestration-test DSL
