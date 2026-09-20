@@ -4,12 +4,6 @@
 
 ### Test Suite:
 
-- todo: audit the test suite to align with the default-backend + contract-test strategy
-  - for each system component base class, ensure there is a contract test file
-  - check higher-level/domain tests to ensure they use the in-memory system component by default
-  - only keep non-default backends in a test when the backend-specific choice is intentional and clearly justified
-  - document this test suite design in a test suite design doc
-
 - todo: reorganize StateStore tests under a dedicated test package
   - move the generic StateStore tests into `tests/minions/_internal/_framework/state_store/`
   - move the existing SQLite test subtree under `tests/minions/_internal/_framework/state_store/sqlite/`

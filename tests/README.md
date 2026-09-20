@@ -28,6 +28,23 @@ This suite is intentionally layered. Each layer has a different purpose and conf
   - `tests/minions/_internal/_utils/*`
   - domain-focused unit tests outside DSL usage files.
 
+### Shared contract versus backend-specific tests
+
+- Add a parameterized contract suite when multiple implementations share the
+  same portable behavior. `test_state_store_contract.py` is the current
+  example: it exercises the shared persistence/blob contract against the
+  in-memory and SQLite stores.
+- Logger and Metrics share framework-owned wrapper and failure-containment
+  behavior, covered by their framework and crash-resilience tests. Their
+  backend-observable output, registry, and snapshot behavior is intentionally
+  implementation-specific, so the suite does not manufacture a generic
+  parity contract where no common observation exists.
+- `NoOp` and console backends are used explicitly in composition, loading,
+  configuration, and injection tests when persistence or output is outside the
+  subject under test. SQLite is kept in persistence, backend, and process
+  restart tests. These are intentional backend choices, not defaults for
+  orchestration-semantics coverage.
+
 ## 3) Integration Fit Layer (thin orchestration smoke with real components)
 - Purpose: prove concrete backends satisfy runtime contracts when plugged into orchestration.
 - Scope is intentionally small and focused.
