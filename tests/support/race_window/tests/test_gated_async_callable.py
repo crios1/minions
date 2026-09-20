@@ -29,6 +29,14 @@ async def test_wait_until_called_times_out_when_not_called():
 
 
 @pytest.mark.asyncio
+async def test_omitted_result_defaults_to_none():
+    gated_callable = GatedAsyncCallable[None]()
+    gated_callable.allow_return()
+
+    assert await gated_callable() is None
+
+
+@pytest.mark.asyncio
 async def test_allow_return_releases_future_calls():
     gated_callable = GatedAsyncCallable(result="result")
     gated_callable.allow_return()
@@ -78,3 +86,11 @@ def test_rejects_fixed_result_and_delegate():
 
     with pytest.raises(ValueError, match="either result or delegate"):
         GatedAsyncCallable[str](result="fixed", delegate=delegate)
+
+
+def test_rejects_explicit_none_result_and_delegate():
+    async def delegate() -> None:
+        return None
+
+    with pytest.raises(ValueError, match="either result or delegate"):
+        GatedAsyncCallable[None](result=None, delegate=delegate)

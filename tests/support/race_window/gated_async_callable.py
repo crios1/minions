@@ -1,8 +1,15 @@
 import asyncio
 from collections.abc import Awaitable, Callable
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, TypeVar, cast
 
 T_Result = TypeVar("T_Result")
+
+
+class _UnsetType:
+    pass
+
+
+_UNSET = _UnsetType()
 
 
 class GatedAsyncCallable(Generic[T_Result]):
@@ -16,16 +23,18 @@ class GatedAsyncCallable(Generic[T_Result]):
 
     def __init__(
         self,
-        result: T_Result | None = None,
+        result: T_Result | _UnsetType = _UNSET,
         *,
         delegate: Callable[..., Awaitable[T_Result]] | None = None,
     ) -> None:
-        if result is not None and delegate is not None:
+        if result is not _UNSET and delegate is not None:
             raise ValueError("Specify either result or delegate, not both.")
         self._called = asyncio.Event()
         self._allow_return = asyncio.Event()
         self.call_count = 0
-        self._result = result
+        self._result: T_Result | None = (
+            None if result is _UNSET else cast(T_Result, result)
+        )
         self._delegate = delegate
 
     async def __call__(self, *args: Any, **kwargs: Any) -> T_Result | None:
