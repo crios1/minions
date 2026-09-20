@@ -38,6 +38,12 @@
   - only keep non-default backends in a test when the backend-specific choice is intentional and clearly justified
   - document this test suite design in a test suite design doc
 
+- todo: reorganize StateStore tests under a dedicated test package
+  - move the generic StateStore tests into `tests/minions/_internal/_framework/state_store/`
+  - move the existing SQLite test subtree under `tests/minions/_internal/_framework/state_store/sqlite/`
+  - update test imports, fixture module paths, `scripts/flake_hunter.py`, and any documentation or path references
+  - keep this as a test-layout-only cleanup that preserves existing behavior and coverage
+
 - todo: complete the Gru scenario DSL migration for orchestration tests
   - status:
     - `tests.support.gru_scenario` is the canonical deterministic orchestration-test DSL
@@ -115,6 +121,95 @@
 
 
 ### Features:
+- todo: design Gru-level composition and configuration for built-in infrastructure
+  - prerequisite migration: make the StateStore Metrics dependency explicit
+    - context:
+      - the initial StateStore telemetry slice uses Gru-owned
+        `_mn_bind_metrics(...)` so the telemetry behavior can land as a small,
+        reviewable change without migrating every StateStore construction site
+      - this binding is transitional and should not become the final dependency
+        model; Metrics is a real collaborator once StateStore metrics
+        is part of the StateStore base behavior
+    - goal:
+      - pass the selected Metrics backend when constructing every built-in and
+        custom StateStore implementation
+      - remove `_mn_bind_metrics(...)` and the optional, post-construction metrics
+        state from the StateStore contract
+      - make the relationship between a supplied StateStore and Gru's Metrics
+        backend explicit, preferably requiring the same Metrics instance rather
+        than silently creating split telemetry registries
+    - migration scope:
+      - update StateStore, SQLiteStateStore, NoOpStateStore, test stores, fixtures,
+        direct construction sites, and custom-store documentation
+      - remove the transitional
+        `test_mn_record_operation_does_not_evaluate_payload_size_when_metrics_unbound`;
+        it verifies that the payload-size provider is not invoked when Metrics is unbound
+      - preserve the existing low-cardinality, backend-independent StateStore metrics and best-effort failure
+        behavior without changing persistence semantics
+      - treat the constructor change as an intentional pre-1.0 API migration,
+        not as an incidental cleanup
+    - sequencing:
+      - resolve the supplied-store/Metrics identity rule before implementation
+      - complete this migration before finalizing the Gru-level built-in
+        composition/configuration contract below
+  - problem:
+    - `await Gru.create()` is ergonomic when the built-in defaults are sufficient,
+      but changing one SQLiteStateStore option (such as the database path or batch
+      timing) currently requires manually constructing and passing the whole store
+    - Logger, Metrics, StateStore, and Gru-level policy settings are configured at
+      different layers, so there is no single high-level composition/configuration
+      model for a normal application
+    - caller-constructed infrastructure is an intentional escape hatch for custom
+      backends, tests, seeded state, and unusual lifecycle ordering, but the current
+      API makes that advanced path necessary for ordinary built-in customization
+  - goal:
+    - make `Gru.create()` the composition root for built-in Logger, Metrics, and
+      StateStore instances, including their shared runtime wiring and lifecycle
+    - let users configure a built-in component through high-level typed settings
+      without manually instantiating unrelated components
+    - preserve prebuilt component injection for custom implementations and other
+      advanced use cases; supplied components still belong to Gru for lifecycle
+      management after creation
+  - design constraints:
+    - distinguish clearly between omitted/default configuration, explicit disable
+      (`None`), configured built-in components, and prebuilt instances
+    - keep low-level option definitions, defaults, and validation with the
+      component that owns them; Gru should route user intent without duplicating
+      backend semantics
+    - do not require custom StateStore, Logger, or Metrics constructors to mirror
+      the constructors of shipped implementations unless that becomes an explicit
+      contract decision
+    - do not prescribe config objects, factories, or a particular keyword layout
+      before representative usage demonstrates that shape is valuable
+    - define configuration precedence and reject ambiguous combinations such as a
+      prebuilt instance plus settings intended to construct a replacement
+    - validate one representative simple call, one configured-built-in call, and
+      one custom-instance call before finalizing names or the public shape
+  - representative usage to validate:
+    - `await Gru.create()` remains the zero-configuration path
+    - a user can change one built-in component setting through Gru without
+      manually wiring unrelated infrastructure components
+    - `await Gru.create(state_store=custom_store, ...)` remains the explicit
+      advanced/custom path
+  - decisions to make:
+    - decide how Gru forwards component-specific settings while keeping the
+      owning component's constructor/default/validation semantics authoritative
+    - decide whether a real external configuration boundary justifies first-class
+      config objects; do not add them merely to group constructor arguments
+    - decide how a configuration selects a shipped implementation and how future
+      built-in backends would participate
+    - decide whether custom factories/providers are needed in addition to prebuilt
+      instances; do not add them without a demonstrated construction use case
+  - tests and docs:
+    - preserve default, disabled, configured-built-in, and prebuilt-custom behavior
+    - verify Gru creates one coherent infrastructure graph and owns its lifecycle
+    - document the simple default path, configured-built-in path, and advanced
+      prebuilt-instance path separately
+  - why it matters:
+    - users should be able to express runtime intent at Gru's composition boundary
+      without reconstructing infrastructure by hand, while custom backends retain
+      the flexibility that justifies caller construction
+
 - considering: structured Gru failure results for programmatic handling
   - current incremental contract:
     - keep `reason` as the curated high-level result description
@@ -255,76 +350,6 @@
     - add coverage for opt-in stale-event rejection once semantics are chosen
   - docs:
     - document delivery-vs-freshness tradeoffs clearly so users do not assume immediate-on-create handling guarantees
-
-- todo: add first-class logger system telemetry (`logger_*`)
-  - goal:
-    - expose logger health and performance as system telemetry, separate from domain/business metrics
-    - treat logger as a pluggable infrastructure component like StateStore, while starting with a smaller generic metric surface
-    - keep metric names backend-agnostic and labels low-cardinality
-  - metrics to add:
-    - `logger_writes_total` (counter)
-    - `logger_write_failures_total` (counter)
-    - `logger_write_duration_seconds` (histogram)
-    - `logger_payload_bytes` (histogram)
-  - labels/policy:
-    - allowed labels:
-      - `backend` (e.g. `file`, `prometheus`, `noop`)
-      - `operation` (`write`)
-      - `error_type` (for `logger_write_failures_total` only)
-    - do not include high-cardinality labels (no workflow ids/minion ids/payload content)
-    - telemetry emission must be best-effort and never block runtime paths
-    - avoid a `framework_` prefix because user-provided loggers are still first-class infrastructure inside a Minions system
-  - implementation steps:
-    - add constants + label mappings in `metrics_constants.py`
-    - instrument logger write path(s)
-    - defer deeper backend-specific metrics such as queue depth, flush duration, and dropped records until logger implementations need them
-  - tests:
-    - add focused tests that metrics are emitted for logger success paths
-    - add focused tests that logger error counters increment on failure paths
-    - ensure no unexpected labels are emitted
-  - docs:
-    - update docs to explain domain telemetry vs system/infrastructure telemetry split
-    - document the new generic logger metric names and label policy
-    - note that dashboard authors can ignore exposed metrics visually, but scraped metrics still cost storage unless scrape config or relabeling drops them
-
-
-- todo: add operational guidance and guardrails for high-cardinality orchestration labels
-  - evidence:
-    - the operating-envelope audit reached roughly 42,000 Prometheus series and 10.56 MB of text at 5,000 orchestration label sets
-    - this is an operational storage/scrape risk, not a confirmed runtime correctness defect
-  - guidance:
-    - preserve orchestration labels where workflow attribution requires them
-    - keep orchestration, workflow, checkpoint, and payload identifiers out of backend/system metrics such as `state_store_*`
-    - document scrape, relabel, and family-filtering options for operators with large orchestration counts
-    - add a regression or review guardrail before introducing new high-cardinality labels to stable metric families
-  - why it matters:
-    - operators need a deliberate way to control metrics cost without weakening the low-cardinality telemetry contract
-
-- todo: add family-level metrics exposure controls
-  - goal:
-    - let operators disable or exclude whole metric families when they do not want Prometheus to ingest that runtime surface
-    - keep the default behavior observability-first so users get the full low-cardinality runtime picture without extra setup
-  - families to consider:
-    - `logger_*`
-    - `state_store_*`
-    - `minion_workflow_persistence_*`
-    - other future framework/system families
-  - design constraints:
-    - prefer family-level include/exclude controls over per-metric toggles to avoid excessive configuration surface
-    - disabling a family should prevent exposing those series at the metrics endpoint, not merely hide them from dashboards
-    - defaults should expose all stable low-cardinality metric families
-    - telemetry emission must remain best-effort and must not block runtime paths
-  - implementation steps:
-    - decide where metrics exposure config belongs (global runtime config, Prometheus exporter config, or both)
-    - add allow/deny family filtering before metrics are exported
-    - document how exporter-side filtering differs from Prometheus scrape/relabel filtering
-  - tests:
-    - verify excluded families are not exposed on the Prometheus endpoint
-    - verify included families continue to emit with their normal label policy
-    - verify unknown family names are rejected or ignored consistently
-  - docs:
-    - recommend exposing all stable low-cardinality runtime metrics by default
-    - explain that family-level controls are mostly for operators with storage, policy, or relevance constraints
 
 - todo: stabilize workflow persistence and recovery semantics
   - implementation order:
