@@ -57,3 +57,58 @@ async def test_stdout_formats_structured_log_fields_as_json(
     assert 'workflow_id=wf-1' in out.out
     assert 'detail={"count":3,"tags":["x"]}' in out.out
     assert out.err == ""
+
+
+@pytest.mark.asyncio
+async def test_rotation_uses_unique_paths_when_timestamp_repeats(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    logger = FileLogger(
+        stdout=False,
+        log_dir=str(tmp_path),
+        log_filename_prefix="collision-log",
+        max_log_file_bytes=1024,
+        max_log_storage_bytes=None,
+    )
+    monkeypatch.setattr(
+        logger,
+        "_mn_iso_8601_ts_fs_safe",
+        lambda: "2026-09-20T12-00-00Z",
+    )
+
+    for index in range(5):
+        await logger.log(INFO, f"record-{index}", payload="x" * 800)
+
+    active_file = tmp_path / "collision-log.log"
+    rotated_files = sorted(tmp_path.glob("collision-log_*.log"))
+
+    active_line_count = len(active_file.read_text(encoding="utf-8").splitlines())
+    rotated_line_count = sum(
+        len(path.read_text(encoding="utf-8").splitlines())
+        for path in rotated_files
+    )
+
+    assert len(rotated_files) == 4
+    assert rotated_line_count + active_line_count == 5
+
+
+@pytest.mark.asyncio
+async def test_storage_limit_includes_active_log_file(tmp_path: Path):
+    logger = FileLogger(
+        stdout=False,
+        log_dir=str(tmp_path),
+        log_filename_prefix="bounded-log",
+        max_log_file_bytes=1024,
+        max_log_storage_bytes=2048,
+    )
+
+    # write enough records to exercise the storage limit.
+    for index in range(6):
+        await logger.log(INFO, f"record-{index}", payload="x" * 800)
+
+    managed_files = [
+        tmp_path / "bounded-log.log",
+        *tmp_path.glob("bounded-log_*.log"),
+    ]
+
+    assert sum(path.stat().st_size for path in managed_files) <= 2048

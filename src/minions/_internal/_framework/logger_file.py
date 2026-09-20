@@ -42,9 +42,10 @@ class FileLogger(Logger):
       and a new file is created. This keeps logs manageable for inspection and
       tailing. Set to None to disable limits.
     - **Retention Policy**: When a total disk usage limit is set
-      (`max_log_storage_bytes`), old rotated logs are deleted to avoid
-      unbounded disk growth. This is useful as a failsafe in long-running
-      deployments. Set to None to disable limits.
+      (`max_log_storage_bytes`), old rotated logs are deleted while the active
+      log is retained until the total managed log bytes fit within the limit.
+      This is useful as a failsafe in long-running deployments. Set to None
+      to disable limits.
     - **Safe Defaults**: Ensures log directory exists, escapes non-ASCII
       characters if necessary, and avoids crashes if a log file cannot be
       deleted.
@@ -69,13 +70,13 @@ class FileLogger(Logger):
         self._log_dir = Path(log_dir)
         self._log_filename_prefix = log_filename_prefix
         self._max_log_file_bytes = max_log_file_bytes
-        self._lock = asyncio.Lock()
+        self._file_lock = asyncio.Lock()
         self._max_log_storage_bytes = max_log_storage_bytes
 
         if log_filename_prefix.endswith(".log"):
             raise ValueError(
                 "log_filename_prefix should not include a file extension like '.log'; "
-                "it will be automatically appended during rotation"
+                "the '.log' extension is added automatically"
             )
 
         if max_log_file_bytes is not None:
@@ -99,14 +100,14 @@ class FileLogger(Logger):
 
         self._log_dir.mkdir(parents=True, exist_ok=True)
 
-        self._path = self._log_dir / f"{self._log_filename_prefix}.log"
+        self._active_log_path = self._log_dir / f"{self._log_filename_prefix}.log"
 
     def _print_err(self, e: Exception):
         print(f"[FileLogger error] {e.__class__.__name__}: {e}", file=sys.stderr)
 
     def _write_line(self, line: str):
         try:
-            with open(self._path, "a", encoding="utf-8") as file:
+            with open(self._active_log_path, "a", encoding="utf-8") as file:
                 file.write(line)
         except Exception as e:
             self._print_err(e)
@@ -153,28 +154,42 @@ class FileLogger(Logger):
 
                 print(f"{marker} {msg} {extras}", file=sys.stdout)
 
-            async with self._lock:
-                await self._rotate_if_needed()
+            async with self._file_lock:
+                await self._rotate_if_needed(
+                    incoming_bytes=len(log_line.encode("utf-8"))
+                )
                 await asyncio.to_thread(self._write_line, log_line)
+                await self._enforce_storage_limit()
 
         except Exception as e:
             self._print_err(e)
 
-    async def _rotate_if_needed(self):
+    async def _rotate_if_needed(self, *, incoming_bytes: int = 0):
         try:
+            current_size = (
+                self._active_log_path.stat().st_size
+                if self._active_log_path.exists()
+                else 0
+            )
             if (
                 not self._log_dir.exists()
-                or not self._path.exists()
+                or not self._active_log_path.exists()
                 or self._max_log_file_bytes is None
-                or self._path.stat().st_size < self._max_log_file_bytes
+                or current_size == 0
+                or current_size + incoming_bytes <= self._max_log_file_bytes
             ):
                 return
 
             ts = self._mn_iso_8601_ts_fs_safe()
             rotated_name = f"{self._log_filename_prefix}_{ts}.log"
             rotated_path = self._log_dir / rotated_name
+            suffix = 1
+            while rotated_path.exists():
+                rotated_name = f"{self._log_filename_prefix}_{ts}_{suffix}.log"
+                rotated_path = self._log_dir / rotated_name
+                suffix += 1
 
-            self._path.rename(rotated_path)
+            self._active_log_path.rename(rotated_path)
 
             await self._enforce_storage_limit()
         except Exception as e:
@@ -185,14 +200,19 @@ class FileLogger(Logger):
             if self._max_log_storage_bytes is None:
                 return
 
-            files = sorted(
+            rotated_files = sorted(
                 self._log_dir.glob(f"{self._log_filename_prefix}_*.log"),
                 key=lambda p: p.stat().st_mtime,
             )
-            total_size = sum(f.stat().st_size for f in files)
+            active_file_size = (
+                self._active_log_path.stat().st_size
+                if self._active_log_path.exists()
+                else 0
+            )
+            total_size = active_file_size + sum(f.stat().st_size for f in rotated_files)
 
-            while total_size > self._max_log_storage_bytes and files:
-                oldest = files.pop(0)
+            while total_size > self._max_log_storage_bytes and rotated_files:
+                oldest = rotated_files.pop(0)
                 total_size -= oldest.stat().st_size
                 oldest.unlink()
         except Exception as e:
