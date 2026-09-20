@@ -396,6 +396,9 @@ class Gru:
         global _gru_instance
         if _gru_instance is not None:
             raise RuntimeError("Only one Gru instance is allowed per process.")
+
+        self._state_store._mn_bind_metrics(self._metrics)  # temporary pattern
+
         _gru_instance = self
 
         self._loop = loop

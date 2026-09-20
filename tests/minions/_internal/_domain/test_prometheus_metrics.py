@@ -15,6 +15,7 @@ from minions._internal._framework.metrics_constants import (
     METRIC_LABEL_NAMES,
     MINION_WORKFLOW_STARTED_TOTAL,
     MINION_WORKFLOW_STEP_DURATION_SECONDS,
+    STATE_STORE_PAYLOAD_SIZE_BYTES,
     SYSTEM_MEMORY_USED_PERCENT,
 )
 from minions._internal._framework.metrics_prometheus import PrometheusMetrics
@@ -150,6 +151,41 @@ async def test_histogram_exposed_on_http():
 
     assert count_val == 1.0
     assert sum_val == 0.75
+
+
+@pytest.mark.parametrize(
+    ("metric_name", "value", "labels", "expected_bucket"),
+    [
+        (
+            STATE_STORE_PAYLOAD_SIZE_BYTES,
+            65_536.0,
+            {"state_store_type": "SQLiteStateStore", "operation": "save_context"},
+            "65536.0",
+        ),
+    ],
+)
+def test_state_store_payload_histogram_uses_byte_buckets(
+    metric_name: str,
+    value: float,
+    labels: dict[str, str],
+    expected_bucket: str,
+):
+    registry = CollectorRegistry()
+    metrics = PrometheusMetrics(logger=NoOpLogger(), registry=registry)
+    metric = metrics.create_metric(
+        metric_name,
+        METRIC_LABEL_NAMES[metric_name],
+        "histogram",
+    )
+    metric.labels(**labels).observe(value)
+
+    family = next(family for family in registry.collect() if family.name == metric_name)
+    buckets = {
+        sample.labels["le"]: sample.value
+        for sample in family.samples
+        if sample.name == f"{metric_name}_bucket"
+    }
+    assert buckets[expected_bucket] == 1.0
 
 
 # Metric Registry Behavior

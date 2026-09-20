@@ -39,7 +39,7 @@ from .._framework.metrics_constants import (
     LABEL_MINION_WORKFLOW_PERSISTENCE_RETRYABLE,
     LABEL_MINION_WORKFLOW_STEP,
     LABEL_ORCHESTRATION_ID,
-    LABEL_STATE_STORE,
+    LABEL_STATE_STORE_TYPE,
     LABEL_STATUS,
     MINION_WORKFLOW_ABORTED_TOTAL,
     MINION_WORKFLOW_DURATION_SECONDS,
@@ -1015,7 +1015,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             LABEL_MINION_WORKFLOW_PERSISTENCE_POINT: persistence_point,
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: operation,
             LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: self._mn_workflow_persistence_failure_policy,
-            LABEL_STATE_STORE: type(self._mn_state_store).__name__,
+            LABEL_STATE_STORE_TYPE: type(self._mn_state_store).__name__,
         }
 
     def _mn_workflow_persistence_failure_metric_labels(
@@ -1047,7 +1047,7 @@ class Minion(AsyncService, Generic[T_Event, T_Ctx]):
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: operation,
             LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: result.failure_stage or "none",
             LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: self._mn_workflow_persistence_failure_policy,
-            LABEL_STATE_STORE: type(self._mn_state_store).__name__,
+            LABEL_STATE_STORE_TYPE: type(self._mn_state_store).__name__,
         }
 
     @staticmethod

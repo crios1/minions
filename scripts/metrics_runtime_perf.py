@@ -37,7 +37,7 @@ from minions._internal._framework.metrics_constants import (
     LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY,
     LABEL_MINION_WORKFLOW_PERSISTENCE_RETRYABLE,
     LABEL_ORCHESTRATION_ID,
-    LABEL_STATE_STORE,
+    LABEL_STATE_STORE_TYPE,
     LABEL_STATUS,
     MINION_WORKFLOW_DURATION_SECONDS,
     MINION_WORKFLOW_FAILED_TOTAL,
@@ -177,7 +177,7 @@ def persistence_mixed(iteration: int, cardinality: int) -> Iterable[Operation]:
         LABEL_MINION_WORKFLOW_PERSISTENCE_POINT: checkpoint_type,
         LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
         LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: policy,
-        LABEL_STATE_STORE: state_store,
+        LABEL_STATE_STORE_TYPE: state_store,
     }
     yield Operation(
         kind="counter",

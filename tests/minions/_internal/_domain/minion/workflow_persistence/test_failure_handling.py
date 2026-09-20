@@ -15,7 +15,7 @@ from minions._internal._framework.metrics_constants import (
     LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY,
     LABEL_MINION_WORKFLOW_PERSISTENCE_RETRYABLE,
     LABEL_ORCHESTRATION_ID,
-    LABEL_STATE_STORE,
+    LABEL_STATE_STORE_TYPE,
     MINION_WORKFLOW_INFLIGHT_GAUGE,
     MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL,
     MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
@@ -117,7 +117,7 @@ async def test_continue_on_failure_policy_advances_after_save_failure_and_persis
         == "Ensure the configured StateStore is available and can persist workflow context blobs."
     )
     assert failure_log.kwargs["error_type"] == "RuntimeError"
-    assert failure_log.kwargs[LABEL_STATE_STORE] == "FailableStateStore"
+    assert failure_log.kwargs["state_store"] == "FailableStateStore"
     assert failure_log.kwargs["event_type"] == "EmptyEvent"
     assert failure_log.kwargs["context_type"] == "EmptyContext"
     assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL) == 4
@@ -190,7 +190,7 @@ async def test_idle_until_persisted_policy_idles_workflow_until_save_retry_succe
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
             LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "save",
             LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: "idle-until-persisted",
-            LABEL_STATE_STORE: "FailableStateStore",
+            LABEL_STATE_STORE_TYPE: "FailableStateStore",
         },
     )
     assert blocked_value == 0
@@ -240,7 +240,7 @@ async def test_workflow_cancellation_during_retry_wait_preserves_checkpoint_and_
         LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
         LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "save",
         LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: "idle-until-persisted",
-        LABEL_STATE_STORE: "FailableStateStore",
+        LABEL_STATE_STORE_TYPE: "FailableStateStore",
     }
 
     m._mn_mark_running()
@@ -346,7 +346,7 @@ async def test_stopping_orchestration_during_retry_wait_preserves_unfinished_wor
             LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
             LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "save",
             LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: "idle-until-persisted",
-            LABEL_STATE_STORE: "FailableStateStore",
+            LABEL_STATE_STORE_TYPE: "FailableStateStore",
         }
 
         await pipeline.wait_for_subscribers_then_emit_event()
@@ -454,7 +454,7 @@ async def test_persistence_blocked_gauge_tracks_concurrent_workflows_for_same_la
         LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "save",
         LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "save",
         LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: "idle-until-persisted",
-        LABEL_STATE_STORE: "FailableStateStore",
+        LABEL_STATE_STORE_TYPE: "FailableStateStore",
     }
     await _wait_until(
         lambda: (
@@ -594,7 +594,7 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds(
         LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION: "delete",
         LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "delete",
         LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: "continue-on-failure",
-        LABEL_STATE_STORE: "FailableStateStore",
+        LABEL_STATE_STORE_TYPE: "FailableStateStore",
     }
     await _wait_until(
         lambda: (
@@ -706,7 +706,7 @@ async def test_serialization_failure_is_non_retryable_and_preserves_prior_checkp
             LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE: "serialize",
             LABEL_MINION_WORKFLOW_PERSISTENCE_RETRYABLE: "false",
             LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY: "idle-until-persisted",
-            LABEL_STATE_STORE: "InMemoryStateStore",
+            LABEL_STATE_STORE_TYPE: "InMemoryStateStore",
         },
     )
     assert failure_value == 1

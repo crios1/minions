@@ -187,7 +187,7 @@ Workflow persistence metrics describe the runtime durability guarantee as experi
 - `minion_workflow_persistence_duration_seconds`
 - `minion_workflow_persistence_blocked_gauge`
 
-Use `minion_workflow_persistence_blocked_gauge` and sustained persistence failures to alert on workflow durability impact. Use labels such as `minion_workflow_persistence_failure_stage`, `minion_workflow_persistence_retryable`, `minion_workflow_persistence_policy`, `minion_workflow_persistence_point`, and `state_store` to distinguish serialization problems from StateStore outages.
+Use `minion_workflow_persistence_blocked_gauge` and sustained persistence failures to alert on workflow durability impact. Use labels such as `minion_workflow_persistence_failure_stage`, `minion_workflow_persistence_retryable`, `minion_workflow_persistence_policy`, `minion_workflow_persistence_point`, and `state_store_type` to distinguish serialization problems from StateStore outages.
 
 ### How to read persistence telemetry
 
@@ -204,7 +204,7 @@ The most important labels are:
 - `minion_workflow_persistence_failure_stage`: distinguishes codec/serialization problems from StateStore save/delete failures.
 - `minion_workflow_persistence_retryable`: `false` means the workflow data itself is not persistable and retrying will not help; `true` means the failure is operational and the runtime may retry.
 - `minion_workflow_persistence_policy`: tells you whether the workflow is configured to continue after save failure or idle until the checkpoint is durably persisted.
-- `state_store`: identifies which backend is experiencing the problem.
+- `state_store_type`: identifies the concrete StateStore implementation experiencing the problem.
 
 Common interpretations:
 
@@ -214,6 +214,21 @@ Common interpretations:
 - `failure_stage="save"` or `failure_stage="delete"` with `retryable="true"` points to a StateStore or backend availability problem.
 
 For a broader operator view, see {doc}`/guides/operating-with-metrics`.
+
+## StateStore metrics
+
+StateStore metrics intentionally cover only backend-independent operations:
+
+- `state_store_operations_total`
+- `state_store_operation_failures_total`
+- `state_store_operation_duration_seconds`
+- `state_store_payload_size_bytes`
+
+They use low-cardinality `state_store_type` and `operation` labels, plus
+`error_type` on failure counters. They do not expose backend-specific batching,
+connection behavior, or other implementation details. Use the backing database
+or service's native metrics, logs, and tooling when deeper implementation-specific
+diagnosis is needed.
 
 ## Config loading
 

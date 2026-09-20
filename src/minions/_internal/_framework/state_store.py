@@ -1,11 +1,23 @@
+import time
 from abc import abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal, overload
 
 from .._domain.minion_workflow_context import MinionWorkflowContext
 from .._domain.types import T_Ctx, T_Event
-from .logger import ERROR
+from .logger import ERROR, Logger
 from .logger_backed_async_component import LoggerBackedAsyncComponent
+from .metrics import Metrics
+from .metrics_constants import (
+    LABEL_ERROR_TYPE,
+    LABEL_OPERATION,
+    LABEL_STATE_STORE_TYPE,
+    STATE_STORE_OPERATION_DURATION_SECONDS,
+    STATE_STORE_OPERATION_FAILURES_TOTAL,
+    STATE_STORE_OPERATIONS_TOTAL,
+    STATE_STORE_PAYLOAD_SIZE_BYTES,
+)
 from .minion_workflow_context_codec import (
     WorkflowContextTypeMismatchError,
     deserialize_workflow_context_blob,
@@ -45,6 +57,58 @@ class StateStore(LoggerBackedAsyncComponent):
 
     _mn_user_facing = True
 
+    def __init__(self, logger: Logger):
+        super().__init__(logger)
+        self._mn_metrics: Metrics | None = None
+
+    # temporary; in the future Metrics will be set in __init__
+    def _mn_bind_metrics(self, metrics: Metrics) -> None:
+        """Bind the process metrics backend selected by Gru."""
+        self._mn_metrics = metrics
+
+    async def _mn_record_operation(
+        self,
+        operation: Literal[
+            "save_context",
+            "delete_context",
+            "load_contexts_for_orchestration",
+            "load_all_contexts",
+        ],
+        started_at: float,
+        *,
+        payload_size_bytes: Callable[[], int] | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        metrics = self._mn_metrics
+        if metrics is None:
+            return
+
+        operation_duration_seconds = max(0.0, time.perf_counter() - started_at)
+        labels = {
+            LABEL_STATE_STORE_TYPE: type(self).__name__,
+            LABEL_OPERATION: operation,
+        }
+        await metrics._mn_inc(
+            STATE_STORE_OPERATIONS_TOTAL,
+            labels=labels,
+        )
+        await metrics._mn_observe(
+            STATE_STORE_OPERATION_DURATION_SECONDS,
+            operation_duration_seconds,
+            labels=labels,
+        )
+        if payload_size_bytes is not None:
+            await metrics._mn_observe(
+                STATE_STORE_PAYLOAD_SIZE_BYTES,
+                float(payload_size_bytes()),
+                labels=labels,
+            )
+        if error is not None:
+            await metrics._mn_inc(
+                STATE_STORE_OPERATION_FAILURES_TOTAL,
+                labels={**labels, LABEL_ERROR_TYPE: type(error).__name__},
+            )
+
     # User Code
 
     @abstractmethod
@@ -79,9 +143,16 @@ class StateStore(LoggerBackedAsyncComponent):
         orchestration_id: str,
         context: bytes,
     ) -> PersistenceOperationResult:
+        started_at = time.perf_counter()
         try:
             await self.save_context(workflow_id, orchestration_id, context)
         except Exception as e:
+            await self._mn_record_operation(
+                "save_context",
+                started_at,
+                payload_size_bytes=lambda: len(context),
+                error=e,
+            )
             await self._mn_logger._mn_log_exception(
                 ERROR,
                 f"{type(self).__name__}.save_context failed",
@@ -95,12 +166,19 @@ class StateStore(LoggerBackedAsyncComponent):
                 error=e,
                 retryable=True,
             )
+        await self._mn_record_operation(
+            "save_context",
+            started_at,
+            payload_size_bytes=lambda: len(context),
+        )
         return PersistenceOperationResult(persisted=True)
 
     async def _mn_delete_context(self, workflow_id: str) -> PersistenceOperationResult:
+        started_at = time.perf_counter()
         try:
             await self.delete_context(workflow_id)
         except Exception as e:
+            await self._mn_record_operation("delete_context", started_at, error=e)
             await self._mn_logger._mn_log_exception(
                 ERROR,
                 f"{type(self).__name__}.delete_context failed",
@@ -113,20 +191,58 @@ class StateStore(LoggerBackedAsyncComponent):
                 error=e,
                 retryable=True,
             )
+        await self._mn_record_operation("delete_context", started_at)
         return PersistenceOperationResult(persisted=True)
 
     async def _mn_get_contexts_for_orchestration(
         self,
         orchestration_id: str,
     ) -> list[StoredWorkflowContext]:
-        return await self._mn_run_and_log_failure(
-            method=self.get_contexts_for_orchestration,
-            method_args=[orchestration_id],
-            log_kwargs={"orchestration_id": orchestration_id},
+        method = self.get_contexts_for_orchestration
+        started_at = time.perf_counter()
+        try:
+            contexts = await self._mn_call_bound_method(
+                method,
+                method_args=[orchestration_id],
+            )
+        except Exception as e:
+            await self._mn_record_operation(
+                "load_contexts_for_orchestration",
+                started_at,
+                error=e,
+            )
+            await self._mn_log_method_failure(
+                method,
+                e,
+                log_kwargs={"orchestration_id": orchestration_id},
+            )
+            raise
+        await self._mn_record_operation(
+            "load_contexts_for_orchestration",
+            started_at,
+            payload_size_bytes=lambda: sum(
+                len(context.context) for context in contexts
+            ),
         )
+        return contexts
 
     async def _mn_get_all_contexts(self) -> list[StoredWorkflowContext]:
-        return await self._mn_run_and_log_failure(method=self.get_all_contexts)
+        method = self.get_all_contexts
+        started_at = time.perf_counter()
+        try:
+            contexts = await self._mn_call_bound_method(method)
+        except Exception as e:
+            await self._mn_record_operation("load_all_contexts", started_at, error=e)
+            await self._mn_log_method_failure(method, e)
+            raise
+        await self._mn_record_operation(
+            "load_all_contexts",
+            started_at,
+            payload_size_bytes=lambda: sum(
+                len(context.context) for context in contexts
+            ),
+        )
+        return contexts
 
     # Helpers
 

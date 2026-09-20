@@ -20,6 +20,25 @@ If you only watch one group of metrics for workflow correctness, watch the workf
 
 These metrics describe what workflows are experiencing, not just whether the backend store itself looks healthy.
 
+## Inspect StateStore backend health
+
+Use the lower-level `state_store_*` metrics after identifying a persistence
+impact:
+
+- `state_store_operations_total` shows StateStore `save_context`, `delete_context`,
+  `load_contexts_for_orchestration`, and `load_all_contexts` activity by StateStore type.
+- `state_store_operation_failures_total` classifies backend operation failures by `error_type`.
+- `state_store_operation_duration_seconds` shows concrete StateStore operation latency.
+- `state_store_payload_size_bytes` shows the size of save payloads and aggregate load responses.
+
+Generic operation metrics use low-cardinality concrete `state_store_type` and `operation`
+labels (plus `error_type` on failure counters). These metrics are
+backend-independent and do not expose batching, queueing, or other
+implementation-specific behavior. Use the backing database or service's native
+metrics, logs, and tooling for deeper backend diagnosis. Canceled operations are not
+classified as backend failures, and these metrics do not replace workflow
+persistence metrics or apply backpressure.
+
 ## In-flight and saved unfinished workflows
 
 `minion_workflow_inflight_gauge` reports the number of **in-flight workflows**:
@@ -48,11 +67,13 @@ When investigating persistence behavior, start with these labels:
 - `minion_workflow_persistence_failure_stage`: `serialize`, `save`, or `delete`
 - `minion_workflow_persistence_retryable`: `true` or `false`
 - `minion_workflow_persistence_policy`: `continue-on-failure` or `idle-until-persisted`
-- `state_store`: backend implementation name
+- `state_store_type`: StateStore implementation type
 - `orchestration_id`: affected minion instance/config/pipeline orchestration
 - `minion`: stable minion component identity, using `@minion_id(...)` when present and the class-address or supplied module-path fallback otherwise
 
 Those labels tell you whether you are looking at application data that cannot be persisted, an operational store outage, a workflow that is already done with user code and is now waiting to resolve checkpoint cleanup, or a recurring issue across all orchestrations of the same minion component.
+
+`orchestration_id` is intentionally retained on workflow and resource metrics because it identifies the stable logical composition affected and makes per-orchestration diagnosis possible. The trade-off is that series count grows with the number of distinct compositions, and high orchestration churn can increase retained series until monitoring retention removes them. That cost is accepted for the framework's expected operating envelope; it is not a reason to remove the label. Backend/system families such as `state_store_*` intentionally omit orchestration, workflow, checkpoint, and payload identifiers. Deployments with unusually large orchestration counts can use Prometheus scrape or relabel filtering if needed.
 
 ## What normal behavior looks like
 
@@ -105,7 +126,7 @@ The exact thresholds depend on your workload, but the alert order should usually
 1. Page on sustained blocked workflows for `operation="save"`.
 2. Page on repeated non-retryable persistence failures.
 3. Warn on sustained blocked workflows for `operation="delete"`.
-4. Watch for rising persistence latency or failure ratios by `state_store`.
+4. Watch for rising persistence latency or failure ratios by `state_store_type`.
 
 If you use `continue-on-failure`, you should also watch `failures_total` even when `blocked_gauge` stays at zero, because workflows may still be progressing while checkpoint durability is degraded.
 
@@ -138,7 +159,7 @@ When an operator sees persistence trouble:
 1. Check whether `minion_workflow_persistence_blocked_gauge` is non-zero.
 2. Split by `minion_workflow_persistence_operation` to see whether the issue is blocking workflow progress or terminal cleanup.
 3. Inspect `minion_workflow_persistence_failures_total` by `minion_workflow_persistence_failure_stage` and `minion_workflow_persistence_retryable`.
-4. Narrow by `state_store`, `minion`, and `orchestration_id` to see whether the issue is backend-wide, component-wide, or isolated to one orchestration.
+4. Narrow by `state_store_type`, `minion`, and `orchestration_id` to see whether the issue is StateStore-type-wide, component-wide, or isolated to one orchestration.
 5. Use the persistence logs to confirm whether the runtime is retrying, resuming, or hitting a deterministic serialization failure.
 
 ## Resource metrics

@@ -19,7 +19,26 @@ from .metrics import (
     SnapshotGauges,
     SnapshotHistograms,
 )
+from .metrics_constants import (
+    STATE_STORE_PAYLOAD_SIZE_BYTES,
+)
 from .metrics_interface import LabelledCounter, LabelledGauge, LabelledHistogram, LabelledMetric
+
+_PAYLOAD_SIZE_BYTES_HISTOGRAM_BUCKETS = (
+    256.0,
+    1024.0,
+    4096.0,
+    16_384.0,
+    65_536.0,
+    262_144.0,
+    1_048_576.0,
+    4_194_304.0,
+    16_777_216.0,
+    67_108_864.0,
+)
+_HISTOGRAM_BUCKETS_BY_METRIC: dict[str, tuple[float, ...]] = {
+    STATE_STORE_PAYLOAD_SIZE_BYTES: _PAYLOAD_SIZE_BYTES_HISTOGRAM_BUCKETS,
+}
 
 
 class _PrometheusCounter:
@@ -147,13 +166,19 @@ class PrometheusMetrics(Metrics):
                 label_names,
             )
         if kind == "histogram":
+            buckets = _HISTOGRAM_BUCKETS_BY_METRIC.get(
+                metric_name,
+                Histogram.DEFAULT_BUCKETS,
+            )
+            histogram = Histogram(
+                metric_name,
+                f"{metric_name} ({kind})",
+                labelnames=label_names,
+                registry=self._registry,
+                buckets=buckets,
+            )
             return _PrometheusHistogram(
-                Histogram(
-                    metric_name,
-                    f"{metric_name} ({kind})",
-                    labelnames=label_names,
-                    registry=self._registry,
-                ),
+                histogram,
                 label_names,
             )
 

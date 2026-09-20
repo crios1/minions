@@ -972,7 +972,7 @@ class SQLiteStateStore(StateStore):
                         pass
             raise
 
-    # Telemetry and Warnings
+    # Warnings
 
     def _record_commit_metrics(self, dt_ms: float, row_count: int) -> None:
         self._metric_commit_latency_ms_hist.append(dt_ms)
