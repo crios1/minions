@@ -68,6 +68,50 @@ async def test_supports_start_wait_shutdown_flow(
         pipeline_event_counts={pipeline_ref: 1},
     )
 
+
+@pytest.mark.asyncio
+async def test_verifies_resource_lifecycle_observed_during_failed_start(
+    gru: Gru,
+):
+    from tests.assets.crash.minions.counter.with_boom_startup_resource import (
+        AssetMinion as BoomResourceMinion,
+    )
+    from tests.assets.pipelines.emit_one.counter.default import (
+        AssetPipeline as EmitOneCounterPipeline,
+    )
+
+    start = OrchestrationStart(
+        pipeline=EmitOneCounterPipeline,
+        minion=BoomResourceMinion,
+        expect_success=False,
+    )
+
+    await run_gru_scenario(
+        gru,
+        [start, GruShutdown(expect_success=True)],
+        pipeline_event_counts={},
+    )
+
+
+@pytest.mark.asyncio
+async def test_verifies_pipeline_lifecycle_observed_during_failed_start(
+    gru: Gru,
+):
+    pipeline_ref = "tests.assets.crash.pipelines.counter.boom_startup"
+    minion_ref = "tests.assets.minions.two_steps.counter.default"
+    start = OrchestrationStart(
+        pipeline=pipeline_ref,
+        minion=minion_ref,
+        expect_success=False,
+    )
+
+    await run_gru_scenario(
+        gru,
+        [start, GruShutdown(expect_success=True)],
+        pipeline_event_counts={},
+    )
+
+
 @pytest.mark.asyncio
 async def test_class_start_with_inline_config_records_successful_resolution_and_exact_steps(
     gru: Gru,

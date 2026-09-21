@@ -172,6 +172,12 @@ class ScenarioRunResult:
     spy_instance_identities: defaultdict[SpiedComponentClass, set[int]] = field(
         default_factory=lambda: defaultdict(set)
     )
+    # Failed starts can construct components before rollback removes them. Keep
+    # those identities separate so the verifier can account for partial lifecycles
+    # without treating them as successfully started runtime components.
+    failed_start_spy_instance_identities: defaultdict[SpiedComponentClass, set[int]] = field(
+        default_factory=lambda: defaultdict(set)
+    )
     call_count_limit_violations: list[CallCountLimitViolation] = field(
         default_factory=lambda: list()
     )
@@ -476,6 +482,7 @@ class ScenarioRunner:
         if not r.success:
             result.receipts.append(receipt)
             self._orchestration_start_receipts_by_directive_id[id(d)] = receipt
+            self._record_failed_start_spy_instance_identities()
             return
 
         minion_inst = None
@@ -631,6 +638,20 @@ class ScenarioRunner:
         for rid in resource_ids:
             res_inst = self._insp.get_resource_instance(rid)
             self._record_spy_instance_identity_if_present(res_inst)
+
+    def _record_failed_start_spy_instance_identities(self) -> None:
+        result = self._require_result()
+        classes: set[SpiedComponentClass] = set(self._spies.minions.values())
+        classes.update(self._spies.pipelines.values())
+        classes.update(self._spies.resources)
+        for cls in classes:
+            known_identities = (
+                result.spy_instance_identities[cls]
+                | result.failed_start_spy_instance_identities[cls]
+            )
+            result.failed_start_spy_instance_identities[cls].update(
+                cls.get_spy_instance_identities() - known_identities
+            )
 
     def _record_spy_instance_identity_if_present(self, inst: object | None) -> None:
         if inst is None:

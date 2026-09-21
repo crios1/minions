@@ -338,11 +338,13 @@ class ScenarioVerifier:
         # the final owner stops. Aggregate lifecycle calls therefore scale with the
         # distinct Resource instances observed across the scenario.
         for r_cls in spies.resources:
-            instance_count = len(self._result.spy_instance_identities.get(r_cls, set()))
+            successful_instance_count = len(
+                self._result.spy_instance_identities.get(r_cls, set())
+            )
             call_counts[r_cls] = {
-                "__init__": instance_count,
-                "startup": instance_count,
-                "run": instance_count,
+                name: successful_instance_count
+                + self._failed_start_call_count(r_cls, name)
+                for name in ("__init__", "startup", "run")
             }
             allow_unlisted_calls.add(r_cls)
 
@@ -351,17 +353,18 @@ class ScenarioVerifier:
             replayed_step_counts = self._compute_replayed_step_counts(spies).get(m_cls, {})
             workflow = self._require_workflow_spec(m_cls)
             base = {
-                "__init__": starts,
-                "startup": starts,
-                "run": starts,
-                **{
+                name: starts + self._failed_start_call_count(m_cls, name)
+                for name in ("__init__", "startup", "run")
+            }
+            base.update(
+                {
                     name: (
                         expectations.expected_workflows_by_class.get(m_cls, 0)
                         + replayed_step_counts.get(name, 0)
                     )
                     for name in workflow
-                },
-            }
+                }
+            )
             call_counts[m_cls] = base
 
         minion_starts = sum(expectations.minion_start_counts.values())
@@ -407,6 +410,40 @@ class ScenarioVerifier:
             call_counts=call_counts,
             allow_unlisted_calls=allow_unlisted_calls,
         )
+
+    def _failed_start_call_count(
+        self,
+        cls: SpiedComponentClass,
+        method_name: str,
+    ) -> int:
+        failed_identities = self._result.failed_start_spy_instance_identities.get(cls, set())
+        if not failed_identities:
+            return 0
+        return sum(
+            1
+            for recorded_call in cls.get_call_history()
+            if (
+                recorded_call.method_name == method_name
+                and recorded_call.spy_instance_identity in failed_identities
+            )
+        )
+
+    def _assert_failed_start_call_order(self, cls: SpiedComponentClass) -> None:
+        for spy_instance_identity in self._result.failed_start_spy_instance_identities.get(
+            cls, set()
+        ):
+            names = _names_for_spy_instance_identity(cls, spy_instance_identity)
+            if "__init__" not in names:
+                pytest.fail(
+                    f"Failed-start spy instance identity {spy_instance_identity} for "
+                    f"{_class_ref(cls)} has no __init__ call."
+                )
+            observed_lifecycle = [
+                name
+                for name in ("__init__", "startup", "run", "shutdown")
+                if name in names
+            ]
+            cls.assert_call_order_for_instance(spy_instance_identity, observed_lifecycle)
 
     def _compute_replayed_step_counts(
         self,
@@ -1369,6 +1406,10 @@ class ScenarioVerifier:
         for pipeline_id, p_cls in spies.pipelines.items():
             expected_events = self._plan.pipeline_event_targets.get(pipeline_id)
             counts = p_cls.get_call_counts()
+            failed_start_call_counts = {
+                name: self._failed_start_call_count(p_cls, name)
+                for name in ("__init__", "startup", "run", "shutdown")
+            }
 
             if call_expectations is not None:
                 expected_starts = call_expectations.starts_by_pipeline_id.get(
@@ -1381,10 +1422,19 @@ class ScenarioVerifier:
                     pipeline_id, 0
                 )
                 for name, expected in (
-                    ("__init__", expected_inits),
-                    ("startup", expected_starts),
-                    ("run", expected_starts),
-                    ("shutdown", expected_shutdowns),
+                    (
+                        "__init__",
+                        expected_inits + failed_start_call_counts["__init__"],
+                    ),
+                    (
+                        "startup",
+                        expected_starts + failed_start_call_counts["startup"],
+                    ),
+                    ("run", expected_starts + failed_start_call_counts["run"]),
+                    (
+                        "shutdown",
+                        expected_shutdowns + failed_start_call_counts["shutdown"],
+                    ),
                 ):
                     actual = counts.get(name, 0)
                     if actual != expected:
@@ -1564,6 +1614,7 @@ class ScenarioVerifier:
                 if "shutdown" in names:
                     order.append("shutdown")
                 m_cls.assert_call_order_for_instance(spy_instance_identity, order)
+            self._assert_failed_start_call_order(m_cls)
 
         for pipeline_id, p_cls in spies.pipelines.items():
             expected_events = self._plan.pipeline_event_targets.get(pipeline_id)
@@ -1575,6 +1626,7 @@ class ScenarioVerifier:
                 if "shutdown" in names:
                     order.append("shutdown")
                 p_cls.assert_call_order_for_instance(spy_instance_identity, order)
+            self._assert_failed_start_call_order(p_cls)
 
         for r_cls in spies.resources:
             for spy_instance_identity in self._result.spy_instance_identities.get(r_cls, set()):
@@ -1583,6 +1635,7 @@ class ScenarioVerifier:
                 if "shutdown" in names:
                     order.append("shutdown")
                 r_cls.assert_call_order_for_instance(spy_instance_identity, order)
+            self._assert_failed_start_call_order(r_cls)
 
         if should_assert_state_store_order:
             assert state_store_spy_instance_identity is not None

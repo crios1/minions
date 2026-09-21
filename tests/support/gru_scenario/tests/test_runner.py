@@ -241,6 +241,30 @@ async def test_records_receipts_for_success_and_expected_failure(
 
 
 @pytest.mark.asyncio
+async def test_records_resource_spy_identity_created_by_failed_start(
+    gru: Gru,
+):
+    from tests.assets.crash.minions.counter.with_boom_startup_resource import (
+        AssetMinion as BoomResourceMinion,
+    )
+    from tests.assets.crash.resources.boom_startup import AssetResource as BoomResource
+    from tests.assets.pipelines.emit_one.counter.default import (
+        AssetPipeline as EmitOneCounterPipeline,
+    )
+
+    start = OrchestrationStart(
+        pipeline=EmitOneCounterPipeline,
+        minion=BoomResourceMinion,
+        expect_success=False,
+    )
+    plan = ScenarioPlan([start, GruShutdown()], pipeline_event_counts={})
+    result = await ScenarioRunner(gru, plan, per_verification_timeout=1.0).run()
+
+    assert result.receipts[0].success is False
+    assert result.failed_start_spy_instance_identities[BoomResource]
+
+
+@pytest.mark.asyncio
 async def test_concurrent_starts_capture_started_minions_and_spy_instance_identities(
     gru: Gru,
 ):
