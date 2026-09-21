@@ -177,6 +177,32 @@ durability mode. The runtime-level persistence policy still lives in
 `Gru.create(...)` via `workflow_persistence_failure_policy` and the retry
 settings.
 
+### Choose SQLite batching for the workload
+
+Batch settings trade checkpoint latency against write throughput; storage
+class alone is not enough to select a safe universal profile. The manual
+defaults are currently `batch_max_queued_writes=64` and
+`batch_max_flush_delay_ms=8`. They are a starting point, not a latency or
+throughput guarantee.
+
+Use these starting points according to the workload's priority:
+
+| Priority | Starting point | Trade-off |
+| --- | --- | --- |
+| Lowest checkpoint latency | `batch_max_queued_writes=1` | Uses one-row transactions, minimizing batching delay at the cost of throughput and more commit overhead. |
+| Unknown or changing hardware | `batch_tuning="calibrated"` | Measures startup commit latency and selects a hardware-relative profile, but still needs validation under the application's workload. |
+| High concurrent write throughput | Batched settings measured with representative low-, medium-, and upper-load profiles | Larger or longer batches can improve throughput while materially increasing low-volume p95 latency. |
+
+For manual tuning, run `minions tune sqlite --recommend-config` with workload
+profiles that resemble the deployment. Include a low-load profile to expose
+flush-delay latency and an upper-load profile to measure throughput and rows
+per commit. If the tool reports a fallback or low-confidence recommendation,
+do not promote that candidate to a global default; retain the current setting
+or make the choice explicitly for that workload. A configured
+`batch_max_interarrival_delay_ms` can cap low-volume waiting while retaining
+batching during bursts, but it also needs to be measured because it changes
+the latency/throughput trade-off.
+
 ## Persistence telemetry
 
 Workflow persistence metrics describe the runtime durability guarantee as experienced by workflows. They are separate from lower-level `state_store_*` backend health metrics.
