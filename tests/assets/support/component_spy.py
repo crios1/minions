@@ -50,6 +50,7 @@ class _CallCountWaiter:
     target_count: int
     event_loop: asyncio.AbstractEventLoop
     future: asyncio.Future[None]
+    spy_instance_identity: int | None = None
 
 
 class ComponentSpy(Generic[T_Component]):
@@ -112,6 +113,28 @@ class ComponentSpy(Generic[T_Component]):
         if not future.done():
             future.set_result(None)
 
+    def _count_recorded_calls(
+        self,
+        name: str,
+        *,
+        spy_instance_identity: int | None = None,
+    ) -> int:
+        """Count recorded calls, optionally scoped to one spy instance.
+
+        Callers must hold ``self._lock`` while reading the observation state.
+        """
+        if spy_instance_identity is None:
+            return self._call_counts.get(name, 0)
+
+        return sum(
+            1
+            for recorded_call in self._call_history
+            if (
+                recorded_call.method_name == name
+                and recorded_call.spy_instance_identity == spy_instance_identity
+            )
+        )
+
     def _record(self, name: str, spy_instance_identity: int | None = None) -> None:
         waiters_to_notify: list[_CallCountWaiter] = []
 
@@ -160,7 +183,11 @@ class ComponentSpy(Generic[T_Component]):
 
             remaining_waiters: list[_CallCountWaiter] = []
             for waiter in self._call_count_waiters_by_method.get(name, []):
-                if current >= waiter.target_count:
+                waiter_count = self._count_recorded_calls(
+                    name,
+                    spy_instance_identity=waiter.spy_instance_identity,
+                )
+                if waiter_count >= waiter.target_count:
                     waiters_to_notify.append(waiter)
                 else:
                     remaining_waiters.append(waiter)
@@ -357,16 +384,51 @@ class ComponentSpy(Generic[T_Component]):
 
     async def wait_for_call(self, name: str, *, count: int = 1, timeout: float = 10.0) -> None:
         """Wait until the recorded call count for a method reaches ``count``."""
+        await self._wait_for_call(
+            name,
+            count=count,
+            timeout=timeout,
+        )
+
+    async def wait_for_call_for_instance(
+        self,
+        name: str,
+        *,
+        spy_instance_identity: int,
+        count: int = 1,
+        timeout: float = 10.0,
+    ) -> None:
+        """Wait until one spy instance reaches ``count`` calls for a method."""
+        await self._wait_for_call(
+            name,
+            count=count,
+            timeout=timeout,
+            spy_instance_identity=spy_instance_identity,
+        )
+
+    async def _wait_for_call(
+        self,
+        name: str,
+        *,
+        count: int,
+        timeout: float,
+        spy_instance_identity: int | None = None,
+    ) -> None:
         loop = asyncio.get_running_loop()
         future = loop.create_future()
 
         with self._lock:
-            if self._call_counts.get(name, 0) >= count:
+            current_count = self._count_recorded_calls(
+                name,
+                spy_instance_identity=spy_instance_identity,
+            )
+            if current_count >= count:
                 return
             waiter = _CallCountWaiter(
                 target_count=count,
                 event_loop=loop,
                 future=future,
+                spy_instance_identity=spy_instance_identity,
             )
             self._call_count_waiters_by_method.setdefault(name, []).append(waiter)
 

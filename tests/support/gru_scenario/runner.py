@@ -964,10 +964,37 @@ class ScenarioWaiter:
                     "AfterWorkflowStepStarts references a start that has not executed: "
                     f"{directive_index}"
                 )
+            if not receipt.success:
+                pytest.fail(
+                    "AfterWorkflowStepStarts references a start that did not succeed: "
+                    f"{directive_index}"
+                )
+            if receipt.orchestration_id is None:
+                pytest.fail(
+                    "AfterWorkflowStepStarts references a successful start without an "
+                    f"orchestration ID: {directive_index}"
+                )
 
             m_cls = receipt.minion_cls or self._spies.minions.get(receipt.minion_id)
             if m_cls is None:
-                continue
+                pytest.fail(
+                    "AfterWorkflowStepStarts could not resolve the started minion class: "
+                    f"{directive_index}"
+                )
+            minion_inst = self._insp.get_minion_by_orchestration_id(receipt.orchestration_id)
+            if minion_inst is None:
+                pytest.fail(
+                    "AfterWorkflowStepStarts could not resolve the started minion instance: "
+                    f"{directive_index}"
+                )
+            spy_instance_identity = m_cls.get_spy_instance_identity(
+                cast(SpiedMinion[Any, Any], minion_inst)
+            )
+            if spy_instance_identity is None:
+                pytest.fail(
+                    "AfterWorkflowStepStarts could not resolve the started minion spy identity: "
+                    f"{directive_index}"
+                )
             workflow = tuple(m_cls._mn_workflow_spec or ())
             for step_name, count in steps.items():
                 if count <= 0:
@@ -979,7 +1006,14 @@ class ScenarioWaiter:
                     pytest.fail(
                         f"Unknown workflow step in AfterWorkflowStepStarts.expected: {step_name}"
                     )
-                waits.append(m_cls.wait_for_call(step_name, count=count, timeout=self._timeout))
+                waits.append(
+                    m_cls.wait_for_call_for_instance(
+                        step_name,
+                        spy_instance_identity=spy_instance_identity,
+                        count=count,
+                        timeout=self._timeout,
+                    )
+                )
 
         if waits:
             await asyncio.gather(*waits)

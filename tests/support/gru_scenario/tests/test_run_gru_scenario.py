@@ -135,6 +135,48 @@ async def test_supports_after_workflow_step_starts_wrapping_orchestration_stop(
 
 
 @pytest.mark.asyncio
+async def test_after_workflow_step_starts_scopes_wait_to_referenced_start_directive(
+    gru: Gru,
+):
+    minion_ref = "tests.assets.minions.failure.slow_step"
+    first_pipeline_ref = "tests.assets.pipelines.emit_one.counter.default"
+    second_pipeline_ref = "tests.assets.pipelines.emit_one.counter.default_b"
+    first_start = OrchestrationStart(pipeline=first_pipeline_ref, minion=minion_ref)
+    # Use a distinct pipeline identity so the same minion class can run in two
+    # orchestrations without triggering duplicate-start rejection.
+    second_start = OrchestrationStart(pipeline=second_pipeline_ref, minion=minion_ref)
+
+    directives: list[Directive] = [
+        first_start,
+        # Complete the first instance so its class-level step count could
+        # incorrectly satisfy the later instance's step boundary.
+        WaitWorkflowCompletions(
+            orchestrations=(first_start,),
+            workflow_steps_mode="exact",
+        ),
+        second_start,
+        AfterWorkflowStepStarts(
+            expected={second_start: {"step_1": 1}},
+            directive=OrchestrationStop(id=second_start, expect_success=True),
+        ),
+        ExpectRuntime(
+            expect=RuntimeExpectSpec(
+                workflow_steps={second_start: {"step_1": 1}},
+                workflow_steps_mode="exact",
+            ),
+        ),
+        OrchestrationStop(id=first_start, expect_success=True),
+        GruShutdown(expect_success=True),
+    ]
+
+    await run_gru_scenario(
+        gru,
+        directives,
+        pipeline_event_counts={first_pipeline_ref: 1, second_pipeline_ref: 1},
+    )
+
+
+@pytest.mark.asyncio
 async def test_supports_expect_runtime_for_persistence_after_stop(
     gru: Gru,
 ):

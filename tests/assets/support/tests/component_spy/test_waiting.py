@@ -45,6 +45,36 @@ async def test_wait_for_call_resolves_multiple_waiters_at_their_requested_counts
 
 
 @pytest.mark.asyncio
+async def test_wait_for_call_for_instance_ignores_calls_from_other_instances():
+    class SpiedComponent(metaclass=ComponentSpyMeta):
+        async def method(self) -> None:
+            return
+
+    SpiedComponent.enable_spy()
+    SpiedComponent.reset_spy()
+    first = SpiedComponent()
+    second = SpiedComponent()
+    second_identity = SpiedComponent.get_spy_instance_identity(second)
+    assert second_identity is not None
+
+    waiter = asyncio.create_task(
+        SpiedComponent.wait_for_call_for_instance(
+            "method",
+            spy_instance_identity=second_identity,
+            timeout=1.0,
+        )
+    )
+    await asyncio.sleep(0)
+
+    await first.method()
+    await asyncio.sleep(0)
+    assert not waiter.done()
+
+    await second.method()
+    await waiter
+
+
+@pytest.mark.asyncio
 async def test_wait_for_calls_resolves_after_requested_count_is_reached():
     class SpiedComponent(metaclass=ComponentSpyMeta):
         async def method(self) -> None:

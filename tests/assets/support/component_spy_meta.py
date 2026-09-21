@@ -76,6 +76,22 @@ class ComponentSpyMeta(_ComponentMeta):
             timeout=timeout,
         )
 
+    async def wait_for_call_for_instance(
+        cls,
+        name: str,
+        *,
+        spy_instance_identity: int,
+        count: int = 1,
+        timeout: float = 10.0,
+    ) -> None:
+        """Wait until one spy instance reaches ``count`` calls for a method."""
+        await component_spy_for(cls).wait_for_call_for_instance(
+            name,
+            spy_instance_identity=spy_instance_identity,
+            count=count,
+            timeout=timeout,
+        )
+
     async def wait_for_calls(
         cls,
         expected: dict[str, int],
