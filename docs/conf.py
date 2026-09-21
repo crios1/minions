@@ -31,6 +31,18 @@ autosummary_imported_members = True
 autodoc_member_order = "bysource"
 autodoc_typehints = "description"
 
+# Keep nitpicky mode focused on project-owned API targets. The documentation
+# build does not load a Python standard-library inventory, so these stable
+# external names cannot resolve even though their annotations are correct.
+nitpick_ignore = [
+    ("py:class", "asyncio.AbstractEventLoop"),
+    ("py:class", "collections.abc.Mapping"),
+    ("py:data", "typing.Any"),
+    ("py:data", "typing.Callable"),
+    ("py:data", "typing.Optional"),
+    ("py:data", "typing.Union"),
+]
+
 myst_enable_extensions = ["colon_fence", "deflist"]
 myst_heading_anchors = 3
 
