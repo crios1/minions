@@ -939,10 +939,18 @@ class ScenarioWaiter:
         self._result = result
 
     async def wait(self, *, orchestrations: tuple[OrchestrationStart, ...] | None) -> None:
+        selected_receipts = (
+            None if orchestrations is None else self._resolve_receipts(orchestrations)
+        )
         await self._wait_expected_workflow_calls(orchestrations=orchestrations)
         if orchestrations is not None and not orchestrations:
             return
-        await self._wait_minion_tasks(self._result.started_minions)
+        minions = (
+            self._result.started_minions
+            if selected_receipts is None
+            else self._started_minions_for_receipts(selected_receipts)
+        )
+        await self._wait_minion_tasks(minions)
 
     async def wait_for_step_starts(
         self,
@@ -1033,27 +1041,27 @@ class ScenarioWaiter:
         if orchestrations is None:
             self._add_expected_for_receipts(expected_per_class, self._result.receipts)
         else:
-            receipts: list[OrchestrationStartReceipt] = []
-            missing: list[int] = []
-            for start in orchestrations:
-                receipt = next(
-                    (
-                        item
-                        for item in self._result.receipts
-                        if item.directive_index == self._plan.directive_index(start)
-                    ),
-                    None,
-                )
-                if receipt is None:
-                    missing.append(self._plan.directive_index(start))
+            waits: list[Awaitable[None]] = []
+            for receipt in self._resolve_receipts(orchestrations):
+                if not receipt.success:
                     continue
-                receipts.append(receipt)
+                m_cls, _, spy_instance_identity = self._resolve_started_minion(receipt)
+                expected_events = self._plan.pipeline_event_targets.get(receipt.pipeline_id)
+                if expected_events is None or expected_events <= 0:
+                    continue
+                for step_name in tuple(m_cls._mn_workflow_spec or ()):  # type: ignore
+                    waits.append(
+                        m_cls.wait_for_call_for_instance(
+                            step_name,
+                            spy_instance_identity=spy_instance_identity,
+                            count=expected_events,
+                            timeout=self._timeout,
+                        )
+                    )
 
-            if missing:
-                pytest.fail(
-                    f"WaitWorkflowCompletions references starts that have not executed: {missing}"
-                )
-            self._add_expected_for_receipts(expected_per_class, receipts)
+            if waits:
+                await asyncio.gather(*waits)
+            return
 
         waits: list[Awaitable[None]] = []
         for m_cls, count in expected_per_class.items():
@@ -1064,6 +1072,87 @@ class ScenarioWaiter:
 
         if waits:
             await asyncio.gather(*waits)
+
+    def _resolve_receipts(
+        self,
+        orchestrations: tuple[OrchestrationStart, ...],
+    ) -> list[OrchestrationStartReceipt]:
+        receipts: list[OrchestrationStartReceipt] = []
+        missing: list[int] = []
+        for start in orchestrations:
+            directive_index = self._plan.directive_index(start)
+            receipt = next(
+                (
+                    item
+                    for item in self._result.receipts
+                    if item.directive_index == directive_index
+                ),
+                None,
+            )
+            if receipt is None:
+                missing.append(directive_index)
+                continue
+            receipts.append(receipt)
+
+        if missing:
+            pytest.fail(
+                f"WaitWorkflowCompletions references starts that have not executed: {missing}"
+            )
+        return receipts
+
+    def _resolve_started_minion(
+        self,
+        receipt: OrchestrationStartReceipt,
+    ) -> tuple[type[SpiedMinion[Any, Any]], SpiedMinion[Any, Any], int]:
+        if receipt.instance_id is None:
+            pytest.fail(
+                "WaitWorkflowCompletions references a successful start without a minion "
+                f"instance ID: {receipt.directive_index}"
+            )
+
+        minion_inst = next(
+            (
+                minion
+                for minion in self._result.started_minions
+                if getattr(minion, "_mn_minion_instance_id", None) == receipt.instance_id
+            ),
+            None,
+        )
+        if minion_inst is None:
+            live_minion = self._insp.get_minion_instance(receipt.instance_id)
+            if isinstance(live_minion, SpiedMinion):
+                minion_inst = live_minion
+        if minion_inst is None:
+            pytest.fail(
+                "WaitWorkflowCompletions could not resolve the started minion instance: "
+                f"{receipt.directive_index}"
+            )
+
+        m_cls = receipt.minion_cls or self._spies.minions.get(receipt.minion_id)
+        if m_cls is None:
+            pytest.fail(
+                "WaitWorkflowCompletions could not resolve the started minion class: "
+                f"{receipt.directive_index}"
+            )
+        spy_instance_identity = m_cls.get_spy_instance_identity(minion_inst)
+        if spy_instance_identity is None:
+            pytest.fail(
+                "WaitWorkflowCompletions could not resolve the started minion spy identity: "
+                f"{receipt.directive_index}"
+            )
+        return m_cls, minion_inst, spy_instance_identity
+
+    def _started_minions_for_receipts(
+        self,
+        receipts: list[OrchestrationStartReceipt],
+    ) -> set[SpiedMinion[Any, Any]]:
+        selected_minions: set[SpiedMinion[Any, Any]] = set()
+        for receipt in receipts:
+            if not receipt.success:
+                continue
+            _, minion_inst, _ = self._resolve_started_minion(receipt)
+            selected_minions.add(minion_inst)
+        return selected_minions
 
     def _add_expected_for_receipts(
         self,

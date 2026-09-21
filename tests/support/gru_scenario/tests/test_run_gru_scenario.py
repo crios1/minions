@@ -599,6 +599,104 @@ async def test_wait_workflow_completions_targets_selected_orchestrations(
 
 
 @pytest.mark.asyncio
+async def test_wait_workflow_completions_does_not_wait_on_unselected_same_class_start(
+    gru: Gru,
+):
+    import asyncio
+    from dataclasses import dataclass
+
+    from minions import minion_step
+    from tests.assets.contexts.counter import CounterContext
+    from tests.assets.events.counter import CounterEvent
+    from tests.assets.pipelines.emit_one.counter.default import (
+        AssetPipeline as ReadyPipeline,
+    )
+    from tests.assets.pipelines.emit_one.counter.default_b import (
+        AssetPipeline as BlockedPipeline,
+    )
+    from tests.assets.support.minion_spied import SpiedMinion
+
+    @dataclass
+    class MinionConfig:
+        stall: bool
+
+    class SameClassMinion(SpiedMinion[CounterEvent, CounterContext]):
+        config: MinionConfig
+
+        @minion_step
+        async def step_1(self) -> None:
+            if self.config.stall:
+                await asyncio.Event().wait()
+
+    selected_start = OrchestrationStart(
+        pipeline=ReadyPipeline,
+        minion=SameClassMinion,
+        minion_config=MinionConfig(stall=False),
+    )
+    unselected_start = OrchestrationStart(
+        pipeline=BlockedPipeline,
+        minion=SameClassMinion,
+        minion_config=MinionConfig(stall=True),
+    )
+    directives: list[Directive] = [
+        selected_start,
+        unselected_start,
+        WaitWorkflowCompletions(orchestrations=(selected_start,)),
+        OrchestrationStop(id=selected_start, expect_success=True),
+        OrchestrationStop(id=unselected_start, expect_success=True),
+        GruShutdown(expect_success=True),
+    ]
+
+    await run_gru_scenario(
+        gru,
+        directives,
+        pipeline_event_counts={ReadyPipeline: 1, BlockedPipeline: 1},
+        per_verification_timeout=0.05,
+    )
+
+
+@pytest.mark.asyncio
+async def test_wait_workflow_completions_does_not_use_unselected_same_class_calls(
+    gru: Gru,
+):
+    from tests.assets.minions.two_steps.simple.default import AssetMinion
+    from tests.assets.pipelines.emit_one.simple.default import (
+        AssetPipeline as SelectedPipeline,
+    )
+    from tests.assets.pipelines.emit_one.simple.default_b import (
+        AssetPipeline as UnselectedPipeline,
+    )
+    from tests.support.gru_scenario.plan import ScenarioPlan
+    from tests.support.gru_scenario.runner import ScenarioRunner
+
+    SelectedPipeline.configure_gate(expected_subs=2)
+    UnselectedPipeline.configure_gate(expected_subs=1)
+    selected_start = OrchestrationStart(
+        pipeline=SelectedPipeline,
+        minion=AssetMinion,
+    )
+    unselected_start = OrchestrationStart(
+        pipeline=UnselectedPipeline,
+        minion=AssetMinion,
+    )
+    plan = ScenarioPlan(
+        [
+            unselected_start,
+            selected_start,
+            WaitWorkflowCompletions(orchestrations=(selected_start,)),
+        ],
+        pipeline_event_counts={SelectedPipeline: 1, UnselectedPipeline: 1},
+    )
+
+    try:
+        with pytest.raises(TimeoutError):
+            await ScenarioRunner(gru, plan, per_verification_timeout=0.05).run()
+    finally:
+        shutdown = await gru.shutdown()
+        assert shutdown.success
+
+
+@pytest.mark.asyncio
 async def test_exact_runtime_expectation_reports_mismatch(
     gru: Gru,
 ):
