@@ -593,6 +593,7 @@ class ScenarioVerifier:
                     "orchestrations": frozenset(),
                     "pipelines": frozenset(),
                     "resources": frozenset(),
+                    "minion_instance_by_orchestration": {},
                     "pipeline_by_orchestration": {},
                     "resources_by_minion_instance": {},
                     "resources_by_pipeline": {},
@@ -643,6 +644,11 @@ class ScenarioVerifier:
                         resources_with_dependencies.add(dependency_id)
                         pending_resources.append(dependency_id)
                 resources = frozenset(resources_with_dependencies)
+                minion_instance_by_orchestration = {
+                    receipt.orchestration_id: receipt.instance_id
+                    for receipt in active_receipts
+                    if receipt.orchestration_id is not None and receipt.instance_id is not None
+                }
                 pipeline_by_orchestration = {
                     receipt.orchestration_id: receipt.pipeline_id
                     for receipt in active_receipts
@@ -704,6 +710,7 @@ class ScenarioVerifier:
                     "orchestrations": orchestrations,
                     "pipelines": pipelines,
                     "resources": resources,
+                    "minion_instance_by_orchestration": minion_instance_by_orchestration,
                     "pipeline_by_orchestration": pipeline_by_orchestration,
                     "resources_by_minion_instance": (resources_by_minion_instance),
                     "resources_by_pipeline": resources_by_pipeline,
