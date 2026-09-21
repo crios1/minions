@@ -41,6 +41,14 @@ nitpick_ignore = [
     ("py:data", "typing.Callable"),
     ("py:data", "typing.Optional"),
     ("py:data", "typing.Union"),
+    # These names are implementation-only sentinel and generic variables;
+    # they are not independently importable public API contracts.
+    ("py:class", "_UnsetType"),
+    ("py:class", "minions._internal._domain.gru._UnsetType"),
+    ("py:class", "minions._internal._domain.resource.R"),
+    ("py:class", "minions._internal._domain.types.T_Ctx"),
+    ("py:class", "minions._internal._domain.types.T_Event"),
+    ("py:class", "~P"),
 ]
 
 myst_enable_extensions = ["colon_fence", "deflist"]
