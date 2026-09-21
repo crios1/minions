@@ -35,7 +35,7 @@ class WorkflowCtx:
 
 ## Create a Resource
 
-Resources are shared dependencies with startup/shutdown hooks. Public async methods are automatically latency/error-tracked unless you mark them `{py:func}``Resource.untracked``.
+Resources are shared dependencies with startup/shutdown hooks. Public async methods are automatically latency/error-tracked unless you mark them `{py:func}``~minions.Resource.untracked``.
 
 ```python
 # my_app/resources.py
@@ -67,7 +67,7 @@ class HeartbeatPipeline(Pipeline[Heartbeat]):
 
 ## Write a Minion
 
-Minions declare the event and workflow context types, then implement ordered `{py:func}``@minion_step`` methods.
+Minions declare the event and workflow context types, then implement ordered `{py:func}``@minion_step <minions.minion_step>`` methods.
 
 ```python
 # my_app/minions/my_minion.py

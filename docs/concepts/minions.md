@@ -33,12 +33,12 @@ Rules from the runtime:
 - Workflow context types must be constructible without arguments. Minions
   creates one for each live event, so required context fields need defaults.
 - For durable workflow state, prefer explicit schemas such as dataclasses or `msgspec.Struct` types.
-- Steps must be instance methods decorated with `{py:func}``@minion_step``. They run in source order.
+- Steps must be instance methods decorated with `{py:func}``@minion_step <minions.minion_step>``. They run in source order.
 - Use `self.event` to access the current pipeline event; the event is contextvar-bound per workflow.
 - Use `self.context` to read and update the current workflow context; steps do not receive it as an argument.
 - Keep per-workflow mutable state in `self.context`. Regular Minion instance attributes are shared by that Minion's concurrent workflows; see {ref}`component-state-ownership` for the complete state-scope model.
 - Use `self.workflow_handle` when business code needs optional diagnostic correlation data for logs or audit records. The read-only handle exposes `orchestration_id` and `workflow_id`, matching the stable identity fields used by framework diagnostics and persisted workflow state.
-- Raise `{py:class}``minions._internal._domain.exceptions.AbortWorkflow`` to stop a workflow gracefully without treating it as a failure.
+- Raise `{py:class}``~minions.exceptions.AbortWorkflow`` to stop a workflow gracefully without treating it as a failure.
 - Do not raise `asyncio.CancelledError` to intentionally stop a workflow. The runtime treats cancellation as an interruption, keeps the persisted workflow context, and may resume the workflow later. Use `AbortWorkflow` when the workflow should stop as an intentional terminal outcome.
 
 ### Async work ownership

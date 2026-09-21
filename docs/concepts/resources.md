@@ -6,7 +6,7 @@ Resources are shared async services used by pipelines and minions. They encapsul
 
 - Implement `startup`, `run`, and `shutdown` as needed.
 - Public async methods are automatically wrapped to record latency and errors via Prometheus metrics and structured logs.
-- Use `{py:func}``Resource.untracked`` when you need a method to skip tracking (e.g., health checks).
+- Use `{py:func}``~minions.Resource.untracked`` when you need a method to skip tracking (e.g., health checks).
 
 ```python
 from minions import Resource

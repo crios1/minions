@@ -32,7 +32,7 @@ Public async methods are wrapped automatically:
 See {doc}`/concepts/resources` for the failure-log fields and argument-privacy
 boundary.
 
-Mark methods that should skip tracking with `{py:func}``Resource.untracked``.
+Mark methods that should skip tracking with `{py:func}``~minions.Resource.untracked``.
 
 ## 2) Declare dependencies
 
