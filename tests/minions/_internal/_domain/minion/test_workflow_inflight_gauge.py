@@ -81,7 +81,7 @@ async def test_tracks_accepted_workflow_during_initial_persistence_and_step_exec
             step_started.set()
             await allow_step_to_finish.wait()
 
-    state_store = FailableStateStore(logger=logger)
+    state_store = FailableStateStore(logger=logger, metrics=metrics)
     state_store.save_failures.enable()
     minion = _make_minion(
         WaitingMinion,

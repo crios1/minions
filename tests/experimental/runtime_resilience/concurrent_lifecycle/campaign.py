@@ -185,7 +185,7 @@ async def test_concurrent_lifecycle_batches_are_linearizable(seed: int):
     rng = random.Random(seed)
     logger = InMemoryLogger()
     metrics = InMemoryMetrics(logger=logger)
-    state_store = InMemoryStateStore(logger=logger)
+    state_store = InMemoryStateStore(logger=logger, metrics=metrics)
     gru = await Gru.create(
         logger=logger,
         metrics=metrics,
@@ -282,10 +282,11 @@ async def test_shutdown_race_drains_reserved_work_and_rejects_late_work(
 ):
     rng = random.Random(seed)
     logger = InMemoryLogger()
+    metrics = InMemoryMetrics(logger=logger)
     gru = await Gru.create(
         logger=logger,
-        metrics=InMemoryMetrics(logger=logger),
-        state_store=InMemoryStateStore(logger=logger),
+        metrics=metrics,
+        state_store=InMemoryStateStore(logger=logger, metrics=metrics),
     )
     states = {
         composition: CompositionState(orchestration_id=await _discover_id(gru, composition))

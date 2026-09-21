@@ -74,10 +74,13 @@ def metrics(logger: InMemoryLogger) -> Generator[InMemoryMetrics, None, None]:
 
 
 @pytest.fixture
-def state_store(logger: InMemoryLogger) -> InMemoryStateStore:
+def state_store(
+    logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
+) -> InMemoryStateStore:
     InMemoryStateStore.enable_spy()
     InMemoryStateStore.reset_spy()
-    return InMemoryStateStore(logger=logger)
+    return InMemoryStateStore(logger=logger, metrics=metrics)
 
 
 @pytest.fixture

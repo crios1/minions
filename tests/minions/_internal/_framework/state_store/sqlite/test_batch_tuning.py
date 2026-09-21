@@ -1,6 +1,7 @@
 import pytest
 
 from minions._internal._framework.logger import WARNING
+from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_sqlite import (
     BATCH_MAX_FLUSH_DELAY_MS_HDD_LIKE,
     BATCH_MAX_FLUSH_DELAY_MS_NVME_LIKE,
@@ -25,6 +26,7 @@ async def test_init_resolves_default_batch_config(logger: InMemoryLogger):
     s = SQLiteStateStore(
         db_path=":memory:",
         logger=logger,
+        metrics=NoOpMetrics(),
     )
 
     assert s._batch_tuning == "manual"
@@ -38,6 +40,7 @@ async def test_init_preserves_configured_batch_max_queued_writes(
     s = SQLiteStateStore(
         db_path=":memory:",
         logger=logger,
+        metrics=NoOpMetrics(),
         batch_max_queued_writes=200,
     )
 
@@ -51,6 +54,7 @@ async def test_init_accepts_immediate_batch_max_queued_writes(
     s = SQLiteStateStore(
         db_path=":memory:",
         logger=logger,
+        metrics=NoOpMetrics(),
         batch_max_queued_writes=1,
     )
 
@@ -64,6 +68,7 @@ async def test_init_preserves_configured_batch_max_flush_delay_ms(
     s = SQLiteStateStore(
         db_path=":memory:",
         logger=logger,
+        metrics=NoOpMetrics(),
         batch_max_flush_delay_ms=30,
     )
 
@@ -77,6 +82,7 @@ async def test_init_with_calibrated_batch_tuning_defers_batch_resolution_until_s
     s = SQLiteStateStore(
         db_path=":memory:",
         logger=logger,
+        metrics=NoOpMetrics(),
         batch_tuning="calibrated",
     )
 
@@ -107,6 +113,7 @@ async def test_init_rejects_explicit_batch_config_in_calibrated_mode(
         SQLiteStateStore(
             db_path=":memory:",
             logger=logger,
+            metrics=NoOpMetrics(),
             batch_tuning="calibrated",
             batch_max_queued_writes=batch_max_queued_writes,
             batch_max_flush_delay_ms=batch_max_flush_delay_ms,
@@ -122,6 +129,7 @@ async def test_init_rejects_out_of_range_batch_max_queued_writes(
         SQLiteStateStore(
             db_path=":memory:",
             logger=logger,
+            metrics=NoOpMetrics(),
             batch_max_queued_writes=batch_max_queued_writes,
         )
 
@@ -131,6 +139,7 @@ async def test_init_rejects_invalid_batch_tuning_mode(logger: InMemoryLogger):
         SQLiteStateStore(
             db_path=":memory:",
             logger=logger,
+            metrics=NoOpMetrics(),
             batch_tuning="boom",  # type: ignore[arg-type]
         )
 
@@ -144,6 +153,7 @@ async def test_init_rejects_out_of_range_batch_max_flush_delay_ms(
         SQLiteStateStore(
             db_path=":memory:",
             logger=logger,
+            metrics=NoOpMetrics(),
             batch_max_flush_delay_ms=batch_max_flush_delay_ms,
         )
 
@@ -180,6 +190,7 @@ async def test_derive_calibrated_batch_config_maps_latency_to_profile(
     s = SQLiteStateStore(
         db_path=":memory:",
         logger=logger,
+        metrics=NoOpMetrics(),
         batch_tuning="calibrated",
     )
 

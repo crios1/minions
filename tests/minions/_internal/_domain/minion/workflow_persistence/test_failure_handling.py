@@ -74,7 +74,7 @@ async def test_continue_on_failure_policy_advances_after_save_failure_and_persis
         async def complete_workflow(self):
             step_calls.append("complete_workflow")
 
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     m = TransientSaveFailureMinion(
         minion_instance_id="dummy-minion-instance-id",
         orchestration_id="dummy-orchestration-id",
@@ -146,7 +146,7 @@ async def test_idle_until_persisted_policy_idles_workflow_until_save_retry_succe
             step_calls.append("continue_after_persistence")
             workflow_continued.set()
 
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     m = TransientSaveFailureMinion(
         minion_instance_id="dummy-minion-instance-id",
         orchestration_id="dummy-orchestration-id",
@@ -216,7 +216,7 @@ async def test_workflow_cancellation_during_retry_wait_preserves_checkpoint_and_
         async def must_not_run(self):
             step_calls.append("must_not_run")
 
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     m = SaveFailureBeforeNextStepMinion(
         minion_instance_id="dummy-minion-instance-id",
         orchestration_id="dummy-orchestration-id",
@@ -318,7 +318,7 @@ async def test_stopping_orchestration_during_retry_wait_preserves_unfinished_wor
         async def must_not_run(self):
             step_calls.append("must_not_run")
 
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
 
     async with managed_gru_context(
         logger=logger,
@@ -423,7 +423,7 @@ async def test_persistence_blocked_gauge_tracks_concurrent_workflows_for_same_la
         async def continue_after_persistence(self):
             step_calls.append("continue_after_persistence")
 
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     m = ConcurrentSaveFailureMinion(
         minion_instance_id="dummy-minion-instance-id",
         orchestration_id="dummy-orchestration-id",
@@ -497,7 +497,7 @@ async def test_idle_until_persisted_policy_reports_retry_progress_and_escalates_
         async def continue_after_persistence(self):
             workflow_continued.set()
 
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     m = SustainedSaveFailureMinion(
         minion_instance_id="dummy-minion-instance-id",
         orchestration_id="dummy-orchestration-id",
@@ -560,7 +560,7 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds(
         async def step_1(self):
             step_1_done.set()
 
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     store.delete_failures.enable()
     m = DeleteBlockingSuccessMinion(
         minion_instance_id="dummy-minion-instance-id",

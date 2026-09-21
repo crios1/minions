@@ -1,6 +1,7 @@
 import asyncio
 
 from minions._internal._framework.logger import Logger
+from minions._internal._framework.metrics import Metrics
 from minions._internal._framework.state_store import StoredWorkflowContext
 from tests.assets.support.state_store_spied import SpiedStateStore
 
@@ -8,8 +9,8 @@ from tests.assets.support.state_store_spied import SpiedStateStore
 class InMemoryStateStore(SpiedStateStore):
     """In-memory implementation of StateStore for testing."""
 
-    def __init__(self, logger: Logger):
-        super().__init__(logger)
+    def __init__(self, logger: Logger, metrics: Metrics):
+        super().__init__(logger, metrics)
         self._contexts: dict[str, StoredWorkflowContext] = {}
         self._lock = asyncio.Lock()
 

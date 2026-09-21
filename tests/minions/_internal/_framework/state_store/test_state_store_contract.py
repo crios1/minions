@@ -9,6 +9,7 @@ import pytest
 import pytest_asyncio
 
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
+from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.minion_workflow_context_codec import (
     CURRENT_WORKFLOW_CONTEXT_SCHEMA_VERSION,
     PersistedMinionWorkflowContext,
@@ -70,7 +71,11 @@ async def state_store_under_contract(
 ) -> AsyncGenerator[tuple[StateStore, InMemoryLogger], None]:
     if request.param == "sqlite":
         db_path = str(tmp_path / "state.db")
-        store = SQLiteStateStore(db_path=db_path, logger=logger)
+        store = SQLiteStateStore(
+            db_path=db_path,
+            logger=logger,
+            metrics=NoOpMetrics(),
+        )
         await logger._mn_startup()
         await store._mn_startup()
         try:
@@ -80,7 +85,7 @@ async def state_store_under_contract(
             await logger._mn_shutdown()
         return
 
-    store = InMemoryStateStore(logger=logger)
+    store = InMemoryStateStore(logger=logger, metrics=NoOpMetrics())
     yield store, logger
 
 

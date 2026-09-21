@@ -294,7 +294,7 @@ class TestUnit:
         async with managed_gru_context(
             logger=logger,
             metrics=metrics,
-            state_store=NoOpStateStore(),
+            state_store=NoOpStateStore(metrics=metrics),
         ) as gru:
 
             def get_config_id_and_record_thread_id(_config_path: str) -> str:
@@ -527,7 +527,7 @@ class TestUnit:
         async with managed_gru_context(
             logger=logger,
             metrics=metrics,
-            state_store=NoOpStateStore(),
+            state_store=NoOpStateStore(metrics=metrics),
         ) as gru:
 
             async def failing_shutdown_async_component(
@@ -558,7 +558,7 @@ class TestUnit:
         async with managed_gru_context(
             logger=logger,
             metrics=metrics,
-            state_store=NoOpStateStore(),
+            state_store=NoOpStateStore(metrics=metrics),
         ) as gru:
             result = await gru.start_orchestration(
                 "tests.assets.pipelines.emit_one.counter.default",
@@ -617,7 +617,7 @@ class TestUnit:
         async with managed_gru_context(
             logger=logger,
             metrics=metrics,
-            state_store=NoOpStateStore(),
+            state_store=NoOpStateStore(metrics=metrics),
         ) as gru:
             result = await gru.start_orchestration(
                 IdentifiedEmitOneCounterPipeline,
@@ -724,7 +724,7 @@ class TestUnit:
         async with managed_gru_context(
             logger=logger,
             metrics=metrics,
-            state_store=NoOpStateStore(),
+            state_store=NoOpStateStore(metrics=metrics),
         ) as gru:
             result = await gru.start_orchestration(
                 "tests.assets.pipelines.emit_one.counter.default",
@@ -759,7 +759,7 @@ class TestUnit:
         async with managed_gru_context(
             logger=logger,
             metrics=metrics,
-            state_store=NoOpStateStore(),
+            state_store=NoOpStateStore(metrics=metrics),
         ) as gru:
             result = await gru.start_orchestration(
                 "tests.assets.pipelines.emit_one.counter.default",
@@ -801,7 +801,7 @@ class TestUnit:
         async with managed_gru_context(
             logger=logger,
             metrics=metrics,
-            state_store=NoOpStateStore(),
+            state_store=NoOpStateStore(metrics=metrics),
         ) as gru:
             result = await gru.start_orchestration(
                 "tests.assets.pipelines.emit_one.counter.default",

@@ -3,6 +3,7 @@ from typing import Any
 import pytest
 
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
+from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store import PersistenceOperationResult
 from tests.assets.crash.boom import BOOM_MESSAGE, BoomError
 from tests.assets.crash.support.state_store.boom_delete_context import (
@@ -34,7 +35,7 @@ def make_context() -> MinionWorkflowContext[CounterEvent, dict[str, Any]]:
 async def test_save_failure_returns_structured_result_and_logs(
     logger: InMemoryLogger,
 ):
-    store = BoomSaveContextStateStore(logger=logger)
+    store = BoomSaveContextStateStore(logger=logger, metrics=NoOpMetrics())
 
     result = await store._mn_serialize_and_save_context(make_context())
 
@@ -52,7 +53,7 @@ async def test_save_failure_returns_structured_result_and_logs(
 async def test_delete_failure_returns_structured_result_and_logs(
     logger: InMemoryLogger,
 ):
-    store = BoomDeleteContextStateStore(logger=logger)
+    store = BoomDeleteContextStateStore(logger=logger, metrics=NoOpMetrics())
 
     result = await store._mn_delete_context("wf-boom")
 
@@ -70,7 +71,10 @@ async def test_delete_failure_returns_structured_result_and_logs(
 async def test_get_contexts_for_orchestration_failure_raises_and_logs(
     logger: InMemoryLogger,
 ):
-    store = BoomGetContextsForOrchestrationStateStore(logger=logger)
+    store = BoomGetContextsForOrchestrationStateStore(
+        logger=logger,
+        metrics=NoOpMetrics(),
+    )
 
     with pytest.raises(BoomError, match=BOOM_MESSAGE):
         await store._mn_get_contexts_for_orchestration("orch")
@@ -83,7 +87,7 @@ async def test_get_contexts_for_orchestration_failure_raises_and_logs(
 async def test_get_all_contexts_failure_raises_and_logs(
     logger: InMemoryLogger,
 ):
-    store = BoomGetAllContextsStateStore(logger=logger)
+    store = BoomGetAllContextsStateStore(logger=logger, metrics=NoOpMetrics())
 
     with pytest.raises(BoomError, match=BOOM_MESSAGE):
         await store._mn_get_all_contexts()

@@ -6,7 +6,7 @@ Minions treats workflow context as durable. Before each step executes, Gru saves
 
 - **State store**: SQLite-backed store by default.
 - **Disable persistence**: pass `state_store=None` to {py:meth}`minions.Gru.create`.
-- **Custom stores**: implement {py:class}`minions.interfaces.StateStore` with `save_context`, `delete_context`, `get_contexts_for_orchestration`, and `get_all_contexts`. State stores persist opaque workflow context blobs; the Minions runtime owns event/context serialization before calling the store. Override `startup` and `shutdown` only when the store needs async setup or cleanup.
+- **Custom stores**: implement {py:class}`minions.interfaces.StateStore` with `save_context`, `delete_context`, `get_contexts_for_orchestration`, and `get_all_contexts`. Pass the selected `Logger` and `Metrics` instances to the `StateStore` base constructor, and pass that same `Metrics` instance to `Gru.create(metrics=...)`; Gru rejects a supplied store wired to a different Metrics instance. State stores persist opaque workflow context blobs; the Minions runtime owns event/context serialization before calling the store. Override `startup` and `shutdown` only when the store needs async setup or cleanup.
 
 ## Workflow lifecycle
 

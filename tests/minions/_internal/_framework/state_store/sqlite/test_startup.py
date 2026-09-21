@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_sqlite import (
     DEFAULT_BATCH_MAX_FLUSH_DELAY_MS,
     DEFAULT_BATCH_MAX_QUEUED_WRITES,
@@ -130,7 +131,7 @@ async def test_scrubs_orphaned_probe_rows(
     finally:
         conn.close()
 
-    s = SQLiteStateStore(db_path=db_path, logger=logger)
+    s = SQLiteStateStore(db_path=db_path, logger=logger, metrics=NoOpMetrics())
     await logger._mn_startup()
     await s._mn_startup()
     try:
@@ -213,6 +214,7 @@ async def test_degrades_when_page_size_lookup_fails(
     s = SQLiteStateStore(
         db_path=db_path,
         logger=logger,
+        metrics=NoOpMetrics(),
         batch_tuning="calibrated",
     )
 
@@ -247,6 +249,7 @@ async def test_degrades_when_page_size_is_unusable(
     s = SQLiteStateStore(
         db_path=db_path,
         logger=logger,
+        metrics=NoOpMetrics(),
         batch_tuning="calibrated",
     )
 
@@ -276,6 +279,7 @@ async def test_uses_fallback_measurements_when_commit_timing_fails_without_clean
     s = SQLiteStateStore(
         db_path=db_path,
         logger=logger,
+        metrics=NoOpMetrics(),
         batch_tuning="calibrated",
     )
 
@@ -371,7 +375,7 @@ async def test_closes_connection_when_startup_phase_fails(
     logger: InMemoryLogger,
 ):
     db_path = os.path.join(tmp_path, "state.db")
-    s = SQLiteStateStore(db_path=db_path, logger=logger)
+    s = SQLiteStateStore(db_path=db_path, logger=logger, metrics=NoOpMetrics())
     close_called = False
 
     async def _boom(self: SQLiteStateStore):
@@ -407,6 +411,7 @@ async def test_propagates_commit_measurement_probe_cleanup_failure(
     s = SQLiteStateStore(
         db_path=db_path,
         logger=logger,
+        metrics=NoOpMetrics(),
         batch_tuning="calibrated",
     )
 
@@ -434,7 +439,7 @@ async def test_probe_raises_when_cleanup_delete_fails(
     monkeypatch: pytest.MonkeyPatch,
     logger: InMemoryLogger,
 ):
-    s = SQLiteStateStore(db_path=":memory:", logger=logger)
+    s = SQLiteStateStore(db_path=":memory:", logger=logger, metrics=NoOpMetrics())
     fake_db = StartupProbeDb(
         select_row=(WORKFLOW_ID_STARTUP_PROBE, b"startup-probe"),
         delete_error=RuntimeError("delete boom"),
@@ -450,7 +455,7 @@ async def test_probe_preserves_primary_failure_when_cleanup_delete_also_fails(
     monkeypatch: pytest.MonkeyPatch,
     logger: InMemoryLogger,
 ):
-    s = SQLiteStateStore(db_path=":memory:", logger=logger)
+    s = SQLiteStateStore(db_path=":memory:", logger=logger, metrics=NoOpMetrics())
     fake_db = StartupProbeDb(
         select_row=("wrong-id", b"wrong-payload"),
         delete_error=RuntimeError("delete boom"),

@@ -53,6 +53,7 @@ class GatedSQLiteStateStore(SQLiteStateStore):
         self,
         db_path: str,
         logger: Logger,
+        metrics: NoOpMetrics,
         *,
         artifact_dir: Path,
         scenario: Scenario,
@@ -61,6 +62,7 @@ class GatedSQLiteStateStore(SQLiteStateStore):
         super().__init__(
             db_path=db_path,
             logger=logger,
+            metrics=metrics,
             batch_max_queued_writes=(
                 16 if scenario == "queued_checkpoint" else 1
             ),
@@ -253,9 +255,11 @@ async def _run(
         )
 
     logger = InMemoryLogger()
+    metrics = NoOpMetrics()
     store = GatedSQLiteStateStore(
         str(db_path),
         logger,
+        metrics,
         artifact_dir=artifact_dir,
         scenario=scenario,
         role=role,
@@ -263,7 +267,7 @@ async def _run(
     gru = await Gru.create(
         state_store=store,
         logger=logger,
-        metrics=NoOpMetrics(),
+        metrics=metrics,
     )
     try:
         started = await gru.start_orchestration(

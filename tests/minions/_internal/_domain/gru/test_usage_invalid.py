@@ -28,23 +28,25 @@ class TestInvalidUsage:
             Gru(
                 loop=asyncio.get_running_loop(),
                 logger=NoOpLogger(),
-                state_store=NoOpStateStore(),
+                state_store=NoOpStateStore(metrics=NoOpMetrics()),
                 metrics=NoOpMetrics(),
             )
 
     @pytest.mark.asyncio
     async def test_gru_raises_on_multiple_instances(self):
+        metrics = NoOpMetrics()
         gru = await Gru.create(
             logger=NoOpLogger(),
-            metrics=NoOpMetrics(),
-            state_store=NoOpStateStore()
+            metrics=metrics,
+            state_store=NoOpStateStore(metrics=metrics)
         )
         try:
+            replacement_metrics = NoOpMetrics()
             with pytest.raises(RuntimeError, match="Only one Gru instance is allowed per process."):
                 await Gru.create(
                     logger=NoOpLogger(),
-                    metrics=NoOpMetrics(),
-                    state_store=NoOpStateStore()
+                    metrics=replacement_metrics,
+                    state_store=NoOpStateStore(metrics=replacement_metrics)
                 )
         finally:
             await gru.shutdown()
@@ -56,7 +58,7 @@ class TestInvalidUsage:
             await Gru.create(
                 logger=bad_logger,  # type: ignore[arg-type]
                 metrics=NoOpMetrics(),
-                state_store=NoOpStateStore()
+                state_store=NoOpStateStore(metrics=NoOpMetrics())
             )
 
     @pytest.mark.asyncio
@@ -66,7 +68,7 @@ class TestInvalidUsage:
             await Gru.create(
                 logger=NoOpLogger(),
                 metrics=bad_metrics,  # type: ignore[arg-type]
-                state_store=NoOpStateStore()
+                state_store=NoOpStateStore(metrics=NoOpMetrics())
             )
 
     @pytest.mark.asyncio
@@ -77,6 +79,19 @@ class TestInvalidUsage:
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics(),
                 state_store=bad_state_store,  # type: ignore[arg-type]
+            )
+
+    @pytest.mark.asyncio
+    async def test_gru_raises_on_state_store_metrics_instance_mismatch(self):
+        state_store_metrics = NoOpMetrics()
+        with pytest.raises(
+            ValueError,
+            match="StateStore and Gru must use the same Metrics instance",
+        ):
+            await Gru.create(
+                logger=NoOpLogger(),
+                state_store=NoOpStateStore(metrics=state_store_metrics),
+                metrics=NoOpMetrics(),
             )
 
     @pytest.mark.asyncio
@@ -91,7 +106,7 @@ class TestInvalidUsage:
             await Gru.create(
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics(),
-                state_store=NoOpStateStore(),
+                state_store=NoOpStateStore(metrics=NoOpMetrics()),
                 workflow_persistence_failure_policy="invalid",  # type: ignore[arg-type]
             )
 
@@ -104,7 +119,7 @@ class TestInvalidUsage:
             await Gru.create(
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics(),
-                state_store=NoOpStateStore(),
+                state_store=NoOpStateStore(metrics=NoOpMetrics()),
                 workflow_failure_policy="invalid",  # type: ignore[arg-type]
             )
 
@@ -125,7 +140,7 @@ class TestInvalidUsage:
             await Gru.create(
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics(),
-                state_store=NoOpStateStore(),
+                state_store=NoOpStateStore(metrics=NoOpMetrics()),
                 component_owned_task_cancellation_timeout_seconds=value,  # type: ignore[arg-type]
             )
 
@@ -150,7 +165,7 @@ class TestInvalidUsage:
             await Gru.create(
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics(),
-                state_store=NoOpStateStore(),
+                state_store=NoOpStateStore(metrics=NoOpMetrics()),
                 **kwargs,
             )
 
@@ -175,7 +190,7 @@ class TestInvalidUsage:
             await Gru.create(
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics(),
-                state_store=NoOpStateStore(),
+                state_store=NoOpStateStore(metrics=NoOpMetrics()),
                 **kwargs,
             )
 
@@ -193,7 +208,7 @@ class TestInvalidUsage:
             await Gru.create(
                 logger=NoOpLogger(),
                 metrics=NoOpMetrics(),
-                state_store=NoOpStateStore(),
+                state_store=NoOpStateStore(metrics=NoOpMetrics()),
                 workflow_persistence_retry_delay_seconds=2.0,
                 workflow_persistence_retry_max_delay_seconds=1.0,
             )
@@ -205,11 +220,12 @@ class TestInvalidUsage:
     ):
         minion_module_path = "tests.assets.minions.two_steps.counter.default"
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
+        metrics = NoOpMetrics()
 
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=NoOpStateStore(metrics=metrics),
             logger=ConsoleLogger(),
-            metrics=NoOpMetrics()
+            metrics=metrics
         ) as gru:
             result1 = await gru.start_orchestration(
                 pipeline=pipeline_module_path,
@@ -240,11 +256,12 @@ class TestInvalidUsage:
         from tests.assets.pipelines.emit_one.counter.default import (
             AssetPipeline as EmitOneCounterPipeline,
         )
+        metrics = NoOpMetrics()
 
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=NoOpStateStore(metrics=metrics),
             logger=ConsoleLogger(),
-            metrics=NoOpMetrics(),
+            metrics=metrics,
         ) as gru:
             result = await gru.start_orchestration(
                 pipeline=EmitOneCounterPipeline,
@@ -263,10 +280,11 @@ class TestInvalidUsage:
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]]
     ):
+        metrics = NoOpMetrics()
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=NoOpStateStore(metrics=metrics),
             logger=ConsoleLogger(),
-            metrics=NoOpMetrics()
+            metrics=metrics
         ) as gru:
             result = await gru.stop_orchestration("dummy-orchestration-id")
 
@@ -281,11 +299,12 @@ class TestInvalidUsage:
     ):
         minion_module_path = "tests.assets.minions.two_steps.counter.default"
         pipeline_module_path = "tests.assets.pipelines.emit_one.record.default"
+        metrics = NoOpMetrics()
 
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=NoOpStateStore(metrics=metrics),
             logger=ConsoleLogger(),
-            metrics=NoOpMetrics()
+            metrics=metrics
         ) as gru:
             result = await gru.start_orchestration(
                 pipeline=pipeline_module_path,

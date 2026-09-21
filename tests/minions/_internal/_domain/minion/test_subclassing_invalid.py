@@ -224,7 +224,7 @@ def test_reject_instantiating_minion_without_steps():
             "dummy-orchestration-id",
             "dummy-minion-module-path",
             None,
-            NoOpStateStore(),
+            NoOpStateStore(metrics=NoOpMetrics()),
             NoOpMetrics(),
             NoOpLogger(),
             minion_id="dummy-minion-id",

@@ -68,7 +68,7 @@ def _find_failing_resource(gru: Gru) -> tuple[str, _TriggerableFailure]:
 async def test_repeated_shared_resource_failures_remain_contained():
     logger = InMemoryLogger()
     metrics = InMemoryMetrics(logger=logger)
-    state_store = InMemoryStateStore(logger=logger)
+    state_store = InMemoryStateStore(logger=logger, metrics=metrics)
     gru = await Gru.create(
         logger=logger,
         metrics=metrics,

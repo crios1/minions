@@ -82,7 +82,7 @@ async def _run_interruption_and_resume(
     expected_workflows = subscribers * events
     logger = NoOpLogger()
     metrics = InMemoryMetrics(logger=logger)
-    state_store = InMemoryStateStore(logger=logger)
+    state_store = InMemoryStateStore(logger=logger, metrics=metrics)
     GatedSharedResource.reset(expected_calls=expected_workflows)
     BurstPipeline.reset(expected_subs=subscribers, total_events=events)
 

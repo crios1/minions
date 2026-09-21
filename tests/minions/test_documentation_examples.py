@@ -63,11 +63,12 @@ async def test_getting_started_example_handles_a_live_event():
     HeartbeatStore.reset()
     PrintMinion.observed_user_ids = []
     logger = InMemoryLogger()
-    state_store = InMemoryStateStore(logger=logger)
+    metrics = InMemoryMetrics(logger=logger)
+    state_store = InMemoryStateStore(logger=logger, metrics=metrics)
     gru = await Gru.create(
         state_store=state_store,
         logger=logger,
-        metrics=InMemoryMetrics(logger=logger),
+        metrics=metrics,
     )
     try:
         started = await gru.start_orchestration(

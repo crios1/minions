@@ -12,6 +12,7 @@ import time
 from dataclasses import dataclass
 
 from minions._internal._framework.logger_noop import NoOpLogger
+from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_sqlite import (
     BatchTuningMode,
     SQLiteStateStore,
@@ -108,6 +109,7 @@ async def _run_once(
         store = SQLiteStateStore(
             db_path=db_path,
             logger=NoOpLogger(),
+            metrics=NoOpMetrics(),
             batch_tuning=batch_tuning,
             batch_max_queued_writes=batch_max_queued_writes,
             batch_max_flush_delay_ms=flush_delay_ms,
@@ -119,6 +121,7 @@ async def _run_once(
         store = SQLiteStateStore(
             db_path=db_path,
             logger=NoOpLogger(),
+            metrics=NoOpMetrics(),
             batch_tuning=batch_tuning,
             batch_max_interarrival_delay_ms=batch_max_interarrival_delay_ms,
         )

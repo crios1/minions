@@ -32,7 +32,12 @@ def _build_parser() -> argparse.ArgumentParser:
 async def _run_shell(*, show_banner: bool) -> None:
     # Intentionally use no-op implementations so exploratory usage does not create files
     # (e.g. SQLite state) or start network listeners (e.g. Prometheus).
-    gru = await Gru.create(NoOpStateStore(), NoOpLogger(), NoOpMetrics())
+    metrics = NoOpMetrics()
+    gru = await Gru.create(
+        NoOpStateStore(metrics=metrics),
+        NoOpLogger(),
+        metrics,
+    )
     try:
         if show_banner:
             print(

@@ -204,15 +204,17 @@ async def _run_child_command(
     workflow_id: str | None,
 ) -> dict[str, object]:
     logger = InMemoryLogger()
+    metrics = NoOpMetrics()
     state_store = SQLiteStateStore(
         db_path=state_store_path,
         logger=logger,
+        metrics=metrics,
         batch_max_queued_writes=1,
     )
     gru = await Gru.create(
         state_store=state_store,
         logger=logger,
-        metrics=NoOpMetrics(),
+        metrics=metrics,
     )
     result: dict[str, object] = {}
     try:

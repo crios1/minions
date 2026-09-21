@@ -21,10 +21,13 @@ class TestMinionFile:
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
+        metrics = NoOpMetrics()
+        state_store = NoOpStateStore(metrics=metrics)
+
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=state_store,
             logger=NoOpLogger(),
-            metrics=NoOpMetrics()
+            metrics=metrics
         ) as gru:
             result = await gru.start_orchestration(
                 minion=minion_module_path,
@@ -46,10 +49,13 @@ class TestMinionFile:
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
+        metrics = NoOpMetrics()
+        state_store = NoOpStateStore(metrics=metrics)
+
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=state_store,
             logger=NoOpLogger(),
-            metrics=NoOpMetrics()
+            metrics=metrics
         ) as gru:
             result = await gru.start_orchestration(
                 minion=minion_module_path,
@@ -71,10 +77,13 @@ class TestMinionFile:
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
+        metrics = NoOpMetrics()
+        state_store = NoOpStateStore(metrics=metrics)
+
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=state_store,
             logger=NoOpLogger(),
-            metrics=NoOpMetrics()
+            metrics=metrics
         ) as gru:
             result = await gru.start_orchestration(
                 minion=minion_module_path,
@@ -96,10 +105,13 @@ class TestMinionFile:
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
+        metrics = NoOpMetrics()
+        state_store = NoOpStateStore(metrics=metrics)
+
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=state_store,
             logger=NoOpLogger(),
-            metrics=NoOpMetrics()
+            metrics=metrics
         ) as gru:
             result = await gru.start_orchestration(
                 minion=minion_module_path,
@@ -125,10 +137,13 @@ class TestMinionFile:
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
+        metrics = NoOpMetrics()
+        state_store = NoOpStateStore(metrics=metrics)
+
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=state_store,
             logger=NoOpLogger(),
-            metrics=NoOpMetrics()
+            metrics=metrics
         ) as gru:
             result = await gru.start_orchestration(
                 minion=minion_module_path,
@@ -150,10 +165,13 @@ class TestMinionFile:
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
+        metrics = NoOpMetrics()
+        state_store = NoOpStateStore(metrics=metrics)
+
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=state_store,
             logger=NoOpLogger(),
-            metrics=NoOpMetrics()
+            metrics=metrics
         ) as gru:
             result = await gru.start_orchestration(
                 minion=minion_module_path,
@@ -179,10 +197,13 @@ class TestMinionFile:
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
+        metrics = NoOpMetrics()
+        state_store = NoOpStateStore(metrics=metrics)
+
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=state_store,
             logger=NoOpLogger(),
-            metrics=NoOpMetrics()
+            metrics=metrics
         ) as gru:
             result = await gru.start_orchestration(
                 minion=minion_module_path,
@@ -206,10 +227,13 @@ class TestPipelineFile:
         pipeline_module_path = "tests.assets.entrypoints.invalid.empty"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
+        metrics = NoOpMetrics()
+        state_store = NoOpStateStore(metrics=metrics)
+
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=state_store,
             logger=NoOpLogger(),
-            metrics=NoOpMetrics()
+            metrics=metrics
         ) as gru:
             result = await gru.start_orchestration(
                 minion=minion_module_path,
@@ -231,10 +255,13 @@ class TestPipelineFile:
         pipeline_module_path = "tests.assets.entrypoints.invalid.two_pipelines"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
+        metrics = NoOpMetrics()
+        state_store = NoOpStateStore(metrics=metrics)
+
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=state_store,
             logger=NoOpLogger(),
-            metrics=NoOpMetrics()
+            metrics=metrics
         ) as gru:
             result = await gru.start_orchestration(
                 minion=minion_module_path,
@@ -256,10 +283,13 @@ class TestPipelineFile:
         pipeline_module_path = "tests.assets.entrypoints.invalid.invalid_explicit_pipeline"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
+        metrics = NoOpMetrics()
+        state_store = NoOpStateStore(metrics=metrics)
+
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=state_store,
             logger=NoOpLogger(),
-            metrics=NoOpMetrics()
+            metrics=metrics
         ) as gru:
             result = await gru.start_orchestration(
                 minion=minion_module_path,
@@ -281,10 +311,13 @@ class TestPipelineFile:
         pipeline_module_path = "tests.assets.pipelines.invalid.unsupported_event_type"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
+        metrics = NoOpMetrics()
+        state_store = NoOpStateStore(metrics=metrics)
+
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=state_store,
             logger=NoOpLogger(),
-            metrics=NoOpMetrics()
+            metrics=metrics
         ) as gru:
             result = await gru.start_orchestration(
                 minion=minion_module_path,
@@ -310,10 +343,13 @@ class TestPipelineFile:
         pipeline_module_path = "tests.assets.pipelines.invalid.with_unserializable_event"
         config_path = str(tests_dir / "assets" / "config" / "minions" / "a.toml")
 
+        metrics = NoOpMetrics()
+        state_store = NoOpStateStore(metrics=metrics)
+
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=state_store,
             logger=NoOpLogger(),
-            metrics=NoOpMetrics()
+            metrics=metrics
         ) as gru:
             result = await gru.start_orchestration(
                 minion=minion_module_path,

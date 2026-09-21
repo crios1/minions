@@ -1,6 +1,7 @@
 import asyncio
 
 from minions._internal._framework.logger import Logger
+from minions._internal._framework.metrics import Metrics
 from minions._internal._framework.state_store import StoredWorkflowContext
 
 from .state_store_inmemory import InMemoryStateStore
@@ -45,8 +46,8 @@ class FailureControl:
 class FailableStateStore(InMemoryStateStore):
     """In-memory StateStore with independently controlled save and delete failures."""
 
-    def __init__(self, logger: Logger) -> None:
-        super().__init__(logger)
+    def __init__(self, logger: Logger, metrics: Metrics) -> None:
+        super().__init__(logger, metrics)
         self._save_failure_control = FailureControl()
         self._delete_failure_control = FailureControl()
         self._saved_context_history: list[StoredWorkflowContext] = []

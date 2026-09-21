@@ -8,12 +8,14 @@ from minions import Minion
 from minions._internal._domain.minion import WorkflowPersistencePoint
 from minions._internal._domain.minion_workflow_context import MinionWorkflowContext
 from minions._internal._framework.logger import Logger
+from minions._internal._framework.metrics import Metrics
 from minions._internal._framework.metrics_constants import (
     MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL,
     MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
     MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL,
     MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL,
 )
+from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store import StateStore
 from minions._internal._framework.state_store_noop import NoOpStateStore
 from tests.assets.contexts.empty import EmptyContext
@@ -31,11 +33,12 @@ class _GatedStateStore(InMemoryStateStore):
     def __init__(
         self,
         logger: Logger,
+        metrics: Metrics,
         *,
         gated_operation: Literal["save", "delete"],
         fail_after_release: bool,
     ) -> None:
-        super().__init__(logger)
+        super().__init__(logger, metrics)
         self._gated_operation = gated_operation
         self._fail_after_release = fail_after_release
         self.attempt_count = 0
@@ -173,7 +176,7 @@ async def test_retry_delays_follow_exponential_backoff_and_remain_capped(
     metrics: InMemoryMetrics,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     store.save_failures.enable()
     m = _make_no_op_minion(
         store=store,
@@ -221,7 +224,7 @@ async def test_retry_jitter_respects_configured_bounds(
     metrics: InMemoryMetrics,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     store.save_failures.enable()
     m = _make_no_op_minion(
         store=store,
@@ -278,6 +281,7 @@ async def test_cancellation_propagates_after_one_active_attempt_finishes(
 ):
     store = _GatedStateStore(
         logger,
+        metrics,
         gated_operation=operation,
         fail_after_release=fail,
     )
@@ -348,7 +352,7 @@ async def test_unexpected_active_attempt_error_is_logged_without_replacing_cance
     metrics: InMemoryMetrics,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    store = NoOpStateStore()
+    store = NoOpStateStore(metrics=NoOpMetrics())
     m = _make_no_op_minion(
         store=store,
         logger=logger,

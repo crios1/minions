@@ -2,6 +2,7 @@ import asyncio
 
 import pytest
 
+from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store import StoredWorkflowContext
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.state_store_failable import FailableStateStore
@@ -9,7 +10,7 @@ from tests.assets.support.state_store_failable import FailableStateStore
 
 @pytest.mark.asyncio
 async def test_save_failures_can_be_enabled_and_disabled():
-    store = FailableStateStore(InMemoryLogger())
+    store = FailableStateStore(InMemoryLogger(), NoOpMetrics())
 
     await store.save_context("workflow", "orchestration", b"first")
     store.save_failures.enable()
@@ -32,7 +33,7 @@ async def test_save_failures_can_be_enabled_and_disabled():
 
 @pytest.mark.asyncio
 async def test_delete_failures_can_be_enabled_and_disabled():
-    store = FailableStateStore(InMemoryLogger())
+    store = FailableStateStore(InMemoryLogger(), NoOpMetrics())
     await store.save_context("workflow", "orchestration", b"context")
     store.delete_failures.enable()
 
@@ -50,7 +51,7 @@ async def test_delete_failures_can_be_enabled_and_disabled():
 
 @pytest.mark.asyncio
 async def test_save_and_delete_failures_are_controlled_independently():
-    store = FailableStateStore(InMemoryLogger())
+    store = FailableStateStore(InMemoryLogger(), NoOpMetrics())
     await store.save_context("workflow", "orchestration", b"first")
 
     store.save_failures.enable()
@@ -67,7 +68,7 @@ async def test_save_and_delete_failures_are_controlled_independently():
 
 @pytest.mark.asyncio
 async def test_save_failures_wait_for_returns_after_requested_count():
-    store = FailableStateStore(InMemoryLogger())
+    store = FailableStateStore(InMemoryLogger(), NoOpMetrics())
     store.save_failures.enable()
 
     failures = [
@@ -84,7 +85,7 @@ async def test_save_failures_wait_for_returns_after_requested_count():
 
 @pytest.mark.asyncio
 async def test_save_failures_wait_for_times_out_when_disabled():
-    store = FailableStateStore(InMemoryLogger())
+    store = FailableStateStore(InMemoryLogger(), NoOpMetrics())
 
     with pytest.raises(TimeoutError):
         await store.save_failures.wait_for(1, timeout=0.01)
@@ -92,7 +93,7 @@ async def test_save_failures_wait_for_times_out_when_disabled():
 
 @pytest.mark.asyncio
 async def test_save_failures_wait_for_rejects_non_positive_count():
-    store = FailableStateStore(InMemoryLogger())
+    store = FailableStateStore(InMemoryLogger(), NoOpMetrics())
 
     with pytest.raises(ValueError, match="failure count must be positive"):
         await store.save_failures.wait_for(0)

@@ -23,11 +23,12 @@ class TestMinionFile:
     ):
         minion_module_path = "tests.assets.entrypoints.valid.two_minions_explicit_minion"
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
+        metrics = NoOpMetrics()
 
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=NoOpStateStore(metrics=metrics),
             logger=ConsoleLogger(),
-            metrics=NoOpMetrics(),
+            metrics=metrics,
         ) as gru:
             result = await gru.start_orchestration(
                 minion=minion_module_path,
@@ -43,11 +44,12 @@ class TestMinionFile:
     ):
         minion_module_path = "tests.assets.entrypoints.valid.single_minion_subclass"
         pipeline_module_path = "tests.assets.pipelines.emit_one.counter.default"
+        metrics = NoOpMetrics()
 
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=NoOpStateStore(metrics=metrics),
             logger=ConsoleLogger(),
-            metrics=NoOpMetrics(),
+            metrics=metrics,
         ) as gru:
             result = await gru.start_orchestration(
                 minion=minion_module_path,
@@ -93,11 +95,12 @@ class TestPipelineFile:
     ):
         minion_module_path = "tests.assets.minions.two_steps.counter.default"
         pipeline_module_path = "tests.assets.pipelines.entrypoint.counter.single_class"
+        metrics = NoOpMetrics()
 
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=NoOpStateStore(metrics=metrics),
             logger=ConsoleLogger(),
-            metrics=NoOpMetrics(),
+            metrics=metrics,
         ) as gru:
             result = await gru.start_orchestration(
                 minion=minion_module_path,
@@ -113,11 +116,12 @@ class TestPipelineFile:
     ):
         minion_module_path = "tests.assets.minions.two_steps.counter.default"
         pipeline_module_path = "tests.assets.entrypoints.valid.single_pipeline_subclass"
+        metrics = NoOpMetrics()
 
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=NoOpStateStore(metrics=metrics),
             logger=ConsoleLogger(),
-            metrics=NoOpMetrics(),
+            metrics=metrics,
         ) as gru:
             result = await gru.start_orchestration(
                 minion=minion_module_path,

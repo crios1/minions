@@ -56,7 +56,7 @@ def test_minion_workflow_created_properly():
         "dummy-orchestration-id",
         "dummy-minion-module-path",
         None,
-        NoOpStateStore(),
+        NoOpStateStore(metrics=NoOpMetrics()),
         NoOpMetrics(),
         NoOpLogger(),
         minion_id="dummy-minion-id",

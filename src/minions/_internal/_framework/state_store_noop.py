@@ -1,11 +1,12 @@
 from .logger import Logger
 from .logger_noop import NoOpLogger
+from .metrics import Metrics
 from .state_store import StateStore, StoredWorkflowContext
 
 
 class NoOpStateStore(StateStore):
-    def __init__(self, logger: Logger | None = None):
-        super().__init__(logger=logger or NoOpLogger())
+    def __init__(self, logger: Logger | None = None, *, metrics: Metrics):
+        super().__init__(logger=logger or NoOpLogger(), metrics=metrics)
 
     async def save_context(
         self,

@@ -45,7 +45,8 @@ class PersistenceOperationResult:
 class StateStore(LoggerBackedAsyncComponent):
     """Base class for durable workflow context storage.
 
-    Custom stores must persist serialized context bytes by workflow ID, keep
+    Custom stores must call this constructor with their Logger and Metrics
+    collaborators, then persist serialized context bytes by workflow ID, keep
     the orchestration ID with each saved context, support lookup by
     orchestration, support listing all saved contexts for startup recovery, and
     delete contexts when workflows finish. `save_context` and `delete_context`
@@ -57,14 +58,18 @@ class StateStore(LoggerBackedAsyncComponent):
 
     _mn_user_facing = True
 
-    def __init__(self, logger: Logger):
+    def __init__(self, logger: Logger, metrics: Metrics):
         super().__init__(logger)
-        self._mn_metrics: Metrics | None = None
-
-    # temporary; in the future Metrics will be set in __init__
-    def _mn_bind_metrics(self, metrics: Metrics) -> None:
-        """Bind the process metrics backend selected by Gru."""
         self._mn_metrics = metrics
+
+    def _mn_validate_metrics_identity(self, metrics: Metrics) -> None:
+        """Require Gru to use the Metrics backend selected at construction."""
+        if self._mn_metrics is metrics:
+            return
+        raise ValueError(
+            "StateStore and Gru must use the same Metrics instance; "
+            "pass the store's Metrics instance to Gru.create(metrics=...)."
+        )
 
     async def _mn_record_operation(
         self,
@@ -80,8 +85,6 @@ class StateStore(LoggerBackedAsyncComponent):
         error: Exception | None = None,
     ) -> None:
         metrics = self._mn_metrics
-        if metrics is None:
-            return
 
         operation_duration_seconds = max(0.0, time.perf_counter() - started_at)
         labels = {

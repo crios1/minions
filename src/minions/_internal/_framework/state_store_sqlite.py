@@ -11,6 +11,7 @@ import aiosqlite
 from .._utils.safe_create_task import safe_create_task
 from .._utils.task_failure_handler import report_task_failure_to_stderr
 from .logger import CRITICAL, DEBUG, ERROR, WARNING, Logger
+from .metrics import Metrics
 from .state_store import StateStore, StoredWorkflowContext
 
 SQL_WORKFLOWS_TABLE_CREATE_IF_NOT_EXISTS = """
@@ -183,6 +184,7 @@ class SQLiteStateStore(StateStore):
         db_path: str,
         logger: Logger,
         *,
+        metrics: Metrics,
         batch_tuning: BatchTuningMode = "manual",
         batch_max_queued_writes: int | None = None,
         batch_max_flush_delay_ms: int | None = None,
@@ -209,7 +211,7 @@ class SQLiteStateStore(StateStore):
         In calibrated mode, batch settings must be omitted and are resolved from
         startup commit-latency measurements.
         """
-        super().__init__(logger)
+        super().__init__(logger, metrics)
         self.db_path = db_path
         self._db: aiosqlite.Connection | None = None
 

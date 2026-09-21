@@ -75,7 +75,7 @@ async def test_event_acceptance_registers_missing_checkpoint_before_workflow_tas
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
 ):
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     minion = _make_minion(
         minion_class=NoOpMinion,
         store=store,
@@ -125,7 +125,7 @@ async def test_persists_at_workflow_start_before_first_step_and_before_later_ste
             second_step_started.set()
             await continue_second_step.wait()
 
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     minion = _make_minion(
         minion_class=TwoStepMinion,
         store=store,
@@ -161,7 +161,7 @@ async def test_register_new_workflow_persistence_state_rejects_duplicate_workflo
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
 ):
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     minion = _make_minion(
         minion_class=NoOpMinion,
         store=store,
@@ -184,7 +184,7 @@ async def test_workflow_start_save_failure_creates_missing_checkpoint_risk(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
 ):
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     minion = _make_minion(
         minion_class=NoOpMinion,
         store=store,
@@ -212,7 +212,7 @@ async def test_save_failure_after_workflow_advances_creates_stale_checkpoint_ris
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
 ):
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     minion = _make_minion(
         minion_class=NoOpMinion,
         store=store,
@@ -246,7 +246,7 @@ async def test_save_success_after_stale_checkpoint_risk_clears_risk(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
 ):
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     minion = _make_minion(
         minion_class=NoOpMinion,
         store=store,
@@ -286,7 +286,7 @@ async def test_delete_failure_creates_unresolved_delete_risk(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
 ):
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     minion = _make_minion(
         minion_class=NoOpMinion,
         store=store,
@@ -332,7 +332,7 @@ async def test_workflow_completion_removes_workflow_persistence_state(
             step_entered.set()
             await allow_step_to_finish.wait()
 
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     minion = _make_minion(
         minion_class=WaitingMinion,
         store=store,
@@ -359,7 +359,7 @@ async def test_shutdown_before_workflow_task_admission_removes_workflow_persiste
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
 ):
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     minion = _make_minion(
         minion_class=NoOpMinion,
         store=store,
@@ -389,7 +389,7 @@ async def test_workflow_inflight_gauge_failure_cancels_workflow_and_removes_pers
     metrics: InMemoryMetrics,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     minion = _make_minion(
         minion_class=NoOpMinion,
         store=store,
@@ -424,7 +424,7 @@ async def test_workflow_duration_metric_failure_removes_workflow_persistence_sta
     metrics: InMemoryMetrics,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     minion = _make_minion(
         minion_class=NoOpMinion,
         store=store,

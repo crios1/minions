@@ -60,7 +60,7 @@ async def test_requires_force_when_workflow_persistence_risk_exists(
     policy: WorkflowPersistenceFailurePolicy,
 ) -> None:
     minion = _make_minion(
-        store=FailableStateStore(logger=logger),
+        store=FailableStateStore(logger=logger, metrics=metrics),
         logger=logger,
         metrics=metrics,
         policy=policy,
@@ -97,7 +97,7 @@ async def test_is_accepted_when_no_workflow_persistence_risk_exists(
     policy: WorkflowPersistenceFailurePolicy,
 ) -> None:
     minion = _make_minion(
-        store=FailableStateStore(logger=logger),
+        store=FailableStateStore(logger=logger, metrics=metrics),
         logger=logger,
         metrics=metrics,
         policy=policy,
@@ -121,7 +121,7 @@ async def test_rejected_request_is_accepted_after_workflow_persistence_succeeds(
     metrics: InMemoryMetrics,
 ) -> None:
     minion = _make_minion(
-        store=FailableStateStore(logger=logger),
+        store=FailableStateStore(logger=logger, metrics=metrics),
         logger=logger,
         metrics=metrics,
         policy="continue-on-failure",
@@ -149,7 +149,7 @@ async def test_stop_request_waits_for_in_progress_event_acceptance(
     metrics: InMemoryMetrics,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    store = FailableStateStore(logger=logger)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     store.save_failures.enable()
     minion = _make_minion(
         store=store,

@@ -28,10 +28,11 @@ class TestStartup:
             async def startup(self) -> None:
                 calls.append("metrics startup")
 
+        metrics = MyMetrics()
         gru = await Gru.create(
             logger=MyLogger(),
-            state_store=MyStateStore(),
-            metrics=MyMetrics(),
+            state_store=MyStateStore(metrics=metrics),
+            metrics=metrics,
         )
         try:
             assert calls[0] == "logger startup"
@@ -75,11 +76,12 @@ class TestStartup:
             async def shutdown(self) -> None:
                 calls.append("metrics shutdown")
 
+        metrics = MyMetrics()
         with pytest.raises(MinionsError, match="MyMetrics.startup failed"):
             await Gru.create(
                 logger=MyLogger(),
-                state_store=MyStateStore(),
-                metrics=MyMetrics(),
+                state_store=MyStateStore(metrics=metrics),
+                metrics=metrics,
             )
 
         assert calls[0] == "logger startup"
@@ -106,11 +108,12 @@ class TestStartup:
             async def startup(self) -> None:
                 raise RuntimeError("metrics startup failed")
 
+        metrics = MyMetrics()
         with pytest.raises(MinionsError, match="MyMetrics.startup failed") as exc_info:
             await Gru.create(
                 logger=NoOpLogger(),
-                state_store=MyStateStore(),
-                metrics=MyMetrics(),
+                state_store=MyStateStore(metrics=metrics),
+                metrics=metrics,
             )
 
         assert any(
@@ -134,11 +137,12 @@ class TestStartup:
 
         monkeypatch.setattr(Gru, "_monitor_process_resources", record_monitor_start)
 
+        metrics = MyMetrics()
         with pytest.raises(MinionsError, match="MyMetrics.startup failed"):
             await Gru.create(
                 logger=NoOpLogger(),
-                state_store=NoOpStateStore(),
-                metrics=MyMetrics(),
+                state_store=NoOpStateStore(metrics=metrics),
+                metrics=metrics,
             )
         await asyncio.sleep(0)
 
@@ -169,11 +173,12 @@ class TestStartup:
             async def shutdown(self) -> None:
                 calls.append("metrics shutdown")
 
+        metrics = MyMetrics()
         with pytest.raises(MinionsError, match="MyMetrics.startup failed"):
             await Gru.create(
                 logger=MyLogger(),
-                state_store=MyStateStore(),
-                metrics=MyMetrics(),
+                state_store=MyStateStore(metrics=metrics),
+                metrics=metrics,
             )
 
         assert calls == [
@@ -206,11 +211,12 @@ class TestStartup:
             async def shutdown(self) -> None:
                 calls.append("state store shutdown")
 
+        metrics = NoOpMetrics()
         create_task = asyncio.create_task(
             Gru.create(
                 logger=MyLogger(),
-                state_store=MyStateStore(),
-                metrics=NoOpMetrics(),
+                state_store=MyStateStore(metrics=metrics),
+                metrics=metrics,
             )
         )
         await state_store_startup_blocked.wait()
@@ -226,9 +232,10 @@ class TestStartup:
             "logger shutdown",
         ]
 
+        replacement_metrics = NoOpMetrics()
         replacement = await Gru.create(
             logger=NoOpLogger(),
-            state_store=NoOpStateStore(),
-            metrics=NoOpMetrics(),
+            state_store=NoOpStateStore(metrics=replacement_metrics),
+            metrics=replacement_metrics,
         )
         await replacement.shutdown()

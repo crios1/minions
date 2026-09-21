@@ -42,10 +42,13 @@ async def test_class_based_start_uses_distinct_fallback_identities_for_same_modu
         async def step_1(self) -> None:
             return
 
+    noop_metrics = NoOpMetrics()
+    noop_state_store = NoOpStateStore(metrics=noop_metrics)
+
     async with managed_gru_context(
-        state_store=NoOpStateStore(),
+        state_store=noop_state_store,
         logger=logger,
-        metrics=NoOpMetrics(),
+        metrics=noop_metrics,
     ) as gru:
         first = await gru.start_orchestration(SharedPipeline, FirstMinion)
         second = await gru.start_orchestration(SharedPipeline, SecondMinion)
@@ -84,10 +87,13 @@ async def test_start_orchestration_uses_attached_component_ids(
         async def step_1(self) -> None:
             self.context.step1 = "step1"
 
+    noop_metrics = NoOpMetrics()
+    noop_state_store = NoOpStateStore(metrics=noop_metrics)
+
     async with managed_gru_context(
-        state_store=NoOpStateStore(),
+        state_store=noop_state_store,
         logger=logger,
-        metrics=NoOpMetrics(),
+        metrics=noop_metrics,
     ) as gru:
         start_result = await gru.start_orchestration(
             pipeline=IdentifiedPipeline,
@@ -178,10 +184,13 @@ async def test_start_orchestration_uses_attached_component_and_config_ids(
     for module_name in ("durable_app.minion", "durable_app.pipeline"):
         sys.modules.pop(module_name, None)
 
+    noop_metrics = NoOpMetrics()
+    noop_state_store = NoOpStateStore(metrics=noop_metrics)
+
     async with managed_gru_context(
-        state_store=NoOpStateStore(),
+        state_store=noop_state_store,
         logger=logger,
-        metrics=NoOpMetrics(),
+        metrics=noop_metrics,
     ) as gru:
         start_result = await gru.start_orchestration(
             pipeline="durable_app.pipeline",

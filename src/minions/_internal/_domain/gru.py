@@ -375,15 +375,6 @@ class Gru:
         else:
             raise TypeError(f"Invalid logger: {type(logger).__name__}")
 
-        if state_store is _UNSET:
-            self._state_store = SQLiteStateStore(db_path="minions.db", logger=self._logger)
-        elif state_store is None:
-            self._state_store = NoOpStateStore()
-        elif isinstance(state_store, StateStore):
-            self._state_store = state_store
-        else:
-            raise TypeError(f"Invalid state_store: {type(state_store).__name__}")
-
         if metrics is _UNSET:
             self._metrics = PrometheusMetrics(logger=self._logger, port=metrics_port)
         elif metrics is None:
@@ -393,11 +384,23 @@ class Gru:
         else:
             raise TypeError(f"Invalid metrics: {type(metrics).__name__}")
 
+        if state_store is _UNSET:
+            self._state_store = SQLiteStateStore(
+                db_path="minions.db",
+                logger=self._logger,
+                metrics=self._metrics,
+            )
+        elif state_store is None:
+            self._state_store = NoOpStateStore(metrics=self._metrics)
+        elif isinstance(state_store, StateStore):
+            state_store._mn_validate_metrics_identity(self._metrics)
+            self._state_store = state_store
+        else:
+            raise TypeError(f"Invalid state_store: {type(state_store).__name__}")
+
         global _gru_instance
         if _gru_instance is not None:
             raise RuntimeError("Only one Gru instance is allowed per process.")
-
-        self._state_store._mn_bind_metrics(self._metrics)  # temporary pattern
 
         _gru_instance = self
 

@@ -224,7 +224,7 @@ async def test_isolates_subscriber_failure_during_event_fanout(
             orchestration_id=orchestration_id,
             minion_module_path=f"tests.minions.{minion_id}",
             config_path=None,
-            state_store=NoOpStateStore(),
+            state_store=NoOpStateStore(metrics=NoOpMetrics()),
             metrics=NoOpMetrics(),
             logger=NoOpLogger(),
             minion_id=minion_id,

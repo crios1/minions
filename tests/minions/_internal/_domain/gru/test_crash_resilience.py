@@ -98,7 +98,10 @@ async def test_start_orchestration_contains_state_store_resume_read_failure(
     logger: InMemoryLogger,
     metrics: InMemoryMetrics,
 ):
-    state_store = BoomGetContextsForOrchestrationStateStore(logger=logger)
+    state_store = BoomGetContextsForOrchestrationStateStore(
+        logger=logger,
+        metrics=metrics,
+    )
 
     async with managed_gru_context(logger=logger, metrics=metrics, state_store=state_store) as gru:
         result = await gru.start_orchestration(

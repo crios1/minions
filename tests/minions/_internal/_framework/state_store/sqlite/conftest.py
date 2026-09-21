@@ -7,6 +7,7 @@ from typing import Literal, Protocol, get_type_hints
 
 import pytest_asyncio
 
+from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_sqlite import SQLiteStateStore
 from tests.assets.support.logger_inmemory import InMemoryLogger
 
@@ -43,6 +44,7 @@ def _assert_factory_kwargs_match_state_store_constructor() -> None:
         name
         for name, parameter in signature.parameters.items()
         if parameter.kind is inspect.Parameter.KEYWORD_ONLY
+        and name != "metrics"
     }
     snapshot_kwargs = set(_SQLITE_STATE_STORE_FACTORY_KWARG_SNAPSHOT)
 
@@ -132,6 +134,7 @@ async def make_state_store_and_logger(
         store = SQLiteStateStore(
             db_path=db_path,
             logger=logger,
+            metrics=NoOpMetrics(),
             batch_tuning=batch_tuning,
             batch_max_queued_writes=batch_max_queued_writes,
             batch_max_flush_delay_ms=batch_max_flush_delay_ms,

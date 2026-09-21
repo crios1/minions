@@ -22,33 +22,11 @@ from tests.assets.support.state_store_inmemory import InMemoryStateStore
 
 
 @pytest.mark.asyncio
-async def test_mn_record_operation_does_not_evaluate_payload_size_when_metrics_unbound(
-    logger: InMemoryLogger,
-):
-    store = InMemoryStateStore(logger=logger)
-    evaluated = False
-
-    def payload_size_bytes() -> int:
-        nonlocal evaluated
-        evaluated = True
-        return 3
-
-    await store._mn_record_operation(
-        "save_context",
-        started_at=0.0,
-        payload_size_bytes=payload_size_bytes,
-    )
-
-    assert evaluated is False
-
-
-@pytest.mark.asyncio
 async def test_state_store_operation_telemetry_records_operations_durations_and_payloads(
     logger: InMemoryLogger,
 ):
     metrics = InMemoryMetrics(logger=logger)
-    store = InMemoryStateStore(logger=logger)
-    store._mn_bind_metrics(metrics)
+    store = InMemoryStateStore(logger=logger, metrics=metrics)
 
     await store._mn_save_context("wf-1", "orch-1", b"abc")
     await store._mn_save_context("wf-2", "orch-1", b"de")
@@ -121,8 +99,7 @@ async def test_state_store_write_failure_metrics_include_operation_and_error_typ
     logger: InMemoryLogger,
 ):
     metrics = InMemoryMetrics(logger=logger)
-    store = FailableStateStore(logger=logger)
-    store._mn_bind_metrics(metrics)
+    store = FailableStateStore(logger=logger, metrics=metrics)
     store.save_failures.enable()
 
     await store._mn_save_context("wf-1", "orch-1", b"abc")
@@ -163,8 +140,7 @@ async def test_state_store_read_failure_metrics_include_operation_and_error_type
     monkeypatch: pytest.MonkeyPatch,
 ):
     metrics = InMemoryMetrics(logger=logger)
-    store = InMemoryStateStore(logger=logger)
-    store._mn_bind_metrics(metrics)
+    store = InMemoryStateStore(logger=logger, metrics=metrics)
     load_error = RuntimeError("controlled load failure")
     load_all_error = RuntimeError("controlled all-contexts load failure")
 
@@ -221,8 +197,7 @@ async def test_state_store_failure_duration_excludes_error_logging(
     monkeypatch: pytest.MonkeyPatch,
 ):
     metrics = InMemoryMetrics(logger=logger)
-    store = InMemoryStateStore(logger=logger)
-    store._mn_bind_metrics(metrics)
+    store = InMemoryStateStore(logger=logger, metrics=metrics)
     clock = 0.0
 
     def perf_counter() -> float:
@@ -315,8 +290,7 @@ async def test_canceled_state_store_operations_are_not_backend_failures(
     monkeypatch: pytest.MonkeyPatch,
 ):
     metrics = InMemoryMetrics(logger=logger)
-    store = InMemoryStateStore(logger=logger)
-    store._mn_bind_metrics(metrics)
+    store = InMemoryStateStore(logger=logger, metrics=metrics)
     operation_started = asyncio.Event()
     release_operation = asyncio.Event()
 
@@ -357,8 +331,10 @@ async def test_canceled_state_store_operations_are_not_backend_failures(
 async def test_state_store_metric_failures_do_not_change_persistence(
     logger: InMemoryLogger,
 ):
-    store = InMemoryStateStore(logger=logger)
-    store._mn_bind_metrics(BrokenMetrics(logger=logger))
+    store = InMemoryStateStore(
+        logger=logger,
+        metrics=BrokenMetrics(logger=logger),
+    )
 
     result = await store._mn_save_context("wf-1", "orch-1", b"abc")
 

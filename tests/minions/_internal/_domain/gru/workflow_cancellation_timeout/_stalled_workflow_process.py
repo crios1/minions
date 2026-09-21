@@ -22,7 +22,7 @@ def _signal(minion_type: type[object], name: str) -> asyncio.Event:
 async def _run_stalled_workflow_process() -> None:
     logger = InMemoryLogger()
     metrics = InMemoryMetrics(logger=logger)
-    state_store = InMemoryStateStore(logger=logger)
+    state_store = InMemoryStateStore(logger=logger, metrics=metrics)
     gru = await Gru.create(
         logger=logger,
         metrics=metrics,

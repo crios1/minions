@@ -82,36 +82,23 @@
 
 ### Features:
 - todo: design Gru-level composition and configuration for built-in infrastructure
-  - prerequisite migration: make the StateStore Metrics dependency explicit
-    - context:
-      - the initial StateStore telemetry slice uses Gru-owned
-        `_mn_bind_metrics(...)` so the telemetry behavior can land as a small,
-        reviewable change without migrating every StateStore construction site
-      - this binding is transitional and should not become the final dependency
-        model; Metrics is a real collaborator once StateStore metrics
-        is part of the StateStore base behavior
-    - goal:
+  - StateStore Metrics dependency migration is now explicit
+    - final contract:
       - pass the selected Metrics backend when constructing every built-in and
         custom StateStore implementation
-      - remove `_mn_bind_metrics(...)` and the optional, post-construction metrics
-        state from the StateStore contract
-      - make the relationship between a supplied StateStore and Gru's Metrics
-        backend explicit, preferably requiring the same Metrics instance rather
-        than silently creating split telemetry registries
+      - keep Metrics as a required StateStore collaborator rather than optional
+        post-construction state
+      - require a supplied StateStore and Gru to use the same Metrics instance,
+        preventing split telemetry registries
     - migration scope:
-      - update StateStore, SQLiteStateStore, NoOpStateStore, test stores, fixtures,
-        direct construction sites, and custom-store documentation
-      - remove the transitional
-        `test_mn_record_operation_does_not_evaluate_payload_size_when_metrics_unbound`;
-        it verifies that the payload-size provider is not invoked when Metrics is unbound
-      - preserve the existing low-cardinality, backend-independent StateStore metrics and best-effort failure
-        behavior without changing persistence semantics
+      - keep StateStore, SQLiteStateStore, NoOpStateStore, test stores, fixtures,
+        direct construction sites, and custom-store documentation aligned with
+        the constructor contract
+      - preserve the existing low-cardinality, backend-independent StateStore
+        metrics and best-effort failure behavior without changing persistence
+        semantics
       - treat the constructor change as an intentional pre-1.0 API migration,
         not as an incidental cleanup
-    - sequencing:
-      - resolve the supplied-store/Metrics identity rule before implementation
-      - complete this migration before finalizing the Gru-level built-in
-        composition/configuration contract below
   - problem:
     - `await Gru.create()` is ergonomic when the built-in defaults are sufficient,
       but changing one SQLiteStateStore option (such as the database path or batch
@@ -165,6 +152,10 @@
     - verify Gru creates one coherent infrastructure graph and owns its lifecycle
     - document the simple default path, configured-built-in path, and advanced
       prebuilt-instance path separately
+    - assess test-call-site ergonomics: the high-level path should reduce
+      repetitive Logger/Metrics/StateStore construction in ordinary tests while
+      preserving explicit wiring for tests that assert infrastructure identity
+      or lifecycle ownership
   - why it matters:
     - users should be able to express runtime intent at Gru's composition boundary
       without reconstructing infrastructure by hand, while custom backends retain

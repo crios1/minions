@@ -52,7 +52,7 @@ async def _run_scenario(subscribers: int, events: int) -> FanoutSample:
 
     logger = NoOpLogger()
     metrics = InMemoryMetrics(logger=logger)
-    state_store = InMemoryStateStore(logger=logger)
+    state_store = InMemoryStateStore(logger=logger, metrics=metrics)
     SlowSharedResource.reset(expected_calls=expected_workflows)
     FanoutPipeline.reset(expected_subs=subscribers, total_events=events)
 

@@ -53,7 +53,7 @@ def _sample_process(process: psutil.Process) -> ProcessSample:
 async def _run_lifecycle_cycle() -> tuple[weakref.ReferenceType[object], ...]:
     logger = NoOpLogger()
     metrics = NoOpMetrics()
-    state_store = InMemoryStateStore(logger=logger)
+    state_store = InMemoryStateStore(logger=logger, metrics=metrics)
     gru = await Gru.create(
         logger=logger,
         metrics=metrics,

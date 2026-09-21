@@ -35,6 +35,10 @@ instance-attribute annotations.
 
 Callers construct Logger, Metrics, and StateStore instances and pass them to
 `Gru.create()`, so those component families may define their own constructors.
+StateStore constructors receive the selected Metrics instance explicitly. When a
+caller supplies both a StateStore and Metrics backend, both arguments must
+reference the same instance so runtime and StateStore telemetry share one
+registry.
 Once supplied, their runtime lifecycle belongs to Gru: Gru starts them during
 creation and shuts them down when creation fails or the Gru instance shuts down.
 

@@ -385,6 +385,7 @@ def test_build_expected_call_counts_scales_resource_lifecycle_with_observed_inst
 async def test_build_expected_call_counts_does_not_require_get_all_for_overridden_context_lookup(
     verifier_factory: VerifierFactory,
     logger: InMemoryLogger,
+    metrics: InMemoryMetrics,
 ):
     class IndexedStateStore(InMemoryStateStore):
         async def get_contexts_for_orchestration(
@@ -427,7 +428,7 @@ async def test_build_expected_call_counts_does_not_require_get_all_for_overridde
     verifier = verifier_factory(
         plan,
         result,
-        state_store=IndexedStateStore(logger=logger),
+        state_store=IndexedStateStore(logger=logger, metrics=metrics),
     )
     expected = verifier._build_expected_call_counts()
     state_store_counts = expected.call_counts[type(verifier._state_store)]

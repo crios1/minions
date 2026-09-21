@@ -29,7 +29,7 @@ def _make_minion(
         orchestration_id="dummy-orchestration-id",
         minion_module_path="dummy-minion-module-path",
         config_path=None,
-        state_store=NoOpStateStore(),
+        state_store=NoOpStateStore(metrics=NoOpMetrics()),
         metrics=NoOpMetrics(),
         logger=NoOpLogger(),
         minion_id="dummy-minion-id",

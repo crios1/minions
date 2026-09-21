@@ -50,8 +50,10 @@ class TestValidUsage:
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ):
+        noop_metrics = NoOpMetrics()
+        noop_state_store = NoOpStateStore(metrics=noop_metrics)
         async with managed_gru_context(
-            state_store=NoOpStateStore(), logger=NoOpLogger(), metrics=NoOpMetrics()
+            state_store=noop_state_store, logger=NoOpLogger(), metrics=noop_metrics
         ):
             pass
 
@@ -61,10 +63,12 @@ class TestValidUsage:
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ):
         policy: WorkflowFailurePolicy = "delete"
+        noop_metrics = NoOpMetrics()
+        noop_state_store = NoOpStateStore(metrics=noop_metrics)
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=noop_state_store,
             logger=NoOpLogger(),
-            metrics=NoOpMetrics(),
+            metrics=noop_metrics,
             workflow_failure_policy=policy,
         ) as gru:
             assert gru._workflow_failure_policy == "delete"
@@ -111,10 +115,12 @@ class TestValidUsage:
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
         policy: WorkflowPersistenceFailurePolicy,
     ):
+        noop_metrics = NoOpMetrics()
+        noop_state_store = NoOpStateStore(metrics=noop_metrics)
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=noop_state_store,
             logger=NoOpLogger(),
-            metrics=NoOpMetrics(),
+            metrics=noop_metrics,
             workflow_persistence_failure_policy=policy,
         ):
             pass
@@ -124,10 +130,12 @@ class TestValidUsage:
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ):
+        noop_metrics = NoOpMetrics()
+        noop_state_store = NoOpStateStore(metrics=noop_metrics)
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=noop_state_store,
             logger=NoOpLogger(),
-            metrics=NoOpMetrics(),
+            metrics=noop_metrics,
             workflow_persistence_retry_delay_seconds=0.25,
             workflow_persistence_retry_max_delay_seconds=2.0,
             workflow_persistence_retry_backoff_multiplier=1.5,
@@ -153,10 +161,13 @@ class TestValidUsage:
         TwoStepSimpleMinion.reset_spy()
         EmitOneSimplePipeline.configure_gate(expected_subs=1)
 
+        noop_metrics = NoOpMetrics()
+        noop_state_store = NoOpStateStore(metrics=noop_metrics)
+
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=noop_state_store,
             logger=ConsoleLogger(),
-            metrics=NoOpMetrics()
+            metrics=noop_metrics
         ) as gru:
             result = await gru.start_orchestration(
                 pipeline=EmitOneSimplePipeline.__module__,
@@ -187,10 +198,13 @@ class TestValidUsage:
             AssetPipeline as EmitOneCounterPipeline,
         )
 
+        noop_metrics = NoOpMetrics()
+        noop_state_store = NoOpStateStore(metrics=noop_metrics)
+
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=noop_state_store,
             logger=ConsoleLogger(),
-            metrics=NoOpMetrics(),
+            metrics=noop_metrics,
         ) as gru:
             start_result = await gru.start_orchestration(
                 pipeline=EmitOneCounterPipeline,
@@ -496,10 +510,13 @@ class TestValidUsage:
         self,
         managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
     ):
+        noop_metrics = NoOpMetrics()
+        noop_state_store = NoOpStateStore(metrics=noop_metrics)
+
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=noop_state_store,
             logger=ConsoleLogger(),
-            metrics=NoOpMetrics()
+            metrics=noop_metrics
         ) as gru:
             result = await gru.start_orchestration(
                 pipeline="tests.assets.pipelines.emit_one.simple.default",
@@ -538,10 +555,13 @@ class TestValidUsage:
         )
         original_name = inline_config.name
 
+        noop_metrics = NoOpMetrics()
+        noop_state_store = NoOpStateStore(metrics=noop_metrics)
+
         async with managed_gru_context(
-            state_store=NoOpStateStore(),
+            state_store=noop_state_store,
             logger=ConsoleLogger(),
-            metrics=NoOpMetrics(),
+            metrics=noop_metrics,
         ) as gru:
             result = await gru.start_orchestration(
                 pipeline=EmitOneCounterPipeline,
