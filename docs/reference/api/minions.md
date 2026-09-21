@@ -9,5 +9,6 @@ Public classes and interfaces exposed by the library. Everything here is still p
 minions
 minions.interfaces
 minions.exceptions
+minions.types
 minions.shell
 ```
