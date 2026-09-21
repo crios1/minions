@@ -49,6 +49,10 @@ nitpick_ignore = [
     ("py:class", "minions._internal._domain.types.T_Ctx"),
     ("py:class", "minions._internal._domain.types.T_Event"),
     ("py:class", "~P"),
+    # Policy aliases currently support public constructor options but are not
+    # independently importable public type contracts.
+    ("py:class", "WorkflowFailurePolicy"),
+    ("py:class", "WorkflowPersistenceFailurePolicy"),
 ]
 
 myst_enable_extensions = ["colon_fence", "deflist"]
