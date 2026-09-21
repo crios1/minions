@@ -23,5 +23,8 @@ Public lifecycle result and workflow-diagnostic types.
 .. autoclass:: ConflictingMinion
    :members:
 
+.. autoclass:: MinionWorkflowHandle
+   :members:
+
 .. autoclass:: WorkflowPersistenceRisk
    :members:
