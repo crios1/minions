@@ -103,6 +103,10 @@ treats the start as failed and rolls it back instead.
 
 If shutdown reports errors, that means cleanup was incomplete or uncertain. It does not necessarily mean Gru still has valid active orchestration state. After shutdown, the Gru instance should not route work.
 
+Shutdown is a shared terminal operation. Repeated callers receive the same
+`ShutdownResult` as the first completed attempt, including any cleanup errors;
+they do not receive a synthetic success result that hides an earlier failure.
+
 ## Result Contract Direction
 
 The current `success=False` result is too coarse for lifecycle failures. It conflates:

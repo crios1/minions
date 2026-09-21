@@ -2599,9 +2599,10 @@ class Gru:
 
         The caller may be cancelled while the terminal cleanup continues for
         other callers waiting on the same shutdown task.
+
+        Every caller receives the result of that shared terminal operation,
+        including any cleanup errors reported by the first attempt.
         """
-        if self._is_shutdown:
-            return ShutdownResult(success=True)
         if self._shutdown_task is None:
             # Advertise shutdown synchronously, before yielding to the shared
             # implementation task, so new lifecycle operations cannot begin.

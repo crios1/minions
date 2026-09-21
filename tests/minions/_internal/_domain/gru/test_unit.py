@@ -547,6 +547,9 @@ class TestUnit:
             assert all(e.error_type == "RuntimeError" for e in result.errors)
             assert all("component shutdown boom" in e.error_message for e in result.errors)
 
+            repeated_result = await gru.shutdown()
+            assert repeated_result == result
+
     @pytest.mark.asyncio
     async def test_shutdown_clears_runtime_state_when_component_shutdown_fails(
         self,
