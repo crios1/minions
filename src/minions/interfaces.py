@@ -1,5 +1,10 @@
 from ._internal._framework.logger import Logger
-from ._internal._framework.metrics import Metrics
+from ._internal._framework.metrics import (
+    CounterSample,
+    GaugeSample,
+    HistogramSample,
+    Metrics,
+)
 from ._internal._framework.metrics_interface import (
     LabelledCounter,
     LabelledGauge,
@@ -9,6 +14,9 @@ from ._internal._framework.metrics_interface import (
 from ._internal._framework.state_store import StateStore, StoredWorkflowContext
 
 __all__ = [
+    "CounterSample",
+    "GaugeSample",
+    "HistogramSample",
     "LabelledCounter",
     "LabelledGauge",
     "LabelledHistogram",
