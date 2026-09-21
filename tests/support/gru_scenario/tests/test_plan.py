@@ -1,11 +1,14 @@
 import pytest
 
 from tests.support.gru_scenario.directives import (
+    AfterWorkflowStepStarts,
     Concurrent,
     Directive,
+    ExpectRuntime,
     GruShutdown,
     OrchestrationStart,
     OrchestrationStop,
+    RuntimeExpectSpec,
     WaitWorkflowCompletions,
 )
 from tests.support.gru_scenario.plan import ScenarioPlan
@@ -117,11 +120,13 @@ def test_flattens_nested_concurrent_and_indexes_all_children():
         d1,
         Concurrent(
             d2,
-            Concurrent(d3),
         ),
     )
 
-    plan = ScenarioPlan([nested, d4, d5], pipeline_event_counts={"p1": 1, "p2": 1})
+    plan = ScenarioPlan(
+        [nested, d3, d4, d5],
+        pipeline_event_counts={"p1": 1, "p2": 1},
+    )
 
     assert plan.flat_directives == [d1, d2, d3, d4, d5]
     for idx, directive in enumerate(plan.flat_directives):
@@ -187,6 +192,43 @@ def test_rejects_duplicate_wait_references():
 
     with pytest.raises(ValueError, match="duplicate directive references"):
         ScenarioPlan([start, wait], pipeline_event_counts={"p1": 1})
+
+
+def test_rejects_wait_dependency_inside_concurrent_group():
+    start = OrchestrationStart(pipeline="p1", minion="m1")
+    wait = WaitWorkflowCompletions(orchestrations=(start,))
+
+    with pytest.raises(ValueError, match="same Concurrent group"):
+        ScenarioPlan([Concurrent(start, wait)], pipeline_event_counts={"p1": 1})
+
+
+def test_rejects_stop_dependency_inside_concurrent_group():
+    start = OrchestrationStart(pipeline="p1", minion="m1")
+    stop = OrchestrationStop(id=start, expect_success=True)
+
+    with pytest.raises(ValueError, match="same Concurrent group"):
+        ScenarioPlan([Concurrent(start, stop)], pipeline_event_counts={"p1": 1})
+
+
+def test_rejects_wrapped_dependency_inside_concurrent_group():
+    start = OrchestrationStart(pipeline="p1", minion="m1")
+    wrapped = AfterWorkflowStepStarts(
+        expected={start: {"step_1": 1}},
+        directive=OrchestrationStop(id=start, expect_success=True),
+    )
+
+    with pytest.raises(ValueError, match="same Concurrent group"):
+        ScenarioPlan([Concurrent(start, wrapped)], pipeline_event_counts={"p1": 1})
+
+
+def test_rejects_runtime_expectation_dependency_inside_concurrent_group():
+    start = OrchestrationStart(pipeline="p1", minion="m1")
+    expect = ExpectRuntime(
+        expect=RuntimeExpectSpec(resolutions={start: {"succeeded": 1}}),
+    )
+
+    with pytest.raises(ValueError, match="same Concurrent group"):
+        ScenarioPlan([Concurrent(start, expect)], pipeline_event_counts={"p1": 1})
 
 
 def test_copies_directives_input_list():

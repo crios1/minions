@@ -93,6 +93,9 @@ Directives fall into two broad roles:
   - `mode="drain"` closes event acceptance and waits for accepted workflows to resolve.
   - `force=True` applies only to interrupt mode.
 - `Concurrent(...)` runs child directives concurrently.
+  - A child that depends on an `OrchestrationStart` must be placed after the
+    `Concurrent(...)` group containing that start; `ScenarioPlan` rejects
+    dependency-bearing siblings that would otherwise race.
 - `WaitWorkflowCompletions(...)` waits for workflow completion.
 - `AfterWorkflowStepStarts(expected, directive)` waits for explicit start-directive/step counts, then immediately executes a wrapped directive.
   - The wrapped directive must currently be `OrchestrationStop(...)`.

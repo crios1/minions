@@ -10,6 +10,8 @@ from .directives import (
     Concurrent,
     Directive,
     ExpectRuntime,
+    OrchestrationStart,
+    OrchestrationStop,
     WaitWorkflowCompletions,
     iter_directives_flat,
 )
@@ -67,6 +69,8 @@ class ScenarioPlan:
             if count < 0:
                 raise ValueError(f"pipeline_event_counts[{pipeline!r}] must be >= 0, got {count}.")
 
+        self._validate_concurrent_dependency_boundaries()
+
         for directive in self.flat_directives:
             if not isinstance(directive, WaitWorkflowCompletions):
                 continue
@@ -96,6 +100,78 @@ class ScenarioPlan:
                     )
 
         self._validate_expectation_references(self.directives)
+
+    def _validate_concurrent_dependency_boundaries(self) -> None:
+        starts_by_concurrent_group: dict[int, set[int]] = {}
+        dependencies_by_concurrent_group: dict[
+            int, list[tuple[str, set[int] | None]]
+        ] = {}
+
+        def visit(
+            directives: Sequence[Directive],
+            concurrent_groups: tuple[int, ...],
+        ) -> None:
+            for directive in directives:
+                if isinstance(directive, Concurrent):
+                    group_id = id(directive)
+                    starts_by_concurrent_group.setdefault(group_id, set())
+                    dependencies_by_concurrent_group.setdefault(group_id, [])
+                    visit(directive.directives, (*concurrent_groups, group_id))
+                    continue
+
+                if isinstance(directive, OrchestrationStart):
+                    for group_id in concurrent_groups:
+                        starts_by_concurrent_group[group_id].add(id(directive))
+                    continue
+
+                dependency_start_ids: set[int] | None = set()
+                if isinstance(directive, OrchestrationStop):
+                    if isinstance(directive.id, OrchestrationStart):
+                        dependency_start_ids.add(id(directive.id))
+                elif isinstance(directive, WaitWorkflowCompletions):
+                    if directive.orchestrations is None:
+                        dependency_start_ids = None
+                    else:
+                        dependency_start_ids.update(id(start) for start in directive.orchestrations)
+                elif isinstance(directive, AfterWorkflowStepStarts):
+                    dependency_start_ids.update(id(start) for start in directive.expected)
+                    wrapped = directive.directive
+                    if isinstance(wrapped, OrchestrationStop) and isinstance(
+                        wrapped.id, OrchestrationStart
+                    ):
+                        dependency_start_ids.add(id(wrapped.id))
+                elif isinstance(directive, ExpectRuntime):
+                    for section in (
+                        directive.expect.persistence,
+                        directive.expect.resolutions,
+                        directive.expect.workflow_steps,
+                    ):
+                        if section is not None:
+                            dependency_start_ids.update(id(start) for start in section)
+
+                if dependency_start_ids is None or dependency_start_ids:
+                    for group_id in concurrent_groups:
+                        dependencies_by_concurrent_group[group_id].append(
+                            (type(directive).__name__, dependency_start_ids)
+                        )
+
+        visit(self.directives, ())
+
+        for group_id, dependencies in dependencies_by_concurrent_group.items():
+            concurrent_start_ids = starts_by_concurrent_group[group_id]
+            for directive_name, dependency_start_ids in dependencies:
+                conflicting_start_ids = (
+                    concurrent_start_ids
+                    if dependency_start_ids is None
+                    else concurrent_start_ids & dependency_start_ids
+                )
+                if not conflicting_start_ids:
+                    continue
+                raise ValueError(
+                    f"{directive_name} cannot depend on an OrchestrationStart in the "
+                    "same Concurrent group; place the dependent directive after the "
+                    "Concurrent group so the dependency is ordered."
+                )
 
     def _validate_expectation_references(
         self,
