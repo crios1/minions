@@ -446,6 +446,31 @@ async def test_wait_minion_tasks_times_out_instead_of_blocking_indefinitely(
 
 
 @pytest.mark.asyncio
+async def test_wait_workflow_completions_empty_subset_is_a_true_noop(gru: Gru):
+    class _DummyMinion:
+        def __init__(self) -> None:
+            self._mn_tasks_gate = asyncio.Lock()
+            self._mn_service_tasks: set[asyncio.Task[None]] = set()
+            self._mn_workflow_tasks: set[asyncio.Task[None]] = set()
+
+        async def _mn_wait_until_tasks_idle(self, timeout: float) -> None:
+            await asyncio.sleep(timeout * 10)
+
+    plan = ScenarioPlan([], pipeline_event_counts={})
+    dummy = _DummyMinion()
+    result = ScenarioRunResult(started_minions={dummy})  # type: ignore[arg-type]
+    waiter = ScenarioWaiter(
+        plan,
+        ScenarioRunner(gru, plan, per_verification_timeout=0.01)._insp,
+        timeout=0.01,
+        spies=SpyRegistry(),
+        result=result,
+    )
+
+    await waiter.wait(orchestrations=())
+
+
+@pytest.mark.asyncio
 async def test_wait_minion_tasks_waits_for_minions_concurrently(gru: Gru):
     class _DummyMinion:
         def __init__(

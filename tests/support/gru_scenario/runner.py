@@ -940,6 +940,8 @@ class ScenarioWaiter:
 
     async def wait(self, *, orchestrations: tuple[OrchestrationStart, ...] | None) -> None:
         await self._wait_expected_workflow_calls(orchestrations=orchestrations)
+        if orchestrations is not None and not orchestrations:
+            return
         await self._wait_minion_tasks(self._result.started_minions)
 
     async def wait_for_step_starts(
