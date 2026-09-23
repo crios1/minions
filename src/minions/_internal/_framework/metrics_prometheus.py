@@ -101,20 +101,20 @@ class PrometheusMetrics(Metrics):
         self._port = port
         self._addr = addr
         self._registry = registry
-        self._started = False
-        self._started_lock = threading.Lock()
+        self._runtime_state_lock = threading.Lock() # serializes access runtime state
         self._http_server: tuple[WSGIServer, threading.Thread] | None = None
+        self._registered_collectors: list[Counter | Gauge | Histogram] = []
 
     async def startup(self) -> None:
         try:
-            with self._started_lock:
-                if not self._started:
-                    self._http_server = start_http_server(
-                        port=self._port,
-                        addr=self._addr,
-                        registry=self._registry,
-                    )
-                    self._started = True
+            with self._runtime_state_lock:
+                if self._http_server:
+                    return
+                self._http_server = start_http_server(
+                    port=self._port,
+                    addr=self._addr,
+                    registry=self._registry,
+                )
         except Exception as e:
             await self._mn_logger._mn_log_exception(
                 ERROR,
@@ -123,11 +123,26 @@ class PrometheusMetrics(Metrics):
             )
 
     async def shutdown(self) -> None:
-        with self._started_lock:
-            http_server = self._http_server
-            self._http_server = None
-            self._started = False
+        with self._runtime_state_lock:
+            if not self._http_server and not self._registered_collectors:
+                return
 
+            http_server = self._http_server
+            registered_collectors = self._registered_collectors
+
+            self._http_server = None
+            self._registered_collectors = []
+
+            try:
+                self._stop_http_server(http_server)
+            finally:
+                self._release_owned_metrics(registered_collectors)
+
+    def _stop_http_server(
+        self,
+        http_server: tuple[WSGIServer, threading.Thread] | None,
+    ) -> None:
+        """Stop the HTTP listener and wait for its serving thread to exit."""
         if http_server is None:
             return
 
@@ -138,6 +153,21 @@ class PrometheusMetrics(Metrics):
             server.server_close()
             if thread is not threading.current_thread():
                 thread.join()
+
+    def _release_owned_metrics(
+        self,
+        collectors: list[Counter | Gauge | Histogram],
+    ) -> None:
+        """Unregister owned collectors and invalidate their cached wrappers."""
+        for collector in collectors:
+            try:
+                self._registry.unregister(collector)
+            except KeyError:
+                # The registry may have been explicitly cleared by its owner.
+                pass
+
+        for metrics_by_name in self._mn_metrics_by_kind.values():
+            metrics_by_name.clear()
 
     @overload
     def create_metric(
@@ -168,44 +198,41 @@ class PrometheusMetrics(Metrics):
     ) -> LabelledMetric:
         """Create and return a Prometheus metric with the given name and labels."""
 
-        if kind == "counter":
-            return _PrometheusCounter(
-                Counter(
+        with self._runtime_state_lock:
+            if kind == "counter":
+                metric = Counter(
                     metric_name,
                     f"{metric_name} ({kind})",
                     labelnames=label_names,
                     registry=self._registry,
-                ),
-                label_names,
-            )
-        if kind == "gauge":
-            return _PrometheusGauge(
-                Gauge(
+                )
+                self._registered_collectors.append(metric)
+                return _PrometheusCounter(metric, label_names)
+            if kind == "gauge":
+                metric = Gauge(
                     metric_name,
                     f"{metric_name} ({kind})",
                     labelnames=label_names,
                     registry=self._registry,
-                ),
-                label_names,
-            )
-        if kind == "histogram":
-            buckets = _HISTOGRAM_BUCKETS_BY_METRIC.get(
-                metric_name,
-                Histogram.DEFAULT_BUCKETS,
-            )
-            histogram = Histogram(
-                metric_name,
-                f"{metric_name} ({kind})",
-                labelnames=label_names,
-                registry=self._registry,
-                buckets=buckets,
-            )
-            return _PrometheusHistogram(
-                histogram,
-                label_names,
-            )
+                )
+                self._registered_collectors.append(metric)
+                return _PrometheusGauge(metric, label_names)
+            if kind == "histogram":
+                buckets = _HISTOGRAM_BUCKETS_BY_METRIC.get(
+                    metric_name,
+                    Histogram.DEFAULT_BUCKETS,
+                )
+                histogram = Histogram(
+                    metric_name,
+                    f"{metric_name} ({kind})",
+                    labelnames=label_names,
+                    registry=self._registry,
+                    buckets=buckets,
+                )
+                self._registered_collectors.append(histogram)
+                return _PrometheusHistogram(histogram, label_names)
 
-        raise ValueError(f"[Prometheus] Unknown metric kind: {kind}")
+            raise ValueError(f"[Prometheus] Unknown metric kind: {kind}")
 
     def snapshot_counters(self) -> SnapshotCounters:
         out: SnapshotCounters = {}

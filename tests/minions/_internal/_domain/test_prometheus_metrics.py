@@ -319,10 +319,14 @@ async def test_http_server_can_restart_after_shutdown(
 
     async with prometheus_metrics_context_factory(
         logger=logger, port=port, registry=registry
-    ):
-        pass
+    ) as metrics:
+        await metrics._mn_set(SYSTEM_MEMORY_USED_PERCENT, 42.5)
 
     async with prometheus_metrics_context_factory(
         logger=logger, port=port, registry=registry
-    ):
+    ) as metrics:
         assert not logger.has_log("Failed to start metrics HTTP server")
+        await metrics._mn_set(SYSTEM_MEMORY_USED_PERCENT, 43.5)
+        assert metrics.snapshot_gauges()[SYSTEM_MEMORY_USED_PERCENT] == [
+            {"labels": {}, "value": 43.5}
+        ]

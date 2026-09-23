@@ -74,7 +74,7 @@ class Metrics(LoggerBackedAsyncComponent):
 
     def __init__(self, logger: Logger):
         super().__init__(logger)
-        self._mn_registries: dict[Kind, dict[str, LabelledMetric]] = {
+        self._mn_metrics_by_kind: dict[Kind, dict[str, LabelledMetric]] = {
             "counter": {},
             "gauge": {},
             "histogram": {},
@@ -135,15 +135,15 @@ class Metrics(LoggerBackedAsyncComponent):
     ) -> LabelledHistogram: ...
 
     def _mn_get_metric_unsafe(self, kind: Kind, metric_name: str) -> LabelledMetric:
-        registry = self._mn_registries[kind]
-        if metric := registry.get(metric_name):
+        metrics_by_name = self._mn_metrics_by_kind[kind]
+        if metric := metrics_by_name.get(metric_name):
             return metric
         with self._mn_locks[kind]:
-            if metric := registry.get(metric_name):
+            if metric := metrics_by_name.get(metric_name):
                 return metric
             labels = self._mn_get_label_names_for_metric(metric_name)
             metric = self.create_metric(metric_name, labels, kind)
-            registry[metric_name] = metric
+            metrics_by_name[metric_name] = metric
             return metric
 
     def _mn_inc_unsafe(self, metric_name: str, amount: float = 1, labels: Labels | None = None):
