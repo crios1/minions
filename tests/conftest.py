@@ -43,7 +43,7 @@ def scrub_asset_modules() -> Generator[None, None, None]:
 
 
 @pytest.fixture(autouse=True)
-def _isolate_component_id_registry() -> Generator[None, None, None]:
+def _isolate_component_id_registry() -> Generator[None, None, None]:  # pyright: ignore[reportUnusedFunction]
     registry_snapshot = dict(component_identity._COMPONENT_ID_REGISTRY)
     try:
         yield
