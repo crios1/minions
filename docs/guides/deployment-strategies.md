@@ -65,8 +65,8 @@ StandardError=journal
 
 # Memory guardrails (recommended for long-running Python services)
 MemoryAccounting=yes
-MemoryHigh=1G      # soft pressure point — start shedding / throttling
-MemoryMax=1500M   # hard cap — service is OOM-killed and restarted
+MemoryHigh=1G
+MemoryMax=1500M
 OOMPolicy=restart
 
 [Install]
@@ -84,8 +84,14 @@ If the process crashes, systemd restarts it; `journalctl -u minions.service` sho
 
 - - - - - - - - - - - - - - 
 
-Memory is controlled at two layers:
-- Application-level (Minions runtime): The runtime monitors memory usage and applies backpressure or sheds work before the system is under pressure.
-- Supervisor-level (systemd / cgroups): systemd enforces a hard memory boundary (MemoryHigh / MemoryMax) to protect the host and ensure failures are contained and restartable.
+Minions publishes system and process memory gauges and warns when system memory
+usage reaches 90%. It does not use those readings to throttle workflow admission
+or shed work. The core scheduler is greedy. To bound in-flight workflow memory,
+limit event intake in your application or upstream queue; resource-level
+backpressure protects individual dependencies but does not cap all in-flight
+workflows.
 
-These are complementary: the runtime should react first; systemd is the final safety net.
+The systemd settings above provide separate cgroup memory controls:
+`MemoryHigh` applies memory pressure at its threshold, while `MemoryMax` sets a
+hard limit. They do not make Minions shed workflows gracefully; treat them as
+service-level containment and configure workload limits separately.
