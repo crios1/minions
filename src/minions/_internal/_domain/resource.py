@@ -17,7 +17,7 @@ from .._framework.metrics_constants import (
     RESOURCE_LATENCY_SECONDS,
     RESOURCE_SERVES_TOTAL,
 )
-from .._framework.metrics_context import (
+from .._framework.resource_metric_context import (
     ResourceMetricContext,
     current_resource_metric_caller,
     current_resource_metric_orchestration_id,

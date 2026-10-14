@@ -59,7 +59,7 @@ from .._framework.metrics_constants import (
     MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
     MINION_WORKFLOW_SUCCEEDED_TOTAL,
 )
-from .._framework.metrics_context import ResourceMetricContext
+from .._framework.resource_metric_context import ResourceMetricContext
 from .._framework.state_store import PersistenceOperationResult, StateStore
 from .._utils.get_original_bases import get_original_bases
 from .._utils.get_type_from_hint import get_type_from_hint

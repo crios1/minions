@@ -25,7 +25,7 @@ def current_resource_metric_caller() -> ResourceMetricCaller:
 
 
 class ResourceMetricContext:
-    """Set ambient metric labels for calls to domain `Resource` methods.
+    """Carry caller and, when available, orchestration attribution into `Resource` method metrics.
 
     Implemented as a class so ContextVar tokens are reset only from __exit__;
     generator-based context managers can be finalized from a different asyncio

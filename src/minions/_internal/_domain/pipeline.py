@@ -14,7 +14,7 @@ from .._framework.metrics_constants import (
     PIPELINE_EVENT_FANOUT_TOTAL,
     PIPELINE_EVENT_PRODUCED_TOTAL,
 )
-from .._framework.metrics_context import ResourceMetricContext
+from .._framework.resource_metric_context import ResourceMetricContext
 from .._utils.get_original_bases import get_original_bases
 from .._utils.serialization import (
     require_user_declared_type,
