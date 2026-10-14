@@ -80,8 +80,8 @@ class PriceWatcher(Minion):
     prices: PriceOracle
 
     @minion_step
-    async def on_event(self, event):
-        price = await self.prices.get_price(event.pair)
+    async def on_event(self):
+        price = await self.prices.get_price(self.event.pair)
         ...
 ```
 

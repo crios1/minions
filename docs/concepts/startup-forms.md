@@ -10,7 +10,8 @@ Minions supports two startup forms:
 
 Both forms are fully supported. They differ in how Gru loads components and
 supplies config, but durable identity is controlled separately by component and
-config IDs.
+config IDs. Component methods must have source that Minions can inspect; the
+inline section below explains how this affects interactive definitions.
 
 ---
 
@@ -46,9 +47,15 @@ Minion. Treat the bound config as immutable. No `load_config` override is needed
 for inline configuration.
 
 Use inline mode when you’re exploring, testing, or composing a runtime directly
-in Python. Gru derives the config identity from the serializable config type and
-value as `<inline:digest>`. Component identities come from `@minion_id(...)`
-and `@pipeline_id(...)` when present; otherwise Gru falls back to each class's
+in Python. Minions validates component methods by inspecting their source when
+the class is defined, so define inline components where `inspect.getsource`
+can retrieve that source. Source-backed modules and test files are suitable;
+source-less REPL or dynamically `exec`'d definitions may be rejected. Notebook
+use depends on whether the environment exposes cell source to `inspect.getsource`.
+
+Gru derives the config identity from the serializable config type and value as
+`<inline:digest>`. Component identities come from `@minion_id(...)` and
+`@pipeline_id(...)` when present; otherwise Gru falls back to each class's
 module and name. Starting the same component identities with the same inline
 config value addresses the same orchestration.
 
@@ -86,7 +93,8 @@ path, or its absolute path when it is outside the project.
 
 ## Choosing between the two
 
-- Pick **inline** for tests, notebooks/REPLs, and direct Python composition.
+- Pick **inline** for tests and direct Python composition when component source
+  is inspectable.
 - Pick **module-based** for declared, file-configured, or operator-managed runtime instances.
 - Stamp component and file config IDs before relying on refactor-stable resume or metric continuity in either mode.
 
