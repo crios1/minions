@@ -99,9 +99,14 @@ treats the start as failed and rolls it back instead.
 
 ## Shutdown Failure Semantics
 
-`Gru.shutdown()` is the final in-process cleanup boundary. It should attempt to cancel all known runtime tasks and shut down framework-owned components. It should clear Gru's active runtime state even if some cleanup steps fail.
+`Gru.shutdown()` is the final cleanup boundary for that `Gru` instance. It
+attempts to cancel all known runtime tasks and shut down framework-owned
+components. It clears Gru's active runtime state even if some cleanup steps
+fail. Shutdown is terminal: that `Gru` object cannot start another
+runtime. After successful cleanup, create a new `Gru` with fresh instances of
+the framework components if the process needs another runtime.
 
-If shutdown reports errors, that means cleanup was incomplete or uncertain. It does not necessarily mean Gru still has valid active orchestration state. After shutdown, the Gru instance should not route work.
+If shutdown reports errors, cleanup was incomplete or uncertain. It does not necessarily mean Gru still has valid active orchestration state. After shutdown, Gru rejects new lifecycle operations. Restart the process when a hard cleanup boundary is required.
 
 Shutdown is a shared terminal operation. Repeated callers receive the same
 `ShutdownResult` as the first completed attempt, including any cleanup errors;

@@ -6,7 +6,16 @@ Minions treats workflow context as durable. Before each step executes, Gru saves
 
 - **State store**: SQLite-backed store by default.
 - **Disable persistence**: pass `state_store=None` to {py:meth}`minions.Gru.create`.
-- **Custom stores**: implement {py:class}`minions.interfaces.StateStore` with `save_context`, `delete_context`, `get_contexts_for_orchestration`, and `get_all_contexts`. Pass the selected `Logger` and `Metrics` instances to the `StateStore` base constructor, and pass that same `Metrics` instance to `Gru.create(metrics=...)`; Gru rejects a supplied store wired to a different Metrics instance. State stores persist opaque workflow context blobs; the Minions runtime owns event/context serialization before calling the store. Override `startup` and `shutdown` only when the store needs async setup or cleanup.
+- **Your own StateStore**: implement {py:class}`minions.interfaces.StateStore` with
+  `save_context`, `delete_context`, `get_contexts_for_orchestration`, and
+  `get_all_contexts`. Pass the selected `Logger` and `Metrics` instances to the
+  `StateStore` base constructor, and pass that same `Metrics` instance to
+  `Gru.create(metrics=...)`; Gru rejects a supplied store wired to a different
+  Metrics instance. The runtime owns context serialization, so stores receive
+  opaque workflow-context bytes. Override `startup` and `shutdown` only when
+  the store needs async setup or cleanup. See
+  {doc}`/guides/implementing-minions-framework-components` for guidance on providing your
+  own Logger, Metrics, or StateStore.
 
 ## Workflow lifecycle
 
@@ -128,7 +137,7 @@ inspect or mutate workflow event/context data.
 
 By default those blobs are internal binary `msgspec` payloads. They are a runtime
 durability format, not a human-readable interchange format or a public storage
-schema for custom stores to inspect.
+schema for stores you provide to inspect.
 
 The important contract for write methods is:
 

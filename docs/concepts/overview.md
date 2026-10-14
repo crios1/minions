@@ -15,7 +15,7 @@ expect APIs and docs to evolve.
 
 ## Key ideas
 
-- **Single-process ownership**: one `Gru` coordinates the runtime components and workflows in its Python process.
+- **Single-process ownership**: one active `Gru` coordinates the runtime components and workflows in its Python process.
 - **Workflow-per-event compute**: each pipeline event is processed by minions through ordered, stateful steps.
 - **Explicit lifecycles**: the framework manages startup, active execution, and
   shutdown for every pipeline, minion, and resource.
@@ -31,9 +31,20 @@ In Minions, `Gru` is a process-level runtime owner, not just a helper object.
 - It owns process-wide runtime services (metrics endpoint, persistence backend, background monitoring).
 - A single owner keeps startup/shutdown behavior deterministic and avoids conflicting defaults (for example: one metrics port, one default SQLite file).
 
-If you need multiple independent Minions runtimes, run one `Gru` per process
-and provide any required partitioning or cross-process coordination outside
-Minions.
+A `Gru` instance has one runtime lifetime. `Gru.create()` starts that lifetime;
+`Gru.shutdown()` ends it permanently for that object. Start and stop
+orchestrations while the `Gru` is active. After a successful shutdown, a later
+runtime in the same process uses a new `Gru` and new instances of the framework
+components. A shut-down `Gru` rejects orchestration start and stop operations;
+its read-only runtime snapshot remains available, and repeated shutdown calls
+return the original result. Framework component instances have one `Gru`
+lifetime; Minions does not guarantee they can be restarted or reused after
+shutdown. If shutdown reports cleanup errors, restart the process for a hard
+cleanup boundary.
+
+Only one active `Gru` is supported per process. If you need multiple
+independent runtimes at the same time, run one `Gru` per process and provide
+any required partitioning or cross-process coordination outside Minions.
 
 (runtime-component-sharing)=
 ## Runtime component sharing

@@ -1,9 +1,9 @@
 # Deployment Strategies
 
-Minions runs one `Gru` inside one Python process. That process can run
+Minions runs one active `Gru` inside one Python process. That process can run
 directly under a service supervisor or inside a container.
 
-- **Supervised process**: wrap your app with `systemd`, `supervisord`, or a container runtime that restarts on failure. Gru enforces a single instance per process (see {doc}`../concepts/overview`).
+- **Supervised process**: wrap your app with `systemd`, `supervisord`, or a container runtime that restarts on failure. Gru enforces a single active instance per process (see {doc}`../concepts/overview`).
 - **Separate risky code**: if you depend on native extensions that can segfault, keep them in subprocesses and talk over a narrow IPC API; let Gru restart cleanly.
 - **Scale-out topology**: when scaling up is not enough, offload hotspots to
   sidecars or run separately coordinated runtimes with explicitly partitioned

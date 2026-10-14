@@ -1,12 +1,12 @@
 # Operating with Metrics
 
 Minions exposes runtime metrics for health, workflow progress, resource
-activity, and persistence behavior. The default backend is Prometheus-backed,
-but `Metrics` is a pluggable interface, so custom backends may expose these
-framework-defined metric names and kinds differently. This guide uses the
-framework metric names and counter, gauge, and histogram terminology while
-focusing on the signals operators can use to understand runtime health and
-workflow durability.
+activity, and persistence behavior. Prometheus is the default `Metrics`
+implementation. If you provide another `Metrics` implementation, it can expose
+the framework-defined metric names and kinds through its own system. This guide
+uses the framework metric names and counter, gauge, and histogram terminology
+while focusing on the signals operators can use to understand runtime health
+and workflow durability.
 
 ## Start with persistence metrics
 
