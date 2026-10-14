@@ -14,6 +14,7 @@ from minions._internal._framework.logger_console import ConsoleLogger
 from minions._internal._framework.logger_noop import NoOpLogger
 from minions._internal._framework.metrics_noop import NoOpMetrics
 from minions._internal._framework.state_store_noop import NoOpStateStore
+from minions._internal._framework.state_store_sqlite import SQLiteStateStore
 from tests.assets.support.logger_inmemory import InMemoryLogger
 from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.assets.support.state_store_inmemory import InMemoryStateStore
@@ -56,6 +57,37 @@ class TestValidUsage:
             state_store=noop_state_store, logger=NoOpLogger(), metrics=noop_metrics
         ):
             pass
+
+    @pytest.mark.asyncio
+    async def test_gru_uses_minions_db_path_when_sqlite_db_path_is_omitted(
+        self,
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ):
+        monkeypatch.chdir(tmp_path)
+
+        async with managed_gru_context(logger=NoOpLogger(), metrics=NoOpMetrics()) as gru:
+            assert isinstance(gru._state_store, SQLiteStateStore)
+            assert gru._state_store.db_path == "minions.db"
+            assert (tmp_path / "minions.db").exists()
+
+    @pytest.mark.asyncio
+    async def test_gru_uses_provided_sqlite_db_path_for_default_store(
+        self,
+        managed_gru_context: Callable[..., contextlib.AbstractAsyncContextManager[Gru]],
+        tmp_path: Path,
+    ):
+        db_path = tmp_path / "custom.db"
+
+        async with managed_gru_context(
+            logger=NoOpLogger(),
+            metrics=NoOpMetrics(),
+            sqlite_db_path=str(db_path),
+        ) as gru:
+            assert isinstance(gru._state_store, SQLiteStateStore)
+            assert gru._state_store.db_path == str(db_path)
+            assert db_path.exists()
 
     @pytest.mark.asyncio
     async def test_gru_accepts_workflow_failure_policy(

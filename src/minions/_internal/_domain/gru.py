@@ -250,6 +250,7 @@ class Gru:
         workflow_persistence_retry_warning_interval_seconds: float = 30.0,
         workflow_persistence_retry_error_after_seconds: float | None = 60.0,
         component_owned_task_cancellation_timeout_seconds: float = 5.0,
+        sqlite_db_path: str | None = None,
     ):
         """
         Args:
@@ -257,6 +258,8 @@ class Gru:
             state_store: Optional StateStore instance. If omitted (left as default),
                 a default SQLiteStateStore is created. Pass None to disable state
                 persistence entirely.
+            sqlite_db_path: Path for the default SQLiteStateStore. Defaults to
+                "minions.db". Cannot be set when state_store is explicitly provided.
             logger: Optional Logger instance. If omitted, a default logger is created.
                 Pass None to disable logging.
             metrics: Optional Metrics backend. If omitted, PrometheusMetrics is used
@@ -300,6 +303,8 @@ class Gru:
 
         if not Gru._allow_direct_init:
             raise RuntimeError("Use 'await Gru.create(...)' instead of direct instantiation.")
+        if state_store is not _UNSET and sqlite_db_path is not None:
+            raise ValueError("sqlite_db_path cannot be set when state_store is provided")
 
         self._is_started = False
         self._is_shutdown = False
@@ -386,7 +391,7 @@ class Gru:
 
         if state_store is _UNSET:
             self._state_store = SQLiteStateStore(
-                db_path="minions.db",
+                db_path="minions.db" if sqlite_db_path is None else sqlite_db_path,
                 logger=self._logger,
                 metrics=self._metrics,
             )
@@ -476,6 +481,7 @@ class Gru:
         workflow_persistence_retry_warning_interval_seconds: float = 30.0,
         workflow_persistence_retry_error_after_seconds: float | None = 60.0,
         component_owned_task_cancellation_timeout_seconds: float = 5.0,
+        sqlite_db_path: str | None = None,
     ) -> "Gru":
         cls._allow_direct_init = True
         try:
@@ -484,6 +490,7 @@ class Gru:
                 state_store=state_store,
                 logger=logger,
                 metrics=metrics,
+                sqlite_db_path=sqlite_db_path,
                 metrics_port=metrics_port,
                 component_owned_task_cancellation_timeout_seconds=(
                     component_owned_task_cancellation_timeout_seconds

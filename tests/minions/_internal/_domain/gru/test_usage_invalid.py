@@ -82,6 +82,20 @@ class TestInvalidUsage:
             )
 
     @pytest.mark.asyncio
+    async def test_gru_raises_when_sqlite_db_path_and_state_store_are_both_provided(self):
+        metrics = NoOpMetrics()
+        with pytest.raises(
+            ValueError,
+            match="sqlite_db_path cannot be set when state_store is provided",
+        ):
+            await Gru.create(
+                logger=NoOpLogger(),
+                metrics=metrics,
+                state_store=NoOpStateStore(metrics=metrics),
+                sqlite_db_path="unused.db",
+            )
+
+    @pytest.mark.asyncio
     async def test_gru_raises_on_state_store_metrics_instance_mismatch(self):
         state_store_metrics = NoOpMetrics()
         with pytest.raises(

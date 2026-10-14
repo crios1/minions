@@ -5,6 +5,10 @@ Minions treats workflow context as durable. Before each step executes, Gru saves
 ## Defaults
 
 - **State store**: SQLite-backed store by default.
+- **SQLite database path**: pass `sqlite_db_path="path/to/minions.db"` to
+  {py:meth}`minions.Gru.create` to override the default `minions.db` path. Gru
+  uses this option for its default store; supplying it alongside `state_store`
+  is a configuration conflict, so Gru rejects the configuration.
 - **Disable persistence**: pass `state_store=None` to {py:meth}`minions.Gru.create`.
 - **Your own StateStore**: implement {py:class}`minions.interfaces.StateStore` with
   `save_context`, `delete_context`, `get_contexts_for_orchestration`, and
