@@ -643,22 +643,32 @@ async def test_wait_workflow_completions_targets_selected_orchestrations(
 
 
 @pytest.mark.asyncio
-async def test_wait_workflow_completions_does_not_wait_on_unselected_same_class_start(
+async def test_wait_workflow_completions_target_finishes_with_same_class_peer_pending(
     gru: Gru,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     import asyncio
     from dataclasses import dataclass
+    from typing import Any
 
+    import tests.support.gru_scenario.runner as scenario_runner_module
     from minions import minion_step
     from tests.assets.contexts.counter import CounterContext
     from tests.assets.events.counter import CounterEvent
     from tests.assets.pipelines.emit_one.counter.default import (
-        AssetPipeline as ReadyPipeline,
+        AssetPipeline as TargetPipeline,
     )
     from tests.assets.pipelines.emit_one.counter.default_b import (
-        AssetPipeline as BlockedPipeline,
+        AssetPipeline as PeerPipeline,
     )
     from tests.assets.support.minion_spied import SpiedMinion
+    from tests.support.gru_scenario.runner import ScenarioWaiter
+
+    peer_step_blocked = asyncio.Event()
+    release_target_step = asyncio.Event()
+    target_step_finished = asyncio.Event()
+    peer_step_exited = asyncio.Event()
+    target_finished_while_peer_pending = False
 
     @dataclass
     class MinionConfig:
@@ -670,32 +680,70 @@ async def test_wait_workflow_completions_does_not_wait_on_unselected_same_class_
         @minion_step
         async def step_1(self) -> None:
             if self.config.stall:
-                await asyncio.Event().wait()
+                peer_step_blocked.set()
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    peer_step_exited.set()
+            else:
+                await release_target_step.wait()
+                target_step_finished.set()
 
-    selected_start = OrchestrationStart(
-        pipeline=ReadyPipeline,
+    class ObservingScenarioWaiter(ScenarioWaiter):
+        async def _wait_minion_tasks(
+            self,
+            minions: set[SpiedMinion[Any, Any]],
+        ) -> None:
+            nonlocal target_finished_while_peer_pending
+
+            target_is_waited = any(
+                isinstance(minion, SameClassMinion) and not minion.config.stall
+                for minion in minions
+            )
+            if target_is_waited:
+                # Hold the target until its same-class peer is demonstrably pending.
+                await asyncio.wait_for(peer_step_blocked.wait(), timeout=self._timeout)
+                release_target_step.set()
+
+            await super()._wait_minion_tasks(minions)
+
+            if target_is_waited:
+                target_finished_while_peer_pending = (
+                    target_step_finished.is_set()
+                    and peer_step_blocked.is_set()
+                    and not peer_step_exited.is_set()
+                )
+
+    monkeypatch.setattr(scenario_runner_module, "ScenarioWaiter", ObservingScenarioWaiter)
+
+    wait_target_start = OrchestrationStart(
+        pipeline=TargetPipeline,
         minion=SameClassMinion,
         minion_config=MinionConfig(stall=False),
     )
-    unselected_start = OrchestrationStart(
-        pipeline=BlockedPipeline,
+    peer_start = OrchestrationStart(
+        pipeline=PeerPipeline,
         minion=SameClassMinion,
         minion_config=MinionConfig(stall=True),
     )
     directives: list[Directive] = [
-        selected_start,
-        unselected_start,
-        WaitWorkflowCompletions(orchestrations=(selected_start,)),
-        OrchestrationStop(id=selected_start, expect_success=True),
-        OrchestrationStop(id=unselected_start, expect_success=True),
+        wait_target_start,
+        peer_start,
+        WaitWorkflowCompletions(orchestrations=(wait_target_start,)),
+        OrchestrationStop(id=wait_target_start, expect_success=True),
+        OrchestrationStop(id=peer_start, expect_success=True),
         GruShutdown(expect_success=True),
     ]
 
     await run_gru_scenario(
         gru,
         directives,
-        pipeline_event_counts={ReadyPipeline: 1, BlockedPipeline: 1},
-        per_verification_timeout=0.05,
+        pipeline_event_counts={TargetPipeline: 1, PeerPipeline: 1},
+        per_verification_timeout=1.0,
+    )
+
+    assert target_finished_while_peer_pending, (
+        "WaitWorkflowCompletions should finish its target while the same-class peer is pending"
     )
 
 
