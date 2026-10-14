@@ -265,6 +265,21 @@
   - why it matters:
     - stable metric identities make long-lived dashboards and alerts less fragile during refactors
 
+- todo: decide which persistence-pressure signals Minions should expose as metrics
+  - problem:
+    - in-flight workflows can accumulate when work arrives faster than
+      persistence or a Resource can process it
+  - signals to evaluate:
+    - queued writes, blocked workflows, and checkpoint age
+    - event-loop lateness is covered by the separate event-loop monitor proposal
+  - decision boundary:
+    - distinguish diagnostic signals from admission or load-shedding policy
+    - choose ownership, labels, and cardinality only against a concrete
+      operator use case; do not define universal thresholds
+  - why it matters:
+    - operators need to tell healthy greedy fan-out from a backlog that is
+      falling behind its persistence or Resource bottleneck
+
 - todo: review `StoredWorkflowContext` naming and representation
   - problem:
     - the name embeds "state", but the object represents a stored workflow context row/blob that may be used across different lifecycle states
@@ -738,39 +753,13 @@
     - rejection does not affect another Minion on the same Pipeline
     - invalid runtime options raise clear errors
 
-- todo: add bounded start concurrency to Gru (`max_concurrent_starts`)
-  - goal:
-    - prevent starts storms (ex: 50+ concurrent calls to Gru.start_orchestration) from overloading event loop / NAS / host I/O
-    - keep starts throughput high but controlled and predictable
-  - api:
-    - add kwarg on `Gru.create(...)` (and ctor path) like:
-      - `max_concurrent_starts: int | None = None`
-    - behavior:
-      - `None` = unbounded (current behavior; preserve backwards compatibility)
-      - `>=1` = bounded concurrent starts via semaphore gate
-      - `<=0` should raise `ValueError`
-  - implementation:
-    - create a starts semaphore on Gru init when bounded:
-      - `_mn_starts_sem: asyncio.Semaphore | None`
-    - wrap the full `start_orchestration(...)` orchestration body in the semaphore scope when enabled
-      - (not just config read) so the whole start lifecycle is bounded consistently
-    - keep `Minion.load_config()` using async read (`await asyncio.to_thread(path.read_text)`)
-      because bounded start concurrency is the global throttle
-    - ensure release on all code paths (`async with`), including failures and early returns
-  - policy:
-    - do not add separate config-read semaphores yet
-    - if needed later, derive read cap from starts cap rather than adding another public knob
-  - tests:
-    - usage test: bounded starts allow at most N in flight (instrument with barrier/gate pipeline/minion assets)
-    - usage test: with cap=1, concurrent start requests serialize deterministically
-    - usage test: failures inside bounded section still release permit (no deadlock/leak)
-    - usage test: `None` keeps current behavior
-    - invalid usage test: cap `0` / negative raises clear error
-  - docs:
-    - document as start-storm/backpressure control
-    - include guidance:
-      - small local systems: `4-8`
-      - slow NAS / shared hosts: start lower and tune up
+- consider: optional bound on concurrent Gru starts
+  - potential value: limit bursts of orchestration initialization on hosts where
+    they create harmful resource contention
+  - trade-off: excess start calls wait, adding latency and potentially reducing
+    throughput; define shutdown interaction if this is implemented
+  - preserve unbounded behavior by default unless evidence supports a different
+    policy
 
 - todo: implement `minions gru serve` / `minions gru attach`
   - goal:
@@ -1134,11 +1123,10 @@
     - StrategySpec events are received, run, and managed by a minion `StrategySpecRunnerMinion(Minion[StrategySpec, Ctx])`
   - note:
     - ideally sample Minions system examples should be runnable and have tests to assert behavior
-  - open question:
-    - emitting StrategySpec events may take non-trivial time; should pipelines support resumability for event generation?
-    - current pipeline event emission happens in a single `Pipeline.emit_event` step, so long-running event generation has no persisted resume point
-    - one possible design is `@pipeline_step`, where the last pipeline step returns the event instance
-    - tradeoff: the current emit API is simple, so resumable pipeline steps should only be added if the use case justifies the extra model
+  - lifecycle:
+    - use `stop_orchestration(mode="drain")` for graceful stops during event
+      generation; it waits for the active Pipeline production/fanout cycle
+      (`interrupt` remains the default)
   - convo: https://chatgpt.com/c/694e3d91-2ae0-8328-b434-72d8a30af9e2
 
 ### Misc:
@@ -1216,203 +1204,3 @@
     - fail-fast in flake lane with iteration index and failing test output
   - note:
     - evaluate whether the test suite can run safely in parallel; this could provide a large performance gain if shared resources and timing-sensitive tests are structured correctly
-
-- consider: implement sharded sqlite state store for workflow context persistence (same could be said for sqlite logger)
-  - goal:
-    - increase persistence throughput by replacing the single SQLite file with `N` deterministically sharded SQLite files
-    - preserve the current state store API and current batching/coalescing behavior
-    - keep SQLite as embedded storage rather than introducing external infra
-  - current fit:
-
-    - current schema is already ideal for sharding because atomicity is naturally bounded by `workflow_id`
-    - current store is basically KV-like persistence over:
-
-      - `workflow_id TEXT PRIMARY KEY`
-      - `context BLOB NOT NULL`
-    - current implementation already batches/coalesces writes, so sharding composes naturally with the existing design
-  - design:
-
-    - split into two layers:
-
-      - `SQLiteStateStoreShard`
-
-        - owns one sqlite database file
-        - owns one connection
-        - owns one `_batch`
-        - owns one `_lock`
-        - owns one `_flush_task`
-        - preserves current shard-local batching and flush behavior
-      - `ShardedSQLiteStateStore`
-
-        - owns `list[SQLiteStateStoreShard]`
-        - routes each workflow operation to exactly one shard by deterministic hashing of `workflow_id`
-    - deterministic shard routing:
-
-      - use stable hash of `workflow_id`
-      - route by:
-
-        - `shard_idx = stable_hash(workflow_id) % shard_count`
-      - do not use Python `hash()` because placement must remain stable across process restarts
-      - use something simple/stable like truncated `blake2b` or `sha1`
-    - shard file layout:
-
-      - store files in a base dir like:
-
-        - `workflows_00.sqlite3`
-        - `workflows_01.sqlite3`
-        - ...
-    - api behavior:
-
-      - `save_context(workflow_id, payload)`:
-
-        - route to one shard
-      - `get_context(workflow_id)`:
-
-        - route to one shard only
-        - do not scan all shards
-      - `delete_context(workflow_id)`:
-
-        - route to one shard only
-      - `get_all_contexts()`:
-
-        - fan out across all shards in parallel
-        - concatenate results
-  - constraints:
-
-    - no placement/index database
-
-      - deterministic routing removes the need for a metadata DB
-    - no cross-shard transactions
-
-      - acceptable because current persistence boundary is already per-workflow
-    - no scatter/gather for point lookups
-
-      - shard lookup must remain O(1)
-    - no serialization format changes
-
-      - keep existing payload encoding as-is
-  - correctness work:
-
-    - fix the existing delete-vs-flush race before or during sharding
-
-      - current risk:
-
-        - a pending flush can re-upsert a workflow after `delete_context()` has already removed it
-      - this is a real correctness issue and becomes more important once multiple shard flushers exist
-    - implementation options:
-
-      - minimal fix:
-
-        - track `_pending_deletes`
-        - ensure pending flushes skip deleted workflow ids
-      - cleaner fix:
-
-        - serialize all shard writes/deletes through a single shard writer queue
-        - batching becomes queue-drain based
-      - preference:
-
-        - minimal fix first unless queue-based rewrite feels clean enough to justify now
-  - batching:
-
-    - preserve current shard-local batching semantics
-    - each shard should continue to:
-
-      - coalesce multiple writes to the same `workflow_id`
-      - flush when `batch_max_n` is reached
-      - flush when `batch_max_ms` elapses
-    - this keeps the current batching win while also unlocking parallel writes across shards
-  - startup and shutdown:
-
-    - startup:
-
-      - initialize all shards in parallel
-      - create schema on each shard
-      - optionally calibrate batch defaults once and apply to all shards
-    - shutdown:
-
-      - flush all shards in parallel
-      - close all shard connections cleanly
-  - shard count:
-
-    - start with small fixed shard counts
-
-      - default: `4`
-      - practical early range: `4-16`
-    - do not over-shard initially
-
-      - each shard adds file handles, WAL activity, caches, connection overhead, and one more flusher
-  - stats and logging:
-
-    - keep shard-local metrics similar to current implementation
-
-      - commit latency
-      - backlog size
-      - rows/sec capacity
-    - optionally add store-level summary logging:
-
-      - per-shard backlog
-      - hottest shard
-      - shard skew ratio
-  - expected throughput increase:
-
-    - realistic estimate:
-
-      - `4` shards: roughly `2x-3.5x` write throughput
-      - `8` shards: roughly `3x-5x` write throughput
-    - best case:
-
-      - if current bottleneck is mostly single-writer lock contention and workflow ids distribute well, gains can approach shard-count scaling early on
-    - weaker case:
-
-      - if bottleneck is mostly serialization cost, oversized blobs, hot-key concentration, or raw disk latency, gains may be closer to `1.3x-2x`
-    - practical read:
-
-      - for this exact schema, sharded SQLite is very likely the highest-leverage next step before considering Postgres
-  - implementation steps:
-
-    - extract current single-file logic into `SQLiteStateStoreShard`
-    - add stable hash helper for shard routing
-    - add `ShardedSQLiteStateStore` wrapper
-    - route `save_context`, `get_context`, and `delete_context` by shard
-    - implement `get_all_contexts()` as parallel fanout across shards
-    - fix delete-vs-flush resurrection behavior
-    - add shard-aware startup and shutdown
-    - add store-level shard stats
-    - add benchmark script comparing:
-
-      - single-file sqlite
-      - sharded sqlite with 4 shards
-      - sharded sqlite with 8 shards
-  - tests:
-
-    - correctness:
-
-      - save/get roundtrip
-      - overwrite same `workflow_id`
-      - delete removes persisted row
-      - repeated save/delete/save ordering
-      - delete during pending flush does not resurrect row
-      - restart preserves data
-      - `get_all_contexts()` returns union of all shards
-    - routing:
-
-      - same `workflow_id` always maps to same shard across restarts
-      - large sample of ids distributes roughly evenly
-    - performance:
-
-      - concurrent saves to many distinct workflow ids
-      - hot-key workload
-      - mixed save/delete workload
-      - larger payload blobs
-  - decision rule:
-
-    - implement this if:
-
-      - persistence is becoming a measurable bottleneck
-      - writes are spread across many workflow ids
-      - you want more throughput without infra burden
-    - defer this if:
-
-      - current batching is already sufficient
-      - persistence is not near the top of the profile
-      - the real bottleneck is serialization rather than sqlite writer contention
