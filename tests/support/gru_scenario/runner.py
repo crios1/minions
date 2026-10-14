@@ -937,9 +937,10 @@ class ScenarioRunner:
         return dict(counts)
 
     def _snapshot_metrics_counters(self) -> dict[str, list[dict[str, object]]]:
+        snapshot = self._metrics.snapshot()
         return {
             name: [dict(sample) for sample in samples]
-            for name, samples in self._metrics.snapshot_counters().items()
+            for name, samples in snapshot["counter"].items()
         }
 
 

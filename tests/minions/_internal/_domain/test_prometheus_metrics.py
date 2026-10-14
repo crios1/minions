@@ -1,21 +1,24 @@
 import asyncio
 import contextlib
 import re
+import threading
 import urllib.error
 import urllib.request
 from collections.abc import AsyncGenerator, Callable
+from concurrent.futures import ThreadPoolExecutor
+from typing import Literal, NoReturn, cast
 
 import pytest
-from prometheus_client import CollectorRegistry
 
-from minions._internal._framework.logger import WARNING, Logger
+import minions._internal._framework.metrics_prometheus as metrics_prometheus_module
+from minions._internal._framework.logger import Logger
 from minions._internal._framework.logger_noop import NoOpLogger
-from minions._internal._framework.metrics import Kind
+from minions._internal._framework.metric_definition import Kind, MetricDefinition
 from minions._internal._framework.metrics_constants import (
     LABEL_MINION,
     LABEL_MINION_WORKFLOW_STEP,
     LABEL_ORCHESTRATION_ID,
-    METRIC_LABEL_NAMES,
+    LABEL_STATUS,
     MINION_WORKFLOW_STARTED_TOTAL,
     MINION_WORKFLOW_STEP_DURATION_SECONDS,
     STATE_STORE_PAYLOAD_SIZE_BYTES,
@@ -29,6 +32,35 @@ PrometheusMetricsContextFactory = Callable[
 ]
 
 
+def _update_metric_by_kind(
+    metrics: PrometheusMetrics,
+    definition: MetricDefinition[Kind],
+    *,
+    labels: dict[str, str],
+    value: float,
+) -> None:
+    if definition.kind == "counter":
+        metrics.increment_counter(
+            cast(MetricDefinition[Literal["counter"]], definition),
+            labels=labels,
+            amount=value,
+        )
+    elif definition.kind == "gauge":
+        metrics.set_gauge(
+            cast(MetricDefinition[Literal["gauge"]], definition),
+            labels=labels,
+            value=value,
+        )
+    elif definition.kind == "histogram":
+        metrics.observe_histogram(
+            cast(MetricDefinition[Literal["histogram"]], definition),
+            labels=labels,
+            value=value,
+        )
+    else:
+        raise AssertionError(f"unhandled metric kind: {definition.kind}")
+
+
 @pytest.fixture
 def prometheus_metrics_context_factory() -> PrometheusMetricsContextFactory:
     @contextlib.asynccontextmanager
@@ -36,9 +68,8 @@ def prometheus_metrics_context_factory() -> PrometheusMetricsContextFactory:
         *,
         logger: Logger,
         port: int,
-        registry: CollectorRegistry,
     ) -> AsyncGenerator[PrometheusMetrics, None]:
-        metrics = PrometheusMetrics(logger=logger, port=port, registry=registry)
+        metrics = PrometheusMetrics(logger=logger, port=port)
         await metrics.startup()
         try:
             yield metrics
@@ -69,10 +100,10 @@ async def poll_read_metrics_from_http(
             await asyncio.sleep(poll_interval)
 
 
-def extract_metric_value(text: str, name: str, labels: dict[str, str]) -> float:
-    """
-    handles 'some_metric{label1="foo",label2="bar"} 42.0'
-    and 'some_metric 42.0'
+def find_metric_value(text: str, name: str, labels: dict[str, str]) -> float:
+    """Supported formats:
+    - ``metric_name{label1="foo",label2="bar"} 42.0``
+    - ``metric_name 42.0`` (without labels)
     """
     for line in text.splitlines():
         if labels:
@@ -106,30 +137,87 @@ async def test_counter_exposed_on_http(
     prometheus_metrics_context_factory: PrometheusMetricsContextFactory,
 ):
     port = find_unused_port()
-    registry = CollectorRegistry()
-    async with prometheus_metrics_context_factory(
-        logger=NoOpLogger(), port=port, registry=registry
-    ) as metrics:
-        counter = metrics.create_metric(
-            MINION_WORKFLOW_STARTED_TOTAL, [LABEL_ORCHESTRATION_ID, LABEL_MINION], "counter"
+    async with prometheus_metrics_context_factory(logger=NoOpLogger(), port=port) as metrics:
+        await metrics._mn_inc(
+            MINION_WORKFLOW_STARTED_TOTAL,
+            amount=1.0,
+            labels={
+                LABEL_ORCHESTRATION_ID: "o1",
+                LABEL_MINION: "m1",
+            },
         )
-        counter.labels(
-            **{
-                LABEL_ORCHESTRATION_ID: "dummy-orchestration-id",
-                LABEL_MINION: "dummy-minion-id",
-            }
-        ).inc()
 
         page = await poll_read_metrics_from_http(port)
-        value = extract_metric_value(
+        value = find_metric_value(
             page,
             MINION_WORKFLOW_STARTED_TOTAL,
             {
-                LABEL_ORCHESTRATION_ID: "dummy-orchestration-id",
-                LABEL_MINION: "dummy-minion-id",
+                LABEL_ORCHESTRATION_ID: "o1",
+                LABEL_MINION: "m1",
             },
         )
         assert value == 1.0
+
+
+@pytest.mark.asyncio
+async def test_prometheus_scrapes_metrics_recorded_before_startup():
+    port = find_unused_port()
+    metrics = PrometheusMetrics(logger=NoOpLogger(), port=port)
+
+    workflow_started_labels = {
+        LABEL_ORCHESTRATION_ID: "o1",
+        LABEL_MINION: "m1",
+    }
+    workflow_step_duration_labels = {
+        LABEL_ORCHESTRATION_ID: "o1",
+        LABEL_MINION: "m1",
+        LABEL_MINION_WORKFLOW_STEP: "s1",
+        LABEL_STATUS: "succeeded",
+    }
+
+    await metrics._mn_inc(
+        MINION_WORKFLOW_STARTED_TOTAL,
+        amount=1.0,
+        labels=workflow_started_labels,
+    )
+    await metrics._mn_set(SYSTEM_MEMORY_USED_PERCENT, value=25.0)
+    await metrics._mn_observe(
+        MINION_WORKFLOW_STEP_DURATION_SECONDS,
+        value=0.75,
+        labels=workflow_step_duration_labels,
+    )
+
+    try:
+        await metrics.startup()
+
+        page = await poll_read_metrics_from_http(port)
+
+        assert find_metric_value(
+            page,
+            MINION_WORKFLOW_STARTED_TOTAL,
+            workflow_started_labels
+        ) == 1.0
+
+        assert find_metric_value(
+            page,
+            SYSTEM_MEMORY_USED_PERCENT,
+            {}
+        ) == 25.0
+
+        assert find_metric_value(
+            page,
+            MINION_WORKFLOW_STEP_DURATION_SECONDS + "_sum",
+            workflow_step_duration_labels,
+        ) == 0.75
+
+        assert find_metric_value(
+            page,
+            MINION_WORKFLOW_STEP_DURATION_SECONDS + "_count",
+            workflow_step_duration_labels,
+        ) == 1.0
+
+    finally:
+        await metrics.shutdown()
 
 
 @pytest.mark.asyncio
@@ -137,15 +225,11 @@ async def test_gauge_exposed_on_http(
     prometheus_metrics_context_factory: PrometheusMetricsContextFactory,
 ):
     port = find_unused_port()
-    registry = CollectorRegistry()
-    async with prometheus_metrics_context_factory(
-        logger=NoOpLogger(), port=port, registry=registry
-    ) as metrics:
-        gauge = metrics.create_metric(SYSTEM_MEMORY_USED_PERCENT, [], "gauge")
-        gauge.set(42.5)
+    async with prometheus_metrics_context_factory(logger=NoOpLogger(), port=port) as metrics:
+        await metrics._mn_set(SYSTEM_MEMORY_USED_PERCENT, value=42.5)
 
         page = await poll_read_metrics_from_http(port)
-        value = extract_metric_value(page, SYSTEM_MEMORY_USED_PERCENT, {})
+        value = find_metric_value(page, SYSTEM_MEMORY_USED_PERCENT, {})
         assert value == 42.5
 
 
@@ -154,32 +238,28 @@ async def test_histogram_exposed_on_http(
     prometheus_metrics_context_factory: PrometheusMetricsContextFactory,
 ):
     port = find_unused_port()
-    registry = CollectorRegistry()
-    async with prometheus_metrics_context_factory(
-        logger=NoOpLogger(), port=port, registry=registry
-    ) as metrics:
-        histogram = metrics.create_metric(
+    async with prometheus_metrics_context_factory(logger=NoOpLogger(), port=port) as metrics:
+        await metrics._mn_observe(
             MINION_WORKFLOW_STEP_DURATION_SECONDS,
-            [LABEL_ORCHESTRATION_ID, LABEL_MINION, LABEL_MINION_WORKFLOW_STEP],
-            "histogram",
+            value=0.75,
+            labels={
+                LABEL_ORCHESTRATION_ID: "o1",
+                LABEL_MINION: "m1",
+                LABEL_MINION_WORKFLOW_STEP: "s1",
+                LABEL_STATUS: "succeeded",
+            },
         )
-        histogram.labels(
-            **{
-                LABEL_ORCHESTRATION_ID: "orchestration123",
-                LABEL_MINION: "minion123",
-                LABEL_MINION_WORKFLOW_STEP: "step_xyz",
-            }
-        ).observe(0.75)
 
         page = await poll_read_metrics_from_http(port)
         labels = {
-            LABEL_ORCHESTRATION_ID: "orchestration123",
-            LABEL_MINION: "minion123",
-            LABEL_MINION_WORKFLOW_STEP: "step_xyz",
+            LABEL_ORCHESTRATION_ID: "o1",
+            LABEL_MINION: "m1",
+            LABEL_MINION_WORKFLOW_STEP: "s1",
+            LABEL_STATUS: "succeeded",
         }
 
-        sum_val = extract_metric_value(page, MINION_WORKFLOW_STEP_DURATION_SECONDS + "_sum", labels)
-        count_val = extract_metric_value(
+        sum_val = find_metric_value(page, MINION_WORKFLOW_STEP_DURATION_SECONDS + "_sum", labels)
+        count_val = find_metric_value(
             page, MINION_WORKFLOW_STEP_DURATION_SECONDS + "_count", labels
         )
 
@@ -187,6 +267,7 @@ async def test_histogram_exposed_on_http(
         assert sum_val == 0.75
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("metric_name", "value", "labels", "expected_bucket"),
     [
@@ -198,22 +279,20 @@ async def test_histogram_exposed_on_http(
         ),
     ],
 )
-def test_state_store_payload_histogram_uses_byte_buckets(
+async def test_prometheus_uses_declared_histogram_bucket_boundaries(
     metric_name: str,
     value: float,
     labels: dict[str, str],
     expected_bucket: str,
 ):
-    registry = CollectorRegistry()
-    metrics = PrometheusMetrics(logger=NoOpLogger(), registry=registry)
-    metric = metrics.create_metric(
-        metric_name,
-        METRIC_LABEL_NAMES[metric_name],
-        "histogram",
-    )
-    metric.labels(**labels).observe(value)
+    metrics = PrometheusMetrics(logger=NoOpLogger())
+    await metrics._mn_observe(metric_name, value=value, labels=labels)
 
-    family = next(family for family in registry.collect() if family.name == metric_name)
+    family = next(
+        family
+        for family in metrics._collector_registry_state.collector_registry.collect()
+        if family.name == metric_name
+    )
     buckets = {
         sample.labels["le"]: sample.value
         for sample in family.samples
@@ -222,111 +301,95 @@ def test_state_store_payload_histogram_uses_byte_buckets(
     assert buckets[expected_bucket] == 1.0
 
 
-# Metric Registry Behavior
+# Collector Registration and Snapshot Behavior
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["counter", "gauge", "histogram"])
-async def test_zero_label_metrics_update_without_unknown_warning(
-    kind: Kind,
-    monkeypatch: pytest.MonkeyPatch,
-    logger: InMemoryLogger,
-):
-    metric_name = f"test_zero_label_{kind}"
-    monkeypatch.setitem(METRIC_LABEL_NAMES, metric_name, [])
-    assert METRIC_LABEL_NAMES[metric_name] == []
-    registry = CollectorRegistry()
-    metrics = PrometheusMetrics(logger=logger, registry=registry)
+def test_repeated_operations_reuse_one_registered_metric_family(kind: Kind):
+    metrics = PrometheusMetrics(logger=NoOpLogger())
 
-    if kind == "counter":
-        await metrics._mn_inc(metric_name)
-        assert metrics.snapshot_counters()[metric_name] == [{"labels": {}, "value": 1.0}]
-    elif kind == "gauge":
-        await metrics._mn_set(metric_name, 42.5)
-        assert metrics.snapshot_gauges()[metric_name] == [{"labels": {}, "value": 42.5}]
-    elif kind == "histogram":
-        await metrics._mn_observe(metric_name, 0.75)
-        assert {"labels": {}, "count": 1.0, "sum": 0.75} in metrics.snapshot_histograms()[
-            metric_name
-        ]
-    else:
-        raise Exception("unhandled metric kind")
+    definition = MetricDefinition(
+        name="metric",
+        kind=kind,
+        label_names=set(),
+    )
+    _update_metric_by_kind(metrics, definition, labels={}, value=1.0)
+    _update_metric_by_kind(metrics, definition, labels={}, value=1.0)
 
-    assert not logger.has_log(f"undeclared metric '{metric_name}'")
-
-
-@pytest.mark.asyncio
-async def test_undeclared_metric_warns_and_is_rejected(logger: InMemoryLogger):
-    metric_name = "test_undeclared_metric"
-    registry = CollectorRegistry()
-    metrics = PrometheusMetrics(logger=logger, registry=registry)
-
-    await metrics._mn_set(metric_name, 42.5, labels={"route": "/v1"})
-
-    assert await logger.wait_for_log(f"undeclared metric '{metric_name}'", min_level=WARNING)
-    undeclared_metric_logs = [
-        log for log in logger.logs if f"undeclared metric '{metric_name}'" in log.msg
+    assert [
+        family.name for family in metrics._collector_registry_state.collector_registry.collect()
+    ] == [
+        definition.name
     ]
-    assert len(undeclared_metric_logs) == 1
-    assert undeclared_metric_logs[0].level == WARNING
-    assert "no declared label schema" in undeclared_metric_logs[0].msg
-    assert metric_name not in metrics.snapshot_gauges()
 
 
-# Failure Cases
+def test_concurrent_prometheus_registration_publishes_one_collector():
+    metrics = PrometheusMetrics(logger=NoOpLogger())
+    definition = MetricDefinition(
+        name="test_concurrent_registration",
+        kind="gauge",
+        label_names=set(),
+    )
+    worker_count = 8
+    continue_together = threading.Barrier(worker_count + 1)  # workers and this test thread
+
+    def record_metric(_index: int) -> None:
+        continue_together.wait(timeout=5)
+        metrics.set_gauge(definition, labels={}, value=1.0)
+
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        futures = [executor.submit(record_metric, index) for index in range(worker_count)]
+        continue_together.wait(timeout=5)
+        for future in futures:
+            future.result(timeout=5)
+
+    assert [
+        family.name for family in metrics._collector_registry_state.collector_registry.collect()
+    ] == [
+        definition.name
+    ]
 
 
-def test_unknown_metric_kind_raises_value_error():
-    port = find_unused_port()
-    registry = CollectorRegistry()
-    metrics = PrometheusMetrics(logger=NoOpLogger(), port=port, registry=registry)
-
-    with pytest.raises(ValueError) as exc_info:
-        metrics.create_metric("invalid_metric", [], "bogus_kind")  # type: ignore
-
-    assert "Unknown metric kind" in str(exc_info.value)
+# HTTP Server Lifecycle
 
 
 @pytest.mark.asyncio
 async def test_http_server_start_failure_logs_error(
     logger: InMemoryLogger,
-    prometheus_metrics_context_factory: PrometheusMetricsContextFactory,
+    monkeypatch: pytest.MonkeyPatch,
 ):
-    port = find_unused_port()
-    registry = CollectorRegistry()
+    def raise_os_error(**_kwargs: object) -> NoReturn:
+        raise OSError("address already in use")
 
-    async with prometheus_metrics_context_factory(
-        logger=logger, port=port, registry=registry
-    ):
-        assert not logger.has_log("Failed to start metrics HTTP server")
+    monkeypatch.setattr(
+        metrics_prometheus_module,
+        "start_http_server",
+        raise_os_error,
+    )
+    metrics = PrometheusMetrics(logger=logger)
 
-        # Keep the first listener alive while the second instance attempts the same port.
-        async with prometheus_metrics_context_factory(
-            logger=logger, port=port, registry=registry
-        ):
-            pass
+    with pytest.raises(OSError, match="address already in use"):
+        await metrics.startup()
 
-        assert logger.has_log("Failed to start metrics HTTP server")
+    assert logger.has_log("Failed to start metrics HTTP server")
 
 
 @pytest.mark.asyncio
-async def test_http_server_can_restart_after_shutdown(
+async def test_http_server_port_can_be_reused_by_new_metrics_instance_after_shutdown(
     logger: InMemoryLogger,
     prometheus_metrics_context_factory: PrometheusMetricsContextFactory,
 ):
     port = find_unused_port()
-    registry = CollectorRegistry()
 
-    async with prometheus_metrics_context_factory(
-        logger=logger, port=port, registry=registry
-    ) as metrics:
+    async with prometheus_metrics_context_factory(logger=logger, port=port) as metrics:
         await metrics._mn_set(SYSTEM_MEMORY_USED_PERCENT, 42.5)
+        assert metrics.snapshot()["gauge"][SYSTEM_MEMORY_USED_PERCENT] == [
+            {"labels": {}, "value": 42.5}
+        ]
 
-    async with prometheus_metrics_context_factory(
-        logger=logger, port=port, registry=registry
-    ) as metrics:
+    async with prometheus_metrics_context_factory(logger=logger, port=port) as metrics:
         assert not logger.has_log("Failed to start metrics HTTP server")
         await metrics._mn_set(SYSTEM_MEMORY_USED_PERCENT, 43.5)
-        assert metrics.snapshot_gauges()[SYSTEM_MEMORY_USED_PERCENT] == [
+        assert metrics.snapshot()["gauge"][SYSTEM_MEMORY_USED_PERCENT] == [
             {"labels": {}, "value": 43.5}
         ]

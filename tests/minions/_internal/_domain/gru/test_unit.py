@@ -406,13 +406,22 @@ class TestUnit:
         with pytest.raises(asyncio.CancelledError):
             await monitor._monitor_process_resources(interval=0)
 
-        assert metrics.snapshot_gauge_value(SYSTEM_MEMORY_USED_PERCENT, {}) == 55
-        assert metrics.snapshot_gauge_value(SYSTEM_CPU_USED_PERCENT, {}) == 20
-        assert metrics.snapshot_gauge_value(PROCESS_MEMORY_USED_PERCENT, {}) == 12
-        assert metrics.snapshot_gauge_value(PROCESS_CPU_USED_PERCENT, {}) == 2
+        snapshot = metrics.snapshot()
+        assert snapshot["gauge"][SYSTEM_MEMORY_USED_PERCENT] == [
+            {"labels": {}, "value": 55.0}
+        ]
+        assert snapshot["gauge"][SYSTEM_CPU_USED_PERCENT] == [
+            {"labels": {}, "value": 20.0}
+        ]
+        assert snapshot["gauge"][PROCESS_MEMORY_USED_PERCENT] == [
+            {"labels": {}, "value": 12.0}
+        ]
+        assert snapshot["gauge"][PROCESS_CPU_USED_PERCENT] == [
+            {"labels": {}, "value": 2.0}
+        ]
 
-        assert metrics.snapshot_counters() == {}
-        assert metrics.snapshot_histograms() == {}
+        assert snapshot["counter"] == {}
+        assert snapshot["histogram"] == {}
 
     @pytest.mark.asyncio
     async def test_monitor_high_ram_warn_once_with_reset(

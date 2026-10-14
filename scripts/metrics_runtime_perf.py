@@ -100,10 +100,11 @@ def make_backend(name: BackendName) -> BackendRuntime:
     if name == "noop":
         return BackendRuntime(metrics=NoOpMetrics())
     if name == "prometheus":
-        registry = CollectorRegistry()
+        metrics = PrometheusMetrics(logger=NoOpLogger())
+        # Read its registry only to measure the generated scrape size.
         return BackendRuntime(
-            metrics=PrometheusMetrics(logger=NoOpLogger(), registry=registry),
-            registry=registry,
+            metrics=metrics,
+            registry=metrics._collector_registry_state.collector_registry,
         )
     if name == "inmemory":
         from tests.assets.support.metrics_inmemory import InMemoryMetrics

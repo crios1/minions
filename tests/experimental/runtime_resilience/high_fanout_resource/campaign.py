@@ -39,7 +39,13 @@ class FanoutSample:
 def _label_set_count(metrics: InMemoryMetrics) -> int:
     snapshot = metrics.snapshot()
     return sum(
-        len(samples) for metric_kind in snapshot.values() for samples in metric_kind.values()
+        len(samples)
+        for samples_by_name in (
+            snapshot["counter"],
+            snapshot["gauge"],
+            snapshot["histogram"],
+        )
+        for samples in samples_by_name.values()
     )
 
 
@@ -100,16 +106,26 @@ async def _run_scenario(subscribers: int, events: int) -> FanoutSample:
     assert SlowSharedResource.peak_calls_inflight >= int(
         subscribers * _MIN_EXPECTED_CONCURRENCY_RATIO
     )
-    assert metrics.snapshot_counter_value_total(PIPELINE_EVENT_FANOUT_TOTAL) == expected_workflows
-    assert len(metrics.snapshot_counters()[PIPELINE_EVENT_FANOUT_TOTAL]) == subscribers
-    assert (
-        metrics.snapshot_counter_value_total(MINION_WORKFLOW_SUCCEEDED_TOTAL) == expected_workflows
-    )
-    assert len(metrics.snapshot_counters()[MINION_WORKFLOW_SUCCEEDED_TOTAL]) == subscribers
-    assert metrics.snapshot_counter_value_total(RESOURCE_SERVES_TOTAL) == expected_workflows
-    assert len(metrics.snapshot_counters()[RESOURCE_SERVES_TOTAL]) == subscribers
-    assert metrics.snapshot_histogram_count_total(RESOURCE_LATENCY_SECONDS) == expected_workflows
-    assert len(metrics.snapshot_histograms()[RESOURCE_LATENCY_SECONDS]) == subscribers
+    snapshot = metrics.snapshot()
+    assert sum(
+        sample["value"]
+        for sample in snapshot["counter"][PIPELINE_EVENT_FANOUT_TOTAL]
+    ) == expected_workflows
+    assert len(snapshot["counter"][PIPELINE_EVENT_FANOUT_TOTAL]) == subscribers
+    assert sum(
+        sample["value"]
+        for sample in snapshot["counter"][MINION_WORKFLOW_SUCCEEDED_TOTAL]
+    ) == expected_workflows
+    assert len(snapshot["counter"][MINION_WORKFLOW_SUCCEEDED_TOTAL]) == subscribers
+    assert sum(
+        sample["value"] for sample in snapshot["counter"][RESOURCE_SERVES_TOTAL]
+    ) == expected_workflows
+    assert len(snapshot["counter"][RESOURCE_SERVES_TOTAL]) == subscribers
+    assert sum(
+        sample["count"]
+        for sample in snapshot["histogram"][RESOURCE_LATENCY_SECONDS]
+    ) == expected_workflows
+    assert len(snapshot["histogram"][RESOURCE_LATENCY_SECONDS]) == subscribers
     metrics.assert_metric_label_observations_match_contract()
     assert await state_store.get_all_contexts() == []
     metric_label_sets = _label_set_count(metrics)

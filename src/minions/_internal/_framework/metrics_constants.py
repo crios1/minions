@@ -1,3 +1,8 @@
+from collections.abc import Mapping
+from types import MappingProxyType
+
+from .metric_definition import Kind, MetricDefinition
+
 # Label Keys
 LABEL_PIPELINE = "pipeline"
 
@@ -64,140 +69,226 @@ SYSTEM_CPU_USED_PERCENT = "system_cpu_used_percent"
 PROCESS_MEMORY_USED_PERCENT = "process_memory_used_percent"
 PROCESS_CPU_USED_PERCENT = "process_cpu_used_percent"
 
-# Metric schema for the Metrics base class.
-# Every metric name used through its metric-operation methods must be listed here.
-# An empty list explicitly declares a metric with no labels.
-# If a metric name is not listed here, Metrics rejects the operation.
-METRIC_LABEL_NAMES = {
-    PIPELINE_EVENT_PRODUCED_TOTAL: [LABEL_PIPELINE],
-    PIPELINE_EVENT_FANOUT_TOTAL: [LABEL_PIPELINE, LABEL_ORCHESTRATION_ID],
-    PIPELINE_ERROR_TOTAL: [LABEL_PIPELINE, LABEL_ERROR_TYPE],
+def _metric_def(
+    name: str,
+    kind: Kind,
+    label_names: set[str],
+    *,
+    histogram_buckets: tuple[float, ...] | None = None,
+) -> MetricDefinition[Kind]:
+    return MetricDefinition(
+        name=name,
+        kind=kind,
+        label_names=label_names,
+        histogram_buckets=histogram_buckets,
+    )
 
-    RESOURCE_SERVES_TOTAL: [
-        LABEL_RESOURCE,
-        LABEL_RESOURCE_METHOD,
-        LABEL_RESOURCE_CALLER_KIND,
-        LABEL_RESOURCE_CALLER,
-        LABEL_ORCHESTRATION_ID,
-    ],
-    RESOURCE_LATENCY_SECONDS: [
-        LABEL_RESOURCE,
-        LABEL_RESOURCE_METHOD,
-        LABEL_RESOURCE_CALLER_KIND,
-        LABEL_RESOURCE_CALLER,
-        LABEL_ORCHESTRATION_ID,
-    ],
-    RESOURCE_ERROR_TOTAL: [
-        LABEL_RESOURCE,
-        LABEL_RESOURCE_METHOD,
-        LABEL_RESOURCE_CALLER_KIND,
-        LABEL_RESOURCE_CALLER,
-        LABEL_ORCHESTRATION_ID,
-        LABEL_ERROR_TYPE
-    ],
 
-    MINION_WORKFLOW_STARTED_TOTAL: [LABEL_MINION, LABEL_ORCHESTRATION_ID],
-    MINION_WORKFLOW_INFLIGHT_GAUGE: [LABEL_MINION, LABEL_ORCHESTRATION_ID],
-    MINION_WORKFLOW_ABORTED_TOTAL: [LABEL_MINION, LABEL_ORCHESTRATION_ID],
-    MINION_WORKFLOW_FAILED_TOTAL: [LABEL_MINION, LABEL_ORCHESTRATION_ID, LABEL_ERROR_TYPE],
-    MINION_WORKFLOW_SUCCEEDED_TOTAL: [LABEL_MINION, LABEL_ORCHESTRATION_ID],
-    MINION_WORKFLOW_DURATION_SECONDS: [LABEL_MINION, LABEL_ORCHESTRATION_ID, LABEL_STATUS],
+METRIC_DEFINITIONS: Mapping[str, MetricDefinition[Kind]] = MappingProxyType(
+    {
+        PIPELINE_EVENT_PRODUCED_TOTAL: _metric_def(
+            PIPELINE_EVENT_PRODUCED_TOTAL, "counter", {LABEL_PIPELINE}
+        ),
+        PIPELINE_EVENT_FANOUT_TOTAL: _metric_def(
+            PIPELINE_EVENT_FANOUT_TOTAL, "counter", {LABEL_PIPELINE, LABEL_ORCHESTRATION_ID}
+        ),
+        PIPELINE_ERROR_TOTAL: _metric_def(
+            PIPELINE_ERROR_TOTAL, "counter", {LABEL_PIPELINE, LABEL_ERROR_TYPE}
+        ),
 
-    MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL: [
-        LABEL_MINION,
-        LABEL_ORCHESTRATION_ID,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_POINT,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY,
-        LABEL_STATE_STORE_TYPE,
-    ],
-    MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL: [
-        LABEL_MINION,
-        LABEL_ORCHESTRATION_ID,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_POINT,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY,
-        LABEL_STATE_STORE_TYPE,
-    ],
-    MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL: [
-        LABEL_MINION,
-        LABEL_ORCHESTRATION_ID,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_POINT,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_RETRYABLE,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY,
-        LABEL_STATE_STORE_TYPE,
-    ],
-    MINION_WORKFLOW_PERSISTENCE_DURATION_SECONDS: [
-        LABEL_MINION,
-        LABEL_ORCHESTRATION_ID,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_POINT,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY,
-        LABEL_STATE_STORE_TYPE,
-    ],
-    MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE: [
-        LABEL_MINION,
-        LABEL_ORCHESTRATION_ID,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_POINT,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE,
-        LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY,
-        LABEL_STATE_STORE_TYPE,
-    ],
+        RESOURCE_SERVES_TOTAL: _metric_def(
+            RESOURCE_SERVES_TOTAL,
+            "counter",
+            {
+                LABEL_RESOURCE,
+                LABEL_RESOURCE_METHOD,
+                LABEL_RESOURCE_CALLER_KIND,
+                LABEL_RESOURCE_CALLER,
+                LABEL_ORCHESTRATION_ID,
+            },
+        ),
+        RESOURCE_LATENCY_SECONDS: _metric_def(
+            RESOURCE_LATENCY_SECONDS,
+            "histogram",
+            {
+                LABEL_RESOURCE,
+                LABEL_RESOURCE_METHOD,
+                LABEL_RESOURCE_CALLER_KIND,
+                LABEL_RESOURCE_CALLER,
+                LABEL_ORCHESTRATION_ID,
+            },
+        ),
+        RESOURCE_ERROR_TOTAL: _metric_def(
+            RESOURCE_ERROR_TOTAL,
+            "counter",
+            {
+                LABEL_RESOURCE,
+                LABEL_RESOURCE_METHOD,
+                LABEL_RESOURCE_CALLER_KIND,
+                LABEL_RESOURCE_CALLER,
+                LABEL_ORCHESTRATION_ID,
+                LABEL_ERROR_TYPE,
+            },
+        ),
 
-    STATE_STORE_OPERATIONS_TOTAL: [LABEL_STATE_STORE_TYPE, LABEL_OPERATION],
-    STATE_STORE_OPERATION_FAILURES_TOTAL: [
-        LABEL_STATE_STORE_TYPE,
-        LABEL_OPERATION,
-        LABEL_ERROR_TYPE,
-    ],
-    STATE_STORE_OPERATION_DURATION_SECONDS: [
-        LABEL_STATE_STORE_TYPE,
-        LABEL_OPERATION,
-    ],
-    STATE_STORE_PAYLOAD_SIZE_BYTES: [
-        LABEL_STATE_STORE_TYPE,
-        LABEL_OPERATION,
-    ],
+        MINION_WORKFLOW_STARTED_TOTAL: _metric_def(
+            MINION_WORKFLOW_STARTED_TOTAL, "counter", {LABEL_MINION, LABEL_ORCHESTRATION_ID}
+        ),
+        MINION_WORKFLOW_INFLIGHT_GAUGE: _metric_def(
+            MINION_WORKFLOW_INFLIGHT_GAUGE, "gauge", {LABEL_MINION, LABEL_ORCHESTRATION_ID}
+        ),
+        MINION_WORKFLOW_ABORTED_TOTAL: _metric_def(
+            MINION_WORKFLOW_ABORTED_TOTAL, "counter", {LABEL_MINION, LABEL_ORCHESTRATION_ID}
+        ),
+        MINION_WORKFLOW_FAILED_TOTAL: _metric_def(
+            MINION_WORKFLOW_FAILED_TOTAL,
+            "counter",
+            {LABEL_MINION, LABEL_ORCHESTRATION_ID, LABEL_ERROR_TYPE},
+        ),
+        MINION_WORKFLOW_SUCCEEDED_TOTAL: _metric_def(
+            MINION_WORKFLOW_SUCCEEDED_TOTAL, "counter", {LABEL_MINION, LABEL_ORCHESTRATION_ID}
+        ),
+        MINION_WORKFLOW_DURATION_SECONDS: _metric_def(
+            MINION_WORKFLOW_DURATION_SECONDS,
+            "histogram",
+            {LABEL_MINION, LABEL_ORCHESTRATION_ID, LABEL_STATUS},
+        ),
 
-    MINION_WORKFLOW_STEP_STARTED_TOTAL: [
-        LABEL_MINION,
-        LABEL_ORCHESTRATION_ID,
-        LABEL_MINION_WORKFLOW_STEP
-    ],
-    MINION_WORKFLOW_STEP_INFLIGHT_GAUGE: [
-        LABEL_MINION,
-        LABEL_ORCHESTRATION_ID,
-        LABEL_MINION_WORKFLOW_STEP
-    ],
-    MINION_WORKFLOW_STEP_ABORTED_TOTAL: [
-        LABEL_MINION,
-        LABEL_ORCHESTRATION_ID,
-        LABEL_MINION_WORKFLOW_STEP
-    ],
-    MINION_WORKFLOW_STEP_FAILED_TOTAL: [
-        LABEL_MINION,
-        LABEL_ORCHESTRATION_ID,
-        LABEL_MINION_WORKFLOW_STEP,
-        LABEL_ERROR_TYPE
-    ],
-    MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL: [
-        LABEL_MINION,
-        LABEL_ORCHESTRATION_ID,
-        LABEL_MINION_WORKFLOW_STEP
-    ],
-    MINION_WORKFLOW_STEP_DURATION_SECONDS: [
-        LABEL_MINION,
-        LABEL_ORCHESTRATION_ID,
-        LABEL_MINION_WORKFLOW_STEP,
-        LABEL_STATUS
-    ],
+        MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL: _metric_def(
+            MINION_WORKFLOW_PERSISTENCE_ATTEMPTS_TOTAL,
+            "counter",
+            {
+                LABEL_MINION,
+                LABEL_ORCHESTRATION_ID,
+                LABEL_MINION_WORKFLOW_PERSISTENCE_POINT,
+                LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION,
+                LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY,
+                LABEL_STATE_STORE_TYPE,
+            },
+        ),
+        MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL: _metric_def(
+            MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL,
+            "counter",
+            {
+                LABEL_MINION,
+                LABEL_ORCHESTRATION_ID,
+                LABEL_MINION_WORKFLOW_PERSISTENCE_POINT,
+                LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION,
+                LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY,
+                LABEL_STATE_STORE_TYPE,
+            },
+        ),
+        MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL: _metric_def(
+            MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL,
+            "counter",
+            {
+                LABEL_MINION,
+                LABEL_ORCHESTRATION_ID,
+                LABEL_MINION_WORKFLOW_PERSISTENCE_POINT,
+                LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION,
+                LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE,
+                LABEL_MINION_WORKFLOW_PERSISTENCE_RETRYABLE,
+                LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY,
+                LABEL_STATE_STORE_TYPE,
+            },
+        ),
+        MINION_WORKFLOW_PERSISTENCE_DURATION_SECONDS: _metric_def(
+            MINION_WORKFLOW_PERSISTENCE_DURATION_SECONDS,
+            "histogram",
+            {
+                LABEL_MINION,
+                LABEL_ORCHESTRATION_ID,
+                LABEL_MINION_WORKFLOW_PERSISTENCE_POINT,
+                LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION,
+                LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY,
+                LABEL_STATE_STORE_TYPE,
+            },
+        ),
+        MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE: _metric_def(
+            MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
+            "gauge",
+            {
+                LABEL_MINION,
+                LABEL_ORCHESTRATION_ID,
+                LABEL_MINION_WORKFLOW_PERSISTENCE_POINT,
+                LABEL_MINION_WORKFLOW_PERSISTENCE_OPERATION,
+                LABEL_MINION_WORKFLOW_PERSISTENCE_FAILURE_STAGE,
+                LABEL_MINION_WORKFLOW_PERSISTENCE_POLICY,
+                LABEL_STATE_STORE_TYPE,
+            },
+        ),
 
-    SYSTEM_MEMORY_USED_PERCENT: [],
-    SYSTEM_CPU_USED_PERCENT: [],
+        STATE_STORE_OPERATIONS_TOTAL: _metric_def(
+            STATE_STORE_OPERATIONS_TOTAL, "counter", {LABEL_STATE_STORE_TYPE, LABEL_OPERATION}
+        ),
+        STATE_STORE_OPERATION_FAILURES_TOTAL: _metric_def(
+            STATE_STORE_OPERATION_FAILURES_TOTAL,
+            "counter",
+            {LABEL_STATE_STORE_TYPE, LABEL_OPERATION, LABEL_ERROR_TYPE},
+        ),
+        STATE_STORE_OPERATION_DURATION_SECONDS: _metric_def(
+            STATE_STORE_OPERATION_DURATION_SECONDS,
+            "histogram",
+            {LABEL_STATE_STORE_TYPE, LABEL_OPERATION},
+        ),
+        STATE_STORE_PAYLOAD_SIZE_BYTES: _metric_def(
+            STATE_STORE_PAYLOAD_SIZE_BYTES,
+            "histogram",
+            {LABEL_STATE_STORE_TYPE, LABEL_OPERATION},
+            histogram_buckets=(
+                256.0,
+                1024.0,
+                4096.0,
+                16_384.0,
+                65_536.0,
+                262_144.0,
+                1_048_576.0,
+                4_194_304.0,
+                16_777_216.0,
+                67_108_864.0,
+            ),
+        ),
 
-    PROCESS_MEMORY_USED_PERCENT: [],
-    PROCESS_CPU_USED_PERCENT: [],
-}
+        MINION_WORKFLOW_STEP_STARTED_TOTAL: _metric_def(
+            MINION_WORKFLOW_STEP_STARTED_TOTAL,
+            "counter",
+            {LABEL_MINION, LABEL_ORCHESTRATION_ID, LABEL_MINION_WORKFLOW_STEP},
+        ),
+        MINION_WORKFLOW_STEP_INFLIGHT_GAUGE: _metric_def(
+            MINION_WORKFLOW_STEP_INFLIGHT_GAUGE,
+            "gauge",
+            {LABEL_MINION, LABEL_ORCHESTRATION_ID, LABEL_MINION_WORKFLOW_STEP},
+        ),
+        MINION_WORKFLOW_STEP_ABORTED_TOTAL: _metric_def(
+            MINION_WORKFLOW_STEP_ABORTED_TOTAL,
+            "counter",
+            {LABEL_MINION, LABEL_ORCHESTRATION_ID, LABEL_MINION_WORKFLOW_STEP},
+        ),
+        MINION_WORKFLOW_STEP_FAILED_TOTAL: _metric_def(
+            MINION_WORKFLOW_STEP_FAILED_TOTAL,
+            "counter",
+            {
+                LABEL_MINION,
+                LABEL_ORCHESTRATION_ID,
+                LABEL_MINION_WORKFLOW_STEP,
+                LABEL_ERROR_TYPE,
+            },
+        ),
+        MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL: _metric_def(
+            MINION_WORKFLOW_STEP_SUCCEEDED_TOTAL,
+            "counter",
+            {LABEL_MINION, LABEL_ORCHESTRATION_ID, LABEL_MINION_WORKFLOW_STEP},
+        ),
+        MINION_WORKFLOW_STEP_DURATION_SECONDS: _metric_def(
+            MINION_WORKFLOW_STEP_DURATION_SECONDS,
+            "histogram",
+            {LABEL_MINION, LABEL_ORCHESTRATION_ID, LABEL_MINION_WORKFLOW_STEP, LABEL_STATUS},
+        ),
+
+        SYSTEM_MEMORY_USED_PERCENT: _metric_def(SYSTEM_MEMORY_USED_PERCENT, "gauge", set()),
+        SYSTEM_CPU_USED_PERCENT: _metric_def(SYSTEM_CPU_USED_PERCENT, "gauge", set()),
+
+        PROCESS_MEMORY_USED_PERCENT: _metric_def(PROCESS_MEMORY_USED_PERCENT, "gauge", set()),
+        PROCESS_CPU_USED_PERCENT: _metric_def(PROCESS_CPU_USED_PERCENT, "gauge", set()),
+    }
+)

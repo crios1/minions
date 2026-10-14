@@ -1,66 +1,43 @@
-from typing import Literal, overload
+from collections.abc import Mapping
+from typing import Literal
 
 from .logger_noop import NoOpLogger
-from .metrics import Kind, Metrics, SnapshotCounters, SnapshotGauges, SnapshotHistograms
-from .metrics_interface import LabelledCounter, LabelledGauge, LabelledHistogram, LabelledMetric
-
-
-class _NoOpMetric:
-    def labels(self, **kwargs: str) -> "_NoOpMetric":
-        return self
-
-    def inc(self, amount: float = 1):
-        pass
-
-    def set(self, value: float):
-        pass
-
-    def observe(self, value: float):
-        pass
+from .metric_definition import MetricDefinition
+from .metrics import Metrics, SnapshotResult
 
 
 class NoOpMetrics(Metrics):
-    """
-    No-op metrics backend for testing or disabled environments.
-    Does nothing but satisfies the framework’s expectations.
-    """
+    """Metrics backend that discards operations and retains no runtime state."""
 
     def __init__(self):
         super().__init__(NoOpLogger())
-        self._noop_metric = _NoOpMetric()
 
-    @overload
-    def create_metric(
+    def increment_counter(
         self,
-        metric_name: str,
-        label_names: list[str],
-        kind: Literal["counter"],
-    ) -> LabelledCounter: ...
+        definition: MetricDefinition[Literal["counter"]],
+        *,
+        labels: Mapping[str, str],
+        amount: float = 1,
+    ) -> None:
+        pass
 
-    @overload
-    def create_metric(
+    def set_gauge(
         self,
-        metric_name: str,
-        label_names: list[str],
-        kind: Literal["gauge"],
-    ) -> LabelledGauge: ...
+        definition: MetricDefinition[Literal["gauge"]],
+        *,
+        labels: Mapping[str, str],
+        value: float,
+    ) -> None:
+        pass
 
-    @overload
-    def create_metric(
+    def observe_histogram(
         self,
-        metric_name: str,
-        label_names: list[str],
-        kind: Literal["histogram"],
-    ) -> LabelledHistogram: ...
+        definition: MetricDefinition[Literal["histogram"]],
+        *,
+        labels: Mapping[str, str],
+        value: float,
+    ) -> None:
+        pass
 
-    def create_metric(self, metric_name: str, label_names: list[str], kind: Kind) -> LabelledMetric:
-        return self._noop_metric
-
-    def snapshot_counters(self) -> SnapshotCounters:
-        return {}
-
-    def snapshot_gauges(self) -> SnapshotGauges:
-        return {}
-
-    def snapshot_histograms(self) -> SnapshotHistograms:
-        return {}
+    def snapshot(self) -> SnapshotResult:
+        return {"counter": {}, "gauge": {}, "histogram": {}}

@@ -123,22 +123,29 @@ def test_require_workflow_spec_rejects_empty_spec(monkeypatch: pytest.MonkeyPatc
         ScenarioVerifier._require_workflow_spec(TwoStepCounterMinion)
 
 
-def test_assert_metrics_label_contract_reports_recorded_mismatches(
+def test_assert_metrics_label_contract_translates_backend_failure(
     verifier_factory: VerifierFactory,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     verifier = verifier_factory(
         ScenarioPlan([], pipeline_event_counts={}),
         ScenarioRunResult(spies=SpyRegistry(), receipts=[]),
     )
-    metric = verifier._metrics.create_metric("unknown_metric_total", [], "counter")
-    metric.labels().inc()
 
-    with pytest.raises(pytest.fail.Exception, match="Metrics label contract mismatch"):
+    def raise_metric_label_contract_failure() -> None:
+        raise AssertionError("injected backend metric-label failure")
+
+    monkeypatch.setattr(
+        verifier._metrics,
+        "assert_metric_label_observations_match_contract",
+        raise_metric_label_contract_failure,
+    )
+
+    with pytest.raises(
+        pytest.fail.Exception,
+        match="Metrics label contract mismatch: injected backend metric-label failure",
+    ):
         verifier._assert_metrics_label_contract()
-
-    assert isinstance(verifier._metrics, InMemoryMetrics)
-
-    verifier._metrics.clear_metric_label_observations()
 
 
 def test_compute_minion_expectations_accumulates_starts_from_successful_receipts(

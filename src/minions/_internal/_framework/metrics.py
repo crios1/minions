@@ -1,37 +1,11 @@
-"""Framework Metrics.
-
-To create a custom metrics backend:
-1. Subclass `Metrics`
-2. Implement `create_metric(...)`, returning an object that conforms to the
-   metric kind
-
-The framework will automatically:
-- Look up metric label names from METRIC_LABEL_NAMES
-- Validate operation label keys against each metric's declared schema
-- Handle registry, locking, and lifecycle
-- Call `.labels(**labels).inc()/set()/observe()` on the returned objects
-"""
-
-import asyncio
-import threading
 from abc import abstractmethod
-from typing import Literal, TypedDict, overload
+from collections.abc import Mapping
+from typing import Literal, TypedDict, cast
 
-from minions._internal._utils.safe_create_task import safe_create_task
-from minions._internal._utils.task_failure_handler import report_task_failure_to_stderr
-
-from .logger import WARNING, Logger
+from .logger import Logger
 from .logger_backed_async_component import LoggerBackedAsyncComponent
-from .metrics_constants import METRIC_LABEL_NAMES
-from .metrics_interface import (
-    LabelledCounter,
-    LabelledGauge,
-    LabelledHistogram,
-    LabelledMetric,
-)
-
-Kind = Literal["counter", "gauge", "histogram"]
-Labels = dict[str, str]
+from .metric_definition import Kind, MetricDefinition
+from .metrics_constants import METRIC_DEFINITIONS
 
 
 class CounterSample(TypedDict):
@@ -54,242 +28,202 @@ SnapshotCounters = dict[str, list[CounterSample]]
 SnapshotGauges = dict[str, list[GaugeSample]]
 SnapshotHistograms = dict[str, list[HistogramSample]]
 
-SnapshotResult = dict[Kind, SnapshotCounters | SnapshotGauges | SnapshotHistograms]
+
+class SnapshotResult(TypedDict):
+    counter: SnapshotCounters
+    gauge: SnapshotGauges
+    histogram: SnapshotHistograms
 
 
 class Metrics(LoggerBackedAsyncComponent):
-    """
-    To implement your own metrics backend, subclass this and override:
-
-    - create_metric(metric_name, label_names, kind)
-    - snapshot_counters()
-    - snapshot_gauges()
-    - snapshot_histograms()
-
-    Metric label names and operation label keys are managed by the framework;
-    backend implementations only handle metric creation and value updates.
-    """
-
     _mn_user_facing = True
 
     def __init__(self, logger: Logger):
         super().__init__(logger)
-        self._mn_metrics_by_kind: dict[Kind, dict[str, LabelledMetric]] = {
-            "counter": {},
-            "gauge": {},
-            "histogram": {},
-        }
-        self._mn_locks: dict[Kind, threading.Lock] = {
-            "counter": threading.Lock(),
-            "gauge": threading.Lock(),
-            "histogram": threading.Lock(),
-        }
-        self._mn_undeclared_metrics: set[str] = set()
 
-    def _mn_get_label_names_for_metric(self, metric_name: str) -> list[str]:
-        labels = METRIC_LABEL_NAMES.get(metric_name)
-        if labels is None:
-            if metric_name not in self._mn_undeclared_metrics:
-                self._mn_undeclared_metrics.add(metric_name)
-                safe_create_task(
-                    self._mn_logger._mn_log(
-                        WARNING,
-                        f"metrics: undeclared metric '{metric_name}'; no declared label schema",
-                    ),
-                    on_failure=report_task_failure_to_stderr,
-                )
-            raise ValueError(
-                f"Undeclared metric '{metric_name}': no declared label schema"
-            )
-        return labels
+    def _mn_get_metric_definition(self, metric_name: str) -> MetricDefinition[Kind]:
+        definition = METRIC_DEFINITIONS.get(metric_name)
+        if definition is not None:
+            return definition
+
+        raise ValueError(f"Undeclared metric '{metric_name}': no declared definition")
 
     def _mn_validate_metric_labels(
         self,
-        metric_name: str,
-        labels: Labels | None,
+        definition: MetricDefinition[Kind],
+        labels: Mapping[str, str] | None,
     ) -> None:
-        expected = frozenset(self._mn_get_label_names_for_metric(metric_name))
+        expected = frozenset(definition.label_names)
         actual = frozenset((labels or {}).keys())
         if actual == expected:
             return
 
         raise ValueError(
-            f"Metric '{metric_name}' label keys do not match declared schema: "
+            f"Metric '{definition.name}' label keys do not match declared schema: "
             f"expected={sorted(expected)!r} actual={sorted(actual)!r} "
             f"missing={sorted(expected - actual)!r} extra={sorted(actual - expected)!r}"
         )
 
-    @overload
-    def _mn_get_metric_unsafe(
-        self, kind: Literal["counter"], metric_name: str
-    ) -> LabelledCounter: ...
+    @staticmethod
+    def _mn_require_metric_kind(
+        definition: MetricDefinition[Kind],
+        expected_kind: Kind,
+    ) -> None:
+        if definition.kind != expected_kind:
+            raise ValueError(
+                f"Metric '{definition.name}' is declared as kind '{definition.kind}', "
+                f"but the operation requested '{expected_kind}'"
+            )
 
-    @overload
-    def _mn_get_metric_unsafe(
-        self, kind: Literal["gauge"], metric_name: str
-    ) -> LabelledGauge: ...
+    @staticmethod
+    def _mn_require_same_definition_for_metric_name(
+        registered_definition: MetricDefinition[Kind],
+        requested_definition: MetricDefinition[Kind],
+    ) -> None:
+        if registered_definition == requested_definition:
+            return
 
-    @overload
-    def _mn_get_metric_unsafe(
-        self, kind: Literal["histogram"], metric_name: str
-    ) -> LabelledHistogram: ...
+        def describe(definition: MetricDefinition[Kind]) -> str:
+            return (
+                f"definition(kind={definition.kind!r}, "
+                f"label_names={list(definition.label_names)!r}, "
+                f"histogram_buckets={definition.histogram_buckets!r})"
+            )
 
-    def _mn_get_metric_unsafe(self, kind: Kind, metric_name: str) -> LabelledMetric:
-        metrics_by_name = self._mn_metrics_by_kind[kind]
-        if metric := metrics_by_name.get(metric_name):
-            return metric
-        with self._mn_locks[kind]:
-            if metric := metrics_by_name.get(metric_name):
-                return metric
-            labels = self._mn_get_label_names_for_metric(metric_name)
-            metric = self.create_metric(metric_name, labels, kind)
-            metrics_by_name[metric_name] = metric
-            return metric
+        raise ValueError(
+            f"Metric name '{requested_definition.name}' is already associated with "
+            f"{describe(registered_definition)}; requested "
+            f"{describe(requested_definition)}"
+        )
 
-    def _mn_inc_unsafe(self, metric_name: str, amount: float = 1, labels: Labels | None = None):
-        self._mn_validate_metric_labels(metric_name, labels)
-        metric = self._mn_get_metric_unsafe("counter", metric_name)
-        metric.labels(**(labels or {})).inc(amount=amount)
+    def _mn_inc_unsafe(
+        self,
+        metric_name: str,
+        amount: float = 1,
+        labels: Mapping[str, str] | None = None,
+    ):
+        definition = self._mn_get_metric_definition(metric_name)
+        self._mn_validate_metric_labels(definition, labels)
+        self._mn_require_metric_kind(definition, "counter")
+        self.increment_counter(
+            cast(MetricDefinition[Literal["counter"]], definition),
+            labels=labels or {},
+            amount=amount,
+        )
 
-    def _mn_set_unsafe(self, metric_name: str, value: float, labels: Labels | None = None):
-        self._mn_validate_metric_labels(metric_name, labels)
-        metric = self._mn_get_metric_unsafe("gauge", metric_name)
-        metric.labels(**(labels or {})).set(value)
+    def _mn_set_unsafe(
+        self,
+        metric_name: str,
+        value: float,
+        labels: Mapping[str, str] | None = None,
+    ):
+        definition = self._mn_get_metric_definition(metric_name)
+        self._mn_validate_metric_labels(definition, labels)
+        self._mn_require_metric_kind(definition, "gauge")
+        self.set_gauge(
+            cast(MetricDefinition[Literal["gauge"]], definition),
+            labels=labels or {},
+            value=value,
+        )
 
-    def _mn_observe_unsafe(self, metric_name: str, value: float, labels: Labels | None = None):
-        self._mn_validate_metric_labels(metric_name, labels)
-        metric = self._mn_get_metric_unsafe("histogram", metric_name)
-        metric.labels(**(labels or {})).observe(value)
+    def _mn_observe_unsafe(
+        self,
+        metric_name: str,
+        value: float,
+        labels: Mapping[str, str] | None = None,
+    ):
+        definition = self._mn_get_metric_definition(metric_name)
+        self._mn_validate_metric_labels(definition, labels)
+        self._mn_require_metric_kind(definition, "histogram")
+        self.observe_histogram(
+            cast(MetricDefinition[Literal["histogram"]], definition),
+            labels=labels or {},
+            value=value,
+        )
 
-    async def _mn_inc(self, metric_name: str, amount: float = 1, labels: Labels | None = None):
+    async def _mn_inc(
+        self,
+        metric_name: str,
+        amount: float = 1,
+        labels: Mapping[str, str] | None = None,
+    ):
         """Increment a counter by the given amount (positive or negative)."""
         return await self._mn_safe_run_and_log_failure(
             method=self._mn_inc_unsafe,
             method_args=[metric_name, amount, labels],
+            log_msg=(
+                f"{type(self).__module__}.{type(self).__qualname__}._mn_inc failed"
+            ),
         )
 
-    async def _mn_set(self, metric_name: str, value: float, labels: Labels | None = None):
+    async def _mn_set(
+        self,
+        metric_name: str,
+        value: float,
+        labels: Mapping[str, str] | None = None,
+    ):
         """Set a gauge to a specific value."""
         return await self._mn_safe_run_and_log_failure(
             method=self._mn_set_unsafe,
             method_args=[metric_name, value, labels],
+            log_msg=(
+                f"{type(self).__module__}.{type(self).__qualname__}._mn_set failed"
+            ),
         )
 
-    async def _mn_observe(self, metric_name: str, value: float, labels: Labels | None = None):
-        """Observe a value (for histograms or summaries)."""
+    async def _mn_observe(
+        self,
+        metric_name: str,
+        value: float,
+        labels: Mapping[str, str] | None = None,
+    ):
+        """Observe a value in a histogram."""
         return await self._mn_safe_run_and_log_failure(
             method=self._mn_observe_unsafe,
             method_args=[metric_name, value, labels],
+            log_msg=(
+                f"{type(self).__module__}.{type(self).__qualname__}._mn_observe failed"
+            ),
         )
 
-    async def _mn_snapshot(self) -> SnapshotResult:
-        counters, gagues, histograms = await asyncio.gather(
-            self._mn_safe_run_and_log_failure(self.snapshot_counters),
-            self._mn_safe_run_and_log_failure(self.snapshot_gauges),
-            self._mn_safe_run_and_log_failure(self.snapshot_histograms),
-        )
-        return {
-            "counter": counters if counters else {},
-            "gauge": gagues if gagues else {},
-            "histogram": histograms if histograms else {},
-        }
+    async def _mn_snapshot(self) -> SnapshotResult | None:
+        """Return a snapshot or ``None`` if the backend snapshot fails."""
+        return await self._mn_safe_run_and_log_failure(self.snapshot)
 
-    @overload
-    def create_metric(
+    @abstractmethod
+    def increment_counter(
         self,
-        metric_name: str,
-        label_names: list[str],
-        kind: Literal["counter"],
-    ) -> LabelledCounter: ...
+        definition: MetricDefinition[Literal["counter"]],
+        *,
+        labels: Mapping[str, str],
+        amount: float = 1,
+    ) -> None:
+        """Atomically record a counter increment for ``definition``."""
 
-    @overload
-    def create_metric(
+    @abstractmethod
+    def set_gauge(
         self,
-        metric_name: str,
-        label_names: list[str],
-        kind: Literal["gauge"],
-    ) -> LabelledGauge: ...
+        definition: MetricDefinition[Literal["gauge"]],
+        *,
+        labels: Mapping[str, str],
+        value: float,
+    ) -> None:
+        """Atomically record a gauge value for ``definition``."""
 
-    @overload
-    def create_metric(
+    @abstractmethod
+    def observe_histogram(
         self,
-        metric_name: str,
-        label_names: list[str],
-        kind: Literal["histogram"],
-    ) -> LabelledHistogram: ...
+        definition: MetricDefinition[Literal["histogram"]],
+        *,
+        labels: Mapping[str, str],
+        value: float,
+    ) -> None:
+        """Atomically record a histogram observation for ``definition``."""
 
     @abstractmethod
-    def create_metric(self, metric_name: str, label_names: list[str], kind: Kind) -> LabelledMetric:
-        """Create and return a backend-specific metric object.
+    def snapshot(self) -> SnapshotResult:
+        """Return a coherent snapshot of all metric kinds.
 
-        The framework will call `.labels(...).inc()/set()/observe()` on it.
-        """
-
-    @abstractmethod
-    def snapshot_counters(self) -> SnapshotCounters:
-        """Return a snapshot of all counters.
-
-        Example structure::
-
-            {
-                "MINION_WORKFLOW_SUCCEEDED_TOTAL": [
-                    {"labels": {"minion": "PriceSync", "reason": "start"}, "value": 4.0},
-                    {"labels": {"minion": "PriceSync", "reason": "resume"}, "value": 2.0},
-                    {"labels": {"minion": "OrderWatcher", "reason": "start"}, "value": 1.0}
-                ],
-                "MINION_WORKFLOW_FAILED_TOTAL": [
-                    {
-                        "labels": {"minion": "OrderWatcher", "error_type": "TimeoutError"},
-                        "value": 1.0,
-                    }
-                ],
-                "MINION_WORKFLOW_ABORTED_TOTAL": []
-            }
-        """
-
-    @abstractmethod
-    def snapshot_gauges(self) -> SnapshotGauges:
-        """Return a snapshot of all gauges.
-
-        Example structure::
-
-            {
-                "MINION_WORKFLOW_INFLIGHT_GAUGE": [
-                    {"labels": {"minion": "PriceSync"}, "value": 1.0},
-                    {"labels": {"minion": "OrderWatcher"}, "value": 0.0}
-                ],
-                "SYSTEM_MEMORY_USAGE_BYTES": [
-                    {"labels": {}, "value": 2.14e8}
-                ]
-            }
-        """
-
-    @abstractmethod
-    def snapshot_histograms(self) -> SnapshotHistograms:
-        """Return a snapshot of all histograms.
-
-        Example structure::
-
-            {
-                "STEP_DURATION_SECONDS": [
-                    {
-                        "labels": {"minion": "PriceSync", "step": "fetch_orders"},
-                        "count": 3.0,
-                        "sum": 1.24,
-                    },
-                    {
-                        "labels": {"minion": "PriceSync", "step": "sync_prices"},
-                        "count": 2.0,
-                        "sum": 0.77,
-                    },
-                    {
-                        "labels": {"minion": "OrderWatcher", "step": "poll_market"},
-                        "count": 5.0,
-                        "sum": 2.95,
-                    }
-                ],
-                "WORKFLOW_LATENCY_SECONDS": [
-                    {"labels": {"minion": "PriceSync"}, "count": 10.0, "sum": 4.38}
-                ]
-            }
+        Histogram samples expose their labels, observation counts, and sums.
+        Bucket-level distributions are outside the generic snapshot contract.
         """

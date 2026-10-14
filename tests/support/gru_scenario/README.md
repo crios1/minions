@@ -271,5 +271,5 @@ Expected workflow counts are derived from `pipeline_event_counts`:
 
 ## Debugging Tips
 - Use the spy-enabled component helpers: `get_call_counts()`, `get_call_history()`, `assert_call_order_for_instance()`.
-- Check metrics via `InMemoryMetrics.snapshot_counters()` for workflow resolution mismatches.
+- Check metrics via `InMemoryMetrics.snapshot()["counter"]` for workflow resolution mismatches.
 - Validate `pipeline_event_counts` against pipeline `produce_event` spy counts.

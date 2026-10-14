@@ -1,293 +1,256 @@
 import threading
-from typing import Literal, overload
+from collections.abc import Mapping
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Generator, Literal, cast
 from wsgiref.simple_server import WSGIServer
 
-from prometheus_client import (
-    REGISTRY,
-    CollectorRegistry,
-    Counter,
-    Gauge,
-    Histogram,
-    start_http_server,
-)
+from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, start_http_server
 
 from .logger import ERROR, Logger
+from .metric_definition import Kind, MetricDefinition
 from .metrics import (
     HistogramSample,
-    Kind,
     Metrics,
     SnapshotCounters,
     SnapshotGauges,
     SnapshotHistograms,
+    SnapshotResult,
 )
-from .metrics_constants import (
-    STATE_STORE_PAYLOAD_SIZE_BYTES,
-)
-from .metrics_interface import LabelledCounter, LabelledGauge, LabelledHistogram, LabelledMetric
 
-_PAYLOAD_SIZE_BYTES_HISTOGRAM_BUCKETS = (
-    256.0,
-    1024.0,
-    4096.0,
-    16_384.0,
-    65_536.0,
-    262_144.0,
-    1_048_576.0,
-    4_194_304.0,
-    16_777_216.0,
-    67_108_864.0,
-)
-_HISTOGRAM_BUCKETS_BY_METRIC: dict[str, tuple[float, ...]] = {
-    STATE_STORE_PAYLOAD_SIZE_BYTES: _PAYLOAD_SIZE_BYTES_HISTOGRAM_BUCKETS,
-}
+_NativeCollector = Counter | Gauge | Histogram
 
 
-class _PrometheusCounter:
-    def __init__(self, metric: Counter, label_names: list[str]):
-        self._metric = metric
-        self._label_names = tuple(label_names)
-
-    def labels(self, **kwargs: str) -> LabelledCounter:
-        if not self._label_names and not kwargs:
-            return self
-        return _PrometheusCounter(self._metric.labels(**kwargs), list(self._label_names))
-
-    def inc(self, amount: float = 1):
-        return self._metric.inc(amount=amount)
+@dataclass(frozen=True, slots=True)
+class _RegisteredMetric:
+    definition: MetricDefinition[Kind]
+    collector: _NativeCollector
 
 
-class _PrometheusGauge:
-    def __init__(self, metric: Gauge, label_names: list[str]):
-        self._metric = metric
-        self._label_names = tuple(label_names)
-
-    def labels(self, **kwargs: str) -> LabelledGauge:
-        if not self._label_names and not kwargs:
-            return self
-        return _PrometheusGauge(self._metric.labels(**kwargs), list(self._label_names))
-
-    def set(self, value: float):
-        return self._metric.set(value)
-
-
-class _PrometheusHistogram:
-    def __init__(self, metric: Histogram, label_names: list[str]):
-        self._metric = metric
-        self._label_names = tuple(label_names)
-
-    def labels(self, **kwargs: str) -> LabelledHistogram:
-        if not self._label_names and not kwargs:
-            return self
-        return _PrometheusHistogram(self._metric.labels(**kwargs), list(self._label_names))
-
-    def observe(self, value: float):
-        return self._metric.observe(value)
+@dataclass(frozen=True, slots=True)
+class _CollectorRegistryState:
+    collector_registry: CollectorRegistry
+    metrics_by_name: dict[str, _RegisteredMetric]
 
 
 class PrometheusMetrics(Metrics):
-    """
-    Prometheus-backed metrics registry. Exposes a /metrics endpoint on the specified port.
-    Implements create_metric(...) by adapting native prometheus_client metric instances.
-    """
+    """Expose Minions metrics to Prometheus."""
 
     def __init__(
         self,
         logger: Logger,
         port: int = 8081,
         addr: str = "",
-        registry: CollectorRegistry = REGISTRY,
     ):
         super().__init__(logger)
         self._port = port
         self._addr = addr
-        self._registry = registry
-        self._runtime_state_lock = threading.Lock() # serializes access runtime state
+        self._lifecycle_lock = threading.Lock()
         self._http_server: tuple[WSGIServer, threading.Thread] | None = None
-        self._registered_collectors: list[Counter | Gauge | Histogram] = []
+        self._collector_registry_state = self._new_collector_registry_state()
+
+    def _new_collector_registry_state(self) -> _CollectorRegistryState:
+        collector_registry = CollectorRegistry()
+        return _CollectorRegistryState(collector_registry, {})
 
     async def startup(self) -> None:
         try:
-            with self._runtime_state_lock:
-                if self._http_server:
+            with self._lifecycle_lock:
+                if self._http_server is not None:
                     return
                 self._http_server = start_http_server(
                     port=self._port,
                     addr=self._addr,
-                    registry=self._registry,
+                    registry=self._collector_registry_state.collector_registry,
                 )
-        except Exception as e:
+        except Exception as error:
             await self._mn_logger._mn_log_exception(
                 ERROR,
                 "[Prometheus] Failed to start metrics HTTP server",
-                e,
+                error,
             )
+            raise
 
     async def shutdown(self) -> None:
-        with self._runtime_state_lock:
-            if not self._http_server and not self._registered_collectors:
-                return
-
-            http_server = self._http_server
-            registered_collectors = self._registered_collectors
-
+        with self._lifecycle_lock:
+            self._stop_http_server()
             self._http_server = None
-            self._registered_collectors = []
 
-            try:
-                self._stop_http_server(http_server)
-            finally:
-                self._release_owned_metrics(registered_collectors)
-
-    def _stop_http_server(
-        self,
-        http_server: tuple[WSGIServer, threading.Thread] | None,
-    ) -> None:
-        """Stop the HTTP listener and wait for its serving thread to exit."""
-        if http_server is None:
+    def _stop_http_server(self) -> None:
+        if self._http_server is None:
             return
 
-        server, thread = http_server
+        server, thread = self._http_server
         try:
             server.shutdown()
         finally:
-            server.server_close()
-            if thread is not threading.current_thread():
-                thread.join()
-
-    def _release_owned_metrics(
-        self,
-        collectors: list[Counter | Gauge | Histogram],
-    ) -> None:
-        """Unregister owned collectors and invalidate their cached wrappers."""
-        for collector in collectors:
             try:
-                self._registry.unregister(collector)
-            except KeyError:
-                # The registry may have been explicitly cleared by its owner.
-                pass
+                server.server_close()
+            finally:
+                if thread is not threading.current_thread():
+                    thread.join()
 
-        for metrics_by_name in self._mn_metrics_by_kind.values():
-            metrics_by_name.clear()
-
-    @overload
-    def create_metric(
+    def _create_metric(
         self,
-        metric_name: str,
-        label_names: list[str],
-        kind: Literal["counter"],
-    ) -> LabelledCounter: ...
+        definition: MetricDefinition[Kind],
+    ) -> _NativeCollector:
+        registry = self._collector_registry_state.collector_registry
+        label_names = list(definition.label_names)
+        if definition.kind == "counter":
+            return Counter(
+                definition.name,
+                f"{definition.name} ({definition.kind})",
+                labelnames=label_names,
+                registry=registry,
+            )
+        if definition.kind == "gauge":
+            return Gauge(
+                definition.name,
+                f"{definition.name} ({definition.kind})",
+                labelnames=label_names,
+                registry=registry,
+            )
+        if definition.kind == "histogram":
+            return Histogram(
+                definition.name,
+                f"{definition.name} ({definition.kind})",
+                labelnames=label_names,
+                registry=registry,
+                buckets=(
+                    definition.histogram_buckets
+                    if definition.histogram_buckets is not None
+                    else Histogram.DEFAULT_BUCKETS
+                ),
+            )
+        raise ValueError(f"[Prometheus] Unknown metric kind: {definition.kind}")
 
-    @overload
-    def create_metric(
+    @contextmanager
+    def _metric_for_update(
         self,
-        metric_name: str,
-        label_names: list[str],
-        kind: Literal["gauge"],
-    ) -> LabelledGauge: ...
+        definition: MetricDefinition[Kind],
+    ) -> Generator[_NativeCollector, None, None]:
+        with self._lifecycle_lock:
+            registry_state = self._collector_registry_state
+            registered_metric = registry_state.metrics_by_name.get(definition.name)
+            if registered_metric:
+                self._mn_require_same_definition_for_metric_name(
+                    registered_metric.definition,
+                    definition,
+                )
+                metric = registered_metric.collector
+            else:
+                metric = self._create_metric(definition)
+                registry_state.metrics_by_name[definition.name] = _RegisteredMetric(
+                    definition,
+                    metric,
+                )
+            yield metric
 
-    @overload
-    def create_metric(
+    def increment_counter(
         self,
-        metric_name: str,
-        label_names: list[str],
-        kind: Literal["histogram"],
-    ) -> LabelledHistogram: ...
+        definition: MetricDefinition[Literal["counter"]],
+        *,
+        labels: Mapping[str, str],
+        amount: float = 1,
+    ) -> None:
+        with self._metric_for_update(definition) as metric:
+            counter = cast(Counter, metric)
+            if labels:
+                counter.labels(**dict(labels)).inc(amount=amount)
+            else:
+                counter.inc(amount=amount)
 
-    def create_metric(
-        self, metric_name: str, label_names: list[str], kind: Kind
-    ) -> LabelledMetric:
-        """Create and return a Prometheus metric with the given name and labels."""
+    def set_gauge(
+        self,
+        definition: MetricDefinition[Literal["gauge"]],
+        *,
+        labels: Mapping[str, str],
+        value: float,
+    ) -> None:
+        with self._metric_for_update(definition) as metric:
+            gauge = cast(Gauge, metric)
+            if labels:
+                gauge.labels(**dict(labels)).set(value)
+            else:
+                gauge.set(value)
 
-        with self._runtime_state_lock:
-            if kind == "counter":
-                metric = Counter(
-                    metric_name,
-                    f"{metric_name} ({kind})",
-                    labelnames=label_names,
-                    registry=self._registry,
-                )
-                self._registered_collectors.append(metric)
-                return _PrometheusCounter(metric, label_names)
-            if kind == "gauge":
-                metric = Gauge(
-                    metric_name,
-                    f"{metric_name} ({kind})",
-                    labelnames=label_names,
-                    registry=self._registry,
-                )
-                self._registered_collectors.append(metric)
-                return _PrometheusGauge(metric, label_names)
-            if kind == "histogram":
-                buckets = _HISTOGRAM_BUCKETS_BY_METRIC.get(
-                    metric_name,
-                    Histogram.DEFAULT_BUCKETS,
-                )
-                histogram = Histogram(
-                    metric_name,
-                    f"{metric_name} ({kind})",
-                    labelnames=label_names,
-                    registry=self._registry,
-                    buckets=buckets,
-                )
-                self._registered_collectors.append(histogram)
-                return _PrometheusHistogram(histogram, label_names)
+    def observe_histogram(
+        self,
+        definition: MetricDefinition[Literal["histogram"]],
+        *,
+        labels: Mapping[str, str],
+        value: float,
+    ) -> None:
+        with self._metric_for_update(definition) as metric:
+            histogram = cast(Histogram, metric)
+            if labels:
+                histogram.labels(**dict(labels)).observe(value)
+            else:
+                histogram.observe(value)
 
-            raise ValueError(f"[Prometheus] Unknown metric kind: {kind}")
+    def snapshot(self) -> SnapshotResult:
+        with self._lifecycle_lock:
+            registry_state = self._collector_registry_state
+            counters: SnapshotCounters = {}
+            gauges: SnapshotGauges = {}
+            histograms: SnapshotHistograms = {}
+            histogram_values: dict[
+                tuple[str, tuple[tuple[str, str], ...]], HistogramSample
+            ] = {}
+            registered_metrics = tuple(registry_state.metrics_by_name.values())
 
-    def snapshot_counters(self) -> SnapshotCounters:
-        out: SnapshotCounters = {}
-        for mf in self._registry.collect():
-            if mf.type != "counter":
-                continue
-            for s in mf.samples:
-                if s.name.endswith("_created"):
-                    continue
-                name = s.name[:-6] if s.name.endswith("_total") else s.name
-                out.setdefault(name, []).append(
-                    {"labels": dict(s.labels or {}), "value": float(s.value)}
-                )
-        return out
+            definition_names_by_prometheus_family = {
+                (
+                    metric.definition.name.removesuffix("_total")
+                    if metric.definition.kind == "counter"
+                    else metric.definition.name
+                ): metric.definition.name
+                for metric in registered_metrics
+            }
 
-    def snapshot_gauges(self) -> SnapshotGauges:
-        out: SnapshotGauges = {}
-        for mf in self._registry.collect():
-            if mf.type != "gauge":
-                continue
-            for s in mf.samples:
-                out.setdefault(s.name, []).append(
-                    {"labels": dict(s.labels or {}), "value": float(s.value)}
-                )
-        return out
+            for metric_family in registry_state.collector_registry.collect():
+                metric_name = definition_names_by_prometheus_family[metric_family.name]
+                if metric_family.type == "counter":
+                    for sample in metric_family.samples:
+                        if sample.name.endswith("_created"):
+                            continue
+                        counters.setdefault(metric_name, []).append(
+                            {
+                                "labels": dict(sample.labels or {}),
+                                "value": float(sample.value),
+                            }
+                        )
+                elif metric_family.type == "gauge":
+                    for sample in metric_family.samples:
+                        gauges.setdefault(metric_name, []).append(
+                            {
+                                "labels": dict(sample.labels or {}),
+                                "value": float(sample.value),
+                            }
+                        )
+                elif metric_family.type == "histogram":
+                    for sample in metric_family.samples:
+                        if not sample.name.endswith(("_count", "_sum")):
+                            continue
+                        labels = tuple(sorted((sample.labels or {}).items()))
+                        key = (metric_name, labels)
+                        record = histogram_values.get(key)
+                        if record is None:
+                            record = cast(
+                                HistogramSample,
+                                {
+                                    "labels": dict(sample.labels or {}),
+                                    "count": 0.0,
+                                    "sum": 0.0,
+                                },
+                            )
+                            histogram_values[key] = record
+                        if sample.name.endswith("_count"):
+                            record["count"] = float(sample.value)
+                        elif sample.name.endswith("_sum"):
+                            record["sum"] = float(sample.value)
 
-    def snapshot_histograms(self) -> SnapshotHistograms:
-        out: SnapshotHistograms = {}
-        tmp: dict[tuple[str, tuple[tuple[str, str], ...]], HistogramSample] = {}
-        # group by (metric_name, label_set) becasue mf.samples intermix *_count and *_sum
+            for (metric_name, _), record in histogram_values.items():
+                histograms.setdefault(metric_name, []).append(record)
 
-        for mf in self._registry.collect():
-            if mf.type != "histogram":
-                continue
-            for s in mf.samples:
-                lbls = tuple(sorted((s.labels or {}).items()))
-                key = (mf.name, lbls)
-                rec = tmp.get(key)
-                if rec is None:
-                    new_rec: HistogramSample = {
-                        "labels": dict(s.labels or {}),
-                        "count": 0.0,
-                        "sum": 0.0,
-                    }
-                    tmp[key] = new_rec
-                    rec = new_rec
-                n = s.name
-                v = float(s.value)
-                if n.endswith("_count"):
-                    rec["count"] = v
-                elif n.endswith("_sum"):
-                    rec["sum"] = v
-
-        # flatten grouped series into per metric lists
-        for (metric_name, _), rec in tmp.items():
-            out.setdefault(metric_name, []).append(rec)
-
-        return out
+            return {"counter": counters, "gauge": gauges, "histogram": histograms}

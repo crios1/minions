@@ -1,15 +1,17 @@
 import asyncio
+from typing import Literal, cast
 
 import pytest
 
 from minions._internal._domain.component_identity import get_component_id
 from minions._internal._domain.gru import Gru, GruRuntimeStateSnapshot
+from minions._internal._framework.metric_definition import MetricDefinition
 from minions._internal._framework.metrics_constants import (
     LABEL_MINION,
     LABEL_ORCHESTRATION_ID,
+    METRIC_DEFINITIONS,
     MINION_WORKFLOW_SUCCEEDED_TOTAL,
 )
-from tests.assets.support.metrics_inmemory import InMemoryMetrics
 from tests.minions._internal._domain.gru.assertions import assert_orchestration_running
 from tests.support.gru_scenario.directives import (
     AfterWorkflowStepStarts,
@@ -74,16 +76,15 @@ def test_require_result_reports_that_run_must_be_called_first(gru: Gru):
 
 
 def test_metrics_counter_snapshot_reflects_gru_metrics(gru: Gru):
-    assert isinstance(gru._metrics, InMemoryMetrics)
-    counter = gru._metrics.create_metric(
-        MINION_WORKFLOW_SUCCEEDED_TOTAL,
-        [LABEL_MINION, LABEL_ORCHESTRATION_ID],
-        "counter",
+    definition = METRIC_DEFINITIONS[MINION_WORKFLOW_SUCCEEDED_TOTAL]
+    assert definition.kind == "counter"
+    gru._metrics.increment_counter(
+        cast(MetricDefinition[Literal["counter"]], definition),
+        labels={
+            LABEL_MINION: "dummy-minion-id",
+            LABEL_ORCHESTRATION_ID: "dummy-orchestration-id",
+        },
     )
-    counter.labels(
-        minion="dummy-minion-id",
-        orchestration_id="dummy-orchestration-id",
-    ).inc()
 
     runner = ScenarioRunner(
         gru,

@@ -343,6 +343,9 @@ class GruShell(cmd.Cmd):
         except Exception as e:
             print(f"metrics error: {e}")
             return
+        if snap is None:
+            print("metrics unavailable")
+            return
         pprint(snap)
         # TODO: consider simplifying the metrics printed instead of a full dump
         # inflights = sum(

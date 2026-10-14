@@ -52,6 +52,19 @@ async def _wait_until(
     raise TimeoutError("condition did not become true before timeout")
 
 
+def _has_gauge_sample(
+    metrics: InMemoryMetrics,
+    metric_name: str,
+    labels: dict[str, str],
+    value: float,
+) -> bool:
+    snapshot = metrics.snapshot()
+    return any(
+        sample["labels"] == labels and sample["value"] == value
+        for sample in snapshot["gauge"].get(metric_name, [])
+    )
+
+
 @pytest.mark.asyncio
 async def test_continue_on_failure_policy_advances_after_save_failure_and_persists_next_checkpoint(  # noqa: E501
     logger: InMemoryLogger,
@@ -124,7 +137,7 @@ async def test_continue_on_failure_policy_advances_after_save_failure_and_persis
     assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_SUCCEEDED_TOTAL) == 3
     assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL) == 1
     assert metrics.snapshot_histogram_count_total(MINION_WORKFLOW_PERSISTENCE_DURATION_SECONDS) == 4
-    assert MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE not in metrics.snapshot_gauges()
+    assert MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE not in metrics.snapshot()["gauge"]
 
 
 @pytest.mark.asyncio
@@ -247,13 +260,11 @@ async def test_workflow_cancellation_during_retry_wait_preserves_checkpoint_and_
     await m._mn_accept_event(EmptyEvent())
     await store.save_failures.wait_for(1)
     await _wait_until(
-        lambda: (
-            MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE in metrics.snapshot_gauges()
-            and metrics.snapshot_gauge_value(
-                MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
-                blocked_labels,
-            )
-            == 1
+        lambda: _has_gauge_sample(
+            metrics,
+            MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
+            blocked_labels,
+            1,
         )
     )
     states = await m._mn_workflow_persistence_state_snapshot()
@@ -352,13 +363,11 @@ async def test_stopping_orchestration_during_retry_wait_preserves_unfinished_wor
         await pipeline.wait_for_subscribers_then_emit_event()
         await store.save_failures.wait_for(1)
         await _wait_until(
-            lambda: (
-                MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE in metrics.snapshot_gauges()
-                and metrics.snapshot_gauge_value(
-                    MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
-                    blocked_labels,
-                )
-                == 1
+            lambda: _has_gauge_sample(
+                metrics,
+                MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
+                blocked_labels,
+                1,
             )
         )
 
@@ -457,13 +466,11 @@ async def test_persistence_blocked_gauge_tracks_concurrent_workflows_for_same_la
         LABEL_STATE_STORE_TYPE: "FailableStateStore",
     }
     await _wait_until(
-        lambda: (
-            MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE in metrics.snapshot_gauges()
-            and metrics.snapshot_gauge_value(
-                MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
-                labels,
-            )
-            == 2
+        lambda: _has_gauge_sample(
+            metrics,
+            MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
+            labels,
+            2,
         )
     )
     assert metrics.snapshot_gauge_value(MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE, labels) == 2
@@ -597,13 +604,11 @@ async def test_workflow_success_is_delayed_until_checkpoint_delete_succeeds(
         LABEL_STATE_STORE_TYPE: "FailableStateStore",
     }
     await _wait_until(
-        lambda: (
-            MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE in metrics.snapshot_gauges()
-            and metrics.snapshot_gauge_value(
-                MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
-                blocked_labels,
-            )
-            == 1
+        lambda: _has_gauge_sample(
+            metrics,
+            MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE,
+            blocked_labels,
+            1,
         )
     )
     assert not logger.has_log("Workflow succeeded")

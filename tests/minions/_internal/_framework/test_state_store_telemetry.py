@@ -12,7 +12,7 @@ from minions._internal._framework.metrics_constants import (
     STATE_STORE_PAYLOAD_SIZE_BYTES,
 )
 from minions._internal._framework.state_store import StoredWorkflowContext
-from tests.assets.crash.support.metrics.boom_child_operations import (
+from tests.assets.crash.support.metrics.boom_metrics import (
     AssetMetrics as BrokenMetrics,
 )
 from tests.assets.support.logger_inmemory import InMemoryLogger

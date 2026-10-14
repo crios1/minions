@@ -333,7 +333,7 @@ async def test_cancellation_propagates_after_one_active_attempt_finishes(
     assert metrics.snapshot_counter_value_total(MINION_WORKFLOW_PERSISTENCE_FAILURES_TOTAL) == (
         1 if fail else 0
     )
-    assert MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE not in metrics.snapshot_gauges()
+    assert MINION_WORKFLOW_PERSISTENCE_BLOCKED_GAUGE not in metrics.snapshot()["gauge"]
 
     states = await m._mn_workflow_persistence_state_snapshot()
     if operation == "delete" and not fail:

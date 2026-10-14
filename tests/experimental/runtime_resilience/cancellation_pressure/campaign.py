@@ -40,10 +40,11 @@ def _duration_count_for_status(
     metric_name: str,
     status: str,
 ) -> int:
+    snapshot = metrics.snapshot()
     return int(
         sum(
             sample["count"]
-            for sample in metrics.snapshot_histograms().get(metric_name, [])
+            for sample in snapshot["histogram"].get(metric_name, [])
             if sample["labels"].get(LABEL_STATUS) == status
         )
     )
