@@ -925,7 +925,7 @@ class TestMetricsFrameworkWrappers:
         else:
             raise AssertionError(f"unhandled metric operation: {metric_operation}")
 
-        assert any(log.kwargs.get("error_type") == "BoomError" for log in logger.logs)
+        assert logger.has_log(log_kwargs={"error_type": "BoomError"})
 
     @pytest.mark.asyncio
     async def test_snapshot_failures_are_contained(

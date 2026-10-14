@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any
 
@@ -33,27 +34,46 @@ class InMemoryLogger(SpiedLogger):
 
     def find_first_log(
         self,
-        substr: str,
+        substr: str | None = None,
         min_level: int = DEBUG,
         log_kwargs: dict[str, object] | None = None,
+        *,
+        log_kwarg_keys: Collection[str] = (),
     ) -> Log | None:
+        """Find the first log matching the supplied message and kwarg filters.
+
+        ``substr=None`` omits message filtering. ``log_kwargs`` matches exact values,
+        while ``log_kwarg_keys`` checks key presence regardless of value.
+        """
         log_kwargs = log_kwargs or {}
         for log in self.logs:
             if (
                 log.level >= min_level
-                and substr in log.msg
+                and (substr is None or substr in log.msg)
                 and all(k in log.kwargs and log.kwargs[k] == v for k, v in log_kwargs.items())
+                and all(k in log.kwargs for k in log_kwarg_keys)
             ):
                 return log
         return None
 
     def has_log(
         self,
-        substr: str,
+        substr: str | None = None,
         min_level: int = DEBUG,
         log_kwargs: dict[str, object] | None = None,
+        *,
+        log_kwarg_keys: Collection[str] = (),
     ) -> bool:
-        return self.find_first_log(substr, min_level=min_level, log_kwargs=log_kwargs) is not None
+        """Return whether any recorded log matches the supplied filters."""
+        return (
+            self.find_first_log(
+                substr,
+                min_level=min_level,
+                log_kwargs=log_kwargs,
+                log_kwarg_keys=log_kwarg_keys,
+            )
+            is not None
+        )
 
     async def wait_for_log(
         self,

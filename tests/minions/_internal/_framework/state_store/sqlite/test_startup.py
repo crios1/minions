@@ -94,11 +94,9 @@ async def test_creates_table_index_and_collects_measurements_even_in_manual_mode
     assert s._batch_max_queued_writes == DEFAULT_BATCH_MAX_QUEUED_WRITES
     assert s._batch_max_flush_delay_ms == DEFAULT_BATCH_MAX_FLUSH_DELAY_MS
     assert s._sqlite_page_size is not None and s._sqlite_page_size >= 1024
-    assert any(
-        "p50_commit_ms" in log.kwargs
-        and log.kwargs.get("measurement_result") == "measured"
-        and log.kwargs.get("batch_tuning") == "manual"
-        for log in logger.logs
+    assert logger.has_log(
+        log_kwargs={"measurement_result": "measured", "batch_tuning": "manual"},
+        log_kwarg_keys=("p50_commit_ms",),
     )
 
     async with s._db.execute("PRAGMA index_list(workflows)") as c:
@@ -230,10 +228,8 @@ async def test_degrades_when_page_size_lookup_fails(
         assert s._db is not None
         assert s._sqlite_page_size is None
         assert await logger.wait_for_log("could not read PRAGMA page_size")
-        assert any(
-            log.kwargs.get("measurement_result") == "fallback_used"
-            and log.kwargs.get("sqlite_page_size") is None
-            for log in logger.logs
+        assert logger.has_log(
+            log_kwargs={"measurement_result": "fallback_used", "sqlite_page_size": None}
         )
     finally:
         await s._mn_shutdown()
@@ -264,7 +260,7 @@ async def test_degrades_when_page_size_is_unusable(
     try:
         assert s._sqlite_page_size is None
         assert await logger.wait_for_log("returned unusable value")
-        assert any(log.kwargs.get("measurement_result") == "fallback_used" for log in logger.logs)
+        assert logger.has_log(log_kwargs={"measurement_result": "fallback_used"})
     finally:
         await s._mn_shutdown()
         await logger._mn_shutdown()
@@ -295,7 +291,7 @@ async def test_uses_fallback_measurements_when_commit_timing_fails_without_clean
         assert s._sqlite_page_size is not None and s._sqlite_page_size >= 1024
         assert s._sqlite_page_size is not None
         assert await logger.wait_for_log("startup measurements failed; using fallback values")
-        assert any(log.kwargs.get("measurement_result") == "fallback_used" for log in logger.logs)
+        assert logger.has_log(log_kwargs={"measurement_result": "fallback_used"})
     finally:
         await s._mn_shutdown()
         await logger._mn_shutdown()
@@ -357,12 +353,13 @@ async def test_measure_commit_latency_percentiles_raises_when_measurement_and_pr
 
     assert isinstance(exc.value.__cause__, RuntimeError)
     assert str(exc.value.__cause__) == "delete boom"
-    assert any(
-        "commit measurement probe cleanup failed after probe error" in log.msg
-        and log.kwargs.get("measurement_probe_error_type") == "RuntimeError"
-        and log.kwargs.get("measurement_probe_error_message") == "measure boom"
-        and log.kwargs.get("error_message") == "delete boom"
-        for log in logger.logs
+    assert logger.has_log(
+        "commit measurement probe cleanup failed after probe error",
+        log_kwargs={
+            "measurement_probe_error_type": "RuntimeError",
+            "measurement_probe_error_message": "measure boom",
+            "error_message": "delete boom",
+        },
     )
 
 
@@ -424,9 +421,7 @@ async def test_propagates_commit_measurement_probe_cleanup_failure(
     try:
         with pytest.raises(CommitMeasurementProbeCleanupError, match="cleanup boom"):
             await s.startup()
-        assert not any(
-            "startup measurements failed; using fallback values" in log.msg for log in logger.logs
-        )
+        assert not logger.has_log("startup measurements failed; using fallback values")
     finally:
         if s._db is not None:
             # Startup failed before normal shutdown ownership, so close the
@@ -469,9 +464,10 @@ async def test_probe_preserves_primary_failure_when_cleanup_delete_also_fails(
     ):
         await s._run_startup_probe()
 
-    assert any(
-        "startup probe cleanup failed after probe error" in log.msg
-        and log.kwargs.get("startup_probe_error_type") == "RuntimeError"
-        and log.kwargs.get("error_type") == "RuntimeError"
-        for log in logger.logs
+    assert logger.has_log(
+        "startup probe cleanup failed after probe error",
+        log_kwargs={
+            "startup_probe_error_type": "RuntimeError",
+            "error_type": "RuntimeError",
+        },
     )

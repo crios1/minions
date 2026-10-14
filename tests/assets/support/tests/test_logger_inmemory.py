@@ -42,6 +42,32 @@ async def test_logs_and_queries():
 
 
 @pytest.mark.asyncio
+async def test_kwargs_only_queries_match_values_and_key_presence_on_same_log():
+    logger = InMemoryLogger(level=DEBUG)
+
+    await logger.log(INFO, "matching log", owner="minion", optional=None)
+    await logger.log(INFO, "owner only", owner="another-minion")
+    await logger.log(INFO, "optional only", optional=None)
+
+    assert logger.has_log(log_kwargs={"owner": "minion", "optional": None})
+    assert logger.has_log(log_kwarg_keys=("optional",))
+    assert logger.has_log(log_kwargs={"optional": None})
+    assert not logger.has_log(log_kwarg_keys=("missing",))
+    assert not logger.has_log(log_kwargs={"missing": None})
+    assert not logger.has_log(
+        log_kwargs={"owner": "another-minion"},
+        log_kwarg_keys=("optional",),
+    )
+
+    matching_log = logger.find_first_log(
+        log_kwargs={"owner": "minion"},
+        log_kwarg_keys=("optional",),
+    )
+    assert matching_log is not None
+    assert matching_log.msg == "matching log"
+
+
+@pytest.mark.asyncio
 async def test_wait_for_log_matches_kwargs():
     logger = InMemoryLogger(level=DEBUG)
 

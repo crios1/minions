@@ -176,11 +176,12 @@ async def test_startup_resolves_calibrated_batch_config(
     s, logger = await make_state_store_and_logger(batch_tuning="calibrated")
     assert s._batch_max_queued_writes == BATCH_MAX_QUEUED_WRITES_NVME_LIKE
     assert s._batch_max_flush_delay_ms == BATCH_MAX_FLUSH_DELAY_MS_NVME_LIKE
-    assert any(
-        log.kwargs.get("batch_tuning") == "calibrated"
-        and log.kwargs.get("batch_max_queued_writes") == BATCH_MAX_QUEUED_WRITES_NVME_LIKE
-        and log.kwargs.get("batch_max_flush_delay_ms") == BATCH_MAX_FLUSH_DELAY_MS_NVME_LIKE
-        for log in logger.logs
+    assert logger.has_log(
+        log_kwargs={
+            "batch_tuning": "calibrated",
+            "batch_max_queued_writes": BATCH_MAX_QUEUED_WRITES_NVME_LIKE,
+            "batch_max_flush_delay_ms": BATCH_MAX_FLUSH_DELAY_MS_NVME_LIKE,
+        }
     )
 
 
@@ -250,4 +251,4 @@ async def test_startup_does_not_warn_for_immediate_batch_max_queued_writes(
     monkeypatch.setattr(SQLiteStateStore, "_collect_startup_measurements", _fixed_measurements)
 
     _s, logger = await make_state_store_and_logger(batch_max_queued_writes=1)
-    assert not any("below the recommended batching range" in log.msg for log in logger.logs)
+    assert not logger.has_log("below the recommended batching range")
