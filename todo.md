@@ -57,9 +57,9 @@
     - deterministic "boom user code" coverage has been added for the primary in-process user-code surfaces
     - `Gru.start_orchestration(...)` failed-start partial registration cleanup has been implemented and tested
   - remaining follow-ups:
-    - add explicit mid-operation invariant tests for remaining public Gru methods, especially `stop_orchestration(...)` and `shutdown(...)`
-    - decide and document whether pipeline/resource shutdown-hook failures during cancellation should make `stop_orchestration(...)` fail or remain log-only
-    - add separate subprocess kill/restart tests for process-death resume guarantees; keep this separate from ordinary in-process exception containment
+    - add explicit mid-operation invariant tests for uncovered `stop_orchestration(...)` failure paths; shutdown failure, cancellation, state-clearing, and singleton-release coverage already exists, so name any remaining shutdown gaps precisely
+    - verify and test the documented contract that required Pipeline/Resource shutdown-hook failures make `stop_orchestration(...)` fail after fail-closed cleanup
+    - extend the existing experimental subprocess kill/restart recovery campaign only for uncovered process-death boundaries, and promote focused regressions to the ordinary suite when the campaign exposes a defect
   - todo: add deterministic "boom user code" testing across every user-code runtime surface
     - goal:
       - pass intentionally exploding user code into every user-code entry point and prove the runtime contains the blast radius consistently
@@ -83,6 +83,9 @@
 ### Features:
 - todo: design Gru-level composition and configuration for built-in infrastructure
   - StateStore Metrics dependency migration is now explicit
+    - status:
+      - the core constructor/wiring contract is implemented: StateStore requires Metrics, Gru supplies its selected backend to built-in stores, and supplied stores are checked for Metrics identity
+      - confirm direct construction sites, fixtures, and custom-store documentation remain aligned, then close this migration sub-scope
     - final contract:
       - pass the selected Metrics backend when constructing every built-in and
         custom StateStore implementation
@@ -161,11 +164,12 @@
       without reconstructing infrastructure by hand, while custom backends retain
       the flexibility that justifies caller construction
 
-- considering: structured Gru failure results for programmatic handling
-  - current incremental contract:
+- consider: structured Gru failure results for programmatic handling
+  - implemented incremental contract:
     - keep `reason` as the curated high-level result description
     - expose `StartResult.cause` as an optional lower-level diagnostic string
     - keep `suggestion` reserved for a recommended caller action
+    - typed persisted-workflow incompatibility returns a failed `StartResult` with a cause and recovery suggestion; callers should surface both to the operator
     - do not treat free-form cause messages as stable programmatic identifiers
   - design work to revisit:
     - introduce stable reason and cause codes alongside human-readable messages
@@ -210,6 +214,7 @@
     - this is a design consideration, not committed roadmap work
     - keep the current `StopResult.success` contract until the replacement
       semantics are fully mapped
+    - `StopResult` already exposes `blocked_by_persistence_risk` and `persistence_risks`; remaining work is the broader stop disposition and structured cleanup-error contract
   - problem:
     - `success=False` does not tell a caller whether an orchestration remains
       active or whether Gru removed it from routing but encountered cleanup
@@ -313,13 +318,13 @@
       - the first pass added explicit persistence failure policies, retry behavior, logs, and metrics
       - remaining design work is about API placement, stop-mode interaction, and operational clarity
     - follow-ups:
-      - decide whether policies should be configured globally on Gru, per Minion, or both
-      - clarify how `continue-on-failure` should report unresolved failed checkpoints when stop/redeploy modes are added
+      - keep `Gru.create(...)` as the current policy default owner; decide whether a per-start override is needed under `finish persistence-policy decisions exposed by orchestration stop modes` below
+      - track unresolved `continue-on-failure` checkpoints and their stop/redeploy consequences under that same stop-mode item so the reporting contract has one owner
       - keep policy interaction with durable vs eventual StateStore semantics explicit
     - linked follow-up:
       - pair this with explicit workflow step skip results so idempotent step guards are visible in logs and runtime receipts
     - tests:
-      - add stop-mode-specific tests once `drain`/`cutover` exists
+      - add tests for future redeploy cutover and any remaining stop-mode/persistence-policy interactions; `interrupt` and `drain` already exist and have coverage
       - add tests for any future per-minion policy override behavior
     - docs:
       - keep documenting the policy tradeoff between availability and durable progress guarantees
@@ -344,9 +349,7 @@
       - if degraded start is supported, add explicit runtime state such as `recovery_pending` / `state_store_unavailable` / `partial_recovery`
       - decide whether new workflow admission should be allowed before persisted recovery completes, and how to avoid duplicate or out-of-order work if recovery later succeeds
     - stop_orchestration design questions:
-      - make `interrupt` / `drain` and higher-level redeploy cutover persistence-aware
-      - `drain` can usually proceed with warnings because live in-memory workflows are allowed to finish
-      - `interrupt` / persisted handoff should require durable checkpoint confidence or report degraded persistence risk
+      - keep stop-mode persistence-risk decisions in `finish persistence-policy decisions exposed by orchestration stop modes` below; this recovery item owns StateStore availability and resume-read semantics
       - redeploy cutover composes interrupt-style stop with immediate restart;
         warn strongly or require `force=True` when state-store health is bad or
         unfinished workflows are not durably current
@@ -396,48 +399,65 @@
       - document the remaining semantic split clearly until it is unified: checkpoint save/delete policy is configurable, while startup bootstrap and resume currently remain stricter/fixed
 
   - todo: add first-class recovery handling for undecodable persisted workflow contexts
-    - problem:
+    - current behavior:
       - StateStore read failures during resume must fail closed because an empty result means "no persisted in-flight workflows", while a failed read means "unknown persisted state"
-      - decode failures are more nuanced: one bad persisted workflow context should not necessarily prevent unrelated decodable workflows from resuming
-      - current best-effort decode behavior only logs bad contexts, so an undecodable in-flight workflow can become stranded without a first-class blocked/recovery-failed state for operators to inspect or alert on
-    - desired default:
-      - long-term default should be best-effort recovery once it is implemented as a real operational feature
-      - decodable workflow contexts resume independently
-      - undecodable workflow contexts are marked as blocked/recovery-failed/quarantined instead of being silently skipped
-      - strict/all-or-nothing recovery remains available for users who need orchestration-wide atomic resume semantics
+      - a valid, current-format checkpoint that cannot decode with the current Minion event/context types raises `WorkflowContextTypeMismatchError`; `start_orchestration` fails before resuming any workflows from that orchestration, and the checkpoint remains persisted
+      - this typed-mismatch failure returns guidance to run compatible code and drain, or discard the affected persisted contexts and retry
+      - other decode errors, including malformed or unsupported checkpoint envelopes, are logged and skipped; decodable workflows may resume and startup may succeed while skipped checkpoints remain persisted
+      - the latter behavior is partial recovery without a first-class blocked/recovery-failed state or a structured start result describing the skipped workflows
+    - recovery contract:
+      - preserve fail-closed start behavior when any current-format persisted workflow is incompatible with the current Minion event/context types; do not add a force-start path for this case
+      - preserve incompatible checkpoints until an operator explicitly drains under compatible code, migrates them, or discards them
+      - never silently treat an undecodable persisted checkpoint as if no persisted workflow existed
+      - decide separately whether malformed or unsupported checkpoint envelopes should fail the orchestration or allow decodable workflows to resume while the failures are recorded as recovery-failed
+      - distinguish no saved workflows, complete resume, typed incompatibility blocking start, and any supported partial-recovery state
+    - activation ordering:
+      - typed resume decoding currently happens in the Minion startup post-hook, after resource and Pipeline activation and after the user Minion `startup()` hook
+      - preflight composition checks and persisted-workflow compatibility before side-effecting resource, Pipeline, and Minion startup where possible, then begin activation only after preflight succeeds
+      - keep rollback/compensating cleanup for failures during actual component startup; preflight can avoid known deterministic rejection but cannot guarantee that side-effecting startup hooks will succeed
+      - before moving the StateStore read into preflight, decide how the preflight result remains authoritative if multiple Gru processes can access the same StateStore and orchestration identity; use an atomic claim/revalidation contract if concurrent starts are supported
     - policy shape:
       - consider a recovery/decode policy separate from `WorkflowPersistenceFailurePolicy`, since persistence failures happen while a live workflow is checkpointing and decode failures happen during recovery
       - possible policy names:
         - `WorkflowRecoveryDecodeFailurePolicy = Literal["resume-decodable", "fail-orchestration"]`
+      - define this policy for malformed/unsupported checkpoint envelopes separately from the existing fail-closed typed-mismatch contract
       - do not add public configurability until the blocked/recovery-failed operational surface exists; otherwise `resume-decodable` would mostly mean "log and skip"
     - observability:
       - add a durable/operator-visible representation for undecodable workflow contexts
         - include `workflow_id`, `orchestration_id`, state store backend, error type/message, and first-seen timestamp
         - avoid logging or storing raw payload contents
       - add metrics such as `minion_workflow_recovery_decode_failed_total`
-      - ensure Gru/GruShell can list recovery-failed workflows and provide an operator action path to drop, retry, or migrate them
+      - ensure the serve/attach operator surface can list and inspect recovery-failed workflows and provide an action path to drop, retry, or migrate them
+      - for a typed-mismatch start rejection, surface the `StartResult` reason, cause, affected workflow count/identities, and recovery options: return to compatible code and drain, or explicitly discard/migrate the saved workflows before retrying start
       - make startup/resume logs clearly distinguish full recovery from partial recovery
     - tests:
       - prove read failures still fail closed and do not look like an empty resume set
-      - prove best-effort recovery resumes decodable contexts while recording undecodable contexts as recovery-failed
-      - prove strict recovery fails the affected orchestration when any persisted context for that orchestration cannot decode
+      - prove a current-format typed event/context mismatch rejects start, launches no saved workflows, preserves checkpoints, and returns actionable cause/suggestion details
+      - prove the selected malformed/unsupported-envelope policy: best-effort resumes decodable contexts while recording failures, or strict recovery rejects the affected orchestration
       - prove recovery-failed contexts are visible through logs, metrics, and the chosen runtime/operator inspection surface
       - prove unrelated orchestrations are not blocked by a recovery failure outside their scope
+      - prove preflight incompatibility rejection occurs before side-effecting component startup, while activation failures still trigger rollback
     - docs:
       - explain the difference between state-store read failure, decode failure, and no persisted contexts
-      - document why best-effort recovery is the intended default once recovery-failed workflows are first-class state
-      - document when users should choose strict recovery instead
+      - document the fail-closed response to typed workflow incompatibility and the operator choices to drain with compatible code, migrate, or discard persisted work
+      - document the chosen policy for malformed/unsupported checkpoint envelopes once recovery-failed workflows are first-class state
 
 - todo: add lifecycle troubleshooting guidance for persistence-risk stops
+  - status:
+    - `docs/concepts/gru-lifecycle-failure-management.md` already explains interrupt persistence-risk rejection, `force=True`, and drain behavior
+    - the remaining operator gap is distinguishing saved unfinished workflows from the live in-flight gauge
   - docs:
-    - explain that interrupt/drain may be rejected when a live workflow has no current checkpoint, a stale checkpoint, or an unresolved delete
-    - explain `force=True` as explicit acceptance of the reported durability risk, not as equivalent to a successful durable drain
+    - explain that an unforced interrupt may be rejected when a live workflow has no current checkpoint, a stale checkpoint, or an unresolved delete
+    - explain that drain closes event acceptance and waits for accepted workflows to resolve; persistence trouble may delay it, while it does not use interrupt's persistence-risk rejection
+    - explain `force=True` as explicit acceptance of the reported durability risk for interrupt mode
     - explain that interrupted workflows may remain persisted for later recovery and that an in-flight gauge of zero does not mean no saved unfinished workflows exist
     - distinguish live-process control from durable recovery guarantees
   - why it matters:
     - keeps operator expectations aligned with the documented StopResult persistence-risk contract
 
 - todo: add memory-pressure guard to manage OOM risk (high-utilization defaults)
+  - status:
+    - Gru currently has high-RAM warning monitoring; the admission guard and load-shedding behavior below are not implemented
   - goal:
     - avoid hard OOM kills while still letting a single-node minions system run “hot” (stable high RAM usage)
     - prevent flapping/thrashing when crossing thresholds
@@ -514,8 +534,8 @@
       - `intake_state{state="ok|pause"}` (gauge 0/1)
       - optional: `step_runtime_seconds` (histogram, per minion/step labels) if not already present
     - intake integration:
-      - reuse existing memory-pressure intake controller; add a “lag” reason to enter/exit `PAUSE`
-      - ensure PAUSE/RESUME are idempotent and reason-agnostic (memory or lag can trigger)
+      - coordinate with the planned memory-pressure guard; define the shared admission-pause behavior rather than assuming an existing controller
+      - ensure PAUSE/RESUME are idempotent and reason-agnostic when both memory pressure and loop lag can trigger them
   - tests:
     - unit: simulate lag by sleeping the event loop in a helper; assert WARN then CRIT transitions with hysteresis
     - unit: register fake INFLIGHT tasks with names/stacks; assert offender dump ordering by `elapsed_s`
@@ -572,10 +592,8 @@
       - strong validation and runtime enforcement make accidental cancellation suppression rare while preserving an honest fallback for behavior Python cannot safely terminate in-process
 
   - todo: refine lifecycle result contracts
-    - distinguish operation failure from framework cleanup status and possible user-owned process pollution
-    - consider structured fields for cleanup phases, cancelled tasks, degraded cleanup, and restart recommendations
-    - preserve the simple success/failure path while making degraded cleanup machine-readable for operators and callers
-    - apply the result model consistently to `start_orchestration(...)`, `stop_orchestration(...)`, and `shutdown()`
+    - use `structured Gru failure results for programmatic handling` and `structured stop disposition and cleanup errors` above as the owners for detailed result-model design
+    - limit this cross-cutting item to checking that `start_orchestration(...)`, `stop_orchestration(...)`, and `shutdown()` communicate consistent lifecycle outcomes
     - why it matters:
       - current `success=False` results are too coarse for lifecycle failures and make it hard for callers/operators to react correctly
 
@@ -622,12 +640,45 @@
     - why it matters:
       - diagnostics help debug user-owned cleanup leaks without changing Gru's core cleanup guarantee
 
-- todo: map orchestration stop modes to higher-level GruShell redeploy strategies
+- todo: map orchestration stop modes to `serve` / `attach` redeploy strategies
   - redeploy drain -> stop_orchestration(mode="drain")
   - redeploy cutover -> stop_orchestration(mode="interrupt"), then restart under
     replacement code
 
 - todo: finish persistence-policy decisions exposed by orchestration stop modes
+  - checkpoint-aware interrupt:
+    - current `interrupt` rejects immediately when persistence risk exists, while
+      `drain` waits for every accepted workflow to finish; operators have no
+      action that waits for durable workflow progress and then interrupts the
+      remaining work
+    - implement an operator-requested stop that closes admission, waits for
+      in-flight workflows to reach a durable resume point or terminal outcome,
+      then interrupts workflows that remain so they can resume later
+    - keep this intent distinct from full `drain` and forced `interrupt`, which
+      accepts the current persistence risk
+    - surface waiting progress and blockers in the runtime/operator result so
+      callers do not need to poll and retry stop requests
+    - make the safety transition race-safe: revalidate persistence state when
+      moving from waiting to interruption so new work or checkpoint changes
+      cannot invalidate the decision
+    - timeout, cancellation, and event-admission decisions:
+      - admission: decide how producers observe that admission is closed
+        (backpressure, rejection, or retaining events upstream); recommendation:
+        close admission as soon as the stop is accepted and use the existing
+        admission contract rather than adding an implicit buffer
+      - timeout: decide whether the stop waits indefinitely or can return while
+        safe-point waiting remains in progress; recommendation: timeout must not
+        force interruption or reopen admission, and must report that the stop is
+        still waiting with its current blockers
+      - caller cancellation: decide whether cancellation cancels the stop or only
+        ends that caller's wait; recommendation: once accepted, the runtime-owned
+        stop continues safely and caller cancellation does not force interruption
+      - define how an operator observes, completes, or explicitly aborts a
+        still-waiting stop, including when it is safe to reopen admission
+      - keep the public API and command names open until these semantics are
+        settled against the redeploy/cutover flow
+    - add coverage for admission closing while waiting, safe workflows resuming
+      after interruption, blocked workflows, and the race-safe transition
   - `continue-on-failure`:
     - decide whether to track outstanding failed checkpoints instead of only
       retrying when the workflow reaches the next checkpoint
@@ -761,6 +812,9 @@
     - for stop/redeploy commands, render structured persistence-risk details
       returned by the runtime and request explicit confirmation only when the
       command would interrupt workflows without durably current checkpoints
+    - expose the checkpoint-aware interrupt direction described under
+      `finish persistence-policy decisions exposed by orchestration stop modes`,
+      including its waiting progress and blockers
     - support an explicit noninteractive force flag for automation; do not infer
       consent merely from the configured workflow persistence failure policy
   - protocol:
@@ -780,7 +834,8 @@
     - use `secrets.compare_digest(...)`; reject malformed/unauthenticated requests before command dispatch
   - initial commands:
     - migrate useful `GruShell` semantics into serve/attach instead of expanding `cmd.Cmd`
-    - commands: `status`, `stop`, `redeploy`, `snapshot`, `deps`, `shutdown`, `help`
+    - commands: `start`, `status`, `stop`, `redeploy`, `snapshot`, `deps`, `shutdown`, `help`
+    - `start` responses preserve and display `reason`, `cause`, and `suggestion`; recovery failures include the operator actions supported by the runtime
     - naming: `stop` stops work/component; `shutdown` stops serve daemon/runtime; `exit` closes attach only
   - security posture:
     - trusted single-user developer/operator environment; not internet-facing or hostile multi-tenant
@@ -846,6 +901,9 @@
     - process-level behavior is reasonable to validate by spawning the shell as a subprocess and asserting exit behavior/log output
 
 - todo: provide uvloop support for better performance on *nix systems (maybe 2-4x more)
+  - status:
+    - `uvloop` is already included in the `dev` and `perf` optional dependency groups
+    - the remaining work is backend test coverage and measured performance comparison; no uvloop test-backend fixture is configured yet
   - design:
     - user does "pip install minions[perf]" and gets uvloop if not on windows
       - in pyproject.toml add to objs
@@ -864,8 +922,8 @@
     - the test suite may need to run each relevant test twice (once with uvloop and once with the default asyncio loop)
       - pytest could be configured as follows:
         - test both backends: "pytest tests/minions/_internal/_domain"
-        - test only asyncio:  "pytest tests/minions/_internal/_domain --loop-policy asyncio"
-        - test only uvloop:   "pytest tests/minions/_internal/_domain --loop-policy uvloop"
+        - test only asyncio:  "pytest tests/minions/_internal/_domain --loop-backend asyncio"
+        - test only uvloop:   "pytest tests/minions/_internal/_domain --loop-backend uvloop"
       - steps:
         - update tests/conftest.py
           ```python
@@ -932,6 +990,8 @@
 
 ### Benchmarks:
 - todo: build a benchmark harness in `benchmarks/`
+  - status:
+    - `scripts/metrics_runtime_perf.py` provides a focused metrics-emission benchmark; the orchestration workload harness and run metadata below remain open
   - define repeatable workload profiles:
     - `io_light_many` (many pipelines/minions, mostly waiting on I/O)
     - `io_mixed` (I/O + moderate transformation)
@@ -1003,9 +1063,14 @@
   - fail release checklist if regressions exceed threshold
 
 ### Docs:
-- todo: autogenerate API tree for the minions module using Sphinx autodoc/autosummary/intersphinx
+- todo: complete the autogenerated API tree for the minions module using Sphinx autodoc/autosummary/intersphinx
+  - status:
+    - autodoc/autosummary generation is configured and generated API pages are present
+    - `intersphinx` is not configured; verify public module coverage and documentation-build behavior as part of the remaining work
 
 - todo: consolidate the Minions single-event-loop execution and deployment-topology contract
+  - status:
+    - the core single-process, event-loop, sidecar, and scale-out guidance already exists across the overview, sidecar, and scale-out docs; this item is to consolidate and cross-link it
   - goal:
     - state plainly that one Minions runtime uses one process and one asyncio event loop for orchestration, while blocking I/O and CPU-heavy work must be offloaded
     - frame Minions as an orchestration runtime rather than a general-purpose compute runtime
@@ -1024,6 +1089,9 @@
     - users need one clear mental model for both the efficiency benefit and the isolation/compute limits of Minions before choosing a deployment topology
 
 - todo: document how operators should choose a SQLite persistence tuning profile
+  - status:
+    - the persistence guide already covers transaction commit semantics, manual/calibrated tuning, and workload-specific recommendations; the CLI reference lists the named tuner recommendations
+    - remaining work is to explain the named profile trade-offs and correlated batch-failure semantics in one operator decision guide
   - decision model:
     - peak burst write rate the store must absorb
     - end-to-end persistence latency budget under isolated, steady, and burst conditions
