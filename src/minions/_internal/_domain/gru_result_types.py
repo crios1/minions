@@ -6,14 +6,6 @@ from .minion import WorkflowPersistenceRisk
 
 
 @dataclass
-class ConflictingMinion:
-    instance_id: str
-    module_path: str
-    config_module_path: str | None
-    pipeline_module_path: str
-
-
-@dataclass
 class ShutdownError:
     phase: str
     component: str
@@ -37,7 +29,6 @@ class GruResult:
 
 @dataclass
 class StopResult(GruResult):
-    conflicts: list[ConflictingMinion] = field(default_factory=list[ConflictingMinion])
     blocked_by_persistence_risk: bool = False
     persistence_risks: tuple[WorkflowPersistenceRisk, ...] = ()
 

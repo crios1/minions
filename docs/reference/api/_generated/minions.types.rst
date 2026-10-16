@@ -20,9 +20,6 @@ Public lifecycle result and workflow-diagnostic types.
 .. autoclass:: ShutdownResult
    :members:
 
-.. autoclass:: ConflictingMinion
-   :members:
-
 .. autoclass:: MinionWorkflowHandle
    :members:
 
